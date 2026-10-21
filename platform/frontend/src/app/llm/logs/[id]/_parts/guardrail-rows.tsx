@@ -3,52 +3,21 @@
 import {
   ChevronLeft,
   ChevronRight,
-  CornerDownRight,
-  Eye,
-  EyeOff,
   Lock,
-  MessageSquareText,
   RotateCcw,
   Send,
   Shield,
   ShieldAlert,
   ShieldX,
 } from "lucide-react";
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  describeModelOrigin,
-  formatCompactNumber,
-  formatRequestCost,
-  formatUsageCost,
-  shortModelName,
-} from "@/app/llm/logs/_parts/logs-table-format";
-import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { McpToolCallStatusIcon } from "@/components/mcp-tool-call-status";
-import { Kbd } from "@/components/ui/kbd";
-import { Skeleton } from "@/components/ui/skeleton";
+import { type MouseEvent, type PointerEvent, useState } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  MCP_TOOL_CALL_STATUS_LABELS,
-  readMcpToolCall,
-} from "@/lib/mcp-logs/tool-call-content";
-import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
-import { formatDate } from "@/lib/utils/date-time";
-import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
+import { formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   audienceTone,
@@ -62,16 +31,7 @@ import {
   trustTone,
 } from "./guardrails";
 import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-context";
-import {
-  type InteractionSummary,
-  type RequestSpan,
-  requestLabel,
-  SPAN_KINDS,
-  type SpanKind,
-  type Timeline,
-  type TimelineSpan,
-  type ToolCallSpan,
-} from "./session-timeline";
+import type { TimelineSpan } from "./session-timeline";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 import { YellStepper } from "./yell-markers";
 
@@ -99,11 +59,9 @@ export type Entry =
 export function buildEntries({
   spans,
   guardrails,
-  checksShown,
 }: {
   spans: TimelineSpan[];
   guardrails: GuardrailsData | null;
-  checksShown: boolean;
 }): Entry[] {
   if (!guardrails || spans.length === 0) {
     return spans.map((span) => ({
@@ -154,11 +112,10 @@ export function buildEntries({
   let next = 0;
   for (const span of spans) {
     while (next < timed.length && timed[next].at <= span.start) {
-      const { entry } = timed[next++];
-      if (checksShown) out.push(entry);
+      out.push(timed[next++].entry);
     }
     const bucket = byTool.get(span.key);
-    if (checksShown && bucket) {
+    if (bucket) {
       for (const c of bucket.before) out.push(consultEntry(c, span, labelAt));
     }
     out.push({
@@ -168,14 +125,11 @@ export function buildEntries({
       gutter: labelAt(span.start),
       checks: bucket ? [...bucket.before, ...bucket.after] : [],
     });
-    if (checksShown && bucket) {
+    if (bucket) {
       for (const c of bucket.after) out.push(consultEntry(c, span, labelAt));
     }
   }
-  for (; next < timed.length; next++) {
-    const { entry } = timed[next];
-    if (checksShown) out.push(entry);
-  }
+  for (; next < timed.length; next++) out.push(timed[next].entry);
   return out;
 }
 
@@ -241,8 +195,6 @@ export function GuardrailsBar({
   onActivateChange,
   label,
   labelName,
-  checksShown,
-  onToggleChecks,
   yells,
   selectedKey,
   onSelectYell,
@@ -254,8 +206,6 @@ export function GuardrailsBar({
   onActivateChange: (change: LabelChange) => void;
   label: LabelState | null;
   labelName: string;
-  checksShown: boolean;
-  onToggleChecks: () => void;
   /** The page's yells whose calls are on it. */
   yells: TraceYell[];
   /** The selected span, when a span (not a check) is selected. */
@@ -309,22 +259,6 @@ export function GuardrailsBar({
           onSelect={onSelectYell}
         />
       ) : null}
-      <UnstyledButton
-        aria-pressed={checksShown}
-        aria-label={checksShown ? "Hide check rows" : "Show check rows"}
-        title={checksShown ? "Hide check rows" : "Show check rows"}
-        onClick={onToggleChecks}
-        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border bg-card px-1.5 font-medium text-foreground/85 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 max-sm:w-7 max-sm:justify-center lg:h-6"
-      >
-        {checksShown ? (
-          <Eye className="size-3.5" aria-hidden="true" />
-        ) : (
-          <EyeOff className="size-3.5" aria-hidden="true" />
-        )}
-        <span className="max-sm:hidden">
-          {checksShown ? "Hide check rows" : "Show check rows"}
-        </span>
-      </UnstyledButton>
       <GutterKey />
       {label ? (
         <span
@@ -707,23 +641,6 @@ export function gutterWords(
   return note && note.length > 0
     ? `${here}, changed the label: ${note.map(changeWords).join("; ")}`
     : here;
-}
-
-/** A tool call's checks while the toolbar hides them: the worst one's shield and a count. */
-export function HiddenChecksBadge({ checks }: { checks: TraceConsult[] }) {
-  const worst =
-    checks.find((c) => c.decision === "blocked") ??
-    checks.find((c) => c.outcome !== "answered") ??
-    checks[0];
-  return (
-    <span
-      className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-muted px-1 text-[10px] leading-4 text-muted-foreground"
-      title={`${checks.length} guardrail ${checks.length === 1 ? "check" : "checks"}; show checks to open them`}
-    >
-      <DecisionIcon consult={worst} className="size-3" />
-      {checks.length}
-    </span>
-  );
 }
 
 /**

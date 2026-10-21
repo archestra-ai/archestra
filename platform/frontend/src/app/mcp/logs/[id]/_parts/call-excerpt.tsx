@@ -17,10 +17,7 @@ import {
   type Timeline,
   toolCallSpanKey,
 } from "@/app/llm/logs/[id]/_parts/session-timeline";
-import {
-  DETAILS_PANE_DEFAULT_HEIGHT,
-  SplitHandle,
-} from "@/app/llm/logs/[id]/_parts/split-handle";
+import { DETAILS_PANE_DEFAULT_HEIGHT } from "@/app/llm/logs/[id]/_parts/split-handle";
 import { Button } from "@/components/ui/button";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -339,7 +336,6 @@ function ExcerptCard({
   const selfKey = toolCallSpanKey(call.id);
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
-  const [height, setHeight] = useState(DETAILS_PANE_DEFAULT_HEIGHT);
 
   const indexOfKey = (key: string | null) =>
     key ? spans.findIndex((span) => span.key === key) : -1;
@@ -391,7 +387,7 @@ function ExcerptCard({
           pane opens only to preview a neighbour. */}
       {selected && selected.key !== selfKey ? (
         <>
-          <SplitHandle height={height} onChange={setHeight} />
+          <div className="hidden h-px bg-border lg:block" />
           <div className="flex items-center gap-2 border-t bg-primary/[0.04] px-4 py-1.5 text-xs text-muted-foreground lg:border-t-0 lg:border-b">
             <span>Previewing a nearby record.</span>
             <Button
@@ -404,7 +400,7 @@ function ExcerptCard({
             </Button>
           </div>
           <RequestDetails
-            height={height}
+            height={DETAILS_PANE_DEFAULT_HEIGHT}
             loading={loading}
             span={selected}
             origin={timeline?.origin ?? 0}

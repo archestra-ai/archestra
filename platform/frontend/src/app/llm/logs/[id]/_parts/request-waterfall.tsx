@@ -1,28 +1,12 @@
 "use client";
 
-import {
-  ChevronLeft,
-  ChevronRight,
-  CornerDownRight,
-  Eye,
-  EyeOff,
-  Lock,
-  MessageSquareText,
-  RotateCcw,
-  Send,
-  Shield,
-  ShieldAlert,
-  ShieldX,
-} from "lucide-react";
+import { CornerDownRight, MessageSquareText } from "lucide-react";
 import {
   type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
   type ReactNode,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import {
   describeModelOrigin,
@@ -58,7 +42,6 @@ import {
   GuardrailsBar,
   type GutterProps,
   gutterWords,
-  HiddenChecksBadge,
   type LabelChange,
   LabelGutter,
   pageChanges,
@@ -66,17 +49,7 @@ import {
   SELECTED_EDGE,
   SELECTED_PAST_GUTTER,
 } from "./guardrail-rows";
-import {
-  audienceTone,
-  CONSULT_KIND,
-  DECISION_TONE,
-  type GuardrailsData,
-  type LabelSegment,
-  type LabelState,
-  type TraceConsult,
-  type TraceYell,
-  trustTone,
-} from "./guardrails";
+import type { GuardrailsData, TraceYell } from "./guardrails";
 import {
   type InteractionSummary,
   type RequestSpan,
@@ -183,14 +156,13 @@ export function RequestWaterfall({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const selected = spans.find((span) => span.key === selectedKey) ?? null;
-  const [checksShown, setChecksShown] = useState(true);
 
   // Every row the list draws, in order: requests and tool calls, and each
   // tool call's checks just above (gates) and below (result checks) it.
   // Label changes add no rows: the gutter carries them.
   const entries = useMemo(
-    () => buildEntries({ spans, guardrails, checksShown }),
-    [spans, guardrails, checksShown],
+    () => buildEntries({ spans, guardrails }),
+    [spans, guardrails],
   );
   const steppable = entries;
   const changes = useMemo(
@@ -432,8 +404,6 @@ export function RequestWaterfall({
           onActivateChange={activateChange}
           label={labelHere}
           labelName={labelHereName}
-          checksShown={checksShown}
-          onToggleChecks={() => setChecksShown((shown) => !shown)}
           yells={yellsOnPage}
           selectedKey={consultRowSelected ? null : selectedKey}
           onSelectYell={(yell) => {
@@ -623,7 +593,6 @@ export function RequestWaterfall({
                       key={span.key}
                       span={span}
                       display={serverDisplayByName.get(span.call.mcpServerName)}
-                      hiddenChecks={checksShown ? [] : entry.checks}
                       {...rowProps}
                     />
                   );
@@ -1135,13 +1104,10 @@ function RequestRow({
 function ToolCallRow({
   span,
   display,
-  hiddenChecks = [],
   ...rowProps
 }: RowProps & {
   span: ToolCallSpan;
   display: McpServerDisplay | undefined;
-  /** Its checks while the toolbar hides them: summarised in the name. */
-  hiddenChecks?: TraceConsult[];
 }) {
   const { call } = span;
   const content = readMcpToolCall(call);
@@ -1171,9 +1137,6 @@ function ToolCallRow({
           <McpCallChip method={content.method} />
           {rowProps.yell ? <YellChip yell={rowProps.yell} /> : null}
           {marked ? <McpToolCallStatusIcon status={status} /> : null}
-          {hiddenChecks.length > 0 ? (
-            <HiddenChecksBadge checks={hiddenChecks} />
-          ) : null}
         </>
       }
       detail={

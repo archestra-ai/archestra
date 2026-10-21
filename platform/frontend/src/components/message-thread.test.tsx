@@ -55,7 +55,17 @@ vi.mock("@/components/ai-elements/sources", () => ({
 }));
 
 vi.mock("@/components/ai-elements/tool", () => ({
-  Tool: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Tool: ({
+    children,
+    defaultOpen,
+  }: {
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+  }) => (
+    <div data-testid="tool" data-open={String(Boolean(defaultOpen))}>
+      {children}
+    </div>
+  ),
   ToolContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -134,6 +144,46 @@ describe("MessageThread", () => {
     expect(screen.getByTestId("tool-output-label")).toHaveTextContent(
       "Cancelled",
     );
+  });
+
+  it("opens a call still waiting on its result only when asked to", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "read_file",
+            toolCallId: "call-done",
+            state: "output-available",
+            input: { path: "a.ts" },
+            output: "contents",
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "exec_command",
+            toolCallId: "call-pending",
+            state: "input-available",
+            input: { cmd: "git status" },
+          },
+        ],
+      },
+    ];
+
+    const { unmount } = render(
+      <MessageThread messages={messages} openPendingTools />,
+    );
+    expect(
+      screen.getAllByTestId("tool").map((tool) => tool.dataset.open),
+    ).toEqual(["false", "true"]);
+    unmount();
+
+    // Chat streams calls in this state; they stay folded there.
+    render(<MessageThread messages={messages} />);
+    expect(
+      screen.getAllByTestId("tool").map((tool) => tool.dataset.open),
+    ).toEqual(["false", "false"]);
   });
 
   it("does not render a message bubble for whitespace-only text parts", () => {

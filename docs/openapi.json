@@ -217507,6 +217507,17 @@
                           "userMessagePreview": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "responseToolNames": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "responseTextPreview": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [

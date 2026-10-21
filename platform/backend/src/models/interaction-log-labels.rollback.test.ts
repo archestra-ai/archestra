@@ -24,6 +24,62 @@ describe("InteractionModel log labels", () => {
     ).toEqual(new Set(["fix the lint errors", "now run the tests"]));
   });
 
+  test("tells apart the requests one prompt drives by what each produced", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const sessionId = `steps-${crypto.randomUUID()}`;
+    const prompt = "find the flaky test";
+    await InteractionModel.create({
+      ...chatTurn({ profileId: agent.id, sessionId, prompt }),
+      response: completion({
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "Grep", arguments: "{}" },
+          },
+          {
+            id: "call_2",
+            type: "function",
+            function: { name: "Read", arguments: "{}" },
+          },
+        ],
+      }),
+    });
+    await InteractionModel.create({
+      ...chatTurn({ profileId: agent.id, sessionId, prompt }),
+      response: completion({
+        role: "assistant",
+        content: "The retry reuses a stale idempotency key.",
+      }),
+    });
+
+    const summaries = await InteractionModel.findSummariesPaginated({
+      pagination: { limit: 10, offset: 0 },
+      filters: { sessionId },
+    });
+
+    expect(
+      summaries.data.map((row) => ({
+        prompt: row.userMessagePreview,
+        tools: row.responseToolNames,
+        reply: row.responseTextPreview,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { prompt, tools: ["Grep", "Read"], reply: null },
+        {
+          prompt,
+          tools: [],
+          reply: "The retry reuses a stale idempotency key.",
+        },
+      ]),
+    );
+  });
+
   test("names a session by its knowledge connector when it has just one", async ({
     makeAdmin,
     makeAgent,
@@ -93,4 +149,16 @@ function chatTurn(params: {
       choices: [],
     },
   } as InsertInteraction;
+}
+
+function completion(
+  message: Record<string, unknown>,
+): InsertInteraction["response"] {
+  return {
+    id: crypto.randomUUID(),
+    object: "chat.completion",
+    created: Date.now(),
+    model: "gpt-4o",
+    choices: [{ index: 0, finish_reason: "stop", logprobs: null, message }],
+  } as InsertInteraction["response"];
 }

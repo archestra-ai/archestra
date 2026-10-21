@@ -6,8 +6,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   resolveMcpClientServerName,
   type SupportedProvider,
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import {
   CONNECT_SETUP_PARTS,
@@ -76,6 +80,16 @@ export interface ConnectPlugin {
 /** A gateway the user can connect through. */
 export type ConnectGateway = AgentSelectorAgent & { slug: string };
 
+/** The tools a progressive-loading gateway lists up front, by purpose. */
+export interface StartingTools {
+  /** search_tools and run_tool, which reach every other tool. */
+  discovery: number;
+  /** Questions and guardrail recovery, which must be callable at once. */
+  controls: number;
+  /** Tools that open an app's interface; clients render them from the list. */
+  apps: number;
+}
+
 export interface ConnectPageData {
   loading: boolean;
   /**
@@ -108,6 +122,11 @@ export interface ConnectPageData {
   totalSkills: number;
   /** Gateway "progressive tool loading": tools load on demand. */
   progressive: boolean;
+  /**
+   * With progressive loading, what the tools the agent starts with are for;
+   * null otherwise and until the preview loads.
+   */
+  startingTools: StartingTools | null;
   /**
    * Initial context cost of the gateway's served tool definitions.
    * `byServer` contains fallback estimates keyed by ConnectServer key for
@@ -392,6 +411,13 @@ export function useConnectPageData({
     (preview?.toolExposureMode ?? profile?.toolExposureMode) ===
     "search_and_run_only";
   const totalTools = toolsAvailable ? (listedTools?.length ?? null) : 0;
+  const startingTools = useMemo(
+    () =>
+      progressive && toolsAvailable && listedTools
+        ? classifyStartingTools(listedTools.map((tool) => tool.name))
+        : null,
+    [progressive, toolsAvailable, listedTools],
+  );
   const servers = useMemo<ConnectServer[]>(() => {
     const inventory = gatewayServers.map(
       ({ catalogName, description: _, ...server }) => ({
@@ -486,6 +512,7 @@ export function useConnectPageData({
     skills,
     totalSkills,
     progressive,
+    startingTools,
     toolTokens,
     llmProxyEnabled: proxyAvailable,
     llmProxyId: proxyAvailable ? (llmProxy?.id ?? null) : null,
@@ -568,3 +595,25 @@ function keptOf(
   const kept = new Set(pluginIds);
   return offered.filter((p) => kept.has(p.id));
 }
+
+// A progressive gateway lists only discovery tools, the controls below, and
+// the UI tools an MCP Apps host must see at discovery time.
+function classifyStartingTools(names: string[]): StartingTools {
+  const counts: StartingTools = { discovery: 0, controls: 0, apps: 0 };
+  for (const name of names) {
+    const shortName = name.slice(name.lastIndexOf("__") + 2);
+    if (DISCOVERY_TOOL_SHORT_NAMES.has(shortName)) counts.discovery++;
+    else if (CONTROL_TOOL_SHORT_NAMES.has(shortName)) counts.controls++;
+    else counts.apps++;
+  }
+  return counts;
+}
+
+const DISCOVERY_TOOL_SHORT_NAMES = new Set<string>([
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+]);
+const CONTROL_TOOL_SHORT_NAMES = new Set<string>([
+  TOOL_ASK_USER_SHORT_NAME,
+  ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+]);

@@ -126,12 +126,12 @@ describe("inspect_guardrails_server", () => {
           id: expect.any(String),
           name: "inspection__read_54",
           readOnly: null,
-          kind: "unlisted",
+          kind: "read",
           description: "Reads one record.",
           rules: [
             {
-              kind: "unlisted",
-              policySource: "not_covered",
+              kind: "read",
+              policySource: "catchall",
               rule: expect.objectContaining({ source: "catchall", name: "*" }),
             },
           ],
@@ -358,10 +358,10 @@ describe("inspect_guardrails_server", () => {
         },
         {
           name: "clock_app__tick",
-          kind: "unlisted",
+          kind: "read",
           rules: [
             {
-              policySource: "not_covered",
+              policySource: "catchall",
               rule: expect.objectContaining({ source: "catchall", name: "*" }),
             },
           ],

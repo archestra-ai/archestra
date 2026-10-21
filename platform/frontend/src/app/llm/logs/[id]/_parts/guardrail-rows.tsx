@@ -278,7 +278,7 @@ export function GuardrailsBar({
                 {consults.length}
               </span>{" "}
               <span className="max-sm:sr-only">
-                {consults.length === 1 ? "check" : "checks"}
+                guardrail {consults.length === 1 ? "check" : "checks"}
               </span>
             </span>
             {blocked > 0 ? (
@@ -321,7 +321,9 @@ export function GuardrailsBar({
         ) : (
           <EyeOff className="size-3.5" aria-hidden="true" />
         )}
-        <span className="max-sm:hidden">Checks</span>
+        <span className="max-sm:hidden">
+          {checksShown ? "Hide check rows" : "Show check rows"}
+        </span>
       </UnstyledButton>
       <GutterKey />
       {label ? (
@@ -449,6 +451,7 @@ function GutterKey() {
           aria-label="Label gutter key: colour is trust, stripes mean the audience is narrowed"
           className="flex h-6 cursor-default items-center gap-x-2.5 whitespace-nowrap max-sm:hidden max-md:order-last max-md:basis-full"
         >
+          <li className="text-muted-foreground/80">Left rail:</li>
           <li className="inline-flex items-center gap-1">
             <GutterSwatch label={{ trust: "trusted", audience: "public" }} />
             Trusted
@@ -457,9 +460,13 @@ function GutterKey() {
             <GutterSwatch label={{ trust: "suspicious", audience: "public" }} />
             Suspicious
           </li>
+          {/* Stripes lie over either trust colour, so the key shows them on
+              the one a narrowed session most often has. */}
           <li className="inline-flex items-center gap-1">
-            <GutterSwatch label={null} />
-            Narrowed
+            <GutterSwatch
+              label={{ trust: "suspicious", audience: "internal" }}
+            />
+            Striped: narrowed audience
           </li>
           <li className="hidden items-center gap-1 xl:inline-flex">
             <span

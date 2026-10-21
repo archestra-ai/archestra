@@ -57,6 +57,8 @@ type GuardrailsState = {
    * to in the list. Null closes it.
    */
   selectConsult: (key: string | null) => void;
+  /** The guardrail records are still loading; they add rows and marks. */
+  loading: boolean;
   /** Wraps the page's span selection so picking a span closes a consult. */
   selectSpan: (key: string | null) => void;
 };
@@ -76,15 +78,16 @@ export function GuardrailsProvider({
   children: ReactNode;
 }) {
   const openappaEnabled = Boolean(useFeature("openappaEnabled"));
-  const { data: consults } = useSessionConsults({
+  const { data: consults, isLoading: consultsLoading } = useSessionConsults({
     llmSessionId: sessionId,
     enabled: openappaEnabled,
   });
-  const { data: labelChanges } = useSessionLabelChanges({
-    llmSessionId: sessionId,
-    enabled: openappaEnabled,
-  });
-  const { data: yells } = useSessionYells({
+  const { data: labelChanges, isLoading: labelChangesLoading } =
+    useSessionLabelChanges({
+      llmSessionId: sessionId,
+      enabled: openappaEnabled,
+    });
+  const { data: yells, isLoading: yellsLoading } = useSessionYells({
     llmSessionId: sessionId,
     enabled: openappaEnabled,
   });
@@ -118,10 +121,12 @@ export function GuardrailsProvider({
     if (!guardrails?.consults.some((c) => c.key === key)) return;
     appliedLink.current = linkedConsult;
     selectConsult(key);
+    revealConsultDetails();
   });
 
   const state: GuardrailsState = {
     guardrails,
+    loading: consultsLoading || labelChangesLoading || yellsLoading,
     selectedConsultKey,
     selectConsult,
     selectSpan: (key) => {
@@ -149,11 +154,12 @@ export function TraceWaterfall(
     "guardrails" | "selectedConsultKey" | "onSelectConsult"
   >,
 ) {
-  const { guardrails, selectedConsultKey, selectConsult, selectSpan } =
+  const { guardrails, loading, selectedConsultKey, selectConsult, selectSpan } =
     useGuardrails();
   return (
     <RequestWaterfall
       {...props}
+      loading={props.loading || loading}
       onSelect={selectSpan}
       guardrails={guardrails}
       selectedConsultKey={selectedConsultKey}
@@ -477,4 +483,22 @@ function Term({
       <TooltipContent className="max-w-60">{explanation}</TooltipContent>
     </Tooltip>
   );
+}
+
+/**
+ * The consult log links here for one check's result, and the details pane
+ * sits below the request list: bring it into view once it has rendered, so
+ * no one has to scroll down to find what they clicked.
+ */
+function revealConsultDetails(framesLeft = 30) {
+  const pane = document.querySelector(
+    'section[aria-label="Guardrail consult details"]',
+  );
+  if (pane) {
+    pane.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (framesLeft > 0) {
+    requestAnimationFrame(() => revealConsultDetails(framesLeft - 1));
+  }
 }

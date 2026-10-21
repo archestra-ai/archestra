@@ -7,7 +7,10 @@
  * @see https://github.com/brianc/node-postgres/issues/434
  * @see https://neon.com/guides/building-resilient-applications-with-postgres
  */
+import { isIP } from "node:net";
+import config from "@/config";
 import logger from "@/logging";
+import { getConnectionFailureTarget } from "@/utils/network-errors";
 
 /**
  * Maximum number of retry attempts for transient database errors.
@@ -125,6 +128,9 @@ const TRANSIENT_NETWORK_CODES = new Set<string>([
   ).map(({ code }) => code),
   ...CONNECT_SYSCALL_ERRNOS,
 ]);
+
+/** Port PostgreSQL listens on when the connection URL names none. */
+const DEFAULT_POSTGRES_PORT = 5432;
 
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
@@ -297,6 +303,45 @@ export function getTransientDbErrorCode(
   const cause = (error as Error & { cause?: unknown }).cause;
   if (cause) return getTransientDbErrorCode(cause, depth + 1);
 
+  return null;
+}
+
+/**
+ * Name the endpoint a connection failure was dialing when it is clearly not
+ * the database, e.g. `api.example.com` or `203.0.113.10:443`. Returns null
+ * when the failure names no target or the target may be the database.
+ *
+ * {@link getTransientDbErrorCode} matches socket errnos without knowing which
+ * connection failed, so an outbound call blocked by a network policy would
+ * otherwise read as a database outage. A connect target is compared by port
+ * (its address is already resolved, so it rarely equals the configured host
+ * name), a DNS target by host name.
+ */
+export function getNonDatabaseConnectionTarget(error: unknown): string | null {
+  const target = getConnectionFailureTarget(error);
+  if (!target) return null;
+
+  let databaseUrl: URL;
+  try {
+    databaseUrl = new URL(config.database.url);
+  } catch {
+    return null;
+  }
+  const databaseHost = databaseUrl.hostname
+    .replace(/^\[(.*)\]$/, "$1")
+    .toLowerCase();
+  if (!databaseHost) return null;
+  const host = target.host.toLowerCase();
+
+  if (target.port === null) {
+    return host === databaseHost ? null : target.host;
+  }
+  const databasePort = Number(databaseUrl.port || DEFAULT_POSTGRES_PORT);
+  const label = isIP(target.host) === 6 ? `[${target.host}]` : target.host;
+  if (target.port !== databasePort) return `${label}:${target.port}`;
+  if (isIP(databaseHost) && host !== databaseHost) {
+    return `${label}:${target.port}`;
+  }
   return null;
 }
 

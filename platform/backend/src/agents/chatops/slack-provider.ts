@@ -62,8 +62,8 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
-import { slackMessageText } from "./slack-message-text";
-import { SlackReplyStream } from "./slack-reply-stream";
+import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
+import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
@@ -136,10 +136,10 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: 10 * TimeInMs.Minute,
   });
   /**
-   * Reads the channel description on the way to a reply, so it must fail fast:
-   * the default client retries for minutes, holding the reply back.
+   * Optional descriptions and startup acknowledgments must fail fast; the
+   * default client can retry for minutes and hold the final reply back.
    */
-  private descriptionClient: WebClient | null = null;
+  private bestEffortClient: WebClient | null = null;
   /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
@@ -229,8 +229,9 @@ class SlackProvider implements ChatOpsProvider {
     await slackAppFactory.ensureManifestScopes(this.config);
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
-    this.descriptionClient = new WebClient(botToken, {
+    this.bestEffortClient = new WebClient(botToken, {
       retryConfig: { retries: 0 },
+      rejectRateLimitedCalls: true,
       timeout: 3 * TimeInMs.Second,
     });
 
@@ -316,6 +317,7 @@ class SlackProvider implements ChatOpsProvider {
     this.eventHandler = null;
     this.socketDedup.clear();
     this.client = null;
+    this.bestEffortClient = null;
     this.botUserId = null;
     this.botId = null;
     this.botDisplayName = null;
@@ -632,7 +634,8 @@ class SlackProvider implements ChatOpsProvider {
     options: ChatReplyOptions,
     replaceTs?: string,
   ): Promise<string> {
-    if (!this.client) {
+    const client = options.bestEffort ? this.bestEffortClient : this.client;
+    if (!client) {
       throw new Error("SlackProvider not initialized");
     }
 
@@ -699,7 +702,7 @@ class SlackProvider implements ChatOpsProvider {
         options.originalMessage.threadId ?? (firstTs || undefined);
 
       if (i === 0 && replaceTs) {
-        await this.client.chat.update({
+        await client.chat.update({
           channel: options.originalMessage.channelId,
           ts: replaceTs,
           text: fallbackText,
@@ -724,7 +727,7 @@ class SlackProvider implements ChatOpsProvider {
         },
         "[SlackProvider] chat.postMessage (sendReply)",
       );
-      const result = await this.client.chat.postMessage(postArgs);
+      const result = await client.chat.postMessage(postArgs);
       if (i === 0) firstTs = (result.ts as string) || "";
     }
 
@@ -955,6 +958,15 @@ class SlackProvider implements ChatOpsProvider {
       // Replacing the blocks removes the buttons, so no one clicks twice.
       blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     });
+    if (options.pausedToolCall) {
+      await updatePausedTasks({
+        client: this.client,
+        channelId: options.channelId,
+        threadTs: options.pausedToolCall.threadId,
+        taskIds: [options.pausedToolCall.toolCallId],
+        outcome: options.approved ? "approved" : "declined",
+      });
+    }
   }
 
   async sendAgentSelectionCard(params: {
@@ -1106,7 +1118,7 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit).map((message) => ({
         ...message,
-        text: slackMessageText(message),
+        text: slackThreadMessageText(message),
       }));
 
       // Keep text-less USER messages that carry downloadable files: a
@@ -1281,7 +1293,7 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async getChannelDescription(channelId: string): Promise<string | null> {
-    const client = this.descriptionClient ?? this.client;
+    const client = this.bestEffortClient ?? this.client;
     if (!client) return null;
     const cached = this.channelDescriptionCache.get(channelId);
     if (cached !== undefined) return cached || null;
@@ -2867,14 +2879,29 @@ const SLACK_MAX_SUGGESTED_PROMPTS = 4;
  * line of the reply.
  */
 function buildTrailingContextBlocks(
-  options: Pick<ChatReplyOptions, "hint" | "footer">,
+  options: Pick<ChatReplyOptions, "hint" | "footer" | "conversationUrl">,
 ) {
-  return [options.hint, options.footer]
-    .filter((text): text is string => Boolean(text))
-    .map((text) => ({
-      type: "context" as const,
-      elements: [{ type: "plain_text" as const, text, emoji: true }],
-    }));
+  return [
+    ...(options.conversationUrl
+      ? [
+          {
+            type: "context" as const,
+            elements: [
+              {
+                type: "mrkdwn" as const,
+                text: `<${options.conversationUrl}|Open conversation>`,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...[options.hint, options.footer]
+      .filter((text): text is string => Boolean(text))
+      .map((text) => ({
+        type: "context" as const,
+        elements: [{ type: "plain_text" as const, text, emoji: true }],
+      })),
+  ];
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -2909,8 +2936,8 @@ function truncateFallbackText(text: string): string {
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
 // sendReply message reserves slots for context footers (a continuation hint, or
-// the agent footer plus an optional hint — at most 2), so the
-// markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
+// the agent footer, an optional hint, and a conversation link — at most 3), so the
+// markdown block's expansion is bounded to 45, keeping the worst case (45 + 3)
 // safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
 

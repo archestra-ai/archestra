@@ -643,7 +643,7 @@ export function ChatMessages({
           isCompacting={contextCompaction?.isCompacting || isContextCompacting}
           feedback={contextCompactionFeedback}
         />
-        <ConversationContent>
+        <ConversationContent scrollClassName={OPEN_AT_END_SCROLL_CLASS}>
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
             <TranscriptWindowEdge
               hiddenCount={transcriptWindow.start}
@@ -792,13 +792,7 @@ export function ChatMessages({
                               agentId,
                               earlyToolUiStarts,
                               onSendMessage: (text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                }),
+                                session?.sendOrQueueText(text),
                             }}
                           />
                         );
@@ -1365,13 +1359,7 @@ export function ChatMessages({
                                   : undefined
                               }
                               onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                })
+                                session?.sendOrQueueText(text)
                               }
                             />
                           );
@@ -1488,13 +1476,7 @@ export function ChatMessages({
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
                               />
@@ -1563,13 +1545,7 @@ export function ChatMessages({
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 nestedToolCalls={
                                   tcId &&
@@ -1662,6 +1638,9 @@ export function ChatMessages({
             )}
           </div>
         </ConversationContent>
+        {/* After the scroller: React attaches a host element's ref after its
+            children's layout effects, and before a later sibling's. */}
+        <OpenAtEnd />
         <ChatScrollButton assistantMessageCount={assistantMessageCount} />
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
@@ -1709,6 +1688,38 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
     default:
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+/**
+ * The transcript in the server's HTML opens at its end: until the page takes
+ * over, its scroller lays out bottom-up, which browsers scroll to the end (the
+ * auto bottom margin keeps a short transcript at the top and collapses once
+ * it overflows). The HTML streams in hidden segments, so a script could not
+ * scroll it, and stick-to-bottom only starts after hydration. The scroller is
+ * `overflow-y-auto` from the HTML on, rather than from stick-to-bottom's mount
+ * effect, so the HTML scrolls it.
+ */
+const OPEN_AT_END_SCROLL_CLASS =
+  "overflow-y-auto [&:not([data-taken-over])]:flex [&:not([data-taken-over])]:flex-col-reverse [&:not([data-taken-over])>*]:shrink-0 [&:not([data-taken-over])>*]:mb-auto";
+
+/**
+ * Hands the scroller to stick-to-bottom as the transcript hydrates: the
+ * bottom-up layout is dropped and the end kept in view, before the first
+ * client paint. This marks the element instead of re-rendering: an update
+ * reaching the transcript's message boundaries before they finish hydrating
+ * would make React discard their server HTML and render them again.
+ */
+function OpenAtEnd() {
+  const { scrollRef } = useStickToBottomContext();
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || "takenOver" in scroller.dataset) return;
+    scroller.dataset.takenOver = "";
+    if (!window.location.hash.startsWith("#message-")) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, [scrollRef]);
+  return null;
 }
 
 // Re-engage stick-to-bottom when the user sends a new message.

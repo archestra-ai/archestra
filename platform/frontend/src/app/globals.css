@@ -104,6 +104,8 @@
 
 /* Base styles and defaults - theme classes override --radius */
 :root {
+  /* Inter's latin subset first; the full file covers other scripts. */
+  --font-inter: var(--font-inter-latin), var(--font-inter-full);
   --radius: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;

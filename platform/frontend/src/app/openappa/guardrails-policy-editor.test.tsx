@@ -245,7 +245,7 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
   expect(summary).not.toHaveAttribute("data-failed");
   expect(
     within(summary).getByRole("link", { name: "1 not enforced" }),
-  ).toHaveAttribute("href", "/openappa/batteries?status=broken");
+  ).toHaveAttribute("href", "/openappa/batteries?status=attention");
 });
 
 test("a refusal that keeps an earlier composition says which one stays enforced", async () => {
@@ -400,40 +400,6 @@ test("the composed view lists no stub while every battery is active", async () =
   expect(
     screen.queryByTestId("effective-policy-stubs"),
   ).not.toBeInTheDocument();
-});
-
-test("the composed view says which annotators it keeps for earlier conversations and which it no longer keeps", async () => {
-  server.use(
-    http.get(effectiveUrl, () =>
-      HttpResponse.json({
-        ...effective,
-        retained: {
-          horizonDays: 30,
-          livenessKnown: true,
-          kept: [
-            {
-              name: "a.tool-call",
-              binding: "https://judge-a.test/annotate",
-              liveRoots: 2,
-              lastActivityAt: "2026-01-01T00:00:00.000Z",
-              retiresAt: "2026-01-31T00:00:00.000Z",
-            },
-          ],
-          inactive: [{ name: "old.judge", binding: 'builtin "jev"' }],
-          dropped: [],
-        },
-      }),
-    ),
-  );
-  mount();
-  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
-  const notice = await screen.findByTestId("effective-policy-retained");
-  expect(notice).toHaveTextContent(
-    "a.tool-call (https://judge-a.test/annotate): 2 active conversations, kept until Jan 31, 2026 unless one is active again.",
-  );
-  expect(notice).toHaveTextContent(
-    "No longer kept: old.judge, unused by any conversation for 30 days.",
-  );
 });
 
 test("the source picker and revision show only in the Source view", async () => {

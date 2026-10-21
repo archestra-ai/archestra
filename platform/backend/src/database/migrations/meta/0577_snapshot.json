@@ -1,5 +1,5 @@
 {
-  "id": "43fa33c8-cf71-4d38-a9d7-8925d0991a9c",
+  "id": "1a122ddf-9ed5-4219-bcad-19fac665898b",
   "prevId": "d2ffdff1-3beb-4a65-94a1-01da2221e1cd",
   "version": "7",
   "dialect": "postgresql",
@@ -2728,113 +2728,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.agent_run_attention_notices": {
-      "name": "agent_run_attention_notices",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "task_id": {
-          "name": "task_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "channel_id": {
-          "name": "channel_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resolved": {
-          "name": "resolved",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "message_ts": {
-          "name": "message_ts",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "post_attempted": {
-          "name": "post_attempted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "resolved_notified": {
-          "name": "resolved_notified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "claim_id": {
-          "name": "claim_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "agent_run_attention_notices_task_id_idx": {
-          "name": "agent_run_attention_notices_task_id_idx",
-          "columns": [
-            {
-              "expression": "task_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "agent_run_attention_notices_task_id_agent_runs_task_id_fk": {
-          "name": "agent_run_attention_notices_task_id_agent_runs_task_id_fk",
-          "tableFrom": "agent_run_attention_notices",
-          "tableTo": "agent_runs",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "task_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -26979,6 +26872,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tools_ui_resource_catalog_idx": {
+          "name": "tools_ui_resource_catalog_idx",
+          "columns": [
+            {
+              "expression": "catalog_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "coalesce(\n    case when \"tools\".\"meta\"->'_meta'->'ui'->>'resourceUri' like 'ui://%' then \"tools\".\"meta\"->'_meta'->'ui'->>'resourceUri' end,\n    case when \"tools\".\"meta\"->'_meta'->>'ui/resourceUri' like 'ui://%' then \"tools\".\"meta\"->'_meta'->>'ui/resourceUri' end\n  ) is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -60,6 +60,7 @@ const app: OwnedApp = {
   pinnedAt: null,
   labels: [],
   icon: null,
+  iconUrl: null,
   createdBy: null,
 };
 

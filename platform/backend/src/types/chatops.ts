@@ -133,6 +133,8 @@ export interface IncomingChatMessage {
  * Options for sending a chat reply
  */
 export interface ChatReplyOptions {
+  /** Use bounded delivery without retries for optional Slack acknowledgments. */
+  bestEffort?: boolean;
   /** The original message to reply to */
   originalMessage: IncomingChatMessage;
   /** The reply text */
@@ -151,6 +153,8 @@ export interface ChatReplyOptions {
    * so the footer stays the reply's last line.
    */
   hint?: string;
+  /** Stable runtime conversation link, rendered separately from the answer. */
+  conversationUrl?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -219,6 +223,11 @@ export interface UpdateApprovalRequestOptions {
   decidedByUserId?: string;
   /** Display name of the reviewer, shown as who decided (Telegram). */
   decidedByName?: string;
+  /**
+   * The paused tool call and its thread, so a streamed reply's task card for
+   * it can be settled too (Slack).
+   */
+  pausedToolCall?: { threadId: string; toolCallId: string };
 }
 
 /**
@@ -505,11 +514,14 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
-   * Clear a transient "thinking" indicator without posting a message.
-   * Needed when the agent deliberately stays silent: providers like Slack
-   * only auto-clear the status once a message is posted to the thread.
+   * Explicitly clear processing status or remove an unanswered placeholder.
+   * Metadata carries provider-specific placeholder cleanup state.
    */
-  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+  clearTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
 
   /**
    * Open a reply stream for this message (optional). The stream posts nothing
@@ -652,6 +664,16 @@ export interface ChatOpsProvider {
    * skip record explaining why it was not delivered
    */
   downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
+
+  /**
+   * Download files of the incoming message that the platform does not put on
+   * the message itself (MS Teams channels and group chats keep them in
+   * SharePoint). Called only for a message the bot is answering.
+   * @returns One outcome per file found on the message
+   */
+  downloadMessageFiles?(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]>;
 
   /**
    * Discover all channels in a workspace/team.

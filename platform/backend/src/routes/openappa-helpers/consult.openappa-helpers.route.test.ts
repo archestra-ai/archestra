@@ -14,6 +14,7 @@ import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { withDraftHelperSources } from "@/openappa/draft-helper-sources";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
@@ -348,6 +349,47 @@ describe("battery helper bridge", () => {
     // battery files, the command, the envelope on stdin.
     const { secretEnv: _secret, ...rest } = params ?? {};
     expect(JSON.stringify(rest)).not.toContain(CREDENTIAL_VALUE);
+  });
+
+  test("a draft battery's helper answers with the credential its draft binds, only while the replay that registered it runs", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    // The bound install only stores the organization credential; the draft
+    // names no install row.
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    await OpenAppaBatteryInstallModel.replaceAll({ organizationId, rows: [] });
+    const run = stubSandbox({
+      exitCode: 0,
+      stdout: JSON.stringify({ version: 1, answer: {} }),
+      stderr: "",
+    });
+
+    const draftId = await withDraftHelperSources(async (register) => {
+      const id = register({
+        organizationId,
+        batteryName: "github",
+        packageHash: null,
+        target: "multi-user",
+        credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
+      });
+      expect(
+        (await consult({ installId: id, authorization: bridgeBearer() }))
+          .statusCode,
+      ).toBe(200);
+      return id;
+    });
+
+    expect(run.mock.calls[0]?.[0]?.secretEnv).toEqual([
+      { name: "APPA_PROVIDER_GITHUB_TOKEN", value: CREDENTIAL_VALUE },
+    ]);
+    expect(
+      (await consult({ installId: draftId, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await consult({ installId: install.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(404);
   });
 
   test("the archestra audience is answered from the organization's own membership, never a sandbox", async ({

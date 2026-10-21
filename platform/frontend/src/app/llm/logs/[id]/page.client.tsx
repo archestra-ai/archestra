@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
@@ -49,13 +49,12 @@ import { RequestDetails } from "./_parts/request-details";
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
-  SessionHeaderTitle,
+  SessionHeaderIcon,
   SessionIdentityLine,
 } from "./_parts/session-header";
 import {
   buildTimeline,
   requestSpanKey,
-  type TimelineSpan,
   toolCallSpanKey,
 } from "./_parts/session-timeline";
 import {
@@ -72,7 +71,6 @@ export default function SessionDetailPage({
 }) {
   // The session key: a session id, or a sessionless request's own id.
   const sessionId = decodeURIComponent(use(paramsPromise).id);
-  const router = useRouter();
   const appName = useAppName();
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
@@ -84,11 +82,14 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
+  // Past page one, the read also takes the previous page's newest row: it
+  // bounds this page's tool-call window, and a second read would delay them.
+  const hasNewerPage = offset > 0;
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: pageSize,
-      offset,
+      limit: hasNewerPage ? pageSize + 1 : pageSize,
+      offset: hasNewerPage ? offset - 1 : offset,
       sortBy: "createdAt",
       sortDirection: "desc",
     });
@@ -104,18 +105,17 @@ export default function SessionDetailPage({
     toastOnError: false,
   });
 
-  const interactions = interactionsResponse?.data ?? [];
+  const pageRows = interactionsResponse?.data ?? [];
+  const newerRequest = hasNewerPage ? (pageRows[0] ?? null) : null;
+  const interactions = useMemo(
+    () => (hasNewerPage ? pageRows.slice(1) : pageRows),
+    [hasNewerPage, pageRows],
+  );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
   const { data: lineage } = useSessionLineage({
     sessionId,
     enabled: openappaEnabled,
-  });
-  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
-  const { data: lastMainRequest } = useInteraction({
-    interactionId: latestInteractionId,
-    refetchInterval: null,
-    enabled: latestInteractionId !== undefined,
   });
 
   // Use session data from API for accurate totals, fall back to page data
@@ -153,16 +153,6 @@ export default function SessionDetailPage({
 
   const exportSession = useExportSessionInteractions();
 
-  // Whether the latest main request captured a thread: its thread is the
-  // whole conversation, so the list marks it and the details offer a way to it.
-  const latestHasConversation = useMemo(
-    () =>
-      lastMainRequest
-        ? new DynamicInteraction(lastMainRequest).mapToUiMessages().length > 0
-        : false,
-    [lastMainRequest],
-  );
-
   const goToPage = useCallback(
     (nextPageIndex: number) =>
       setPagination({ pageIndex: nextPageIndex, pageSize }),
@@ -171,10 +161,10 @@ export default function SessionDetailPage({
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
+    newerRequest,
     requestsReady: interactionsResponse !== undefined && !interactionsLoading,
     pageIndex,
     pageSize,
-    offset,
     onLocatePage: goToPage,
     targetToolCallId,
   });
@@ -188,6 +178,29 @@ export default function SessionDetailPage({
     onLocatePage: goToPage,
     targetRequestId,
   });
+
+  // The trace draws once: this page's requests and tool calls, on the page a
+  // link points at. Drawing each as it lands reflows the rows and moves the
+  // selection.
+  const traceLoading =
+    interactionsLoading || !sessionToolCalls.ready || !linkedRequest.ready;
+
+  // Whether the latest main request captured a thread: its thread is the
+  // whole conversation, so the list marks it and the details offer a way to
+  // it. The full record can run to megabytes, so it waits for the trace.
+  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
+  const { data: lastMainRequest } = useInteraction({
+    interactionId: latestInteractionId,
+    refetchInterval: null,
+    enabled: latestInteractionId !== undefined && !traceLoading,
+  });
+  const latestHasConversation = useMemo(
+    () =>
+      lastMainRequest
+        ? new DynamicInteraction(lastMainRequest).mapToUiMessages().length > 0
+        : false,
+    [lastMainRequest],
+  );
 
   const timeline = useMemo(
     () => buildTimeline({ requests: interactions, toolCalls }),
@@ -295,28 +308,24 @@ export default function SessionDetailPage({
           : null
       : null;
 
-  // A request's whole record is in the details pane; a tool call has a page.
-  const openSpan = (span: TimelineSpan) => {
-    if (span.type === "tool") router.push(`/mcp/logs/${span.call.id}`);
-  };
   const exportDisabled = exportSession.isPending || totalRequests === 0;
 
   return (
     <TooltipProvider delayDuration={150}>
       <PageLayout
         denseContent
+        // Laid out like every other detail page: back arrow, the record's
+        // mark in its tile, then the title over its one-line description.
+        icon={<SessionHeaderIcon session={sessionData} />}
         title={
-          <SessionHeaderTitle
-            session={sessionData}
-            title={sessionTitle || "Session"}
-          />
+          <span className="min-w-0 truncate" title={sessionTitle || "Session"}>
+            {sessionTitle || "Session"}
+          </span>
         }
         documentTitle={sessionTitle || "Session"}
         stackHeaderOnMobile
         backLink={
-          <span className="flex shrink-0 lg:translate-y-3">
-            <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
-          </span>
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
         }
         description={<SessionIdentityLine session={sessionData} />}
       >
@@ -358,7 +367,7 @@ export default function SessionDetailPage({
             >
               <TraceWaterfall
                 timeline={timeline}
-                loading={interactionsLoading}
+                loading={traceLoading}
                 profileName={profileName}
                 serverDisplayByName={serverDisplayByName}
                 conversationRowId={
@@ -367,8 +376,6 @@ export default function SessionDetailPage({
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
                 onSelect={setPickedKey}
-                onOpen={openSpan}
-                openHint="Enter or double-click opens a tool call"
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}
@@ -413,8 +420,8 @@ export default function SessionDetailPage({
               <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
               <TraceDetails
                 height={detailsHeight}
-                loading={interactionsLoading}
-                span={selected}
+                loading={traceLoading}
+                span={traceLoading ? null : selected}
                 origin={timeline?.origin ?? 0}
                 previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
                 index={selectedIndex}

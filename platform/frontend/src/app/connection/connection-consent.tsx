@@ -9,7 +9,8 @@ import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
+import { useDocumentSeedFresh } from "@/lib/shell-deferral";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
@@ -24,6 +25,10 @@ export function ConnectionConsent() {
   usePageTitle(approvalDocumentTitle);
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
+  // A server-seeded document carries the settings the server read for this
+  // request: that is the authoritative read, so the flow renders at once.
+  const seededFresh = useDocumentSeedFresh(organizationKeys.details());
+  const settingsRead = organizationQuery.isFetchedAfterMount || seededFresh;
   useEffect(() => {
     // A second browser tab can change these settings without updating this
     // tab's query cache. visibilitychange is the reliable notification when
@@ -43,7 +48,7 @@ export function ConnectionConsent() {
   // retain its inputs and selections but pause actions until revalidated;
   // treating a pending read as disabled would generate a partial setup.
   const organization =
-    organizationQuery.isFetchedAfterMount && !organizationQuery.isError
+    settingsRead && !organizationQuery.isError
       ? organizationQuery.data
       : undefined;
   // Fail closed until the org read confirms the Connect affordances. Missing
@@ -69,8 +74,7 @@ export function ConnectionConsent() {
       maxWidth="wizard"
       contentOverflowX="clip"
     >
-      {(organizationQuery.isFetching && !organization) ||
-      !organizationQuery.isFetchedAfterMount ? (
+      {(organizationQuery.isFetching && !organization) || !settingsRead ? (
         <LoadingState label="Checking connection settings" />
       ) : organizationQuery.isError ? (
         <QueryLoadError

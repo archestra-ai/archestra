@@ -72,6 +72,33 @@ describe("proxy", () => {
       (response.headers.get("x-middleware-override-headers") ?? "").split(",");
     const documentLoad = { "sec-fetch-dest": "document" };
 
+    it("hands on the query string of a marked document, and of no other", () => {
+      const marked = proxy(
+        createMockRequest({ url: "/chat?agentId=a1", headers: documentLoad }),
+      );
+      expect(
+        new Headers(
+          Object.fromEntries(
+            handedOn(marked).map((name) => [
+              name,
+              marked.headers.get(`x-middleware-request-${name}`) ?? "",
+            ]),
+          ),
+        ).get("x-archestra-shell-seed-search"),
+      ).toBe("?agentId=a1");
+
+      const unmarked = proxy(
+        createMockRequest({
+          url: "/agents?x=1",
+          headers: {
+            ...documentLoad,
+            "x-archestra-shell-seed-search": "?forged=1",
+          },
+        }),
+      );
+      expect(handedOn(unmarked)).not.toContain("x-archestra-shell-seed-search");
+    });
+
     it("marks a document load of the registry list", () => {
       expect(
         forwarded(
@@ -94,7 +121,50 @@ describe("proxy", () => {
           ),
         ).toBe(route);
       }
-      for (const url of ["/agents", "/mcp/gateways", "/mcp/registry/abc"]) {
+      // An existing conversation and an Agent Runtime run, by their ids.
+      for (const page of [
+        "/chat/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+        "/chat/runs/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      ]) {
+        expect(
+          forwarded(
+            proxy(createMockRequest({ url: page, headers: documentLoad })),
+          ),
+        ).toBe(page);
+      }
+      for (const url of [
+        "/agents",
+        "/mcp/gateways",
+        "/mcp/registry/abc",
+        // Not a conversation id, nor a page under one.
+        "/chat/abc",
+        "/chat/new",
+        "/chat/runs/abc",
+        "/chat/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/files",
+      ]) {
+        expect(
+          forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),
+        ).toBeNull();
+      }
+    });
+
+    it("marks a connection approval document, and not the plain Connect page", () => {
+      const request = `connectRequest=${"0a1b2c".repeat(8)}`;
+      expect(
+        forwarded(
+          proxy(
+            createMockRequest({
+              url: `/connection?clientId=opencode&platform=linux&${request}`,
+              headers: documentLoad,
+            }),
+          ),
+        ),
+      ).toBe("/connection");
+      for (const url of [
+        "/connection",
+        "/connection?clientId=opencode",
+        "/connection?connectRequest=not-a-request-id",
+      ]) {
         expect(
           forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),
         ).toBeNull();

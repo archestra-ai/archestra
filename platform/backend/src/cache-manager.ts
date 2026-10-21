@@ -122,6 +122,8 @@ export const CacheKey = {
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
   KbConnectorIdentity: "kb-connector-identity",
+  /** Files of the MS Teams message that triggered an agent-selection card, replayed once the agent is picked */
+  TeamsAgentSelectionAttachments: "teams-agent-selection-attachments",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
@@ -140,6 +142,8 @@ export const CacheKey = {
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  ChatOpsReplyAnchor: "chatops-reply-anchor",
+  ChatOpsRuntimeAcknowledgement: "chatops-runtime-acknowledgement",
   /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */

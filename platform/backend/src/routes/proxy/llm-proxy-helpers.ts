@@ -1,3 +1,10 @@
+import { priceBillingUsage } from "@/services/billable-usage";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
+import { componentCacheCosts } from "@/utils/billable-usage";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * LLM Proxy Helpers
  *
@@ -347,8 +354,14 @@ export async function calculateUsageCost(params: {
   model: string;
   usage: UsageView;
   provider: SupportedProvider;
+  usageAccountingMode?: PricedBillingUsage["mode"];
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
+  if (params.usageAccountingMode === "enforce")
+    return Number(
+      (await priceBillingUsage({ model, usage, provider, mode: "enforce" }))
+        .cost,
+    );
   if (usage.providerReportedCost !== undefined) {
     return usage.providerReportedCost;
   }
@@ -372,29 +385,68 @@ export async function calculateInteractionCosts(params: {
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
+  usageAccountingMode?: PricedBillingUsage["mode"];
 }): Promise<{
+  billingUsage?: PricedBillingUsage;
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
-  const actualCost = await calculateUsageCost({
-    model: params.actualModel,
-    usage: params.usage,
-    provider: params.providerName,
-  });
-  const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
-    params.actualModel,
-    params.providerName,
-    params.usage.cacheReadTokens ?? 0,
-    params.usage.cacheWriteTokens ?? 0,
-    params.usage.cacheWrite1hTokens ?? 0,
-  );
+  const billingUsage =
+    params.usageAccountingMode && params.usageAccountingMode !== "off"
+      ? await priceBillingUsage({
+          model: params.actualModel,
+          usage: params.usage,
+          provider: params.providerName,
+          mode: params.usageAccountingMode,
+        })
+      : undefined;
+  const actualCost =
+    billingUsage?.mode === "enforce"
+      ? Number(billingUsage.cost)
+      : await calculateUsageCost({
+          model: params.actualModel,
+          usage: params.usage,
+          provider: params.providerName,
+        });
+  const cacheBreakdown =
+    billingUsage?.mode === "enforce"
+      ? undefined
+      : await utils.costOptimization.calculateCacheCost(
+          params.actualModel,
+          params.providerName,
+          params.usage.cacheReadTokens ?? 0,
+          params.usage.cacheWriteTokens ?? 0,
+          params.usage.cacheWrite1hTokens ?? 0,
+        );
+  const componentsCache =
+    billingUsage?.mode === "enforce"
+      ? billingUsage.components.map(componentCacheCosts)
+      : undefined;
   return {
+    billingUsage,
     actualCost,
-    cacheCost: cacheBreakdown?.cacheCost,
-    cacheSavings: cacheBreakdown?.cacheSavings,
-    cacheReadSavings: cacheBreakdown?.cacheReadSavings,
+    ...(componentsCache
+      ? {
+          cacheCost: componentsCache.reduce(
+            (sum, item) => sum + item.cacheCost,
+            0,
+          ),
+          cacheSavings: componentsCache.reduce(
+            (sum, item) => sum + item.cacheSavings,
+            0,
+          ),
+          cacheReadSavings: componentsCache.reduce(
+            (sum, item) => sum + item.cacheReadSavings,
+            0,
+          ),
+        }
+      : {
+          cacheCost: cacheBreakdown?.cacheCost,
+          cacheSavings: cacheBreakdown?.cacheSavings,
+          cacheReadSavings: cacheBreakdown?.cacheReadSavings,
+        }),
   };
 }
 
@@ -461,6 +513,16 @@ export function applyInputTokenFallback(params: {
     ...usage,
     inputTokens: estimatedInputTokens,
     inputTokensEstimated: true,
+    billingQuote: undefined,
+    ...(usage.billingUsage
+      ? {
+          billingUsage: {
+            ...usage.billingUsage,
+            status: "incomplete" as const,
+            issues: [...usage.billingUsage.issues, "estimated_input_tokens"],
+          },
+        }
+      : {}),
   };
 }
 
@@ -470,6 +532,7 @@ export function applyInputTokenFallback(params: {
  */
 export function buildInteractionRecord(params: {
   agent: GatewayAgent;
+  billingAttribution?: BillingAttribution;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   billingMode: BillingMode;
@@ -496,6 +559,7 @@ export function buildInteractionRecord(params: {
   actualModel: string;
   usage: UsageView;
   costs: {
+    billingUsage?: PricedBillingUsage;
     actualCost: number | undefined;
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
@@ -504,6 +568,9 @@ export function buildInteractionRecord(params: {
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
+    environmentId: params.billingAttribution?.environmentId,
+    billingAttribution: params.billingAttribution,
+    billingUsage: params.costs.billingUsage,
     externalAgentId: params.externalAgentId,
     authMethod: params.authMethod,
     billingMode: params.billingMode,
@@ -539,8 +606,14 @@ export function buildInteractionRecord(params: {
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
-    cost: params.costs.actualCost?.toFixed(10) ?? null,
-    baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
+    cost:
+      params.costs.billingUsage?.mode === "enforce"
+        ? params.costs.billingUsage.cost
+        : (params.costs.actualCost?.toFixed(10) ?? null),
+    baselineCost:
+      params.costs.billingUsage?.mode === "enforce"
+        ? params.costs.billingUsage.cost
+        : (params.costs.actualCost?.toFixed(10) ?? null),
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
   };
@@ -683,6 +756,7 @@ export function upstreamErrorMessage(
  * The caller limits retries to failures before the first response chunk.
  */
 export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
+  if (error instanceof ObservedProviderUsageError) return false;
   if (
     error instanceof ApiError ||
     explicitHttpStatus(error) !== undefined ||
@@ -1324,4 +1398,46 @@ function undecorated(
     return undefined;
   }
   return toolCall.name.slice(decoration.prefix.length);
+}
+
+/** Handler-owned component metrics; HTTP wrappers own other providers' tokens. */
+export function reportBillableUsageMetrics(params: {
+  usage: PricedBillingUsage;
+  agent: GatewayAgent;
+  source: InteractionSource;
+  billingMode: BillingMode;
+  authMethod?: InteractionAuthMethod;
+  tokens: boolean;
+}) {
+  for (const component of params.usage.components) {
+    if (params.tokens)
+      metrics.llm.reportLLMTokens(
+        component.provider,
+        params.agent,
+        {
+          input: component.inputTokens,
+          output: component.outputTokens,
+          cacheRead: component.cacheReadTokens,
+          cacheWrite: component.cacheWriteTokens,
+        },
+        component.model,
+        params.source,
+      );
+    metrics.llm.reportLLMCost({
+      provider: component.provider,
+      profile: params.agent,
+      model: component.model,
+      cost: component.cost ? Number(component.cost) : 0,
+      source: params.source,
+      billingMode: params.billingMode,
+      authMethod: params.authMethod,
+    });
+    metrics.llm.reportLLMCacheCost(
+      component.provider,
+      params.agent,
+      component.model,
+      componentCacheCosts(component),
+      params.source,
+    );
+  }
 }

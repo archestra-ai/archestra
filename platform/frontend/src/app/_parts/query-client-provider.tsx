@@ -12,6 +12,7 @@ import {
   startPersistingQueryCache,
   syncPersistedQueryCacheScope,
 } from "@/lib/query-persistence";
+import { markShellSeeded } from "@/lib/shell-deferral";
 
 export const ArchestraQueryClientProvider = ({
   children,
@@ -38,6 +39,7 @@ export const ArchestraQueryClientProvider = ({
       },
     });
     if (shellSeed) {
+      markShellSeeded(client);
       seedShellQueries(client, shellSeed);
       for (const { queryKey, data } of shellSeed.queries) {
         client.setQueryData(queryKey, data);

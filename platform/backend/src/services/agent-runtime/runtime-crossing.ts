@@ -1,4 +1,5 @@
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
+import config from "@/config";
 import logger from "@/logging";
 import {
   type AgentRuntimeCrossingRefusalReason,
@@ -11,6 +12,7 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
+import { isUnenforcedSession } from "@/openappa/unenforced";
 import {
   getGuardrailsDeployment,
   isGuardrailsV2Active,
@@ -101,9 +103,15 @@ export async function guardRuntimeCrossing(
 /**
  * A runtime bound to a parent answers only to that parent's proof. Returns the
  * refusal for a caller without one, or undefined when the runtime has no
- * parent. A runtime whose session cannot be resolved is refused, not assumed
- * to be unbound. Without a proof the gateway cannot tell the parent from a
- * stranger, so the refusal names the missing proof, not a different session.
+ * parent or OpenAPPA no longer governs its session. A runtime whose session
+ * cannot be resolved is refused, not assumed to be unbound. Without a proof
+ * the gateway cannot tell the parent from a stranger, so the refusal names the
+ * missing proof, not a different session.
+ *
+ * A session that was superyelled, whose parent was, or that started while
+ * enforcement was off gets no proof from the proxy, so its own calls and its
+ * parent's carry none. The gateway asks the same question the proxy does, but
+ * only reads: the proxy records the session on its own next request.
  */
 export async function refuseUnrecognizedCaller(params: {
   organizationId: string;
@@ -123,6 +131,7 @@ export async function refuseUnrecognizedCaller(params: {
     });
   }
   if (!resolved.session.parent_id) return undefined;
+  if (await isUnenforcedSession(resolved.session)) return undefined;
   return reportCrossingRefusal({
     reason: "proof_missing",
     message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
@@ -286,8 +295,7 @@ export async function classifyRuntimeCaller(params: {
       kind: "refused",
       reason: reportCrossingRefusal({
         reason: "unparented",
-        message:
-          "This runtime was opened without a parent. Its raw result was not returned.",
+        message: `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
         ...report,
       }),
     };
@@ -421,4 +429,4 @@ const BOUND_TO_ANOTHER_SESSION =
   "This runtime is bound to a different session. The request was refused.";
 
 const UNPROVEN_CALLER_ON_BOUND_RUNTIME =
-  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Retry from the conversation that started the run, with its model requests going through the LLM Proxy.";
+  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Only a tool call from the run's own model, or from the conversation that started the run, carries that proof when its model requests go through the LLM Proxy. A script cannot make this call.";

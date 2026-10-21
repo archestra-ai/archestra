@@ -10,6 +10,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -26,6 +27,7 @@ import type {
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
+import type { ChatOpsProviderType } from "@/types/chatops";
 import { escapeLikePattern } from "@/utils/sql-search";
 import A2AMessageModel from "./a2a/message";
 import AgentRunAttentionNoticeModel from "./agent-run-attention-notice";
@@ -244,13 +246,14 @@ class AgentRunModel {
     run: AgentRunRecord;
     workspace: Pick<
       AgentWorkspace,
-      "state" | "expiresAt" | "activeTaskId"
+      "id" | "state" | "expiresAt" | "activeTaskId"
     > | null;
   } | null> {
     const [result] = await db
       .select({
         run: getTableColumns(schema.agentRunsTable),
         workspace: {
+          id: schema.agentWorkspacesTable.id,
           state: schema.agentWorkspacesTable.state,
           expiresAt: schema.agentWorkspacesTable.expiresAt,
           activeTaskId: schema.agentWorkspacesTable.activeTaskId,
@@ -281,6 +284,44 @@ class AgentRunModel {
       )
       .limit(1);
     return result ?? null;
+  }
+
+  /** Durable turns addressed to one bot in a thread, including other replicas. */
+  static async listCancelableInChatOpsThread(params: {
+    provider: ChatOpsProviderType;
+    channelId: string;
+    threadId: string;
+    pinnedAgentId?: string;
+  }): Promise<AgentRunRecord[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.chatopsChannelBindingsTable,
+        and(
+          sql`${schema.agentRunsTable.completionTarget}->>'bindingId' = ${schema.chatopsChannelBindingsTable.id}::text`,
+          eq(
+            schema.agentRunsTable.organizationId,
+            schema.chatopsChannelBindingsTable.organizationId,
+          ),
+        ),
+      )
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
+          sql`${schema.agentRunsTable.completionTarget}->>'type' = 'chatops'`,
+          sql`${schema.agentRunsTable.completionTarget}->>'threadId' = ${params.threadId}`,
+          params.pinnedAgentId
+            ? sql`${schema.agentRunsTable.completionTarget}->>'pinnedAgentId' = ${params.pinnedAgentId}`
+            : sql`${schema.agentRunsTable.completionTarget}->>'pinnedAgentId' IS NULL`,
+          notInArray(schema.a2aTasksTable.state, [...A2A_TERMINAL_TASK_STATES]),
+        ),
+      );
   }
 
   static async updateAttentionState(params: {

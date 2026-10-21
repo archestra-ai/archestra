@@ -8,8 +8,10 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
-import { useMemo } from "react";
-import config from "@/lib/config/config";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useMemo } from "react";
+import config, { getConfiguredExternalProxyUrls } from "@/lib/config/config";
+import { documentOriginQueryKey } from "@/lib/connection-approval-query-keys";
 
 /** A provider with its own LLM proxy endpoint: chat providers plus Jev. */
 export type ProxyEndpointProvider = Exclude<
@@ -156,16 +158,38 @@ export function resolveEffectiveId(params: {
 export function useConnectionBaseUrl(
   metadata: readonly ConnectionBaseUrl[] | null | undefined,
 ): string {
-  const baseUrls = useMemo(
-    () =>
-      resolveCandidateBaseUrls({
-        externalProxyUrls: config.api.externalProxyUrls,
-        internalProxyUrl: config.api.internalProxyUrl,
-        metadata: metadata ?? null,
-      }),
-    [metadata],
+  // On the server there is no window: a seeded document carries its origin,
+  // so the server render picks the URL the browser picks.
+  const seededOrigin = useContext(QueryClientContext)?.getQueryData<string>(
+    documentOriginQueryKey,
   );
-  const adminDefault = resolveAdminDefaultBaseUrl(metadata ?? null);
+  return useMemo(() => {
+    const configured = getConfiguredExternalProxyUrls();
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : seededOrigin;
+    return resolveConnectionBaseUrl({
+      externalProxyUrls:
+        configured.length > 0 ? configured : origin ? [`${origin}/v1`] : [],
+      internalProxyUrl: config.api.internalProxyUrl,
+      metadata,
+    });
+  }, [metadata, seededOrigin]);
+}
+
+/**
+ * {@link useConnectionBaseUrl} for given URLs: the server seed passes the
+ * document's own origin where the browser passes `window.location.origin`.
+ */
+export function resolveConnectionBaseUrl(params: {
+  externalProxyUrls: readonly string[];
+  internalProxyUrl: string;
+  metadata: readonly ConnectionBaseUrl[] | null | undefined;
+}): string {
+  const baseUrls = resolveCandidateBaseUrls({
+    ...params,
+    metadata: params.metadata ?? null,
+  });
+  const adminDefault = resolveAdminDefaultBaseUrl(params.metadata ?? null);
   return adminDefault && baseUrls.includes(adminDefault)
     ? adminDefault
     : baseUrls[0];

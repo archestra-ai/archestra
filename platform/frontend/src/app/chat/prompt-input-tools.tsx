@@ -115,6 +115,8 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
+  /** The agent is still being decided; the selector shows a placeholder */
+  isSelectorAgentResolving?: boolean;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -194,6 +196,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onOpenFiles,
   agentLlmApiKeyId,
   selectorAgentId,
+  isSelectorAgentResolving = false,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -587,7 +590,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             collisionPadding={12}
             className="w-96 max-w-[calc(100vw-1.5rem)] space-y-2 text-sm"
           >
-            <p className="font-medium">Encrypted chats</p>
+            <p className="font-medium">Encrypted chats (not configured)</p>
             <p className="text-muted-foreground">
               Some conversations shouldn&apos;t be visible to the team that runs{" "}
               {appName} — for example, sensitive discussions among senior
@@ -629,6 +632,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <InitialAgentSelector
               currentAgentId={selectorAgentId}
               onAgentChange={handleAgentChange}
+              isAgentResolving={isSelectorAgentResolving}
             />
           )}
           {!runtimeMode &&

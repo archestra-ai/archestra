@@ -1,5 +1,8 @@
 import type { archestraApiTypes, InteractionSource } from "@archestra/shared";
-import { sourceLabel } from "@/app/llm/logs/_parts/logs-table-format";
+import {
+  sessionTitleOf,
+  sourceLabel,
+} from "@/app/llm/logs/_parts/logs-table-format";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import { formatElapsed } from "@/lib/utils/format-duration";
 
@@ -246,13 +249,19 @@ export function spanKind(
 
 /**
  * A request's name in the list: the sub-agent's label, what a side request
- * did, or who made a main-thread turn. ChatOps and chat turns are the
- * agent's own, so they carry its name rather than "Slack" or "Chat".
+ * did, or for a main-thread turn the prompt it served. Every main turn of a
+ * session comes from the same client, so naming them by it ("claude_code",
+ * "claude_code", …) told them apart by nothing; the agent's name is the
+ * fallback when no prompt was captured.
  */
 export function requestLabel(
   row: Pick<
     InteractionSummary,
-    "requestType" | "source" | "externalAgentIdLabel" | "externalAgentId"
+    | "requestType"
+    | "source"
+    | "externalAgentIdLabel"
+    | "externalAgentId"
+    | "userMessagePreview"
   >,
   profileName: string | null | undefined,
 ): string {
@@ -260,7 +269,11 @@ export function requestLabel(
   if (kind === "subagent") return row.externalAgentIdLabel || "Sub-agent";
   if (kind === "auxiliary" && row.source) return sourceLabel(row.source);
   return (
-    row.externalAgentIdLabel || row.externalAgentId || profileName || "Main"
+    sessionTitleOf({ lastUserMessagePreview: row.userMessagePreview }) ||
+    row.externalAgentIdLabel ||
+    row.externalAgentId ||
+    profileName ||
+    "Main"
   );
 }
 

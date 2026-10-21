@@ -73,6 +73,8 @@ export const REMOTE_MCP_SERVERS = [
   { name: "Notion", description: "Pages, databases, and comments", serverUrl: "https://mcp.notion.com/mcp" },
   { name: "PagerDuty", description: "Incidents, services, and on-call schedules", serverUrl: "https://mcp.pagerduty.com/mcp" },
   { name: "Atlassian", description: "Jira issues and Confluence pages", serverUrl: "https://mcp.atlassian.com/v1/mcp" },
+  { name: "GitHub", description: "Repositories, issues, and pull requests", serverUrl: "https://api.githubcopilot.com/mcp/" },
+  { name: "Slack", description: "Channels, messages, and threads", serverUrl: "https://mcp.slack.com/mcp" },
   // Token header sign-in, so its Install dialog asks for a key.
   {
     name: "Stripe",
@@ -87,6 +89,89 @@ export const REMOTE_MCP_SERVERS = [
         sensitive: true,
       },
     },
+  },
+] as const;
+
+/** Catalog entries that reuse the icon of their public MCP catalog entry (`mcp-catalog/data/mcp-evaluations`). */
+export const MCP_CATALOG_ICONS: Record<string, string> = {
+  GitHub: "githubcopilot__remote-mcp.json",
+  Slack: "slack__remote-mcp.json",
+};
+
+/**
+ * Rules the Guardrails docs walk through, added to the starting policy: an agent
+ * that read an internal Slack channel cannot open an issue in the public SDK repository.
+ */
+export const GUARDRAILS_POLICY_RULES = `
+# Reading Slack keeps what the agent learned inside the company.
+[[policy.tool]]
+name = "slack__slack_read_channel"
+delta = { audience = ["internal"] }
+
+# acme/sdk is a public repository: a new issue there may carry only public data.
+[[policy.tool]]
+name = "github__issue_write(owner:acme,repo:sdk)"
+requires = { audience = { contains = ["public"] } }
+`;
+
+/** Validation files on Guardrails → Validations, each checking one case of GUARDRAILS_POLICY_RULES. */
+export const VALIDATIONS = [
+  {
+    path: "slack-to-public-issue.appa",
+    content: `# Slack data can't go into a public GitHub issue
+mcp/slack/slack_read_channel {
+  channel_id: "C0INCIDENT"
+}
+expect allow
+
+mcp/github/issue_write {
+  method: "create"
+  owner: "acme"
+  repo: "sdk"
+  title: "Upload retries ignore URL expiry"
+}
+expect authority human-approval
+`,
+  },
+  {
+    path: "public-issue-fresh-session.appa",
+    content: `# A fresh session can open a public issue
+mcp/github/issue_write {
+  method: "create"
+  owner: "acme"
+  repo: "sdk"
+  title: "Upload retries ignore URL expiry"
+}
+expect allow
+`,
+  },
+] as const;
+
+/** Yells on Guardrails → Yells: agents that could not finish a task because of the policy. */
+export const YELLS = [
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000001",
+    user: "priya",
+    minutesAgo: 35,
+    superyell: false,
+    message:
+      "Blocked from opening an issue in acme/sdk after reading #incident-review. The issue only describes the SDK retry bug, with no customer details, but the session can no longer send anything public.",
+  },
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000002",
+    user: "marcus",
+    minutesAgo: 180,
+    superyell: true,
+    message:
+      "Could not publish the v3.2.0 release notes to the public changelog: the notes were drafted after reading the internal release thread, and every approval covered only one call.",
+  },
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000003",
+    user: "daniel",
+    minutesAgo: 1440,
+    superyell: false,
+    message:
+      "The remedy plan offered approval for a GitHub search that needs no approval: reading public issues should not need a review.",
   },
 ] as const;
 

@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
+import { WebSocket as WS } from "ws";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -22,6 +23,7 @@ import {
 } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, onTestFinished, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
+import websocketService from "@/websocket";
 import routes from "./openappa-policy-tests.routes";
 
 const content = `[policy]
@@ -146,6 +148,128 @@ describe("policy replay runs", () => {
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
     ).toEqual(files);
+  });
+  /** Open sockets on this replica, as the WebSocket server would hold them. */
+  function openSockets(
+    owners: { userId: string; organizationId: string }[],
+  ): unknown[][] {
+    const service = websocketService as unknown as {
+      wss: { clients: Set<WS> } | null;
+      clientContexts: Map<
+        WS,
+        (typeof owners)[number] & { userIsMcpServerAdmin: boolean }
+      >;
+    };
+    const previous = service.wss;
+    const sockets = owners.map((owner) => {
+      const received: unknown[] = [];
+      const socket = {
+        readyState: WS.OPEN,
+        send: (raw: string) => received.push(JSON.parse(raw)),
+      } as unknown as WS;
+      service.clientContexts.set(socket, {
+        ...owner,
+        userIsMcpServerAdmin: false,
+      });
+      return { socket, received };
+    });
+    service.wss = { clients: new Set(sockets.map(({ socket }) => socket)) };
+    onTestFinished(() => {
+      service.wss = previous;
+      for (const { socket } of sockets) service.clientContexts.delete(socket);
+    });
+    return sockets.map(({ received }) => received);
+  }
+  test("a run with a progress token streams each file to the requesting user and stores its duration", async ({
+    makeUser,
+  }) => {
+    const sourceVersion = await saveFiles();
+    const other = await makeUser();
+    const [own, foreign] = openSockets([
+      { userId: ctx.user.id, organizationId: ctx.organizationId },
+      { userId: other.id, organizationId: ctx.organizationId },
+    ]);
+    const token = randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files, sourceVersion, progressToken: token },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const run = response.json();
+    for (const file of run.files) expect(file.durationMs).toBeTypeOf("number");
+    const [stored] = await OpenAppaPolicyTestsModel.listRuns(
+      ctx.organizationId,
+    );
+    expect(
+      (stored.result.files as { durationMs?: number }[]).map(
+        (file) => file.durationMs,
+      ),
+    ).toEqual(run.files.map((file: { durationMs: number }) => file.durationMs));
+
+    expect(foreign).toEqual([]);
+    const payloads = own.map(
+      (message) => (message as { type: string; payload: unknown }).payload,
+    );
+    expect(
+      own.every(
+        (message) =>
+          (message as { type: string }).type === "openappa_validation_progress",
+      ),
+    ).toBe(true);
+    expect(payloads).toEqual([
+      { token, phase: "started", paths: files.map((file) => file.path) },
+      ...run.files.flatMap(
+        (file: { path: string; durationMs: number; status: string }) => [
+          { token, phase: "file_started", path: file.path },
+          expect.objectContaining({
+            token,
+            phase: "file_finished",
+            path: file.path,
+            status: file.status,
+            durationMs: file.durationMs,
+          }),
+        ],
+      ),
+      { token, phase: "finished", runId: run.id },
+    ]);
+    expect(payloads[6]).toMatchObject({
+      status: "failed",
+      assertionCount: 1,
+      steps: [{ expected: "deny", actual: "allow", status: "failed" }],
+    });
+
+    const quiet = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files, sourceVersion },
+    });
+    expect(quiet.statusCode, quiet.body).toBe(200);
+    expect(own).toHaveLength(payloads.length);
+  });
+  test("a run that cannot be recorded finishes its progress without a run id", async () => {
+    await saveFiles();
+    const [own] = openSockets([
+      { userId: ctx.user.id, organizationId: ctx.organizationId },
+    ]);
+    const token = randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files, sourceVersion: "stale", progressToken: token },
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(
+      own.map((message) => (message as { payload: unknown }).payload),
+    ).toEqual([
+      { token, phase: "started", paths: files.map((file) => file.path) },
+      {
+        token,
+        phase: "finished",
+        runId: null,
+        error: response.json().error.message,
+      },
+    ]);
   });
   test("editor preview rejects batches and stale sources without saving results", async () => {
     for (const previewFiles of [[], files]) {

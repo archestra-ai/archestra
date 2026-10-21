@@ -63,6 +63,7 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import {
   autoReinstallServer,
   reloadToolsForServer,
@@ -1065,13 +1066,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
+                  meta: {
+                    _meta: tool._meta,
+                    annotations: tool.annotations,
+                    outputSchema: tool.outputSchema,
+                  },
                   catalogId: capturedCatalogId,
                 }));
 
                 // Bulk create tools to avoid N+1 queries
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+                await recordInstallToolDescriptions({
+                  mcpServerId: mcpServer.id,
+                  syncedTools: createdTools,
+                  reported: toolsToCreate,
+                });
 
                 // Clone reconciliation: if this catalog has provisional cloned
                 // tools (first install of a clone), confirm the ones the server
@@ -1238,13 +1248,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
-          meta: { _meta: tool._meta, annotations: tool.annotations },
+          meta: {
+            _meta: tool._meta,
+            annotations: tool.annotations,
+            outputSchema: tool.outputSchema,
+          },
           catalogId: catalogItem.id,
         }));
 
         // Bulk create tools to avoid N+1 queries
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+        await recordInstallToolDescriptions({
+          mcpServerId: mcpServer.id,
+          syncedTools: createdTools,
+          reported: toolsToCreate,
+        });
 
         // Clone reconciliation: if this catalog has provisional cloned
         // tools (first install of a clone), confirm the ones the server
@@ -2718,6 +2737,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputSchema: tool.inputSchema,
                       _meta: tool._meta,
                       annotations: tool.annotations,
+                      outputSchema: tool.outputSchema,
                     }))
                 : undefined,
           });

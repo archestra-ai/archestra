@@ -324,37 +324,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      // Get user's team IDs
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "llmProviderApiKey",
-        scope: "*",
-        action: "update",
-      });
-
-      const apiKeys = await LlmProviderApiKeyModel.getVisibleKeys(
-        organizationId,
-        user.id,
-        userTeamIds,
-        isLlmProviderApiKeyAdmin,
-        {
-          search: query.search,
-          provider: query.provider,
-          labels: parseLabelsParam(query.labels),
-          access: await ResourcePermissionSubjectModel.resolveAccessFilter({
-            userId: user.id,
-            organizationId,
-            relations: query.access,
-            sharedWith: query.sharedWith,
-            ownerIds: query.owner,
-          }),
-        },
-        { includeSubscriptionInfo: true },
+      return reply.send(
+        await getVisibleLlmProviderApiKeys({
+          query,
+          userId: user.id,
+          organizationId,
+        }),
       );
-      return reply.send(apiKeys);
     },
   );
 
@@ -378,64 +354,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-
-      const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-        organizationId,
-        user.id,
-        userTeamIds,
-        query.provider,
-        { includeSubscriptionInfo: true },
+      return reply.send(
+        await getAvailableLlmProviderApiKeys({
+          query,
+          userId: user.id,
+          organizationId,
+        }),
       );
-
-      // If includeKeyId is provided and not already in results, fetch it separately.
-      // Subscription metadata rides along so the chat/agent preflight can tell
-      // that the pinned key is somebody's personal subscription (and which one)
-      // even though the viewer can't list the key itself.
-      if (
-        query.includeKeyId &&
-        !apiKeys.some((k) => k.id === query.includeKeyId)
-      ) {
-        // Check organization membership before resolving secret-derived
-        // subscription metadata for an agent-pinned key.
-        const storedAgentKey = await LlmProviderApiKeyModel.findById(
-          query.includeKeyId,
-        );
-        const agentKey =
-          storedAgentKey?.organizationId === organizationId
-            ? await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
-                storedAgentKey.id,
-              )
-            : null;
-        if (agentKey) {
-          apiKeys.push({
-            ...agentKey,
-            // The viewer authenticates with their own subscription, never this owner's.
-            requiresReauthentication:
-              agentKey.userId !== null && agentKey.userId !== user.id
-                ? undefined
-                : agentKey.requiresReauthentication,
-            createdBy: await CreatedByModel.resolveOne(
-              CreatedByModel.id(agentKey, agentKey.createdBy),
-            ),
-            teamName: null,
-            userName: null,
-            isAgentKey: true,
-          });
-        }
-      }
-
-      const bestModelsByApiKeyId =
-        await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys(
-          apiKeys.map((key) => key.id),
-        );
-
-      const apiKeysWithBestModel = apiKeys.map((key) => ({
-        ...key,
-        bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
-      }));
-
-      return reply.send(apiKeysWithBestModel);
     },
   );
 
@@ -888,7 +813,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
         userId: user.id,
-        organizationId: organizationId,
+        organizationId,
         resource: "llmProviderApiKey",
         scope: "*",
         action: "update",
@@ -1493,7 +1418,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         TeamModel.getUserTeamIds(user.id),
         ResourcePermissions.allows({
           userId: user.id,
-          organizationId: organizationId,
+          organizationId,
           resource: "llmProviderApiKey",
           scope: "*",
           action: "update",
@@ -1956,3 +1881,117 @@ export function validateProviderAllowed(provider: SupportedProvider): void {
 }
 
 export default llmProviderApiKeyRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/llm-provider-api-keys` */
+export async function getVisibleLlmProviderApiKeys(params: {
+  query: {
+    search?: string;
+    provider?: SupportedProvider;
+    labels?: string;
+    access?: z.infer<typeof ResourceAccessQuerySchema>;
+    sharedWith?: z.infer<typeof ResourceSharedWithQuerySchema>;
+    owner?: z.infer<typeof ResourceOwnerQuerySchema>;
+  };
+  userId: string;
+  organizationId: string;
+}) {
+  const { query, userId, organizationId } = params;
+  // Get user's team IDs
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+  const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
+    userId,
+    organizationId,
+    resource: "llmProviderApiKey",
+    scope: "*",
+    action: "update",
+  });
+
+  return LlmProviderApiKeyModel.getVisibleKeys(
+    organizationId,
+    userId,
+    userTeamIds,
+    isLlmProviderApiKeyAdmin,
+    {
+      search: query.search,
+      provider: query.provider,
+      labels: parseLabelsParam(query.labels),
+      access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+        userId,
+        organizationId,
+        relations: query.access,
+        sharedWith: query.sharedWith,
+        ownerIds: query.owner,
+      }),
+    },
+    { includeSubscriptionInfo: true },
+  );
+}
+
+/** `GET /api/llm-provider-api-keys/available` */
+export async function getAvailableLlmProviderApiKeys(params: {
+  query: { provider?: SupportedProvider; includeKeyId?: string };
+  userId: string;
+  organizationId: string;
+}) {
+  const { query, userId, organizationId } = params;
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+  const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+    organizationId,
+    userId,
+    userTeamIds,
+    query.provider,
+    { includeSubscriptionInfo: true },
+  );
+
+  // If includeKeyId is provided and not already in results, fetch it separately.
+  // Subscription metadata rides along so the chat/agent preflight can tell
+  // that the pinned key is somebody's personal subscription (and which one)
+  // even though the viewer can't list the key itself.
+  if (query.includeKeyId && !apiKeys.some((k) => k.id === query.includeKeyId)) {
+    // Check organization membership before resolving secret-derived
+    // subscription metadata for an agent-pinned key.
+    const storedAgentKey = await LlmProviderApiKeyModel.findById(
+      query.includeKeyId,
+    );
+    const agentKey =
+      storedAgentKey?.organizationId === organizationId
+        ? await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
+            storedAgentKey.id,
+          )
+        : null;
+    if (agentKey) {
+      apiKeys.push({
+        ...agentKey,
+        // The viewer authenticates with their own subscription, never this owner's.
+        requiresReauthentication:
+          agentKey.userId !== null && agentKey.userId !== userId
+            ? undefined
+            : agentKey.requiresReauthentication,
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(agentKey, agentKey.createdBy),
+        ),
+        teamName: null,
+        userName: null,
+        isAgentKey: true,
+      });
+    }
+  }
+
+  const bestModelsByApiKeyId =
+    await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys(
+      apiKeys.map((key) => key.id),
+    );
+
+  const apiKeysWithBestModel = apiKeys.map((key) => ({
+    ...key,
+    bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
+  }));
+  return apiKeysWithBestModel;
+}

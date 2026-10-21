@@ -1859,6 +1859,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: {},
   [RouteId.GetExternalApp]: { app: ["read"] },
+  [RouteId.GetExternalAppIcon]: { app: ["read"] },
+  // Like GetApp: the handler serves only an app the caller may view.
+  [RouteId.GetAppIcon]: {},
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: {},
   [RouteId.UpdateApp]: {},
@@ -1900,6 +1903,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConfig]: {},
   // Bundles the signed-in user's own startup reads; each part is self-scoped.
   [RouteId.GetBootstrap]: {},
+  // Bundles the new-chat composer's reads; each part keeps its own
+  // endpoint's checks.
+  [RouteId.GetNewChatBootstrap]: {},
+  // The conversation part is the conversation read with its own checks.
+  [RouteId.GetConversationBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.

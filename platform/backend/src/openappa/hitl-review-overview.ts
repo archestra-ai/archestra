@@ -91,14 +91,18 @@ export function hitlInspectionDigest(review: HitlInspectableReview): string {
  * pane becomes a pointer to Inspect that states its size; nothing is cut
  * silently. `approve` is false when the scope does not fit: the card then
  * offers no Allow, so an approval never accepts a scope the reviewer could not
- * see. `base` is the plain card, whose full question a client shows if it
- * withholds the previews.
+ * see, unless the reviewer holds this payload's complete review text
+ * (`inspected`). `base` is the plain card, whose full question a client shows
+ * if it withholds the previews.
  */
 export function hitlReviewCard(params: {
   base: HitlReviewCard;
   review: HitlInspectableReview;
+  /** The reviewer holds this exact payload's complete review text. */
+  inspected?: boolean;
 }): { card: HitlReviewCard; approve: boolean } {
   const { base, review } = params;
+  const inspected = params.inspected === true;
   const card = {
     question: base.question,
     header: "Tool call",
@@ -109,7 +113,8 @@ export function hitlReviewCard(params: {
     // A review that names no tool describes its call only in its text, which
     // the card asks as its question.
     const approve =
-      base.question.length <= PREVIEW_LIMIT && !hasUnsafe(base.question);
+      inspected ||
+      (base.question.length <= PREVIEW_LIMIT && !hasUnsafe(base.question));
     return { card: { ...card, options: cardOptions({ approve }) }, approve };
   }
   const tool = safeText(reviewedToolLabel(review.tool));
@@ -117,7 +122,7 @@ export function hitlReviewCard(params: {
   const question = named.length <= QUESTION_LIMIT ? named : "Run this call?";
   const layout = cardLayout(review, question === named ? [] : wrap(tool));
   let approve = fitLayout(layout);
-  const allowPreview = paneText(render(layout, true));
+  let allowPreview = paneText(render(layout, true));
   let preview = paneText(render(layout, false));
   if (!fitsPane(preview) || (approve && !fitsPane(allowPreview))) {
     // Even an unusually large tool label must not turn inspection into a
@@ -129,6 +134,10 @@ export function hitlReviewCard(params: {
         "",
       ).join("\n"),
     );
+  }
+  if (inspected && !approve) {
+    approve = true;
+    if (!fitsPane(allowPreview)) allowPreview = preview;
   }
   return {
     card: {

@@ -4,6 +4,11 @@ import { retryWhilePolicyMoved } from "./policy-moved";
 const POLICY_MOVED =
   "OpenAPPA published a newer policy revision for this organization; retry the request";
 
+/** The binding's report that the policy moved, as its loader hands it over. */
+function policyMoved(): Error {
+  return Object.assign(new Error(POLICY_MOVED), { code: "policy_moved" });
+}
+
 describe("retryWhilePolicyMoved", () => {
   test("retries a moved policy and returns what the retry decided", async () => {
     const attempts: number[] = [];
@@ -11,7 +16,7 @@ describe("retryWhilePolicyMoved", () => {
       random: () => 0,
       run: async (attempt) => {
         attempts.push(attempt);
-        if (attempt === 0) throw new Error(POLICY_MOVED);
+        if (attempt === 0) throw policyMoved();
         return "allow_call";
       },
     });
@@ -27,7 +32,7 @@ describe("retryWhilePolicyMoved", () => {
         random: () => 0,
         run: async () => {
           attempts++;
-          throw new Error(POLICY_MOVED);
+          throw policyMoved();
         },
       }),
     ).rejects.toThrow(POLICY_MOVED);
@@ -73,7 +78,7 @@ describe("retryWhilePolicyMoved", () => {
         random: () => 0.999,
         run: async () => {
           started.push(Date.now());
-          throw new Error(POLICY_MOVED);
+          throw policyMoved();
         },
       }),
     ).rejects.toThrow(POLICY_MOVED);
@@ -97,7 +102,7 @@ describe("retryWhilePolicyMoved", () => {
         },
         run: async () => {
           attempts++;
-          throw new Error(POLICY_MOVED);
+          throw policyMoved();
         },
       }),
     ).rejects.toThrow(POLICY_MOVED);

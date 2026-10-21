@@ -141,13 +141,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
+    const text = resultText(result.content);
     return (
       this.isSpawnTool(result.name, result.namespace) &&
       !result.isError &&
       !(
-        typeof result.content === "string" &&
+        text !== undefined &&
         /^\s*<task\b[^>]*\bstate\s*=\s*(["'])(?:running|pending|queued)\1[^>]*>/.test(
-          result.content,
+          text,
         )
       )
     );
@@ -243,6 +244,24 @@ function nativeOpenCodeToolName(name: string): string {
     if (name.startsWith(prefix)) return name.slice(prefix.length);
   }
   return name;
+}
+
+/**
+ * The text of a tool result as a provider wire carries it: a string, text
+ * parts, or an object that wraps either in `content` (Gemini's
+ * functionResponse, as the Model Router translates a tool message).
+ */
+function resultText(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const texts = content.flatMap((part) => {
+      const text = typeof part === "string" ? part : asRecord(part)?.text;
+      return typeof text === "string" ? [text] : [];
+    });
+    return texts.length > 0 ? texts.join("\n") : undefined;
+  }
+  const wrapped = asRecord(content)?.content;
+  return wrapped === undefined ? undefined : resultText(wrapped);
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

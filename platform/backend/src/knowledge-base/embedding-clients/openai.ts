@@ -52,6 +52,10 @@ export async function callOpenAIEmbedding(params: {
     const response = await client.embeddings.create({
       model,
       input: texts,
+      // Requested explicitly so the SDK returns the raw payload: its implicit
+      // base64 decode garbles the float arrays that providers ignoring
+      // `encoding_format` send back. `decodeEmbedding` accepts both shapes.
+      encoding_format: "base64",
       // Nomic models do not support the `dimensions` parameter.
       ...(dimensions !== undefined && !isNomicModel(model)
         ? { dimensions }
@@ -68,7 +72,7 @@ export async function callOpenAIEmbedding(params: {
       object: response.object ?? "list",
       data: data.map((item) => ({
         object: item.object,
-        embedding: item.embedding,
+        embedding: decodeEmbedding(item.embedding),
         index: item.index,
       })),
       model: response.model ?? model,
@@ -84,4 +88,27 @@ export async function callOpenAIEmbedding(params: {
     }
     throw err;
   }
+}
+
+// === Internal helpers
+
+/**
+ * Normalize one embedding to a number array. OpenAI returns little-endian
+ * float32 bytes as base64; some OpenAI-compatible providers ignore
+ * `encoding_format` and return a JSON number array instead. Anything else is
+ * returned as-is for the dispatcher's validation to reject.
+ */
+function decodeEmbedding(embedding: unknown): number[] {
+  if (typeof embedding !== "string") return embedding as number[];
+  const bytes = Buffer.from(embedding, "base64");
+  // Copy into a fresh, aligned buffer: a pooled Buffer can have a byteOffset
+  // that is not a multiple of 4, which a Float32Array view would reject.
+  const aligned = new Uint8Array(bytes).buffer;
+  return Array.from(
+    new Float32Array(
+      aligned,
+      0,
+      Math.floor(aligned.byteLength / Float32Array.BYTES_PER_ELEMENT),
+    ),
+  );
 }

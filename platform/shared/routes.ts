@@ -105,6 +105,8 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
+  GetNewChatBootstrap: "getNewChatBootstrap",
+  GetConversationBootstrap: "getConversationBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -1016,6 +1018,8 @@ export const RouteId = {
   // MCP App Routes
   GetApps: "getApps",
   GetExternalApp: "getExternalApp",
+  GetExternalAppIcon: "getExternalAppIcon",
+  GetAppIcon: "getAppIcon",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",

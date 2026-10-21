@@ -31,6 +31,14 @@ export const agentRunTranscriptChunksTable = pgTable(
     uncompressedBytes: integer("uncompressed_bytes").notNull(),
     compressedBytes: integer("compressed_bytes").notNull(),
     data: bytea("data").notNull(),
+    /**
+     * The last terminal size the recording sets at or before the end of this
+     * chunk (an OSC 777 marker, which may start in the chunk before), "" when
+     * it sets none there, null for chunks stored before sizes were indexed.
+     * Lets the end of a recording replay at its geometry without reading the
+     * chunks before it.
+     */
+    lastSizeMarker: text("last_size_marker"),
   },
   (table) => [
     primaryKey({

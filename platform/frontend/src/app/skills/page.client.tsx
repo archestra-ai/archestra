@@ -928,35 +928,35 @@ function SkillsList() {
             <SkillsEmptyState />
           ) : (
             <>
-              {hasImportFilter && (
-                <InlineNotice variant="info">
-                  <Info />
-                  <span className="font-medium">Just imported</span>
-                  <InlineNoticeText>
-                    Showing only the skills created by this import.
-                  </InlineNoticeText>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto"
-                    onClick={() => {
-                      const params = new URLSearchParams(
-                        searchParams.toString(),
-                      );
-                      params.delete("imported");
-                      params.delete("page");
-                      router.push(`${pathname}?${params.toString()}`, {
-                        scroll: false,
-                      });
-                    }}
-                  >
-                    <span>Show all skills</span>
-                  </Button>
-                </InlineNotice>
-              )}
               <CollectionFilters>
+                {hasImportFilter && (
+                  <InlineNotice variant="info" className="-mt-2">
+                    <Info />
+                    <span className="font-medium">Just imported</span>
+                    <InlineNoticeText>
+                      Showing only the skills created by this import.
+                    </InlineNoticeText>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => {
+                        const params = new URLSearchParams(
+                          searchParams.toString(),
+                        );
+                        params.delete("imported");
+                        params.delete("page");
+                        router.push(`${pathname}?${params.toString()}`, {
+                          scroll: false,
+                        });
+                      }}
+                    >
+                      <span>Show all skills</span>
+                    </Button>
+                  </InlineNotice>
+                )}
                 <FilterBar
-                  leading
+                  leading={!hasImportFilter}
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                   search={

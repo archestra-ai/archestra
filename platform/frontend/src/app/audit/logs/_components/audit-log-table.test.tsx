@@ -165,20 +165,15 @@ describe("AuditLogTable", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
     expect(screen.getByText("New name")).toBeInTheDocument();
-    expect(screen.getByText("Updated")).toBeInTheDocument();
-    expect(screen.getByText("Agent")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "Success: Agent updated by Ada Lovelace",
-      }),
-    ).toBeInTheDocument();
-    for (const header of ["Event", "Actor", "Request", "Time"]) {
+    // The action leads the row; the resource and its type sit under it.
+    expect(screen.getByText("Agent updated")).toBeInTheDocument();
+    expect(screen.getByText("Success")).toBeInTheDocument();
+    for (const header of ["Event", "Actor", "Status", "Time"]) {
       expect(
         screen.getByRole("columnheader", { name: header }),
       ).toBeInTheDocument();
     }
-    expect(screen.getByText("PATCH")).toBeInTheDocument();
-    expect(screen.getByText("200")).toBeInTheDocument();
+    expect(screen.getByText("PATCH · 200")).toBeInTheDocument();
     expect(screen.queryByText("10.0.0.1")).toBeNull();
   });
 
@@ -189,9 +184,7 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    // The resource type is already on the line, so the verb carries only the
-    // action.
-    expect(screen.getByText("Created")).toBeInTheDocument();
+    expect(screen.getByText("Agent created")).toBeInTheDocument();
     expect(screen.queryByText("agent.created")).not.toBeInTheDocument();
   });
 
@@ -202,21 +195,30 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Restored")).toBeInTheDocument();
+    expect(screen.getByText("Agent restored")).toBeInTheDocument();
     expect(screen.queryByText("Unknown create")).not.toBeInTheDocument();
   });
 
-  it("names a denied outcome on the row; success stays quiet", () => {
+  it("names a denied outcome in the Status column", () => {
     mockUseAuditLogs.mockReturnValue(
-      withRows([makeEvent({ outcome: "denied" })]),
+      withRows([makeEvent({ outcome: "denied", httpStatus: 403 })]),
     );
 
     renderTable();
 
     expect(screen.getByText("Denied")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Denied: Agent updated/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("PATCH · 403")).toBeInTheDocument();
+    expect(screen.queryByText("Success")).not.toBeInTheDocument();
+  });
+
+  it("says a change with no HTTP request came from the background", () => {
+    mockUseAuditLogs.mockReturnValue(
+      withRows([makeEvent({ httpMethod: null, httpStatus: null })]),
+    );
+
+    renderTable();
+
+    expect(screen.getByText("Background")).toBeInTheDocument();
   });
 
   it("falls back to 'Deleted user' when the actor is null", () => {

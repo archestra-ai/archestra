@@ -1,13 +1,13 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 2
-lastUpdated: 2026-10-16
+order: 1
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra reads its configuration from environment variables. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. Sections follow the order you configure a deployment in; see [Deployment](/docs/admin/deployment) for the install itself.
+Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Deployment](/docs/admin/deployment) for the install.
 
 ## Database
 
@@ -33,7 +33,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 ## Server and Network
 
 - **`ARCHESTRA_API_BASE_URL`** - Public URL of the Archestra API, shown in the connection instructions for the LLM Proxy, MCP Gateway, and A2A Gateway.
-  - Default: unset (the UI shows `http://127.0.0.1:9000`)
+  - Default: unset (connection instructions show the URL the app is open on)
   - Values: one URL, or a comma-separated list, for example `http://archestra.default.svc:9000,https://api.example.com`
   - Set it when clients reach the API through an ingress or load balancer. List every public host you serve the gateways on.
 
@@ -79,7 +79,6 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Plugins, Guardrails, and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -91,11 +90,12 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Default: `false`
   - Values: `true`, `false`
   - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
+  - Instances with fewer than 30 users get most enterprise features without it. Content encryption, data retention, Vault, and Real User Monitoring always need it.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Activates the enterprise Knowledge Base features, such as team-scoped connectors.
   - Default: `false`
   - Values: `true`, `false`
-  - Requires [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED).
+  - Instances with fewer than 30 users get these features without it.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`** - Activates the Platform + AI Security tier: the OpenAPPA integration behind [Guardrails](/docs/agents/guardrails). Instances with fewer than 30 users get it without this flag.
   - Default: `false`
@@ -213,7 +213,6 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Default: `false`
   - Values: `true`, `false`
   - Set it for one boot, then unset it. Secrets encrypted with the old key stay unreadable. Enter them again.
-  - Catalog metadata remains available when credentials are unreadable. Operations that need those credentials return HTTP 409 with recovery instructions. To replace a catalog's unreadable database-backed credentials, submit all its configured secret values together, including registry passwords. Partial credential edits are rejected.
 
 - **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset.
   - Default: generated on first start. Helm stores it in the `<release>-auth` Secret; the Docker image saves it to `/app/data/.auth_secret`.
@@ -288,14 +287,6 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Default: unset
   - Values: `path:key`, for example `secret/data/archestra/database:connection_string`
   - Used only when [`ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER).
-
-- **`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`** - Compatibility name for the encrypted-chat recovery public key.
-  - Default: unset
-  - Used only when [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) is unset.
-
-- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Compatibility name for the encrypted-chat recovery public key.
-  - Default: unset
-  - Used only when both [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) and [`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY) are unset.
 
 ## LLM Providers
 
@@ -496,9 +487,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ### OpenRouter
 
-- **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
-  - Default: `https://api.typesafe.ai/v1/systemone`
-
 - **`ARCHESTRA_OPENROUTER_BASE_URL`** - Base URL for OpenRouter API requests.
   - Default: `https://openrouter.ai/api/v1`
 
@@ -525,6 +513,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Set it only when the native endpoint runs on another host. Omit `/v1`.
 
 ### Other Providers
+
+- **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
+  - Default: `https://api.typesafe.ai/v1/systemone`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Default: unset (provider off)
@@ -567,6 +558,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ## LLM Proxy
 
+- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
+  - Default: `off`
+  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
+  - Set it on both web and worker pods. Requests retain their starting mode. See [Roll Out Usage Accounting](/docs/admin/usage-accounting).
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
   - See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
@@ -592,16 +588,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
 
-- **`ARCHESTRA_LLM_PROXY_PLUGINS`** - LLM proxy plugins loaded at startup.
-  - Default: `appa` (always loaded)
-  - Values: comma-separated; the only plugin is `appa`. An unknown name or a duplicate stops startup.
-  - OpenAPPA is always loaded, independently of [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
-
 ## Chat
 
 ### Provider API Keys
 
-At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` unless one already exists for that provider. Changing a variable later does not update the existing key. Edit it in **Settings → LLM → Model providers** instead. The variable is also the last fallback when no stored key matches.
+At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` unless one already exists for that provider. Changing a variable later does not update the existing key. Edit it in **Settings → LLM → Model providers** instead. The variable is also the last fallback when no stored key matches. A subscription credential, such as a Claude Pro or ChatGPT sign-in, is ignored here. Each user connects their own.
 
 - **`ARCHESTRA_CHAT_ANTHROPIC_API_KEY`** - Anthropic API key.
   - Default: unset
@@ -667,9 +658,6 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: unset
   - Ignored unless [`ARCHESTRA_ARCHESTRA_BASE_URL`](/docs/reference/configuration#ARCHESTRA_ARCHESTRA_BASE_URL) is set.
 
-- **`ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY`** - Has no effect.
-  - GitHub Copilot keys are personal. Each user connects their own GitHub account.
-
 ### Defaults and Limits
 
 - **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Provider of the last-resort default model, used when the organization has no default model, no synced models, and no provider API key variable.
@@ -697,7 +685,6 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
 
 - **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest file a user can attach to a chat message, in bytes.
   - Default: `52428800` (50 MiB)
-  - Archestra stores a file the model cannot read in the conversation's Files panel and tells the agent it is there.
   - Raise [`ARCHESTRA_API_BODY_LIMIT`](/docs/reference/configuration#ARCHESTRA_API_BODY_LIMIT) with it. Archestra sends attachments base64-encoded, at about 4/3 of their size, in the same request as the conversation.
 
 - **`ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT`** - Largest attachment sent to the model in a request, in bytes.
@@ -744,18 +731,30 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: `30000` (30 seconds)
   - Keep it below your clients' own request timeouts. Otherwise the client aborts first and sees a transport error.
 
-- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
-  - Default: `0` (no expiry). The stream stays open until the client disconnects.
-  - An abrupt proxy close can fail an open form. This setting is a partial mitigation, not a guarantee: clients can stop reconnecting after repeated clean ends, which stops tool-list change notifications. Enable it only after checking your client's behavior and accepting that limitation.
-  - Set a positive value below your proxy's maximum request duration. Heartbeats do not extend that maximum, and Archestra does not detect it. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
-  - Accepts whole numbers from `0` through `2147483647`. Invalid or larger values disable expiry, avoiding timer overflow.
+- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Longest one notification stream stays open before the gateway ends it cleanly, in milliseconds.
+  - Default: `0` (open until the client disconnects)
+  - Values: `0` to `2147483647`. Any other value means `0`.
+  - Set it below your proxy's maximum request duration, which Archestra cannot detect. A GKE Ingress backend without `timeoutSec` allows 30 seconds.
+  - Some clients stop reconnecting after repeated ends and then miss tool-list changes. Test your client first.
 
 ## MCP Servers
+
+- **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.
+  - Default: `false`. Set exactly `true` to enforce validation. With the default, existing HTTP and private endpoints, redirects, discovery fallbacks and token refresh behavior remain unchanged. This protection is not active by default.
+  - Enforcement covers metadata and scope discovery, dynamic client registration, authorization-code exchange (including proxy servers), refresh and client-credentials grants. Each destination must pass URL and DNS validation and the catalog's environment egress policy; the remote MCP server's base host must also be permitted. Missing organization context or a missing or foreign environment fails closed.
+  - Production requires HTTPS and public unicast addresses; private, loopback, link-local and reserved addresses are rejected, including mixed DNS answers. Connections use the validated address while retaining the original hostname for TLS. Development and test deployments retain the shared validator's HTTP and loopback exceptions.
+  - Metadata GETs may follow up to three redirects, validating every destination. Requests carrying credentials cannot follow redirects. Each fetch, including redirects and response reading, has a 30-second deadline and a 1 MiB response limit.
+  - Before enabling, check that your providers use supported endpoints and that the environment permits their metadata, registration and token hosts. HTTP/private production providers and providers redirecting token POSTs require compatibility mode. Disabling restores compatibility without rotating tokens, clearing credentials or forcing reconnection.
+  - This setting does not change incoming OAuth authentication to Archestra, the Connection page, LLM provider networking or other outbound URL consumers.
 
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Re-syncs every installed MCP server's tools and Skills from the live server at this interval, in minutes.
   - Default: unset (no periodic refresh)
   - Values: a positive whole number, for example `30`. `0` disables it.
   - To refresh one server on demand, use its **Inspector** tab in the MCP Registry.
+
+- **`ARCHESTRA_MCP_CATALOG_API_BASE_URL`** - API URL for the online MCP server catalog.
+  - Default: `https://archestra.ai/mcp-catalog/api`
+  - Set it when your deployment uses a catalog mirror.
 
 ## MCP Server Orchestrator
 
@@ -807,10 +806,16 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: `600`
   - Values: a positive whole number. `0` disables it.
 
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`** - How often Archestra checks whether a running MCP server's `:latest` or untagged image points to a new build, and rolls the server onto it, in minutes.
+  - Default: `15`
+  - Values: a whole number. `0` turns the check off.
+  - Pin an image tag when a server must not change on its own.
+
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`** - How long an MCP server pod sits unused before it hibernates, in seconds.
   - Default: `1800` (30 minutes)
   - Values: `0`, or `120` and above. Lower values are raised to `120`.
   - `0` turns hibernation off for the whole deployment, whatever the organization setting.
+  - Hibernation also needs [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), an enterprise license, and the organization setting turned on.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_ENABLED`** - Caches MCP server images on every node with a DaemonSet, so hibernated servers wake without pulling from the registry.
   - Default: `true`
@@ -864,10 +869,6 @@ MCP Apps render in sandboxed iframes. Without a sandbox domain, apps still work.
   - Values: a whole number of days. `0` keeps tasks forever.
   - Running tasks are never deleted. The conversation history the task belongs to is kept.
 
-- **`ARCHESTRA_MCP_CATALOG_API_BASE_URL`** - API URL for the online MCP server catalog.
-  - Default: `https://archestra.ai/mcp-catalog/api`
-  - Set it when your deployment uses a catalog mirror.
-
 ## Code Sandbox
 
 Archestra creates one Dagger engine per organization and per environment. Each engine needs a node that admits privileged pods and a storage class for `ReadWriteOnce` volumes. See [Deployment](/docs/admin/deployment).
@@ -883,7 +884,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.
@@ -918,11 +919,16 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
-- **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands that run at once across the deployment.
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
+  - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
+  - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.
+  - Applies to new engines only. Delete an engine to move it.
+
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands each backend process runs at once.
   - Default: `10`
   - Raise it together with the engine's CPU and memory.
 
-- **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands that can wait for a free slot. Beyond this, a command fails with a runtime-at-capacity error.
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands each backend process can queue for a free slot. Beyond this, a command fails with a runtime-at-capacity error.
   - Default: `50`
 
 - **`ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS`** - CPU time one sandbox command can use, in seconds.
@@ -943,11 +949,6 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)
-  - Takes precedence over [`ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN).
-
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`** - Compatibility name for the Dagger CLI executable path.
-  - Default: unset
-  - Prefer [`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_CLI_BIN).
 
 ## Agent Runtime
 
@@ -1149,13 +1150,6 @@ These configure the OAuth client for the Google Drive connector's [individual au
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory that serves the VAF Add On package to the install script and the connector form.
   - Default: `/app/mfiles-vaf-add-on`
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override: a git ref of `archestra-ai/archestra` whose VAF Add On the install script installs instead of the packaged one.
-  - Default: unset. Leave it unset in production.
-  - Values: a commit SHA, branch, or tag, or `local` for the HEAD of the local checkout
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token for downloading the add-on built from [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF).
-  - Default: unset (the install script compiles the add-on from source)
-
 ### Perforce
 
 [Perforce permission sync](/docs/knowledge/connectors/perforce) runs the `p4` CLI in a per-connector pod and needs the Kubernetes orchestrator. Archestra downloads the `p4` binary from Perforce and checks its SHA-256. Air-gapped installs point the URLs at an internal mirror and set matching checksums.
@@ -1282,13 +1276,13 @@ See [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams) for setup.
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Microsoft Entra tenant ID of a single-tenant bot.
   - Default: unset (multi-tenant bot)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET)
 
 ### Slack
@@ -1345,7 +1339,7 @@ Microsoft Teams and Slack webhook mode need Archestra reachable from the interne
 See [Observability](/docs/admin/observability) for metrics, tracing, and dashboards.
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives traces and logs.
-  - Default: `http://localhost:4318/v1/traces`
+  - Default: `http://localhost:4318`
   - Values: a collector URL. Archestra adds `/v1/traces` for traces and `/v1/logs` for logs.
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for basic authentication to the OTLP endpoint.
@@ -1456,30 +1450,25 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 [Guardrails](/docs/agents/guardrails) are available on every deployment. Enforcement is a separate switch on the Guardrails page and starts off.
 
-- **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs delegation bindings, child-session recovery receipts, and peer proofs.
-  - Default: generated and kept across upgrades by the Helm chart. Without Helm, derived from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
-  - Values: at least 32 characters. Every replica must use the same value.
-  - Set it to rotate the key independently of the session secret.
-  - Remedy routing, native questions, session receipt codes, and child completion codes do not require it.
+- **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs Guardrails delegation between agents and agent-to-agent messages.
+  - Default: Helm generates one and keeps it across upgrades. Without Helm, it derives from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
+  - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
+  - Set it to rotate this key separately from the session secret.
 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS) is enabled.
-  - Default: `true` (when Guardrails are on)
+  - Default: `true`
   - Values: `true`, `false`
-
-- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - How long an annotator stays available to conversations that started under an earlier policy after the policy stops declaring it.
-  - Default: `30`
-  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored.
-  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`
-  - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.
+  - A step that waits more than 30 seconds for a free connection fails.
 
-- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`** - Chat provider that writes review summaries. Explicit opt-in: the provider must be one of the chat-capable model providers, and its API key must already be configured (for Kimi, [`ARCHESTRA_CHAT_KIMI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_KIMI_API_KEY)). Never inferred from the organization's default provider.
-  - Default: unset (summaries disabled)
-  - Must be set together with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL); a partial value stops startup.
-  - Uncached summary attempts are limited to five per caller and twenty per organization in a rolling 60-second window. Concurrent identical requests share a generation lease. At the limit, the complete review remains available without a generated summary.
+- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`** - Provider of the model that writes a short summary on each Guardrails approval request.
+  - Default: unset (no summaries)
+  - Values: a chat provider ID, such as `anthropic`, `openai`, or `kimi`. Its key must be set in that provider's `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` variable. A key saved in **Settings** is not used.
+  - Set it with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL). Setting only one stops startup.
+  - Summaries are limited to five per user and twenty per organization per minute. Past the limit, the review shows without a summary.
 
 - **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`** - Model name for review summaries, served by [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER).
   - Default: unset (summaries disabled)

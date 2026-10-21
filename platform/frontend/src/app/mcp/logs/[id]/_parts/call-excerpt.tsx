@@ -1,9 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ArrowUpRight, TriangleAlert, Waypoints } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronRight,
+  TriangleAlert,
+  Waypoints,
+} from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { RequestDetails } from "@/app/llm/logs/[id]/_parts/request-details";
@@ -11,7 +15,6 @@ import { RequestWaterfall } from "@/app/llm/logs/[id]/_parts/request-waterfall";
 import {
   type InteractionSummary,
   type Timeline,
-  type TimelineSpan,
   toolCallSpanKey,
 } from "@/app/llm/logs/[id]/_parts/session-timeline";
 import {
@@ -20,11 +23,9 @@ import {
 } from "@/app/llm/logs/[id]/_parts/split-handle";
 import { Button } from "@/components/ui/button";
 import { InlineNotice } from "@/components/ui/inline-notice";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
-import {
-  llmRequestHref,
-  llmSessionHref,
-} from "@/lib/interactions/llm-log-links";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import {
   useMcpToolCalls,
   useSessionMcpToolCalls,
@@ -147,7 +148,7 @@ function SessionExcerpt({
       timeline={excerpt?.timeline ?? null}
       loading={!failed && excerpt === null}
       profileName={session?.profileName ?? null}
-      title="Session excerpt"
+      title="Around this call in its session"
       countLabel={
         excerpt && session
           ? `Showing ${requestsShown} of ${session.requestCount.toLocaleString()} ${session.requestCount === 1 ? "request" : "requests"}`
@@ -210,6 +211,7 @@ function NeighbourExcerpt({
   call: McpToolCallRecord;
   agentName: string | undefined;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const center = new Date(call.createdAt).getTime();
   const isApp = call.ownerType === "app";
   const ownerId = isApp ? call.appId : call.agentId;
@@ -219,7 +221,7 @@ function NeighbourExcerpt({
     startDate: new Date(center - NEIGHBOUR_WINDOW_MS).toISOString(),
     endDate: new Date(center + NEIGHBOUR_WINDOW_MS).toISOString(),
     limit: NEIGHBOUR_LIMIT,
-    enabled: ownerId !== null,
+    enabled: ownerId !== null && expanded,
   });
 
   const excerpt = useMemo(() => {
@@ -251,13 +253,33 @@ function NeighbourExcerpt({
     ? (call.appName ?? "this app")
     : (agentName ?? "this MCP Gateway");
 
+  // A call with no session has no conversation around it, only other calls
+  // that happened to land nearby: useful to some, noise to most, so the list
+  // waits behind one click.
+  if (!expanded) {
+    return (
+      <UnstyledButton
+        onClick={() => setExpanded(true)}
+        aria-expanded={false}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+      >
+        <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
+        <span>
+          Other calls from{" "}
+          <span className="font-medium text-foreground/80">{ownerName}</span>{" "}
+          within 15 minutes
+        </span>
+      </UnstyledButton>
+    );
+  }
+
   return (
     <ExcerptCard
       call={call}
       timeline={excerpt?.timeline ?? null}
       loading={!neighbours.isError && excerpt === null}
       profileName={null}
-      title="Nearby calls"
+      title="Other calls around this one"
       countLabel={
         excerpt
           ? `Showing ${shown} of ${excerpt.total}${truncated ? "+" : ""}`
@@ -313,7 +335,6 @@ function ExcerptCard({
   status: ReactNode;
   emptyNote?: string | null;
 }) {
-  const router = useRouter();
   const { displayByName: serverDisplayByName } = useMcpServerDisplayByName();
   const selfKey = toolCallSpanKey(call.id);
   const spans = timeline?.spans ?? [];
@@ -330,14 +351,6 @@ function ExcerptCard({
     if (spans.length === 0) return;
     const next = Math.min(spans.length - 1, Math.max(0, selectedIndex + delta));
     setPickedKey(spans[next].key);
-  };
-  const openSpan = (span: TimelineSpan) => {
-    if (span.key === selfKey) return;
-    router.push(
-      span.type === "request"
-        ? llmRequestHref(span.row)
-        : `/mcp/logs/${span.call.id}`,
-    );
   };
 
   return (
@@ -358,7 +371,6 @@ function ExcerptCard({
         highlightedKey={selfKey}
         revealHighlighted={false}
         onSelect={setPickedKey}
-        onOpen={openSpan}
         pagination={null}
         totalRequests={spans.length}
         title={title}
@@ -375,37 +387,40 @@ function ExcerptCard({
         </p>
       ) : null}
 
-      <SplitHandle height={height} onChange={setHeight} />
-
+      {/* This call's own payload is already above the list, so the details
+          pane opens only to preview a neighbour. */}
       {selected && selected.key !== selfKey ? (
-        <div className="flex items-center gap-2 border-t bg-primary/[0.04] px-4 py-1.5 text-xs text-muted-foreground lg:border-t-0 lg:border-b">
-          <span>Previewing a nearby record.</span>
-          <Button
-            variant="link"
-            size="xs"
-            className="h-auto px-0"
-            onClick={() => setPickedKey(selfKey)}
-          >
-            <span>Back to this call</span>
-          </Button>
-        </div>
+        <>
+          <SplitHandle height={height} onChange={setHeight} />
+          <div className="flex items-center gap-2 border-t bg-primary/[0.04] px-4 py-1.5 text-xs text-muted-foreground lg:border-t-0 lg:border-b">
+            <span>Previewing a nearby record.</span>
+            <Button
+              variant="link"
+              size="xs"
+              className="h-auto px-0"
+              onClick={() => setPickedKey(null)}
+            >
+              <span>Close preview</span>
+            </Button>
+          </div>
+          <RequestDetails
+            height={height}
+            loading={loading}
+            span={selected}
+            origin={timeline?.origin ?? 0}
+            previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
+            index={selectedIndex}
+            count={spans.length}
+            profileName={profileName}
+            providerLabel={(provider) => provider}
+            serverDisplayByName={serverDisplayByName}
+            onStep={step}
+            latestRequestId={null}
+            onJumpToLatest={null}
+            excerpt={{ currentKey: selfKey }}
+          />
+        </>
       ) : null}
-      <RequestDetails
-        height={height}
-        loading={loading}
-        span={selected}
-        origin={timeline?.origin ?? 0}
-        previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
-        index={selectedIndex}
-        count={spans.length}
-        profileName={profileName}
-        providerLabel={(provider) => provider}
-        serverDisplayByName={serverDisplayByName}
-        onStep={step}
-        latestRequestId={null}
-        onJumpToLatest={null}
-        excerpt={{ currentKey: selfKey }}
-      />
     </section>
   );
 }

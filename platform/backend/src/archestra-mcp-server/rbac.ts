@@ -281,6 +281,7 @@ export const TOOL_PERMISSIONS: Record<
   steer_run: { resource: "agent", action: "read" },
   cancel_run: { resource: "agent", action: "read" },
   post_run_file: { resource: "agent", action: "read" },
+  post_run_message: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
   transfer_workspace_file: { resource: "agent", action: "read" },

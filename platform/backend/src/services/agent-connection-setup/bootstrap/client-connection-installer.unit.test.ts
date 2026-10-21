@@ -20,6 +20,7 @@ import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { renderSetupScript } from "../index";
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
 let directory: string;
@@ -192,6 +193,21 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test.each([
+  { exit: SETUP_STOPPED_EXIT_CODE, ending: "Setup stopped.", generic: false },
+  { exit: 1, ending: "Setup failed. Review the output above", generic: true },
+])("a setup that exits $exit ends with its own next step only when it explained one", async ({
+  exit,
+  ending,
+  generic,
+}) => {
+  scriptBody = `#!/bin/bash\necho 'Run codex login, then start a new installer run.' >&2\nexit ${exit}\n`;
+  const result = await run();
+  expect(result.code).toBe(1);
+  expect(result.output).toContain(ending);
+  expect(result.output.includes("start the installer again")).toBe(generic);
 });
 
 test("Copilot prints saved credentials once in the final instructions, after the summary and before sign-in", async () => {
@@ -544,6 +560,119 @@ test.each([
   } else {
     expect(signIn).toEqual([]);
     expect(output).toContain("  opencode mcp auth r&d_(prod)");
+  }
+});
+
+test.each([
+  { answer: "", starts: true },
+  { answer: "n\n", starts: false },
+])("offers to start the agent through the interactive shell (answer $answer)", async ({
+  answer,
+  starts,
+}) => {
+  const ending = {
+    label: "Claude Code",
+    appName: "Test",
+    parts: [],
+    signIn: null,
+    launch: { command: ["claude", "hi there"], text: "claude 'hi there'" },
+    notes: [],
+  };
+  scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\necho setup\n`;
+  const calls: Array<{ command: string; args: unknown; options: unknown }> = [];
+  const output: string[] = [];
+  const typed = Buffer.from(answer);
+  let offset = 0;
+  const sigintListeners: unknown[] = [];
+  await new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        hrtime: process.hrtime,
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          namedLoopbackOrigin(),
+          "--client",
+          "claude-code",
+          "--no-open",
+        ],
+        platform: "linux",
+        execPath: process.execPath,
+        env: { NO_COLOR: "1", SHELL: "/bin/zsh" },
+        stdout: { isTTY: true, write: (text: string) => output.push(text) },
+        on: (event: string, listener: unknown) => {
+          if (event === "SIGINT") sigintListeners.push(listener);
+        },
+        removeListener: (event: string, listener: unknown) => {
+          if (event === "SIGINT")
+            sigintListeners.splice(sigintListeners.indexOf(listener), 1);
+        },
+      },
+      Buffer,
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          output.push(message);
+          if (message.includes("Next: open")) resolve();
+        },
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:crypto") return { createHash };
+        if (name === "node:fs")
+          return {
+            openSync: () => 7,
+            readSync: (_fd: number, byte: Buffer) => {
+              if (offset >= typed.length) return 0;
+              byte[0] = typed[offset++];
+              return 1;
+            },
+            closeSync() {},
+          };
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawn,
+            spawnSync: (command: string, args: unknown, options: unknown) => {
+              calls.push({ command, args, options });
+              if (command === "/bin/zsh") {
+                // The agent owns Ctrl+C while it runs.
+                expect(sigintListeners).toHaveLength(1);
+                setTimeout(resolve, 0);
+              }
+              return { status: 0 };
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  const shellRuns = calls.filter((call) => call.command === "/bin/zsh");
+  expect(output.join("\n")).toContain("Start Claude Code now? [Y/n]");
+  if (starts) {
+    expect(shellRuns).toEqual([
+      {
+        command: "/bin/zsh",
+        args: ["-ic", "claude 'hi there'"],
+        options: { stdio: [7, "inherit", "inherit"] },
+      },
+    ]);
+    expect(sigintListeners).toHaveLength(0);
+    expect(output.join("\n")).not.toContain("Next: open");
+  } else {
+    expect(shellRuns).toEqual([]);
+    expect(output.join("\n")).toContain(
+      "Next: open a new terminal and run:\n\n  claude 'hi there'",
+    );
   }
 });
 

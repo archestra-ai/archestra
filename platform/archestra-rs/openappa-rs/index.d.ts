@@ -154,13 +154,6 @@ export interface DispatchPolicy {
    * and is refused as retryable; absent, nothing is checked.
    */
   compositionHash?: string
-  /**
-   * Whether new sessions keep a policy snapshot. While it is true nothing is
-   * published: a new family opens pinned to `content` for its whole life, and
-   * a family that follows the organization's line decides at the line's head
-   * as it stands. Absent is false.
-   */
-  snapshot?: boolean
 }
 
 export interface EditedPolicy {
@@ -190,6 +183,8 @@ export declare function getOpenappaReplayEngineVersion(): string
  * Read the current label of a started session without mutating its trajectory.
  * The read runs through a view pinned to the organization's deployment line, as
  * a dispatch does: a family is read on the line it follows.
+ * None before the session started, and for a family opened under the earlier
+ * policy model, whose next event is refused instead.
  */
 export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
@@ -267,17 +262,18 @@ export interface OfferReviewOutput {
 }
 
 /**
- * The policy file key each root's first stored batch names, in the order given:
- * none for a batch that does not open a root this build can read. The host reads
- * the batches; only this decoding knows how the runtime encodes them.
+ * The kind of family each root opened as, in the order given, for the operator's
+ * preflight count: `following` for one that follows a deployment line, `legacy`
+ * for one pinned to a policy snapshot, `encrypted` for an opening sealed with a
+ * conversation key this read does not hold, and none for a root with no log.
  */
-export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<string | undefined | null>
+export declare function openappaRootKinds(roots: Array<string>): Promise<Array<string | undefined | null>>
 
 export interface OpenappaStatus {
   trust: string
   audience: string
   /** The organization's policy revision the session's next event is decided under. */
-  policyRevision?: number
+  policyRevision: number
 }
 
 /**
@@ -324,20 +320,20 @@ export interface PolicyEditInput {
   key?: string
 }
 
-/**
- * The policy text the runtime stored when `root` opened. Absent when the root
- * has no log. This is the opening document, not an error message.
- */
-export declare function readOpenappaOpeningPolicy(root: string, encryption?: ContentEncryption | undefined | null): Promise<string | null>
-
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 /**
  * Evaluate bounded `.appa` scenarios against the supplied effective policy with the
  * credential values the host resolved for it. Every consult the policy declares is
  * made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+ *
+ * `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+ * `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+ * file's result, before the next file starts. It only observes: calls are queued without
+ * waiting, and the listener must not throw. Events still queued when the replay settles
+ * may arrive after its promise resolves.
  */
-export declare function replayOpenappaPolicy(input: string): Promise<string>
+export declare function replayOpenappaPolicy(input: string, onProgress?: (((arg: string) => void)) | undefined | null): Promise<string>
 
 export interface ReportingOptions {
   endpoint: string

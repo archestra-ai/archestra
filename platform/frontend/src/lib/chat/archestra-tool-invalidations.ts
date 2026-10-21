@@ -1,4 +1,5 @@
 import {
+  type ArchestraToolShortName,
   extractMcpToolError,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -26,10 +27,16 @@ type ToolResultPart = {
  * the new scope through to the app's backing catalog, which drives the MCP
  * registry card. `start_run` refreshes the run sessions shown in the chat
  * sidebar, including when the tool was invoked through `run_tool`.
+ * `update_guardrails_policy` can switch enforcement on, so the deployment
+ * status (the composer's APPA, the sidebar warning) refreshes right away.
  */
 const ARCHESTRA_TOOL_INVALIDATIONS = new Map<string, readonly string[][]>([
   [TOOL_PUBLISH_APP_SHORT_NAME, [["apps"], ["mcp-catalog"]]],
   [TOOL_START_RUN_SHORT_NAME, [["agent-runs"]]],
+  [
+    "update_guardrails_policy" satisfies ArchestraToolShortName,
+    [["guardrails-deployment"]],
+  ],
 ]);
 
 /**

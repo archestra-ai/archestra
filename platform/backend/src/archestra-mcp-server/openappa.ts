@@ -7,6 +7,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  YELL_RESULT_GUARDRAILS_OFF,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -586,13 +587,20 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. While `enforcement.newSessionPolicy` is `snapshot`, a saved policy reaches new sessions only: running sessions keep the policy they decide under now. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
-    schema: z.strictObject({}),
-    async handler({ context }) {
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, which open and new conversations follow at their next call; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` reports the composed result the runtime enforces: one entry per declared battery with the status it composed under, and `credentialBindings`, each battery credential variable bound with bind_guardrails_credential, outside the text. Set `composed` to also get `effective.content`, the composed policy text with every included battery's rules; it is large, so ask for it only to read those rules. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+    schema: z.strictObject({
+      composed: z
+        .boolean()
+        .nullish()
+        .describe(
+          "Also return `effective.content`, the composed policy text. Omit it unless you need the included batteries' rules.",
+        ),
+    }),
+    async handler({ args, context }) {
       const organizationId = organization(context);
       const [root, effective] = await Promise.all([
         guardrailsPolicyService.get(organizationId),
-        enforced(organizationId),
+        enforced(organizationId, { composed: args.composed === true }),
       ]);
       const sync = await getAppaGithubSync(organizationId);
       return result({
@@ -872,7 +880,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision applies to open and new conversations at their next call. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
     schema: ProposedGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -1390,14 +1398,17 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
  * Every declared battery is listed with its status, because a battery that
  * governs nothing still composes and would otherwise read as success.
  */
-async function enforced(organizationId: string) {
+async function enforced(
+  organizationId: string,
+  { composed }: { composed: boolean },
+) {
   const [effective, declarations] = await Promise.all([
     openappaBatteriesService.getEffectivePolicy(organizationId),
     openappaBatteriesService.policyDeclarations(organizationId),
   ]);
   const { served } = compositionView(effective);
   return {
-    content: effective.content,
+    ...(composed ? { content: effective.content } : {}),
     error: effective.lastError,
     served:
       served.kind === "root_only"
@@ -1413,6 +1424,7 @@ async function enforced(organizationId: string) {
       status: battery.status,
       served: battery.served,
     })),
+    credentialBindings: declarations.credentialBindings,
   };
 }
 
@@ -1423,7 +1435,7 @@ async function withLocalEnforcement<T extends { revision: number }>(
 ) {
   return {
     ...saved,
-    effective: await enforced(ids.organizationId),
+    effective: await enforced(ids.organizationId, { composed: false }),
     enforcement: await turnOnForFirstPolicy({
       ...ids,
       revision: saved.revision,
@@ -1455,9 +1467,6 @@ const PREVIEW_APPROVAL_INSTRUCTION =
 /** What a yell tells the agent when break the glass is off. */
 const YELL_RESULT_GUARDRAILS_UNCHANGED =
   "Guardrails are unchanged for this session.";
-/** What a yell tells the agent when break the glass turned OpenAPPA off. */
-const YELL_RESULT_GUARDRAILS_OFF =
-  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 
 function textParts(result: CallToolResult): string[] {
   return result.content.flatMap((part) =>

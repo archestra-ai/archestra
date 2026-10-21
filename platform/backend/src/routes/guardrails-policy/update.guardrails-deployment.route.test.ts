@@ -71,7 +71,6 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
-          newSessionPolicy: "live",
           annotatorModelId: null,
           annotatorLlmApiKeyId: null,
           featureEnabled,
@@ -137,55 +136,22 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
-  test("administrators can give new sessions a policy snapshot without changing enforcement, and the change is audited", async () => {
+  test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {
     await set(true);
-    const choose = (newSessionPolicy: string) =>
-      app.inject({
+    for (const payload of [
+      { newSessionPolicy: "snapshot" },
+      { enabled: false, newSessionPolicy: "live" },
+    ]) {
+      const response = await app.inject({
         method: "PUT",
         url: "/api/guardrails-deployment",
-        payload: { newSessionPolicy },
+        payload,
       });
-
-    const snapshot = await choose("snapshot");
-    expect(snapshot.statusCode, snapshot.body).toBe(200);
-    expect(snapshot.json()).toMatchObject({
+      expect(response.statusCode, response.body).toBe(400);
+    }
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
       enabled: true,
-      active: true,
-      newSessionPolicy: "snapshot",
     });
-    expect(
-      (
-        await app.inject({ method: "GET", url: "/api/guardrails-deployment" })
-      ).json(),
-    ).toMatchObject({ newSessionPolicy: "snapshot" });
-    expect(await GuardrailsDeploymentModel.getNewSessionPolicy()).toBe(
-      "snapshot",
-    );
-    await vi.waitFor(async () => {
-      const rows = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(eq(schema.auditLogsTable.organizationId, organizationId));
-      expect(rows).toContainEqual(
-        expect.objectContaining({
-          action: "organization.updated",
-          before: expect.objectContaining({ newSessionPolicy: "live" }),
-          after: expect.objectContaining({ newSessionPolicy: "snapshot" }),
-        }),
-      );
-    });
-
-    // Turning enforcement off and on again keeps the setting.
-    await set(false);
-    expect((await set(true)).json()).toMatchObject({
-      newSessionPolicy: "snapshot",
-    });
-    expect((await choose("live")).json()).toMatchObject({
-      enabled: true,
-      newSessionPolicy: "live",
-    });
-    expect((await choose("frozen")).statusCode).toBe(400);
-    expect(await GuardrailsDeploymentModel.getNewSessionPolicy()).toBe("live");
   });
 
   test("administrators can pick the annotator model, only as a linked pair of the organization's own, and the change is audited", async ({
@@ -320,7 +286,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.message).toContain(
-      'Revision 1: unsupported policy: tool "grain__*" has an invalid qualified identity',
+      'Revision 1: unsupported policy: A full tool name has three parts: where the tool comes from, the server, and the tool, like "mcp/github/list_issues". "grain__*" is not a full name or the exact name of a tool. Use one of them.',
     );
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
     // Turning it off is never refused.
@@ -338,13 +304,13 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         await app.inject({
           method: "PUT",
           url: "/api/guardrails-deployment",
-          payload: { newSessionPolicy: "snapshot" },
+          payload: { breakTheGlassEnabled: false },
         })
       ).statusCode,
     ).toBe(403);
     expect(await GuardrailsDeploymentModel.get()).toMatchObject({
       enabled: false,
-      newSessionPolicy: "live",
+      breakTheGlassEnabled: true,
     });
   });
 
@@ -360,7 +326,6 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json()).toMatchObject({
       unsupportedClientAction: "bypass",
-      newSessionPolicy: "live",
     });
     expect((await set(true)).statusCode).toBe(403);
   });

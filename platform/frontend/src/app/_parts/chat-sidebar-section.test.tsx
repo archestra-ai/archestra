@@ -110,6 +110,9 @@ let mockApps: Array<{
   pinnedAt: string | null;
 }> = [];
 
+// True while the pinned-apps request is still in flight.
+let mockAppsLoading = false;
+
 let mockRuns: Array<Record<string, unknown>> = [];
 
 let useRealRunsQuery = false;
@@ -175,6 +178,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  SIDEBAR_PINNED_PROJECTS_QUERY: { pinned: true, limit: 100, offset: 0 },
   // Answers like the endpoint: `pinned` splits the list, results are paged.
   useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
     mockUseProjects(filters);
@@ -193,7 +197,11 @@ vi.mock("@/lib/projects/projects.query", () => ({
 }));
 
 vi.mock("@/lib/app.query", () => ({
-  useApps: () => ({ data: { data: mockApps } }),
+  SIDEBAR_PINNED_APPS_QUERY: { limit: 100, offset: 0, pinned: true },
+  useApps: () =>
+    mockAppsLoading
+      ? { data: undefined, isLoading: true }
+      : { data: { data: mockApps }, isLoading: false },
   usePinApp: () => ({ mutate: vi.fn() }),
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
@@ -463,6 +471,7 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
+    mockAppsLoading = false;
     mockRuns = [];
     useRealRunsQuery = false;
     mockChatState.pathname = "/chat";
@@ -1065,6 +1074,37 @@ describe("ChatSidebarSection", () => {
     expect(
       screen.getAllByTestId("app-catalog-icon").map((el) => el.textContent),
     ).toEqual(["🚀", "📋"]);
+  });
+
+  it("draws the Pinned list once every pinned source has answered, in pin order", () => {
+    mockConversations = [
+      makeConv("chat-1", "Pinned chat", { pinnedAt: "2026-01-04T00:00:00Z" }),
+    ];
+    mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+    mockAppsLoading = true;
+
+    const { rerender } = render(<ChatSidebarSection fadeIn={fadeIn} />);
+    // Chats are in, apps are not: showing the chat now would push it down a
+    // row as soon as the more recently pinned app lands.
+    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pinned chat")).not.toBeInTheDocument();
+
+    mockAppsLoading = false;
+    rerender(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    const boardRow = screen.getByText("Sprint Board");
+    const chatRow = screen.getByText("Pinned chat");
+    expect(
+      boardRow.compareDocumentPosition(chatRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("routes an app without an icon through the fallback for its kind", () => {

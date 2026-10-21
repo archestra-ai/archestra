@@ -13,6 +13,8 @@ test.describe("MCP Gateways list when every gateway is pinned", () => {
       {
         method: "get",
         url: "/api/mcp-gateways/default",
+        // The page reads the gateway without its tools.
+        query: { includeTools: "false" },
         body: personalGateway,
         // Resolves after the list, as it can in a real load: the gateway must
         // still never be drawn as a table row first.

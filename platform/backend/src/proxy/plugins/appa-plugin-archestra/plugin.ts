@@ -411,7 +411,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                 }),
             })
           : undefined;
-      if (!recovery || !family) throw error;
+      // Off an OpenAPPA wire, the reporting turn cannot run, so the refusal
+      // does not offer it.
+      if (!family) throw withoutReportingRecovery(error);
+      if (!recovery) throw error;
       binding.reportingRecovery = true;
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
@@ -614,6 +617,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const [index, answer] of context.toolResults.entries()) {
+      if (result.toolResultUpdates[answer.id]?.code !== "unreleased_call")
+        continue;
+      logger.info(
+        {
+          sessionId: governed.session_id,
+          callerId: governed.caller_id,
+          toolCallId: answer.id,
+          thread: trustedContext?.thread ?? "none",
+          // 0 for the request's last tool result; above 0 for one the client
+          // replays from earlier in its history.
+          laterResults: context.toolResults.length - 1 - index,
+        },
+        "OpenAPPA has no record of releasing the call this tool result answers",
+      );
+    }
     for (const [id, notice] of unansweredNotices)
       result.toolResultUpdates[id] = {
         content: notice,
@@ -1779,7 +1798,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (!binding.runtimeTaskId) {
         throw new ApiError(
           409,
-          "The runtime turn has no authenticated task identity",
+          "OpenAPPA found no authenticated task identity for the runtime turn",
         );
       }
       const outcome = await returnRuntimeValue({
@@ -2872,6 +2891,27 @@ async function approveChildReturnCarriers(params: {
  */
 class ChildReturnRefusal extends ApiError {}
 
+/**
+ * The refusal without its offer to report the failure, for a request whose
+ * reporting turn cannot run.
+ */
+function withoutReportingRecovery(error: unknown): unknown {
+  if (
+    !(error instanceof ChildReturnRefusal) ||
+    !error.message.includes(CHILD_RETURN_RECOVERY)
+  )
+    return error;
+  const refusal = new ChildReturnRefusal(
+    error.statusCode,
+    error.message.replace(
+      CHILD_RETURN_RECOVERY,
+      CHILD_RETURN_CONTINUE_RECOVERY,
+    ),
+  );
+  refusal.shouldRetry = error.shouldRetry;
+  return refusal;
+}
+
 function isReportingReviewTool(tool: string | undefined): boolean {
   // The native intrinsic is unprefixed; gateway tools have branded names.
   return (
@@ -2909,8 +2949,9 @@ function childReturnRefusal(params: {
   return error;
 }
 
-const CHILD_RETURN_RECOVERY =
-  "You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+const CHILD_RETURN_CONTINUE_RECOVERY =
+  "To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+const CHILD_RETURN_RECOVERY = `You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. ${CHILD_RETURN_CONTINUE_RECOVERY}`;
 const FORKED_CHILD_RETURN_RECOVERY =
   "To keep this context, resume the original session. Otherwise, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const UNRECORDED_CHILD_RETURN =
@@ -5240,7 +5281,7 @@ async function recordNativeHitlRulings(params: {
           ? "array"
           : typeof answer.content,
       },
-      "Recorded native OpenAPPA HITL answer",
+      "OpenAPPA recorded a native HITL answer",
     );
     for (const offerId of claim.offerIds) {
       const review = await getHitlReview({
@@ -5321,6 +5362,7 @@ async function recordInspectableHitlAnswer(params: {
     session,
     offerIds: [offerId],
     emit: false,
+    carriedReviewText: params.carriedReviewText,
   });
   if (!asked) {
     // The review may have closed while the card was out. Then the answer is
@@ -5495,7 +5537,7 @@ function assertUniqueNativeQuestionResultIds(params: {
     if (seen.has(result.id) && questionIds.has(result.id)) {
       throw new ApiError(
         400,
-        "Duplicate native question result IDs are not allowed",
+        "OpenAPPA does not allow duplicate native question result IDs",
       );
     }
     seen.add(result.id);
@@ -6441,7 +6483,10 @@ async function enforcementFor(
   try {
     return await readGuardrailsV2Activation();
   } catch {
-    throw new ApiError(503, "Guardrails availability could not be confirmed");
+    throw new ApiError(
+      503,
+      "OpenAPPA could not confirm Guardrails availability",
+    );
   }
 }
 

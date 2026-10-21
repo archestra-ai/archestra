@@ -47,7 +47,10 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
+import {
+  ARCHESTRA_TOOL_NAME_UNIQUE_INDEX,
+  toolUiResourceUriExpression,
+} from "@/database/schemas/tool";
 import { restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
@@ -2323,6 +2326,32 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /** A catalog's live tool rows, with the upstream name each was synced from. */
+  static async findSyncedByCatalogId(catalogId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      rawName: string | null;
+      description: string | null;
+    }>
+  > {
+    return db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+        description: schema.toolsTable.description,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          isNull(schema.toolsTable.agentId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
+  }
+
   /**
    * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
    * Powers the server-scoped Apps run path: building `tools/list` and gating
@@ -2347,6 +2376,35 @@ class ToolModel {
       })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
+  }
+
+  /**
+   * Whether a tool assigned to the agent under `name` declares an upstream
+   * object `outputSchema`, i.e. whether the MCP gateway advertises one for it.
+   */
+  static async assignedToolDeclaresOutputSchema(params: {
+    agentId: string;
+    name: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        and(
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          eq(schema.agentToolsTable.agentId, params.agentId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.name, params.name),
+          sql`${schema.toolsTable.meta}->'outputSchema'->>'type' = 'object'`,
+          notDeleted(schema.toolsTable),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /**
@@ -4074,17 +4132,12 @@ function extractArchestraBuiltInShortName(toolName: string): string | null {
 
 /**
  * SQL expression resolving a tool's MCP App `ui://` resource URI, or NULL when
- * the tool is not a UI app. Canonical `_meta.ui.resourceUri` first, then the
- * legacy flat `ui/resourceUri` key; both must use the `ui://` scheme. Shared by
- * the external-apps listing and the catalog list's `providesUi` flag so the two
- * never drift.
+ * the tool is not a UI app. Shared by the external-apps listing and the catalog
+ * list's `providesUi` flag so the two never drift; `is not null` on it is served
+ * by the `tools_ui_resource_catalog_idx` partial index.
  */
 export function toolUiResourceUriSql(): SQL<string | null> {
-  const meta = schema.toolsTable.meta;
-  return sql<string | null>`coalesce(
-    case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
-    case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
-  )`;
+  return toolUiResourceUriExpression(schema.toolsTable.meta);
 }
 
 /** Identical catalog fences for coverage page candidates and hydrated inventory. */

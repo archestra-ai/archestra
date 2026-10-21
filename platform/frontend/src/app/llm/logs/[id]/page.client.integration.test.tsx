@@ -215,6 +215,77 @@ it("opens the request a link names, moving to the page that holds it", async () 
   ).not.toBeInTheDocument();
 });
 
+it("opens a linked tool call on its page without drawing another page first", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) =>
+    summary({
+      id: `request-${i}`,
+      model: `model-${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 60 - i)).toISOString(),
+    }),
+  );
+  serveSession({ rows });
+  // Between requests 52 and 53: the second page's window.
+  const call = {
+    id: "linked-call",
+    agentId: "agent-1",
+    ownerType: "agent",
+    mcpServerName: "github",
+    method: "tools/call",
+    sessionId: "test-session",
+    createdAt: "2026-01-01T00:00:07.500Z",
+    toolCall: { id: "c1", name: "github__search", arguments: {} },
+    toolResult: { isError: false, content: [] },
+  };
+  server.use(
+    http.get(`${origin}/api/mcp-tool-calls/linked-call`, () =>
+      HttpResponse.json(call),
+    ),
+    http.get(`${origin}/api/mcp-tool-calls`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const start = params.get("startDate") ?? "";
+      const end = params.get("endDate");
+      const inWindow =
+        call.createdAt >= start && (!end || call.createdAt <= end);
+      return HttpResponse.json({
+        data: inWindow ? [call] : [],
+        pagination: { hasNext: false },
+      });
+    }),
+  );
+  let search = new URLSearchParams("toolCall=linked-call");
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as ReturnType<typeof useSearchParams>,
+  );
+  push.mockImplementation((url: string) => {
+    search = new URLSearchParams(url.split("?")[1]);
+  });
+
+  const { rerender } = await renderPage();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/test-session?toolCall=linked-call&page=2&pageSize=50",
+      { scroll: false },
+    ),
+  );
+  // The first page was never drawn: the trace waited for the link's page.
+  // A render after the push may already show page 2, so look for page 1's
+  // rows rather than for no list at all.
+  expect(
+    screen.queryByRole("button", { name: /^Test Agent, Model 0,/ }),
+  ).not.toBeInTheDocument();
+  await rerender();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  expect(
+    await within(requests).findByRole("button", {
+      name: /^Tool call search on github,/,
+    }),
+  ).toHaveAttribute("aria-current", "true");
+  expect(
+    within(requests).queryByRole("button", { name: /^Test Agent, Model 0,/ }),
+  ).not.toBeInTheDocument();
+});
+
 it("says so when a linked request is not one of the session's", async () => {
   serveSession({ rows: [summary({ id: "request-0" })] });
   server.use(

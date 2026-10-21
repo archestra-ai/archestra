@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   collectErrorCodes,
+  getConnectionFailureTarget,
   isConnectionErrno,
   isFetchConnectivityError,
   isTimeoutErrno,
@@ -125,5 +126,80 @@ describe("isFetchConnectivityError", () => {
       isFetchConnectivityError(new TypeError("fetch failed", { cause })),
     ).toBe(false);
     expect(isFetchConnectivityError(new TypeError("fetch failed"))).toBe(false);
+  });
+});
+
+describe("getConnectionFailureTarget", () => {
+  test("reads the dialed address and port from a connect failure", () => {
+    const error = Object.assign(new Error("connect ECONNREFUSED"), {
+      code: "ECONNREFUSED",
+      syscall: "connect",
+      address: "203.0.113.10",
+      port: 443,
+    });
+    expect(getConnectionFailureTarget(error)).toEqual({
+      host: "203.0.113.10",
+      port: 443,
+    });
+  });
+
+  test("reads the looked-up hostname from a DNS failure", () => {
+    const error = Object.assign(new Error("lookup failed"), {
+      code: "ENOTFOUND",
+      syscall: "getaddrinfo",
+      hostname: "api.example.com",
+    });
+    expect(getConnectionFailureTarget(error)).toEqual({
+      host: "api.example.com",
+      port: null,
+    });
+  });
+
+  test("finds the target behind wrappers and aggregate members", () => {
+    const error = new Error("Connection error.", {
+      cause: new TypeError("fetch failed", {
+        cause: new AggregateError([
+          Object.assign(new Error("connect ETIMEDOUT 2001:db8::1:443"), {
+            code: "ETIMEDOUT",
+            syscall: "connect",
+            address: "2001:db8::1",
+            port: 443,
+          }),
+        ]),
+      }),
+    });
+    expect(getConnectionFailureTarget(error)).toEqual({
+      host: "2001:db8::1",
+      port: 443,
+    });
+  });
+
+  test.each([
+    [
+      "MCP error -32603: request to https://api.example.com/v1 failed, reason: getaddrinfo ENOTFOUND api.example.com",
+      { host: "api.example.com", port: null },
+    ],
+    [
+      "upstream failed (connect ECONNREFUSED 203.0.113.10:443)",
+      { host: "203.0.113.10", port: 443 },
+    ],
+    ["connect EPERM [2001:db8::1]:5432", { host: "2001:db8::1", port: 5432 }],
+    ["connect ETIMEDOUT ::1:5432", { host: "::1", port: 5432 }],
+  ])("parses the target Node renders into %s", (message, target) => {
+    expect(getConnectionFailureTarget(new Error(message))).toEqual(target);
+  });
+
+  test("returns null when the failure names no target", () => {
+    expect(
+      getConnectionFailureTarget(
+        new Error("Connection terminated unexpectedly"),
+      ),
+    ).toBeNull();
+    expect(
+      getConnectionFailureTarget(
+        Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+      ),
+    ).toBeNull();
+    expect(getConnectionFailureTarget("not an error")).toBeNull();
   });
 });

@@ -3476,6 +3476,63 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("a call too large for the card is allowed from the card that carried its review", async () => {
+    const offerId = "offer-inspectable-oversized";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        sessionId: "user:user|claude-inspectable-oversized",
+        offerId,
+      });
+    const wide = `  - ${"condition ".repeat(200)}`;
+    await stageHitlReview({
+      session: trusted.session,
+      review: {
+        offerId,
+        text: [
+          "[OpenAPPA] Approve this call?",
+          "",
+          "What this ruling would cover:",
+          ...Array(5).fill(wide),
+          "",
+        ].join("\n"),
+        tool: "Bash",
+        arguments: JSON.stringify({ command: "ls", cmd: "ls" }),
+        remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+      },
+    });
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Deny",
+        "Inspect",
+      ]);
+      await answer(first.answerId, first.card.question, "Inspect");
+      const inspected = await askCard();
+      expect(inspected.reviewDetails).toBeDefined();
+      expect(inspected.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      const approved = await answer(
+        inspected.answerId,
+        inspected.card.question,
+        "Allow",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      expect(
+        await consumeHitlRuling({ session: trusted.session, offerId }),
+      ).toBe("approve");
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("a concurrent review replacement never downgrades to a plain approval card", async () => {
     const { plugin, context, trusted } = inspectableClaudeReview({
       sessionId: "user:user|changed-before-card",
@@ -4520,7 +4577,7 @@ describe("asking through the client's own question tool", () => {
         }),
       ).rejects.toMatchObject({
         statusCode: 400,
-        message: "Duplicate native question result IDs are not allowed",
+        message: "OpenAPPA does not allow duplicate native question result IDs",
       });
       await plugin.onToolResults({
         ...context,
@@ -10896,7 +10953,7 @@ describe("activation gate on plugin dispatch", () => {
       const context = requestContext({ sessionId: "switch-unreadable" });
       await expect(plugin.onSessionInit(context)).rejects.toMatchObject({
         statusCode: 503,
-        message: "Guardrails availability could not be confirmed",
+        message: "OpenAPPA could not confirm Guardrails availability",
       });
     } finally {
       read.mockRestore();

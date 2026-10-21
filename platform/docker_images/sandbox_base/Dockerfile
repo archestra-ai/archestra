@@ -8,7 +8,9 @@
 # `requirements.lock` (regenerate with `make update-lockfile` after editing
 # pyproject.toml); the apt toolbelt is not version-pinned, so it floats with the
 # Debian mirror.
-FROM ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim@sha256:d935373e69f9507199c29006b5eaec59893cbd606f6fb7a185da0c2c83f716e9
+# TODO: move to python 3.15 (lazy imports) once ML wheels such as torch and
+# onnxruntime ship cp315 on PyPI.
+FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e08ae2c02f3fcedf76765aebc7c9bc10c55a6bbcc1b0510be
 
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the
 # model is never tempted to `pip install` into a location the venv won't see).
@@ -18,11 +20,12 @@ RUN apt-get update -qq \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \
- && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 \
+ && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
  && printf '%s\n' '#!/bin/sh' 'echo "error: pip is disabled in this sandbox. Use \"uv add --project /home/sandbox <pkg>\" instead." >&2' 'exit 1' > /usr/local/bin/pip \
  && chmod +x /usr/local/bin/pip \
  && ln -s pip /usr/local/bin/pip3 \
- && ln -s pip /usr/local/bin/pip3.12
+ && ln -s pip /usr/local/bin/pip3.14 \
+ && python3 -c "import compileall, sysconfig; compileall.compile_dir(sysconfig.get_path('stdlib'), quiet=2, workers=4)"
 
 # Provenance marker: a running sandbox can `cat` this to confirm it is on the
 # baked base (the runtime-built fallback base does not write this file).
@@ -40,4 +43,4 @@ WORKDIR /home/sandbox
 # The pyproject stays in the image so a runtime `uv add` can extend the project.
 COPY --chown=1000:1000 pyproject.toml requirements.lock /home/sandbox/
 RUN uv venv --python python3 /home/sandbox/.venv \
- && uv pip sync --require-hashes requirements.lock
+ && uv pip sync --require-hashes --compile-bytecode requirements.lock

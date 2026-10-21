@@ -30,10 +30,10 @@ import {
 import {
   AlertTriangle,
   Bot,
-  CheckIcon,
   ChevronRight,
   Globe,
   InfoIcon,
+  Loader2,
   Plus,
   RotateCcw,
   X,
@@ -146,7 +146,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -214,17 +214,13 @@ import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
+import { AccessModeCards, accessModeCountStat } from "./access-mode-cards";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
-  assignedSubagentsSummary,
-  assignedToolsSummary,
   excludedSourcesSummary,
-  excludedSubagentsSummary,
-  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
-  publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
@@ -440,6 +436,19 @@ function SubagentPill({
   );
 }
 
+// Stands in for a just-picked subagent until its name loads.
+function PendingSubagentPill() {
+  return (
+    <output
+      aria-label="Loading subagent"
+      className="flex h-8 w-32 items-center gap-2 rounded-md border border-dashed px-3 text-xs text-muted-foreground"
+    >
+      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      <Skeleton className="h-3 flex-1" />
+    </output>
+  );
+}
+
 // Component to display and edit local delegation targets.
 interface SubagentsEditorProps {
   agentId?: string;
@@ -465,25 +474,43 @@ function SubagentsEditor({
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
-  const { data: availableAgents = [] } = useAgentOptionsByIds({
-    ids: selectedIds.slice(0, 20),
-    enabled: canReadAgents,
-  });
-  const filteredAgents = availableAgents.filter(
-    (agent) => agent.id !== agentId,
-  );
+  const visibleIds = selectedIds.slice(0, 20);
+  // Every pick changes the id list, and so the lookup's key. Without the
+  // previous rows the assigned pills would all vanish until it answers.
+  const { data: availableAgents = [], isFetching: agentsFetching } =
+    useAgentOptionsByIds({
+      ids: visibleIds,
+      enabled: canReadAgents,
+      keepPreviousData: true,
+    });
+  const agentsById = new Map(availableAgents.map((agent) => [agent.id, agent]));
   const handleSelectionChange = (ids: string[]) => {
     const setIds =
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
-
-  const selectedLocalAgents = filteredAgents.filter((agent) =>
-    selectedAgentIds.includes(agent.id),
-  );
-  const excludedLocalAgents = filteredAgents.filter((agent) =>
-    disabledAgentIds.includes(agent.id),
-  );
+  // In pick order, so a new pick holds its place as a loading pill until the
+  // lookup names it, and the pills around it do not move.
+  const pills = visibleIds
+    .filter((id) => id !== agentId && (agentsById.has(id) || agentsFetching))
+    .map((id) => {
+      const agent = agentsById.get(id);
+      if (!agent) return <PendingSubagentPill key={id} />;
+      return (
+        <SubagentPill
+          key={id}
+          agent={agent}
+          isSelected={true}
+          readOnly={readOnly}
+          onToggle={() =>
+            handleSelectionChange(
+              selectedIds.filter((selectedId) => selectedId !== id),
+            )
+          }
+          tone={localMode === "all" ? "exclude" : "delegate"}
+        />
+      );
+    });
   const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
@@ -510,46 +537,17 @@ function SubagentsEditor({
         </div>
       ) : null}
 
-      {localMode === "all" && excludedLocalAgents.length > 0 && (
+      {localMode === "all" && pills.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">
             Excluded from all local agents
           </p>
-          <div className="flex flex-wrap gap-2">
-            {excludedLocalAgents.map((agent) => (
-              <SubagentPill
-                key={agent.id}
-                agent={agent}
-                isSelected={true}
-                readOnly={readOnly}
-                onToggle={() =>
-                  onDisabledSelectionChange(
-                    disabledAgentIds.filter((id) => id !== agent.id),
-                  )
-                }
-                tone="exclude"
-              />
-            ))}
-          </div>
+          <div className="flex flex-wrap gap-2">{pills}</div>
         </div>
       )}
 
-      {localMode === "selected" && selectedLocalAgents.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {selectedLocalAgents.map((agent) => (
-            <SubagentPill
-              key={agent.id}
-              agent={agent}
-              isSelected={true}
-              readOnly={readOnly}
-              onToggle={() =>
-                onSelectionChange(
-                  selectedAgentIds.filter((id) => id !== agent.id),
-                )
-              }
-            />
-          ))}
-        </div>
+      {localMode === "selected" && pills.length > 0 && (
+        <div className="flex flex-wrap gap-2">{pills}</div>
       )}
 
       {selectedIds.length > 20 && (
@@ -1873,9 +1871,6 @@ export function AgentForm({
   const disabledSubagentCount = disabledSubagentIds.length;
   const delegationTargetIdsToSave = selectedDelegationTargetIds;
   const disabledSubagentIdsToSave = disabledSubagentIds;
-  const handleSubagentModeChange = (value: string) =>
-    setAccessAllSubagents(value === "auto");
-
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
@@ -3369,42 +3364,52 @@ export function AgentForm({
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">
-                    {/* What the mode means, beside the control that sets it.
-                        A full-width tab bar over the whole panel read as the
-                        page's own navigation rather than this block's switch,
-                        and the count it governed sat somewhere else entirely.
-                        Both panels stay mounted, so the sentence is resolved
-                        here rather than inside either of them. */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-muted-foreground">
-                        {autoToolsMode
-                          ? excludedToolsSummary(
-                              exclusionsState
-                                ? exclusionsState.current.excludedToolIds.length
-                                : null,
-                            )
-                          : assignedToolsSummary(assignedToolCount)}
-                      </p>
-                      {!isBuiltIn && (
-                        <Tabs
-                          value={autoToolsMode ? "auto" : "custom"}
-                          onValueChange={(value) => {
-                            const auto = value === "auto";
-                            setAccessAllTools(auto);
-                            // Dynamic access only works through the search/run
-                            // dispatch surface, so picking it enables that mode.
-                            if (auto) {
-                              setToolExposureMode("search_and_run_only");
-                            }
-                          }}
-                        >
-                          <TabsList size="sm">
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      )}
-                    </div>
+                    {/* Each card states what the list below it means: in All
+                        it blocks tools, in Manual it allows them. Both panels
+                        stay mounted, so the counts are resolved here rather
+                        than inside either of them. */}
+                    <AccessModeCards
+                      label="Tool access"
+                      mode={autoToolsMode ? "all" : "manual"}
+                      readOnly={isBuiltIn}
+                      onModeChange={(mode) => {
+                        const auto = mode === "all";
+                        setAccessAllTools(auto);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (auto) setToolExposureMode("search_and_run_only");
+                      }}
+                      all={{
+                        title: "All tools",
+                        rule: "Everything is on, including tools added later. Disable the ones you don't want.",
+                        stat: accessModeCountStat(
+                          exclusionsState
+                            ? exclusionsState.current.excludedToolIds.length
+                            : null,
+                          "disabled",
+                        ),
+                      }}
+                      manual={{
+                        title: "Manual",
+                        rule: "Only the tools you pick. New tools stay off.",
+                        stat: accessModeCountStat(
+                          assignedToolCount,
+                          "assigned",
+                        ),
+                      }}
+                      footnote={
+                        autoToolsMode ? (
+                          <p>
+                            To save context, the{" "}
+                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
+                            sees only{" "}
+                            <code className="font-mono">search_tools</code> and{" "}
+                            <code className="font-mono">run_tool</code>, and
+                            looks up the rest when it needs one.
+                          </p>
+                        ) : null
+                      }
+                    />
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
                         they carry the same order, the same widgets and the same
@@ -3652,22 +3657,29 @@ export function AgentForm({
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {accessAllSubagents
-                            ? excludedSubagentsSummary(disabledSubagentCount)
-                            : assignedSubagentsSummary(delegationTargetCount)}
-                        </p>
-                        <Tabs
-                          value={accessAllSubagents ? "auto" : "custom"}
-                          onValueChange={handleSubagentModeChange}
-                        >
-                          <TabsList size="sm">
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
+                      <AccessModeCards
+                        label="Subagent access"
+                        mode={accessAllSubagents ? "all" : "manual"}
+                        onModeChange={(mode) =>
+                          setAccessAllSubagents(mode === "all")
+                        }
+                        all={{
+                          title: "All agents",
+                          rule: "Every local agent, including ones added later. Exclude the ones you don't want.",
+                          stat: accessModeCountStat(
+                            disabledSubagentCount,
+                            "excluded",
+                          ),
+                        }}
+                        manual={{
+                          title: "Manual",
+                          rule: "Only the agents you pick. New agents stay off.",
+                          stat: accessModeCountStat(
+                            delegationTargetCount,
+                            "assigned",
+                          ),
+                        }}
+                      />
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -3784,11 +3796,15 @@ export function AgentForm({
                       onModeChange={(mode) =>
                         setAccessAllSkills(mode === "all")
                       }
-                      summary={publishedSkillsSummary({
-                        publishesAll: accessAllSkills,
-                        excludedCount: excludedSkillIds.length,
-                        assignedCount: assignedSkillIds.length,
-                      })}
+                      allRule="Every organization-wide skill in this environment, including new ones. Exclude the ones you don't want."
+                      allStat={accessModeCountStat(
+                        excludedSkillIds.length,
+                        "excluded",
+                      )}
+                      manualStat={accessModeCountStat(
+                        assignedSkillIds.length,
+                        "assigned",
+                      )}
                       availableSkillsView={
                         <AvailableSkillsDialog
                           source={{
@@ -3800,20 +3816,10 @@ export function AgentForm({
                       }
                       allEditor={
                         <div className="space-y-2">
-                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Publishes skills with organization-wide use
-                              permission in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}
-                              's environment — new ones included automatically
-                            </li>
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Other skills require permission to share them and
-                              a manual assignment
-                            </li>
-                          </ul>
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Other skills need permission to share them and a
+                            manual assignment.
+                          </p>
                           <div className="space-y-1.5">
                             <AgentSkillsEditor
                               availableSkills={availableSkillsForExclusion}

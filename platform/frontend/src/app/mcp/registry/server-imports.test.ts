@@ -14,6 +14,15 @@ const SERVER_IMPORTED_MODULES = [
   "lib/mcp/mcp-registry.query.ts",
   "lib/auth/shell-seed.server.ts",
   "lib/auth/shell-seed.ts",
+  // The shell seed keys its reads with these modules' query keys.
+  "lib/agent-runs-query-keys.ts",
+  "lib/app.query.ts",
+  "lib/auth/auth.query.ts",
+  "lib/chat/conversations-query-key.ts",
+  "lib/chat/new-chat-seed.ts",
+  "lib/environment.query.ts",
+  "lib/projects/projects.query.ts",
+  "lib/site-notification.query.ts",
   "app/mcp/registry/prefetch-first-page.ts",
   "components/table-card-view.server.ts",
 ];

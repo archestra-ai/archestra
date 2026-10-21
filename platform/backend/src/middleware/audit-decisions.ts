@@ -578,6 +578,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "per-viewer UI state; intentionally excluded from audit logs",
   },
+  mcpServerToolDescriptionsTable: {
+    audited: false,
+    reason:
+      "derived from each installation's MCP tool discovery, like tools; no route mutates it directly",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",
@@ -1081,11 +1086,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "label history dataset the native runtime appends",
   },
-  openappaRootOpeningsTable: {
-    audited: false,
-    reason:
-      "derived from the runtime's event log once per root; read to keep or retire annotators, never edited",
-  },
   startupMigrationsTable: {
     audited: false,
     reason:
@@ -1110,6 +1110,22 @@ export const AUDIT_DECISIONS = {
   interactionUserActivityMissingOwnersTable: {
     audited: false,
     reason: "internal unresolved owner dependencies",
+  },
+  interactionSessionHeadsTable: {
+    audited: false,
+    reason: "derived newest-interaction index of log sessions",
+  },
+  interactionSessionHeadsBackfillTable: {
+    audited: false,
+    reason: "internal backfill progress marker",
+  },
+  interactionBillingTable: {
+    audited: false,
+    reason: "content-free idempotent billing receipts",
+  },
+  limitBillingUsageTable: {
+    audited: false,
+    reason: "transactional settled usage projection",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

@@ -22,7 +22,6 @@ async function failedDispatch(params: {
   userId: string;
   installationId: string;
   status: number;
-  onUnreadable?: (unreadable: { variable: string; key: string }[]) => void;
 }) {
   const key = `jev-app-${params.installationId}`;
   await RuntimeCredentialDefinitionModel.create({
@@ -65,7 +64,6 @@ async function failedDispatch(params: {
       .dispatchPolicy({
         organizationId: params.organizationId,
         content,
-        onUnreadable: params.onUnreadable,
       })
       .then(
         () => expect.unreachable("the dispatch policy resolved"),
@@ -90,7 +88,7 @@ test("a bound credential its provider cannot mint now fails the dispatch as retr
   expect(failure.shouldRetry).toBe(true);
 });
 
-test("a dispatch names every bound credential it could not read, whether it resolves or rejects", async ({
+test("a bound credential with no organization value is left out of the dispatch", async ({
   makeOrganization,
   makeUser,
 }) => {
@@ -110,25 +108,11 @@ test("a dispatch names every bound credential it could not read, whether it reso
       allowOrganization: true,
     },
   });
-  const unset: unknown[] = [];
   const resolved = await openappaDeclarations.dispatchPolicy({
     organizationId,
     content: `[policy]\nversion = 2\n[credentials]\n${JEV_KEY} = "${key}"\n[externals.jev]\ntoken_env = "${JEV_KEY}"\n`,
-    onUnreadable: (unreadable) => unset.push(...unreadable),
   });
   expect(resolved.credentials).toEqual({});
-  expect(unset).toEqual([{ variable: JEV_KEY, key }]);
-
-  const failing: unknown[] = [];
-  const failure = await failedDispatch({
-    organizationId,
-    userId,
-    installationId: "502502",
-    status: 503,
-    onUnreadable: (unreadable) => failing.push(...unreadable),
-  });
-  expect(failure.statusCode).toBe(503);
-  expect(failing).toEqual([{ variable: JEV_KEY, key: "jev-app-502502" }]);
 });
 
 test("a bound credential its provider refuses fails the dispatch as the organization's to fix", async ({

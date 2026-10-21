@@ -6,7 +6,7 @@ import { gatewayLlmSessionId, gatewayLlmToolCallId } from "./llm-link";
 describe("gatewayLlmSessionId", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
-    config.enterpriseFeatures.aiSecurity = true;
+    config.enterpriseFeatures.core = true;
   });
 
   test("follows an OpenAPPA session header the way the proxy does", () => {

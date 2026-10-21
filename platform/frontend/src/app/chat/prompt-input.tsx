@@ -36,6 +36,7 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { ChatComposerSecurity } from "@/components/chat/chat-composer-security";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
@@ -285,6 +286,7 @@ const PromptInputContent = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -882,6 +884,8 @@ const PromptInputContent = ({
   // menu and ArrowUp navigates it (handled further down).
   const handleTextareaKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // The reply will need the markdown renderer: start loading it now.
+      void preloadResponseMarkdown();
       if (
         event.key === "Escape" &&
         !isSlashCommandOpen &&
@@ -1026,7 +1030,7 @@ const PromptInputContent = ({
         becomes its live terminal when ready.
       </span>
     </div>
-  ) : encryptedChatActive && !conversationId ? (
+  ) : encryptedChatActive ? (
     <div
       data-testid={E2eTestId.EncryptedChatNotice}
       className={cn(
@@ -1116,6 +1120,7 @@ const PromptInputContent = ({
           maxContextLength={maxContextLength}
           agentLlmApiKeyId={agentLlmApiKeyId}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
@@ -1163,6 +1168,7 @@ const PromptInputContent = ({
                   }
                   status={submitStatus}
                   disabled={isSendBlocked}
+                  onPointerDown={() => void preloadResponseMarkdown()}
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
@@ -1309,14 +1315,14 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {conversationId && !runtimeMode ? (
+      {!runtimeMode ? (
         <ChatComposerSecurity
-          key={conversationId}
+          key={conversationId ?? "new"}
           conversationId={conversationId}
-          encrypted={encryptedChatActive}
-          privacyDetails={privacyDetails}
         >
+          {!drawerBelow && drawer}
           {composer}
+          {drawerBelow && drawer}
         </ChatComposerSecurity>
       ) : (
         <>
@@ -1365,6 +1371,7 @@ const ArchestraPromptInput = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1486,6 +1493,7 @@ const ArchestraPromptInput = ({
           onCompactConversation={onCompactConversation}
           onOpenFiles={onOpenFiles}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

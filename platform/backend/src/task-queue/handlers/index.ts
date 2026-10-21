@@ -20,9 +20,11 @@ import { handleConnectorSync } from "./connector-sync-handler";
 import { handleContentEncryptionBackfill } from "./content-encryption-backfill-handler.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
+import { handleInteractionSessionPreviewBackfill } from "./interaction-session-preview-backfill-handler";
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
+import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -108,6 +110,14 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "skill_publication_backfill",
     handleSkillPublicationBackfill,
+  );
+  taskQueueService.registerHandler(
+    "interaction_session_preview_backfill",
+    handleInteractionSessionPreviewBackfill,
+  );
+  taskQueueService.registerHandler(
+    "mcp_tool_description_backfill",
+    handleMcpToolDescriptionBackfill,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
 }

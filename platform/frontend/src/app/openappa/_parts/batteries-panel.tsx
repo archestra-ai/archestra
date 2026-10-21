@@ -3,7 +3,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   BatteryCharging,
   ExternalLink,
   KeyRound,
@@ -53,6 +52,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -68,7 +72,6 @@ import {
   type BatterySummary,
   batteryMatchesQueryKey,
   type PolicyBattery,
-  type PolicyDeclarations,
   useBatteries,
   useBatteryMatches,
   useCreateBatteryInstall,
@@ -77,7 +80,6 @@ import {
   useRemoveBatteryInclude,
   useSetCredentialBinding,
 } from "@/lib/openappa-batteries.query";
-import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
@@ -91,19 +93,12 @@ import {
 } from "./battery-credentials";
 import { BatteryIcon, type CatalogEntry } from "./battery-icon";
 import {
-  BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
-  type BatteryStatusGroup,
+  BATTERY_TABLE_STATUS,
   type EnforcedStatus,
 } from "./battery-status";
-import {
-  batteryWorks,
-  compositionNotice,
-  enforcedStatus,
-  nowStatus,
-  servedOnly,
-  servedRevision,
-} from "./composition-view";
+import { batteryStatusHint, batteryTableStatus } from "./battery-table-status";
+import { enforcedStatus } from "./composition-view";
 import { DialogSection } from "./dialog-section";
 import {
   GithubManagedPolicyNotice,
@@ -112,27 +107,9 @@ import {
 import { batteryStatusBadge } from "./policy-decorations";
 
 const STATUS_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All batteries" },
+  { value: DEFAULT_FILTER_ALL, label: "All statuses" },
   ...BATTERY_STATUS_GROUPS,
 ];
-
-/**
- * Which status group a row falls in: enforced cleanly, enforced or declared
- * with a problem, not included and fitting a server, or not included.
- */
-function statusGroup(params: {
-  row: BatteryTableRow;
-  declarations: PolicyDeclarations;
-  fits: boolean;
-}): BatteryStatusGroup {
-  const { row, declarations, fits } = params;
-  if (row.servedOnly)
-    return BATTERY_STATUS[row.servedOnly.status].severity === "ok"
-      ? "active"
-      : "broken";
-  if (!row.included) return fits ? "fits" : "other";
-  return batteryWorks(declarations, row.included) ? "active" : "broken";
-}
 
 /** A URL value the select offers, else every row: a stale link shows the table. */
 const knownFilter = (
@@ -166,8 +143,6 @@ export function BatteriesPanel() {
   const servers = {
     data: canReadInstallations ? issueIndex?.servers : undefined,
   };
-  // The batteries that fit a server, as the overview counts them.
-  const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({
     guardrailsPolicy: ["update"],
   });
@@ -199,12 +174,7 @@ export function BatteriesPanel() {
     updateQueryParams({ search: null, status: null, page: "1" });
   const hasActiveFilters =
     !!search.trim() || statusFilter !== DEFAULT_FILTER_ALL;
-  const needsFit = statusFilter === "fits" || statusFilter === "other";
-  if (
-    declarations.isPending ||
-    batteries.isPending ||
-    (needsFit && summary.isPending)
-  )
+  if (declarations.isPending || batteries.isPending)
     return <Skeleton className="h-32 w-full" />;
   if (!declarations.data || !batteries.data)
     return (
@@ -217,12 +187,8 @@ export function BatteriesPanel() {
       />
     );
   const policy = declarations.data;
-  const { lastError, managedInGithub } = policy;
+  const { managedInGithub } = policy;
   const included = policy.batteries;
-  // A refused text keeps an earlier composition enforced: each battery shows
-  // how that composition holds it, and the notice says which one it is.
-  const notice = compositionNotice(policy);
-  const revision = servedRevision(policy);
   const statusOf = (entry: PolicyBattery) => enforcedStatus(policy, entry);
   // The repository owns the text while it syncs: an edit here would be undone
   // by the next pull, so the panel only reads it. Bindings live beside the
@@ -238,29 +204,13 @@ export function BatteriesPanel() {
   const installedCatalogIds = servers.data
     ? new Set(servers.data.map((server) => server.catalogId))
     : null;
+  // One row per battery that exists. An entry naming no battery is an error in
+  // the policy text, which the Policy page marks on its line.
   const rows: BatteryTableRow[] = batteries.data.map((summary) => ({
     name: summary.name,
     summary,
     included: included.find((entry) => entry.name === summary.name) ?? null,
   }));
-  for (const entry of included) {
-    if (!rows.some((row) => row.name === entry.name))
-      rows.push({ name: entry.name, summary: null, included: entry });
-  }
-  for (const held of servedOnly(policy)) {
-    const row = rows.find((candidate) => candidate.name === held.name);
-    if (row) row.servedOnly = held;
-    else
-      rows.push({
-        name: held.name,
-        summary: null,
-        included: null,
-        servedOnly: held,
-      });
-  }
-  const fitting = new Set(
-    summary.data?.batteries.available.map((battery) => battery.name),
-  );
   // Read from the rows each render, so the open dialog follows every write.
   const editingRow = rows.find((row) => row.name === editing) ?? null;
   const query = search.trim().toLowerCase();
@@ -273,11 +223,8 @@ export function BatteriesPanel() {
           ...(row.summary?.namespaces ?? []),
         ].some((value) => value.toLowerCase().includes(query))) &&
       (statusFilter === DEFAULT_FILTER_ALL ||
-        statusGroup({
-          row,
-          declarations: policy,
-          fits: fitting.has(row.name),
-        }) === statusFilter)
+        BATTERY_TABLE_STATUS[batteryTableStatus(row.included)].group ===
+          statusFilter)
     );
   });
   const columns: ColumnDef<BatteryTableRow>[] = [
@@ -297,56 +244,14 @@ export function BatteriesPanel() {
     },
     {
       id: "status",
-      header: "Enforcement",
-      size: 160,
-      cell: ({ row }) => {
-        const entry = row.original.included;
-        const held = row.original.servedOnly;
-        if (!entry && held) {
-          const badge = batteryStatusBadge(held.status);
-          return (
-            <div className="space-y-1">
-              <Badge variant={badge.variant}>{badge.label}</Badge>
-              <p className="text-xs text-muted-foreground">
-                {revision === null
-                  ? "Still enforced; no longer declared"
-                  : `Still enforced from revision ${revision}`}
-              </p>
-            </div>
-          );
-        }
-        if (!entry)
-          return (
-            <span className="text-muted-foreground">
-              {fitting.has(row.original.name)
-                ? "Fits your servers"
-                : "Not included"}
-            </span>
-          );
-        const badge = batteryStatusBadge(statusOf(entry));
-        const now = nowStatus(policy, entry);
-        return (
-          <div className="space-y-1">
-            <Badge variant={badge.variant}>{badge.label}</Badge>
-            {revision !== null && entry.served && (
-              <p className="text-xs text-muted-foreground">
-                From revision {revision}
-              </p>
-            )}
-            {now && (
-              <p className="text-xs text-muted-foreground">
-                Now: {BATTERY_STATUS[now].label}
-              </p>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "servers",
-      header: "Servers",
-      size: 110,
-      cell: ({ row }) => row.original.included?.servers.length ?? 0,
+      header: "Status",
+      size: 220,
+      cell: ({ row }) => (
+        <BatteryStatusCell
+          battery={row.original.included}
+          catalogName={catalogName}
+        />
+      ),
     },
     // A read-only reader opens a battery by clicking its row: no action is left.
     ...(writable
@@ -368,20 +273,6 @@ export function BatteriesPanel() {
   ];
   return (
     <section aria-label="OpenAPPA batteries" className="space-y-4">
-      {notice && (
-        <InlineNotice variant={notice.variant}>
-          <AlertTriangle />
-          <span className="font-medium">{notice.title}</span>
-          <InlineNoticeText>
-            <span>{notice.body}</span>
-            {lastError && (
-              <span className="mt-1 block whitespace-pre-wrap font-mono text-xs">
-                {lastError}
-              </span>
-            )}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
       {managedInGithub && <GithubManagedPolicyNotice />}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -408,7 +299,7 @@ export function BatteriesPanel() {
             value={statusFilter}
             showSearch={false}
             onValueChange={(value) => setFilter("status", value)}
-            placeholder="Filter by enforcement"
+            placeholder="Filter by status"
             items={STATUS_OPTIONS}
           />
         </FilterBar>
@@ -430,7 +321,7 @@ export function BatteriesPanel() {
           </Button>
         }
         filteredEmptyMessage="No batteries match your filters"
-        fixedWidthColumnIds={["status", "servers", "actions"]}
+        fixedWidthColumnIds={["status", "actions"]}
         flexibleColumnIds={["name"]}
         onRowClick={(row, event) =>
           openRowOnPlainClick(event, () => setEditing(row.name))
@@ -447,11 +338,7 @@ export function BatteriesPanel() {
             variables: editingRow.summary?.credentials ?? [],
           })}
           catalogName={catalogName}
-          status={
-            editingRow.included
-              ? statusOf(editingRow.included)
-              : (editingRow.servedOnly?.status ?? null)
-          }
+          status={editingRow.included ? statusOf(editingRow.included) : null}
           writable={writable}
           bindable={bindable}
           managedInGithub={managedInGithub}
@@ -496,9 +383,34 @@ type BatteryTableRow = {
   name: string;
   summary: BatterySummary | null;
   included: PolicyBattery | null;
-  /** Held by the enforced composition although the current text no longer declares it. */
-  servedOnly?: { name: string; status: PolicyBattery["status"] };
 };
+
+/** A row's status badge; a problem status says on hover what it means. */
+function BatteryStatusCell({
+  battery,
+  catalogName,
+}: {
+  battery: PolicyBattery | null;
+  catalogName: (catalogId: string) => string;
+}) {
+  const status = batteryTableStatus(battery);
+  const { label, group } = BATTERY_TABLE_STATUS[status];
+  if (status === "not_configured")
+    return <span className="text-muted-foreground">{label}</span>;
+  const badge = (
+    <Badge variant={group === "attention" ? "destructive" : "secondary"}>
+      {label}
+    </Badge>
+  );
+  const hint = batteryStatusHint({ battery, catalogName });
+  if (!hint) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent className="max-w-72">{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 const UNBOUND = "__unbound__";
 
@@ -586,6 +498,9 @@ function BatteryDialog({
         </span>
       }
       description={summary?.description}
+      // The title row is left-aligned (icon, name, badge), so the copy under
+      // it is too, at every width.
+      headerClassName="text-left"
       bodyClassName="space-y-6"
       footer={<DialogCancelButton>Close</DialogCancelButton>}
     >
@@ -634,7 +549,11 @@ function BatteryDialog({
       ) : (
         <DialogSection
           title="Servers"
-          description="Its rules check tool calls on these servers."
+          description={
+            writable && servers.length === 1
+              ? "Its rules check tool calls on these servers. Detaching the last one also removes the battery from the policy."
+              : "Its rules check tool calls on these servers."
+          }
         >
           {servers.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
@@ -679,12 +598,6 @@ function BatteryDialog({
                 );
               })}
             </ul>
-          )}
-          {writable && servers.length === 1 && (
-            <p className="text-xs text-muted-foreground">
-              Detaching the last server also removes the battery from the
-              policy.
-            </p>
           )}
           {writable && summary && (
             <AttachServerPicker
@@ -740,16 +653,20 @@ function ServerRow({
           size={16}
         />
       ) : null}
-      <span className="font-medium">{name}</span>
-      <span
-        className={cn(
-          "truncate text-xs text-muted-foreground",
-          detail.endsWith("__*") && "font-mono",
-        )}
-      >
-        {detail}
+      {/* Name over the tool pattern, so neither squeezes the other or the
+          action on a narrow dialog. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{name}</span>
+        <span
+          className={cn(
+            "block truncate text-xs text-muted-foreground",
+            detail.endsWith("__*") && "font-mono",
+          )}
+        >
+          {detail}
+        </span>
       </span>
-      {action && <div className="ml-auto shrink-0">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </li>
   );
 }

@@ -67,7 +67,7 @@ export async function captureYellReport<T>(params: {
     })().catch((err: unknown) => {
       logger.warn(
         { err, yellId: params.id },
-        "Could not deliver OpenAPPA report",
+        "OpenAPPA could not deliver the report",
       );
       if (!response.headersSent) response.writeHead(500);
       response.end();

@@ -1,10 +1,17 @@
 import { createHash } from "node:crypto";
+import type { AddressInfo } from "node:net";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import helperRoutes from "@/routes/openappa-helpers/openappa-helpers.routes";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, expect, test } from "@/test";
+import { beforeEach, expect, onTestFinished, test } from "@/test";
 import { executeArchestraTool } from ".";
 
 const candidatePolicy = `[policy]
@@ -324,3 +331,120 @@ test("a policy preview replays the saved validations against the proposed policy
   ).toBe(candidatePolicy);
   expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
+
+test("a policy preview runs the draft's battery helpers for a caller who may change the policy, and only for them", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeTeam,
+  makeTeamMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const editor = await makeUser();
+  await makeMember(editor.id, organization.id, { role: "admin" });
+  const viewer = await makeUser();
+  const reader = await makeCustomRole(organization.id, {
+    permission: { guardrailsPolicy: ["read"] },
+  });
+  await makeMember(viewer.id, organization.id, { role: reader.role });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  const team = await makeTeam(organization.id, editor.id);
+  await makeTeamMember(team.id, editor.id);
+  const consulted = await serveHelperBridge();
+  // After reading organization-internal data, sharing a project with a team needs that team's
+  // members, which the archestra battery's audience source answers.
+  const share = {
+    path: "traces/share.appa",
+    content: `mcp/notes/read {}\nexpect allow\nmcp/archestra/set_project_share {\n  visibility: "team"\n  team_ids: ["${team.id}"]\n}\nexpect allow\n`,
+  };
+  await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [share],
+    expectedVersion: "empty",
+  });
+  // Nothing is saved yet, so the draft's battery has no install row.
+  const draft = `include = ["batteries/archestra/appa.toml"]
+
+[aliases.mcp]
+archestra = ["archestra"]
+
+[policy]
+version = 2
+
+[policy.audience]
+internal = ["archestra:members"]
+
+[[policy.tool]]
+name = "notes__read"
+delta = { audience = ["internal"] }
+`;
+  const preview = (userId: string) =>
+    executeArchestraTool(
+      "archestra__preview_guardrails_policy_change",
+      { content: draft, expectedRevision: 0 },
+      {
+        organizationId: organization.id,
+        userId,
+        agent: { id: agent.id, name: agent.name },
+      },
+    );
+
+  const edited = await preview(editor.id);
+  expect(edited.isError, JSON.stringify(edited.content)).not.toBe(true);
+  expect(edited.structuredContent?.validations).toEqual([
+    expect.objectContaining({ path: share.path, status: "passed" }),
+  ]);
+  // Each consult named a temporary install id the bridge answered.
+  expect(consulted.length).toBeGreaterThan(0);
+  for (const { installId, statusCode } of consulted) {
+    expect(installId).not.toBe("checked");
+    expect(statusCode).toBe(200);
+  }
+
+  consulted.length = 0;
+  const viewed = await preview(viewer.id);
+  expect(viewed.isError, JSON.stringify(viewed.content)).not.toBe(true);
+  expect(viewed.structuredContent?.validations).toEqual([
+    expect.objectContaining({ path: share.path, status: "cannot_run" }),
+  ]);
+  // A viewer's replay names only the placeholder, which the bridge refuses.
+  expect(consulted.length).toBeGreaterThan(0);
+  expect(consulted).toEqual(
+    consulted.map(() => ({ installId: "checked", statusCode: 400 })),
+  );
+  expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
+});
+
+/**
+ * This process's loopback endpoints a replay consults: the real battery
+ * helper route, and the no-op annotator. Records each helper consult.
+ */
+async function serveHelperBridge() {
+  const consulted: { installId: string; statusCode: number }[] = [];
+  const app = createFastifyInstance();
+  await app.register(helperRoutes);
+  app.post(GUARDRAILS_NOOP_ANNOTATOR_PATH, async () =>
+    guardrailsPolicyService.annotate(),
+  );
+  app.addHook("onResponse", async (request, reply) => {
+    if (request.url.startsWith(OPENAPPA_HELPERS_PREFIX))
+      consulted.push({
+        installId: request.url
+          .slice(OPENAPPA_HELPERS_PREFIX.length + 1)
+          .split("/")[0],
+        statusCode: reply.statusCode,
+      });
+  });
+  await app.listen({ port: 0, host: "127.0.0.1" });
+  const port = config.api.port;
+  config.api.port = (app.server.address() as AddressInfo).port;
+  onTestFinished(async () => {
+    config.api.port = port;
+    await app.close();
+  });
+  return consulted;
+}

@@ -42,9 +42,9 @@ A file you read or download while the run is in the middle of a tool call comes 
 
 If a request is refused:
 
-- **"Guardrails do not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- **"OpenAPPA does not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 - **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
-- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a connected client's runtime calls, usually because the client's model requests did not go through the LLM Proxy, or because the model made a steer or write while Guardrails were off. Retry it from the conversation that started the run. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client).
+- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a model's runtime tool calls. A script or a client whose model requests skip the LLM Proxy gets this. Make the call as a tool call from the run's own conversation or from the one that started it. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client). Once a [yell with **Break the glass** on](/docs/agents/guardrails/policies#yells) turns Guardrails off for the run's session or the session that started it, its calls need no proof.
 - **"The protected file could not be admitted":** Guardrails held the file's bytes from your session. The ruling after the message says why and names any plan that lets them through.
 
 ## Pass a Credential

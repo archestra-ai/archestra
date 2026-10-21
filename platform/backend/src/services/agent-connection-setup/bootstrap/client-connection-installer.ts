@@ -2,6 +2,7 @@ import {
   CONNECT_SETUP_PARTS,
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
 
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
@@ -228,6 +229,7 @@ async function applySetup({ scriptPath, origin, platform }) {
     const child = platform === 'windows'
       ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit', env: installerEnv })
       : spawnSync('bash', [filename], { stdio: 'inherit', env: installerEnv });
+    if (child.status === ${SETUP_STOPPED_EXIT_CODE}) throw new Error('Setup stopped.');
     if (child.error || child.status !== 0) throw new Error('Setup failed. Review the output above and start the installer again after fixing the problem.');
     if (marker) return JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
     console.log('Setup applied. Restart or reload your client if needed. Complete its MCP sign-in if prompted.');
@@ -237,9 +239,8 @@ async function applySetup({ scriptPath, origin, platform }) {
 // Tells the script to leave its ending to finishSetup.
 const installerEnv = { ...process.env, ARCHESTRA_CONNECT_INSTALLER: '1' };
 // The end of a run: what was set up, then what is left. With a terminal it
-// offers to run the sign-in; without one (an agent or CI ran the installer) it
-// prints the command instead. Starting the agent is left to the person: run
-// from here, its TUI lost the keyboard.
+// offers to run the sign-in and then to start the agent; without one (an agent
+// or CI ran the installer) it prints the commands instead.
 function finishSetup(ending, platform) {
   if (!ending) return;
   const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
@@ -266,10 +267,36 @@ function finishSetup(ending, platform) {
         console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);
       } else console.log('  ' + ending.signIn.text);
     }
+    const shell = ending.launch && terminal !== null ? launchShell(platform) : null;
+    if (shell && ask(terminal, '\n' + paint('1', 'Start ' + ending.label + ' now?') + ' [Y/n] ')) {
+      console.log('');
+      // Ctrl+C belongs to the agent now. Without a listener it would also end
+      // this process, and the shell would take the keyboard back from the agent.
+      const keepRunning = () => {};
+      process.on('SIGINT', keepRunning);
+      try {
+        // An interactive shell loads the profile wrapper the setup installed,
+        // so the agent starts exactly as it will from a new terminal.
+        const child = spawnSync(shell, ['-ic', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] });
+        if (!child.error) return;
+      } finally { process.removeListener('SIGINT', keepRunning); }
+    }
   } finally { if (terminal !== null) closeSync(terminal); }
-  // The command is the last thing printed, so it is the first thing seen.
-  if (ending.launch) console.log('\n' + paint('1', 'Next: open a new terminal and run:') + '\n\n  ' + paint('1;36', ending.launch.text));
-  else console.log('\n' + paint('1', 'Next: open ' + ending.label + ' to start using ' + ending.appName + '.'));
+  // The command is the last thing printed, so it is the first thing seen. The
+  // rules set it apart from the setup output above it.
+  const rule = paint('2', (platform === 'windows' ? '-' : '\u2500').repeat(60));
+  const next = ending.launch
+    ? paint('1;33', 'Next: open a new terminal and run:') + '\n\n  ' + paint('1;36', ending.launch.text)
+    : paint('1;33', 'Next: open ' + ending.label + ' to start using ' + ending.appName + '.');
+  console.log('\n' + rule + '\n' + next + '\n' + rule);
+}
+// The guard wraps the agent in the bash and zsh profiles. On Windows the agent
+// is left to a new terminal.
+function launchShell(platform) {
+  if (platform === 'windows') return null;
+  const shell = process.env.SHELL ?? '';
+  if (/\/(bash|zsh)$/.test(shell)) return shell;
+  return spawnSync('bash', ['-c', 'exit 0'], { stdio: 'ignore' }).status === 0 ? 'bash' : null;
 }
 // Windows starts npm .cmd shims only through cmd.exe. With shell: true, Node
 // joins an argument list unescaped (deprecated as DEP0190), so cmd.exe gets one

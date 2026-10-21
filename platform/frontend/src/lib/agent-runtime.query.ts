@@ -12,6 +12,13 @@ import {
   hasRecentlyEnded,
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
+import {
+  agentRunQueryKey,
+  MY_AGENT_RUNS_PAGE_SIZE,
+  type MyAgentRunsOptions,
+  myAgentRunsPageQuery,
+  myAgentRunsQueryKey,
+} from "@/lib/agent-runs-query-keys";
 import { useFeature } from "@/lib/config/config.query";
 import { validateUploadFile } from "@/lib/files/file-upload";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -91,29 +98,21 @@ export function useAgentRuns(agentId: string, enabled = true) {
 
 export function useMyAgentRuns(
   enabled = true,
-  options: {
-    pinned?: boolean;
-    search?: string;
-  } = {},
+  options: MyAgentRunsOptions = {},
 ) {
   const query = useInfiniteQuery({
-    queryKey: ["agent-runs", "mine", options],
+    queryKey: myAgentRunsQueryKey(options),
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await getMyAgentRuns({
-        query: {
-          limit: MY_RUNS_PAGE_SIZE,
-          offset: pageParam,
-          sort: options.pinned ? "pinned" : "recent",
-          ...options,
-        },
+        query: myAgentRunsPageQuery(options, pageParam),
       });
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
     getNextPageParam: (lastPage, pages) =>
       lastPage?.pagination.hasNext
-        ? pages.length * MY_RUNS_PAGE_SIZE
+        ? pages.length * MY_AGENT_RUNS_PAGE_SIZE
         : undefined,
     enabled,
     refetchInterval: (query) => {
@@ -146,14 +145,13 @@ export function useMyAgentRuns(
 export function useMyAgentRun(taskId: string, enabled = true) {
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ["agent-runs", taskId],
+    queryKey: agentRunQueryKey(taskId),
     queryFn: async () => {
       const { data, error } = await getMyAgentRun({ path: { taskId } });
       throwOnApiError(error, { toastOnError: false });
-      const previous = queryClient.getQueryData<typeof data>([
-        "agent-runs",
-        taskId,
-      ]);
+      const previous = queryClient.getQueryData<typeof data>(
+        agentRunQueryKey(taskId),
+      );
       // Refresh the sidebar lists when a run's state changes. The first read
       // of a run is not a change: it used to invalidate the lists too, which
       // cancelled and restarted their in-flight page loads on every run page.
@@ -456,8 +454,3 @@ export function useSetMissingAgentRuntimeCredentials(agentId: string) {
     },
   });
 }
-
-// A sidebar page. The sidebar renders every loaded run and offers "load
-// more", so a short first page keeps the 79 KB-per-hundred payload out of
-// every page's request burst; the palette pages further on demand.
-const MY_RUNS_PAGE_SIZE = 20;

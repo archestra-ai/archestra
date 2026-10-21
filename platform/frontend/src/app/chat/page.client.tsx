@@ -509,6 +509,7 @@ export function ChatPageContent({
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    isAgentResolving: isInitialAgentResolving,
     selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
@@ -896,6 +897,13 @@ export function ChatPageContent({
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
+  );
+  // A document the server seeded carries only the end of a long conversation
+  // (olderMessageCount says how much is left out); the full history follows
+  // after paint. Its older messages then go in front of the live thread.
+  const startedFromTail = useStartedFromTail(
+    conversationId,
+    conversation?.olderMessageCount,
   );
   const isWaitingForScheduledPrompt =
     conversation?.origin === "schedule_trigger" &&
@@ -1632,9 +1640,10 @@ export function ChatPageContent({
         ? mergePersistedMessageMetadata({
             liveMessages: chatSession.messages,
             persistedMessages: persistedConversationMessages,
+            includeEarlierPersisted: startedFromTail,
           })
         : persistedConversationMessages,
-    [chatSession?.messages, persistedConversationMessages],
+    [chatSession?.messages, persistedConversationMessages, startedFromTail],
   );
   const mcpApps = useChatApps({
     messages,
@@ -1873,6 +1882,17 @@ export function ChatPageContent({
       }),
     [messages, optimisticToolCalls],
   );
+  // Browser calls already in the saved thread are history: they never open
+  // the panel, whenever they arrive (the end of a long conversation first,
+  // its earlier messages after paint).
+  const savedBrowserToolCallIds = useMemo(
+    () =>
+      collectBrowserToolCallIds({
+        messages: persistedConversationMessages,
+        optimisticToolCalls: [],
+      }),
+    [persistedConversationMessages],
+  );
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
   const contextWindow = chatSession?.contextWindow ?? null;
@@ -1902,10 +1922,11 @@ export function ChatPageContent({
         mergePersistedMessageMetadata({
           liveMessages: current,
           persistedMessages,
+          includeEarlierPersisted: startedFromTail,
         }),
       );
     },
-    [setMessages],
+    [setMessages, startedFromTail],
   );
 
   // Sync once the turn has settled — including a failed one. regenerate (and
@@ -1922,13 +1943,16 @@ export function ChatPageContent({
 
   const conversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
-  const activeAgentId = conversationAgentId ?? initialAgentId;
+  // While a conversation loads, its agent is unknown. Standing in the new-chat
+  // default there painted an unrelated agent on reload, then swapped it.
+  const fallbackAgentId = isLoadingConversation ? null : initialAgentId;
+  const activeAgentId = conversationAgentId ?? fallbackAgentId;
+  const isActiveAgentResolving =
+    !activeAgentId && (isLoadingConversation || isInitialAgentResolving);
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
-  const newChatAgentId =
-    activeAgentId ??
-    initialAgentId ??
-    internalAgents.find((agent) => !agent.builtIn)?.id ??
-    null;
+  // The resolved agent only: a stand-in would load another agent's detail
+  // and readiness while the choice resolves.
+  const newChatAgentId = activeAgentId ?? null;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -2578,7 +2602,10 @@ export function ChatPageContent({
       return;
     }
 
-    const seenBrowserToolCallIds = seenBrowserToolCallIdsRef.current;
+    const seenBrowserToolCallIds = new Set([
+      ...seenBrowserToolCallIdsRef.current,
+      ...savedBrowserToolCallIds,
+    ]);
     const hasNewBrowserToolCall = Array.from(browserToolCallIds).some(
       (toolCallId) => !seenBrowserToolCallIds.has(toolCallId),
     );
@@ -2593,6 +2620,7 @@ export function ChatPageContent({
     }
   }, [
     browserToolCallIds,
+    savedBrowserToolCallIds,
     conversationId,
     openRightPanelTab,
     showBrowserButton,
@@ -3364,7 +3392,7 @@ export function ChatPageContent({
                           conversationId={conversationId}
                           readOnly={isReadOnlyConversation}
                           agentId={
-                            currentProfileId || initialAgentId || undefined
+                            currentProfileId || fallbackAgentId || undefined
                           }
                           messages={messages}
                           status={status}
@@ -3386,7 +3414,7 @@ export function ChatPageContent({
                                   (a) => a.id === currentProfileId,
                                 )
                               : internalAgents.find(
-                                  (a) => a.id === initialAgentId,
+                                  (a) => a.id === fallbackAgentId,
                                 )
                             )?.name ?? conversation?.agent?.name
                           }
@@ -3618,6 +3646,7 @@ export function ChatPageContent({
                                   : undefined
                               }
                               selectorAgentId={activeAgentId}
+                              isSelectorAgentResolving={isActiveAgentResolving}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -3758,7 +3787,7 @@ export function ChatPageContent({
                         >
                           <div className="w-full">
                             {newChatAgentId && !isInitialRuntimeMode && (
-                              <div className="mb-3">
+                              <div className="mb-3 empty:hidden">
                                 <AgentConnectionNotice
                                   agentId={newChatAgentId}
                                 />
@@ -3872,6 +3901,7 @@ export function ChatPageContent({
                                 initialPerUserConnect.provider
                               }
                               selectorAgentId={initialAgentId}
+                              isSelectorAgentResolving={isInitialAgentResolving}
                               onAgentChange={handleInitialAgentChange}
                               encryptedChat={
                                 isInitialRuntimeMode
@@ -4077,3 +4107,24 @@ function subscriptionDebug(event: string, data: Record<string, unknown>) {
 // fade just above it keeps a line from being sliced in half there.
 const COMPOSER_DOCK_CLASS =
   "sticky bottom-0 bg-background px-4 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";
+
+/**
+ * Whether this conversation's first loaded snapshot was a tail read (it left
+ * out older messages). Fixed per conversation: the full history replacing the
+ * tail does not reset it.
+ */
+function useStartedFromTail(
+  conversationId: string | undefined,
+  olderMessageCount: number | undefined,
+): boolean {
+  const seen = useRef<{ id: string | undefined; fromTail: boolean } | null>(
+    null,
+  );
+  if (seen.current?.id !== conversationId) {
+    seen.current =
+      olderMessageCount === undefined
+        ? null
+        : { id: conversationId, fromTail: olderMessageCount > 0 };
+  }
+  return seen.current?.fromTail ?? false;
+}

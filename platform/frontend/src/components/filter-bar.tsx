@@ -261,7 +261,22 @@ export function FilterBar({
               aria-label="Table filters"
               className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto [&>button]:w-full [&>button]:max-w-none"
             >
-              <span className="text-sm font-medium">Filters</span>
+              {/* Clear rides the title row as a small link-weight action;
+                  a direct child button would stretch to the full width. */}
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <span className="text-sm font-medium">Filters</span>
+                {onClearFilters && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={onClearFilters}
+                    className="-mr-1.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X aria-hidden className="size-3.5" />
+                    <span>Clear</span>
+                  </Button>
+                )}
+              </div>
               {extrasInPopover}
               {children}
               {moreFilters?.map((filter) => (
@@ -275,12 +290,6 @@ export function FilterBar({
                   {filter.control}
                 </div>
               ))}
-              {onClearFilters && (
-                <Button variant="ghost" size="sm" onClick={onClearFilters}>
-                  <X aria-hidden className="size-3.5" />
-                  <span>Clear</span>
-                </Button>
-              )}
               {actionsInPopover && (
                 <div className="flex flex-col gap-1.5 border-t pt-3 [&>button]:w-full">
                   {actions}

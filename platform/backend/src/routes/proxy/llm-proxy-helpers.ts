@@ -1,4 +1,5 @@
 import { priceBillingUsage } from "@/services/billable-usage";
+import { asRecord } from "@/utils/as-record";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -904,11 +905,15 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type (and details) so native
-        // streaming clients classify the failure correctly. This uses
-        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // Keep the provider's own error object (its code, details, policy
+        // review data) so native streaming clients classify and recover from
+        // the failure as they would talking to the provider directly. This
+        // uses upstreamBody, not upstreamPassthroughBody: the status (200) is
         // already sent, so the status checks of the passthrough do not apply,
-        // and the type and details are all the client has to go on.
+        // and the error object is all the client has to go on.
+        ...(upstreamBody !== undefined
+          ? providerErrorFields(upstreamBody)
+          : {}),
         // A transport failure has no provider body: frame it as a server
         // error with its own code, so a client that classifies by type
         // (the AI SDK's Responses parser, OpenCode, Kilo Code) treats it as
@@ -921,9 +926,6 @@ export function handleError(
           "api_error",
         ...(transportFailure ? { code: transportFailure.code } : {}),
         message: errorMessage,
-        ...(upstreamBody !== undefined
-          ? providerErrorDetails(upstreamBody)
-          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -1236,10 +1238,9 @@ function extractTrustedProviderErrorBody(error: unknown): object | undefined {
     : undefined;
 }
 
-/** The provider's `details` member of its error object, for mid-stream frames. */
-function providerErrorDetails(body: object): { details?: unknown } {
-  const details = (body as { error?: { details?: unknown } }).error?.details;
-  return details && typeof details === "object" ? { details } : {};
+/** The provider's own error object, for mid-stream frames. */
+function providerErrorFields(body: object): Record<string, unknown> {
+  return asRecord((body as { error?: unknown }).error) ?? {};
 }
 
 /**

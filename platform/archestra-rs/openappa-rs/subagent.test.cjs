@@ -171,7 +171,7 @@ test("an attested child may read untrusted data and still answer at its parent's
 // The pinned runtime still offers the attestation to a suspicious parent and
 // refuses it on execution with no answer. That answer reaches the model as an
 // error result, not as a runtime failure that ends the turn.
-test('a suspicious parent hears why its attested return is refused', { skip: !databaseUrl }, async () => {
+test('a suspicious parent is not offered an attested return', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
   const held = await run.hook(run.parent, run.call('r1', 'read_inbox'));
@@ -179,10 +179,11 @@ test('a suspicious parent hears why its attested return is refused', { skip: !da
   assert.equal((await run.hook(run.parent, run.call('r2', 'read_inbox'))).decision, 'allow_call');
   await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'r2', output: 'lease ends in 3 days', outcome: 'success' });
 
-  const { declared, call } = await startSpawn(run, schema);
-  assert.equal(declared.result.isError, true);
-  assert.match(declared.result.content[0].text, /the return declaration is refused: .*attest-schema.*the offer stands/);
-  assert.equal(call.decision, 'deny_call', 'the spawn stays held');
+  const probe = await run.hook(run.parent, run.spawnCall('s1:declare'));
+  assert.equal(probe.decision, 'deny_call', 'an undeclared spawn is held');
+  const returns = probe.offers.map((offer) => offer.returns);
+  assert.ok(returns.includes('as_spoken'));
+  assert.ok(!returns.some((route) => route?.sanitizer === 'attest-schema'), 'the attestation would be refused');
 });
 
 test('a child returning as spoken may not read untrusted data', { skip: !databaseUrl }, async () => {

@@ -102,7 +102,7 @@ describe("0586 renames the agent-run tools", () => {
     expect(await excludedToolIds(agent.id)).toEqual([ids.acme__steer_run]);
   });
 
-  test("folds list_runs into list_agent_runs and deletes it", async ({
+  test("deletes list_runs without granting or lifting list_agent_runs", async ({
     makeAgent,
     makeApp,
     makeConversation,
@@ -111,7 +111,6 @@ describe("0586 renames the agent-run tools", () => {
     const onlyOld = await makeAgent();
     const excludedOld = await makeAgent();
     const excludedNew = await makeAgent();
-    const excludedBoth = await makeAgent();
     const app = await makeApp();
     const conversation = await makeConversation(both.id);
     const ids = await insertBuiltinTools([
@@ -129,15 +128,13 @@ describe("0586 renames the agent-run tools", () => {
       appId: app.id,
       toolId: oldId,
     });
-    await db.insert(schema.conversationEnabledToolsTable).values([
-      { conversationId: conversation.id, toolId: oldId },
-      { conversationId: conversation.id, toolId: newId },
-    ]);
+    await db.insert(schema.conversationEnabledToolsTable).values({
+      conversationId: conversation.id,
+      toolId: oldId,
+    });
     await db.insert(schema.agentExcludedToolsTable).values([
       { agentId: excludedOld.id, toolId: oldId },
       { agentId: excludedNew.id, toolId: newId },
-      { agentId: excludedBoth.id, toolId: oldId },
-      { agentId: excludedBoth.id, toolId: newId },
     ]);
 
     await migrate();
@@ -146,36 +143,58 @@ describe("0586 renames the agent-run tools", () => {
       [newId]: "archestra__list_agent_runs",
     });
     expect(await agentToolIds(both.id)).toEqual([newId]);
-    expect(await agentToolIds(onlyOld.id)).toEqual([newId]);
+    expect(await agentToolIds(onlyOld.id)).toEqual([]);
     expect(
-      (
-        await db
-          .select({ toolId: schema.appToolsTable.toolId })
-          .from(schema.appToolsTable)
-          .where(eq(schema.appToolsTable.appId, app.id))
-      ).map((row) => row.toolId),
-    ).toEqual([newId]);
+      await db
+        .select()
+        .from(schema.appToolsTable)
+        .where(eq(schema.appToolsTable.appId, app.id)),
+    ).toEqual([]);
     expect(
-      (
-        await db
-          .select({ toolId: schema.conversationEnabledToolsTable.toolId })
-          .from(schema.conversationEnabledToolsTable)
-          .where(
-            eq(
-              schema.conversationEnabledToolsTable.conversationId,
-              conversation.id,
-            ),
-          )
-      ).map((row) => row.toolId),
-    ).toEqual([newId]);
+      await db
+        .select()
+        .from(schema.conversationEnabledToolsTable)
+        .where(
+          eq(
+            schema.conversationEnabledToolsTable.conversationId,
+            conversation.id,
+          ),
+        ),
+    ).toEqual([]);
     expect({
       excludedOld: await excludedToolIds(excludedOld.id),
       excludedNew: await excludedToolIds(excludedNew.id),
-      excludedBoth: await excludedToolIds(excludedBoth.id),
-    }).toEqual({ excludedOld: [], excludedNew: [], excludedBoth: [newId] });
+    }).toEqual({ excludedOld: [], excludedNew: [newId] });
   });
 
-  test("renames list_runs in place when list_agent_runs does not exist yet", async ({
+  test("a renamed tool merging into an existing row keeps both exclusions", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const ids = await insertBuiltinTools([
+      "archestra__get_run",
+      "archestra__get_agent_run",
+    ]);
+    await db.insert(schema.agentToolsTable).values({
+      agentId: agent.id,
+      toolId: ids.archestra__get_run,
+    });
+    await db.insert(schema.agentExcludedToolsTable).values({
+      agentId: agent.id,
+      toolId: ids.archestra__get_run,
+    });
+
+    await migrate();
+
+    expect(await agentToolIds(agent.id)).toEqual([
+      ids.archestra__get_agent_run,
+    ]);
+    expect(await excludedToolIds(agent.id)).toEqual([
+      ids.archestra__get_agent_run,
+    ]);
+  });
+
+  test("deletes list_runs even when list_agent_runs does not exist yet", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -187,13 +206,11 @@ describe("0586 renames the agent-run tools", () => {
 
     await migrate();
 
-    expect(await toolNames([ids.acme__list_runs])).toEqual({
-      [ids.acme__list_runs]: "acme__list_agent_runs",
-    });
-    expect(await agentToolIds(agent.id)).toEqual([ids.acme__list_runs]);
+    expect(await toolNames([ids.acme__list_runs])).toEqual({});
+    expect(await agentToolIds(agent.id)).toEqual([]);
   });
 
-  test("rewrites tool-call limits to the new names, keeping an existing list_agent_runs limit", async ({
+  test("moves every tool-call limit to the new name, keeping distinct windows", async ({
     makeAgent,
   }) => {
     const renamed = await makeAgent();
@@ -207,6 +224,7 @@ describe("0586 renames the agent-run tools", () => {
       entityId: string,
       toolName: string,
       limitValue: number,
+      cleanupInterval: "1h" | "24h",
       mcpServerName = "archestra",
     ) => ({
       entityType: "agent" as const,
@@ -215,15 +233,15 @@ describe("0586 renames the agent-run tools", () => {
       limitValue,
       mcpServerName,
       toolName,
+      cleanupInterval,
     });
     await db
       .insert(schema.limitsTable)
       .values([
-        toolCalls(renamed.id, "archestra__start_run", 1),
-        toolCalls(renamed.id, "archestra__list_runs", 2),
-        toolCalls(merged.id, "archestra__list_runs", 3),
-        toolCalls(merged.id, "archestra__list_agent_runs", 4),
-        toolCalls(merged.id, "github__list_runs", 5, "github"),
+        toolCalls(renamed.id, "archestra__start_run", 1, "1h"),
+        toolCalls(merged.id, "archestra__list_runs", 2, "1h"),
+        toolCalls(merged.id, "archestra__list_agent_runs", 3, "24h"),
+        toolCalls(merged.id, "github__list_runs", 4, "1h", "github"),
       ]);
 
     await migrate();
@@ -233,6 +251,7 @@ describe("0586 renames the agent-run tools", () => {
         entityId: schema.limitsTable.entityId,
         toolName: schema.limitsTable.toolName,
         limitValue: schema.limitsTable.limitValue,
+        cleanupInterval: schema.limitsTable.cleanupInterval,
       })
       .from(schema.limitsTable);
     expect(rows.sort((a, b) => a.limitValue - b.limitValue)).toEqual([
@@ -240,18 +259,26 @@ describe("0586 renames the agent-run tools", () => {
         entityId: renamed.id,
         toolName: "archestra__start_agent_run",
         limitValue: 1,
-      },
-      {
-        entityId: renamed.id,
-        toolName: "archestra__list_agent_runs",
-        limitValue: 2,
+        cleanupInterval: "1h",
       },
       {
         entityId: merged.id,
         toolName: "archestra__list_agent_runs",
-        limitValue: 4,
+        limitValue: 2,
+        cleanupInterval: "1h",
       },
-      { entityId: merged.id, toolName: "github__list_runs", limitValue: 5 },
+      {
+        entityId: merged.id,
+        toolName: "archestra__list_agent_runs",
+        limitValue: 3,
+        cleanupInterval: "24h",
+      },
+      {
+        entityId: merged.id,
+        toolName: "github__list_runs",
+        limitValue: 4,
+        cleanupInterval: "1h",
+      },
     ]);
   });
 });

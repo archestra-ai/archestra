@@ -2,9 +2,13 @@
 --
 -- A tool whose new short name has no live built-in row yet is renamed in
 -- place, so its id and every assignment and exclusion keep pointing at it.
--- A tool whose new name already exists (list_runs -> list_agent_runs) is
--- merged: its references move onto the surviving row and the old row is
--- deleted. The prefix is branded per deployment, so rows are matched on the
+-- A tool whose new name already exists is merged: its references move onto
+-- the surviving row, which also inherits its exclusions.
+--
+-- list_runs only listed the caller's own runs; list_agent_runs can list
+-- everyone's. So list_runs is deleted with its assignments and exclusions,
+-- never carried over: own runs stay reachable through list_agent_runs'
+-- mine_only, which needs no assignment. The prefix is branded per deployment, so rows are matched on the
 -- short name after the last "__" (see 0527, 0553).
 --
 -- 0125 commits the migrator's transaction, so the mapping is a session-scoped
@@ -18,7 +22,8 @@ SELECT
   COALESCE(
     target."name",
     regexp_replace(t."name", m."old_short" || '$', m."new_short")
-  ) AS "new_name"
+  ) AS "new_name",
+  m."old_short" <> 'list_runs' AS "carries_access"
 FROM "tools" t
 JOIN (
   VALUES
@@ -53,6 +58,7 @@ DELETE FROM "agent_tools" a
 USING "_agent_run_tool_renames" r
 WHERE a."tool_id" = r."old_id"
   AND r."target_id" IS NOT NULL
+  AND r."carries_access"
   AND EXISTS (
     SELECT 1 FROM "agent_tools" keep
     LEFT JOIN "_agent_run_tool_renames" kr ON kr."old_id" = keep."tool_id"
@@ -66,12 +72,14 @@ WHERE a."tool_id" = r."old_id"
 --> statement-breakpoint
 UPDATE "agent_tools" a SET "tool_id" = r."target_id"
 FROM "_agent_run_tool_renames" r
-WHERE a."tool_id" = r."old_id" AND r."target_id" IS NOT NULL;
+WHERE a."tool_id" = r."old_id" AND r."target_id" IS NOT NULL
+  AND r."carries_access";
 --> statement-breakpoint
 DELETE FROM "app_tools" a
 USING "_agent_run_tool_renames" r
 WHERE a."tool_id" = r."old_id"
   AND r."target_id" IS NOT NULL
+  AND r."carries_access"
   AND EXISTS (
     SELECT 1 FROM "app_tools" keep
     LEFT JOIN "_agent_run_tool_renames" kr ON kr."old_id" = keep."tool_id"
@@ -85,12 +93,14 @@ WHERE a."tool_id" = r."old_id"
 --> statement-breakpoint
 UPDATE "app_tools" a SET "tool_id" = r."target_id"
 FROM "_agent_run_tool_renames" r
-WHERE a."tool_id" = r."old_id" AND r."target_id" IS NOT NULL;
+WHERE a."tool_id" = r."old_id" AND r."target_id" IS NOT NULL
+  AND r."carries_access";
 --> statement-breakpoint
 DELETE FROM "conversation_enabled_tools" c
 USING "_agent_run_tool_renames" r
 WHERE c."tool_id" = r."old_id"
   AND r."target_id" IS NOT NULL
+  AND r."carries_access"
   AND EXISTS (
     SELECT 1 FROM "conversation_enabled_tools" keep
     LEFT JOIN "_agent_run_tool_renames" kr ON kr."old_id" = keep."tool_id"
@@ -104,12 +114,14 @@ WHERE c."tool_id" = r."old_id"
 --> statement-breakpoint
 UPDATE "conversation_enabled_tools" c SET "tool_id" = r."target_id"
 FROM "_agent_run_tool_renames" r
-WHERE c."tool_id" = r."old_id" AND r."target_id" IS NOT NULL;
+WHERE c."tool_id" = r."old_id" AND r."target_id" IS NOT NULL
+  AND r."carries_access";
 --> statement-breakpoint
 DELETE FROM "tool_observations" o
 USING "_agent_run_tool_renames" r
 WHERE o."tool_id" = r."old_id"
   AND r."target_id" IS NOT NULL
+  AND r."carries_access"
   AND EXISTS (
     SELECT 1 FROM "tool_observations" keep
     LEFT JOIN "_agent_run_tool_renames" kr ON kr."old_id" = keep."tool_id"
@@ -124,46 +136,35 @@ WHERE o."tool_id" = r."old_id"
 --> statement-breakpoint
 UPDATE "tool_observations" o SET "tool_id" = r."target_id"
 FROM "_agent_run_tool_renames" r
-WHERE o."tool_id" = r."old_id" AND r."target_id" IS NOT NULL;
+WHERE o."tool_id" = r."old_id" AND r."target_id" IS NOT NULL
+  AND r."carries_access";
 --> statement-breakpoint
 UPDATE "a2a_outbound_runs" o SET "tool_id" = r."target_id"
 FROM "_agent_run_tool_renames" r
 WHERE o."tool_id" = r."old_id" AND r."target_id" IS NOT NULL;
 --> statement-breakpoint
--- The survivor stays excluded only for agents that also excluded every tool
--- merging into it. The old tools' exclusions, and their per-installation
--- descriptions, go with them through ON DELETE CASCADE.
-DELETE FROM "agent_excluded_tools" e
-USING "_agent_run_tool_renames" r
-WHERE e."tool_id" = r."target_id"
-  AND NOT EXISTS (
-    SELECT 1 FROM "agent_excluded_tools" old
-    WHERE old."agent_id" = e."agent_id" AND old."tool_id" = r."old_id"
-  );
+-- An exclusion only narrows access, so the survivor keeps its own and gains
+-- the merged tool's. Everything else on a deleted row goes with it through
+-- ON DELETE CASCADE.
+INSERT INTO "agent_excluded_tools" ("agent_id", "tool_id")
+SELECT e."agent_id", r."target_id"
+FROM "agent_excluded_tools" e
+JOIN "_agent_run_tool_renames" r ON r."old_id" = e."tool_id"
+WHERE r."target_id" IS NOT NULL AND r."carries_access"
+ON CONFLICT DO NOTHING;
 --> statement-breakpoint
 DELETE FROM "tools"
 WHERE "id" IN (
-  SELECT "old_id" FROM "_agent_run_tool_renames" WHERE "target_id" IS NOT NULL
+  SELECT "old_id" FROM "_agent_run_tool_renames"
+  WHERE "target_id" IS NOT NULL OR NOT "carries_access"
 );
 --> statement-breakpoint
 UPDATE "tools" t SET "name" = r."new_name"
 FROM "_agent_run_tool_renames" r
-WHERE t."id" = r."old_id" AND r."target_id" IS NULL;
+WHERE t."id" = r."old_id" AND r."target_id" IS NULL AND r."carries_access";
 --> statement-breakpoint
--- Limits key tools by full name. When an entity already has the same limit on
--- the new name, keep that one and drop the old-name duplicate.
-DELETE FROM "limits" l
-USING "_agent_run_tool_renames" r
-WHERE l."tool_name" = r."old_name"
-  AND EXISTS (
-    SELECT 1 FROM "limits" k
-    WHERE k."entity_type" = l."entity_type"
-      AND k."entity_id" = l."entity_id"
-      AND k."limit_type" = l."limit_type"
-      AND k."mcp_server_name" IS NOT DISTINCT FROM l."mcp_server_name"
-      AND k."tool_name" = r."new_name"
-  );
---> statement-breakpoint
+-- Limits key tools by full name and only narrow access, so every one moves
+-- to the new name.
 UPDATE "limits" l SET "tool_name" = r."new_name"
 FROM "_agent_run_tool_renames" r
 WHERE l."tool_name" = r."old_name";

@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,
   type ResourcePermissionGrant,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
@@ -17,6 +18,7 @@ import {
   McpServerModel,
   OrganizationModel,
   SreRuntimeModel,
+  ToolModel,
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { deleteEnvironment } from "@/services/environments/environment";
@@ -31,6 +33,7 @@ import {
   SRE_ENVIRONMENT_NAME,
   SRE_OPENAPPA_BATTERY,
   SRE_SERVER_NAME,
+  SRE_SOURCE_HOSTS,
   sreAgentSystemPrompt,
   sreLocalConfig,
 } from "./definition";
@@ -122,10 +125,11 @@ class SreAgentService {
   }
 
   /**
-   * Creates the agent with exactly the SRE tools, only when every one of them
-   * was discovered and setup never completed. Setup completes when version 1
-   * is forked, after the tools are assigned, so an agent without a version was
-   * left by an interrupted run and gets its tools now.
+   * Creates the agent with exactly the SRE tools, plus the sandbox tools when
+   * the code runtime is on, only when every one of them exists and setup never
+   * completed. Setup completes when version 1 is forked, after the tools are
+   * assigned, so an agent without a version was left by an interrupted run and
+   * gets its tools now.
    */
   async ensureAgent(params: {
     organizationId: string;
@@ -149,6 +153,21 @@ class SreAgentService {
       return;
     }
 
+    const sandbox = config.skillsSandbox.enabled;
+    const sandboxToolNames = sandbox
+      ? SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
+          archestraMcpBranding.getToolName(shortName),
+        )
+      : [];
+    const sandboxToolIds =
+      await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
+    if (sandboxToolIds.length < sandboxToolNames.length) {
+      logger.warn(
+        { sandboxToolNames },
+        "Sandbox tools are not seeded yet; not creating the SRE agent, retrying on next start",
+      );
+      return;
+    }
     const toolIds = tools.map(({ id }) => id);
     // An admin may have uninstalled the server while discovery ran.
     if (!(await this.isInstallLive(params.mcpServerId))) return;
@@ -165,6 +184,7 @@ class SreAgentService {
           systemPrompt: sreAgentSystemPrompt({
             appName: archestraMcpBranding.appName,
             namespace: config.orchestrator.kubernetes.namespace,
+            sandbox,
           }),
           environmentId: SRE_ENVIRONMENT_ID,
         },
@@ -179,6 +199,7 @@ class SreAgentService {
     await AgentToolModel.bulkCreateForAgentsAndTools([SRE_AGENT_ID], toolIds, {
       mcpServerId: params.mcpServerId,
     });
+    await AgentToolModel.createManyIfNotExists(SRE_AGENT_ID, sandboxToolIds);
     await AgentVersionModel.forkIfChangedBestEffort(SRE_AGENT_ID);
     logger.info({ agentId: SRE_AGENT_ID }, "Set up the SRE agent");
     if (params.authorId) {
@@ -368,7 +389,7 @@ function sreNetworkPolicy(apiServerCidrs: string[]): NetworkPolicy | null {
   return {
     egressMode: "restricted",
     domainPreset: "none",
-    allowedDomains: [],
+    allowedDomains: config.skillsSandbox.enabled ? SRE_SOURCE_HOSTS : [],
     allowedCidrs: apiServerCidrs,
   };
 }

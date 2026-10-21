@@ -229,6 +229,7 @@ What to know:
 - The MCP server runs in its own **SRE** environment, whose egress allows only `apiServerCidrs`. Without them, the server reaches the API server only on clusters that do not enforce egress policies.
 - Deleting the agent or its MCP server keeps it deleted across restarts, as long as the deleted item is kept. If it is permanently purged, the next start creates it again.
 - Setting `enabled: false` permanently removes the agent, the server, and the environment, including any changes you made to the agent, such as its prompt, tools, and schedules. Turning it back on creates them again from the defaults.
+- With the [code sandbox](/docs/agents#code-sandbox) on, the agent also gets its sandbox tools and clones the source of the running version from GitHub to tie errors to code. For that, the **SRE** environment also allows `github.com` and `codeload.github.com`. These domains then apply to the Kubernetes MCP server too, and they need a [supported FQDN policy provider](/docs/admin/environments); with Kubernetes `NetworkPolicy` alone, the clone fails and the agent works without the source.
 - The agent appears once the server's tools are discovered. If it is missing, check the **Kubernetes** server under **MCP Registry** for a startup error.
 
 ## Collect a Support Bundle

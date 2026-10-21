@@ -1,5 +1,12 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  TOOL_RUN_COMMAND_SHORT_NAME,
+} from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
 import { beforeEach } from "vitest";
+import { getAppVersion } from "@/app-version";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
@@ -16,6 +23,7 @@ import {
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { renderSystemPrompt } from "@/templating";
 import { describe, expect, test } from "@/test";
 import {
   SRE_AGENT_ID,
@@ -23,6 +31,7 @@ import {
   SRE_CATALOG_ID,
   SRE_ENVIRONMENT_ID,
   SRE_SERVER_NAME,
+  SRE_SOURCE_HOSTS,
 } from "./definition";
 import { sreAgentService } from "./index";
 
@@ -33,6 +42,7 @@ describe("sreAgentService", () => {
     config.sreAgent.enabled = true;
     config.sreAgent.k8sServiceAccount = SERVICE_ACCOUNT;
     config.sreAgent.apiServerCidrs = ["10.0.0.1/32"];
+    config.skillsSandbox.enabled = false;
   });
 
   test("seeds one environment, catalog item, and org-wide install, idempotently", async ({
@@ -441,6 +451,53 @@ describe("sreAgentService", () => {
     } else {
       expect(battery).toBeUndefined();
     }
+  });
+
+  test.for([
+    true,
+    false,
+  ])("with the code runtime on: %s, the agent can read the running version's source", async (sandbox, {
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    config.skillsSandbox.enabled = sandbox;
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+
+    await sreAgentService.ensureAgent({
+      organizationId,
+      authorId: adminId,
+      mcpServerId: server.id,
+    });
+
+    const assigned = (await ToolModel.getMcpToolsByAgent(SRE_AGENT_ID)).map(
+      ({ name }) => name,
+    );
+    expect(
+      assigned.includes(
+        archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME),
+      ),
+    ).toBe(sandbox);
+    const environment = await EnvironmentModel.findById(SRE_ENVIRONMENT_ID);
+    expect(environment?.networkPolicy?.allowedDomains).toEqual(
+      sandbox ? SRE_SOURCE_HOSTS : [],
+    );
+    const agent = await AgentModel.findById(SRE_AGENT_ID);
+    const rendered = renderSystemPrompt(agent?.systemPrompt ?? null, {
+      user: { name: "", email: "", role: "", teams: [] },
+    });
+    expect(rendered).not.toContain("{{");
+    expect(rendered?.includes(`--branch platform-v${getAppVersion()} `)).toBe(
+      sandbox,
+    );
   });
 
   test("does not seed without a service account", async ({

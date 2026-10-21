@@ -1,5 +1,7 @@
 name: Update Terraform Provider
 
+# Release Please starts this workflow after it publishes each release from
+# main. The daily run is a fallback; pushes run it when the updater changes.
 on:
   schedule:
     - cron: "37 6 * * *"
@@ -7,7 +9,6 @@ on:
   push:
     branches: [main]
     paths:
-      - docs/openapi.json
       - .github/workflows/update-terraform-provider.yml
       - platform/scripts/terraform-provider/**
 

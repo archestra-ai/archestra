@@ -37,6 +37,33 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
         self.assertIn('ready: ${{ steps.generate.outputs.ready }}', source)
         self.assertIn('name: Generate and record test results\n        id: generate', source)
 
+    def test_release_publication_starts_the_updater(self):
+        release = (ROOT / '.github/workflows/release-please.yml').read_text()
+        job = release.split('  update-terraform-provider:\n', 1)[1]
+        job = re.split(r'^  [\w-]+:\n', job, maxsplit=1, flags=re.M)[0]
+        self.assertRegex(job, r'needs:\n      - publish-github-release\n')
+        self.assertRegex(job, r'permissions:\n      actions: write # .*\n    steps:')
+        self.assertIn('run: gh workflow run update-terraform-provider.yml --ref main\n', job)
+        self.assertNotIn('secrets.', job)
+        condition = re.search(r'^    if: \$\{\{ (.+) \}\}$', job, re.M)[1]
+        for ref, result, expected in (
+            ('refs/heads/main', 'success', 'true'),
+            ('refs/heads/main', 'skipped', 'false'),
+            ('refs/heads/main', 'failure', 'false'),
+            ('refs/heads/release/1.4', 'success', 'false'),
+        ):
+            actual = subprocess.check_output(['node', '-e', '''
+const vm = require('node:vm');
+const [condition, ref, result] = process.argv.slice(1);
+process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{'publish-github-release':{result}}})));
+''', condition.replace("needs.publish-github-release", "needs['publish-github-release']"), ref, result], text=True)
+            self.assertEqual(actual, expected, (ref, result))
+        updater = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()
+        triggers = updater.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
+        self.assertIn('  workflow_dispatch:\n', triggers)
+        self.assertIn('  schedule:\n', triggers)
+        self.assertNotIn('docs/openapi.json', triggers)
+
     def test_semantic_failure_is_reported_after_publication(self):
         source = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()
         self.assertLess(source.index('update_provider.py publish'), source.index('Report provider validation outcome'))

@@ -4,10 +4,11 @@
 # Usage: support-bundle.sh <namespace> <release-name> [output-dir]
 #
 # Collects pods, restarts, events, the last 2h of logs per container (and the
-# previous container), deployments and statefulsets, image versions, and an
-# allowlisted subset of the Helm values. Container env values, Secrets,
-# ConfigMaps, and last-applied annotations are never collected. Logs are
-# collected as written by the application, so review the bundle before sharing.
+# previous container, each capped in size), deployments and statefulsets, image
+# versions, and an allowlisted subset of the Helm values. Container env values,
+# commands and arguments, Secrets, ConfigMaps, and last-applied annotations are
+# never collected. Logs are collected as written by the application, so review
+# the bundle before sharing.
 #
 # Requires kubectl, helm, jq, and tar.
 set -euo pipefail
@@ -52,12 +53,19 @@ readonly HELM_VALUE_ALLOWLIST='[
   ["postgresql", "enabled"]
 ]'
 
-# Drops container env values and annotations that can carry them.
+# Per container log file, for both the current and the previous container.
+readonly LOG_LIMIT_BYTES=$((10 * 1024 * 1024))
+
+# Drops container env values, commands and arguments (MCP server arguments can
+# carry substituted credentials), exec probe and hook commands, and the
+# annotations that can repeat them.
 readonly SANITIZE='
   walk(
     if type == "object" then
       (if has("env") and (.env | type) == "array"
         then .env |= map(del(.value)) else . end)
+      | (if has("image") and has("name") then del(.command, .args) else . end)
+      | del(.exec)
       | del(.managedFields)
       | (if has("annotations") and (.annotations | type) == "object"
           then .annotations |= with_entries(select(.key | test("last-applied-configuration") | not))
@@ -115,9 +123,10 @@ jq -r '
   | ((.spec.initContainers // []) + (.spec.containers // []))[]
   | "\($pod) \(.name)"' "$pods_json" |
   while read -r pod container; do
-    kc logs "$pod" -c "$container" --since=2h --timestamps \
+    kc logs "$pod" -c "$container" --since=2h --limit-bytes="$LOG_LIMIT_BYTES" --timestamps \
       >"${bundle_dir}/logs/${pod}_${container}.log" 2>&1 || true
-    if kc logs "$pod" -c "$container" --previous --timestamps \
+    if kc logs "$pod" -c "$container" --previous --since=2h \
+      --limit-bytes="$LOG_LIMIT_BYTES" --timestamps \
       >"${bundle_dir}/logs/${pod}_${container}.previous.log" 2>/dev/null; then
       :
     else

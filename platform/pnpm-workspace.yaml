@@ -87,6 +87,9 @@ overrides:
   esbuild: '>=0.28.1'
   # CVE-2026-77301 (HIGH, excessive memory allocation) fixed in 0.6.1.
   adm-zip: 0.6.1
+  # CVE-2026-111755 and CVE-2026-111756 (both HIGH) fixed in 1.16.1.
+  # Transitive-only (via axios), so an override lifts every resolution.
+  follow-redirects: '>=1.16.1'
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1

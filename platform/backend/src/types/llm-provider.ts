@@ -532,6 +532,19 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 // ADAPTER FACTORY INTERFACE
 // =============================================================================
 
+/** What the handler knows about a stream when it ends it with an error. */
+export interface StreamErrorFrameContext {
+  /** The provider's response id, when the stream reported one. */
+  responseId?: string;
+  /** The model that answered, when known. */
+  model?: string;
+  /**
+   * True when the client already received the provider's own failure
+   * terminal, so the error frame must not end the stream a second time.
+   */
+  providerTerminalSent?: boolean;
+}
+
 /**
  * Factory for creating adapters for a specific provider
  *
@@ -572,7 +585,10 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error at the client, which reports the framing problem instead of the real
    * upstream cause.
    */
-  readonly formatStreamErrorFrame?: (event: unknown) => string;
+  readonly formatStreamErrorFrame?: (
+    event: unknown,
+    context?: StreamErrorFrameContext,
+  ) => string;
 
   /**
    * Set by adapters that serve a client wire format different from the

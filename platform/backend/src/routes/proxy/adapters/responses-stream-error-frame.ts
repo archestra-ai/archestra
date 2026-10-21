@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import type { StreamErrorFrameContext } from "@/types/llm-provider";
+import { asRecord } from "@/utils/as-record";
+
 /**
  * Mid-stream error framing for the OpenAI Responses transport.
  *
@@ -17,40 +21,64 @@
  * Emitting the Responses shape keeps the failure classifiable. Chat-completions
  * fields are kept alongside it so a client parsing either shape still finds the
  * message.
+ *
+ * The `error` event is followed by a `response.failed` terminal that carries
+ * the same error. Codex reads a failure only from that terminal: it skips an
+ * `error` event, so a stream that ends after one looks like a dropped
+ * connection, which it retries five times and then reports as "stream
+ * disconnected", whatever the real cause was. The terminal lets it show the
+ * message and act on the code: stop on a policy, quota or context-window
+ * code, retry the rest. The AI SDK ignores `response.failed`, so it reports
+ * the `error` event once. The provider's own error fields (a misalignment
+ * review, a retry hint) stay on the error, because clients recover from them.
  */
-export function formatResponsesStreamErrorFrame(event: unknown): string {
-  const source = (event ?? {}) as {
-    error?: {
-      type?: unknown;
-      message?: unknown;
-      code?: unknown;
-      internal_code?: unknown;
-    };
-  };
-  const type =
-    typeof source.error?.type === "string" ? source.error.type : "api_error";
+export function formatResponsesStreamErrorFrame(
+  event: unknown,
+  context: StreamErrorFrameContext = {},
+): string {
+  const source = asRecord(asRecord(event)?.error) ?? {};
+  const type = typeof source.type === "string" ? source.type : "api_error";
   const message =
-    typeof source.error?.message === "string"
-      ? source.error.message
+    typeof source.message === "string"
+      ? source.message
       : "Upstream request failed";
   // `code` is required by the Responses error schema; the normalized Archestra
   // code is the most specific one available, and the error type is the
   // fallback so the field is never empty.
   const code =
-    typeof source.error?.code === "string"
-      ? source.error.code
-      : typeof source.error?.internal_code === "string"
-        ? source.error.internal_code
+    typeof source.code === "string"
+      ? source.code
+      : typeof source.internal_code === "string"
+        ? source.internal_code
         : type;
+  const param = typeof source.param === "string" ? source.param : null;
+  const error = { ...source, type, code, message, param };
 
-  return `data: ${JSON.stringify({
+  const errorFrame = `data: ${JSON.stringify({
     type: "error",
     sequence_number: 0,
-    error: { type, code, message, param: null },
+    error,
     // Top-level duplicates for clients that read the Responses API's own
     // documented error event rather than the AI SDK's nested shape.
     code,
     message,
-    param: null,
+    param,
+  })}\n\n`;
+  if (context.providerTerminalSent) return errorFrame;
+
+  return `${errorFrame}data: ${JSON.stringify({
+    type: "response.failed",
+    sequence_number: 1,
+    response: {
+      id: context.responseId || `resp_${randomUUID().replaceAll("-", "")}`,
+      object: "response",
+      created_at: Math.floor(Date.now() / 1000),
+      status: "failed",
+      ...(context.model ? { model: context.model } : {}),
+      output: [],
+      error,
+      incomplete_details: null,
+      usage: null,
+    },
   })}\n\n`;
 }

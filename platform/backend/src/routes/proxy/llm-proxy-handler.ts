@@ -122,6 +122,7 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
+  type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
@@ -2054,6 +2055,10 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
+  // Set once the provider's own failure terminal is on the wire. A later
+  // error frame must not follow it with a second terminal: Codex keeps the
+  // last `response.failed` it reads, and the provider's one names the cause.
+  let providerFailureTerminalSent = false;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
@@ -2442,6 +2447,7 @@ async function handleStreaming<
         ? withoutResponsesModelOutputSSE(failureEvents)
         : failureEvents)
         writeToClient(event);
+      providerFailureTerminalSent = true;
       await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
@@ -2829,21 +2835,30 @@ async function handleStreaming<
       streamError = settlementError;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    const frameContext: StreamErrorFrameContext = {
+      responseId: streamAdapter.state.responseId || undefined,
+      model: streamAdapter.state.model || actualModel,
+      providerTerminalSent: providerFailureTerminalSent,
+    };
     return handleError(
       streamError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      eofError && formatStreamErrorFrame
+      formatStreamErrorFrame
         ? (event: unknown) => {
+            if (!eofError) return formatStreamErrorFrame(event, frameContext);
             const source = asRecord(event);
-            return formatStreamErrorFrame({
-              ...source,
-              error: { ...asRecord(source?.error), code: eofError.code },
-            });
+            return formatStreamErrorFrame(
+              {
+                ...source,
+                error: { ...asRecord(source?.error), code: eofError.code },
+              },
+              frameContext,
+            );
           }
-        : formatStreamErrorFrame,
+        : undefined,
       provider.translatesWireFormat,
     );
   } finally {

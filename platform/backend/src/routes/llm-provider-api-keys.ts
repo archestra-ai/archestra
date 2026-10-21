@@ -720,6 +720,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetEnd
         );
       } catch (error) {
+        if (secret) await deleteUnusedSecret(secret.id);
         if (isUniqueConstraintError(error)) {
           throw new ApiError(
             409,
@@ -1232,6 +1233,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         try {
           await LlmProviderApiKeyModel.update(params.id, updateData);
         } catch (error) {
+          if (newSecretId) await deleteUnusedSecret(newSecretId);
           if (isUniqueConstraintError(error)) {
             throw new ApiError(
               409,
@@ -1609,6 +1611,23 @@ async function authorizeApiKeyAccess(params: {
 function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
   if (apiKey.isSystem) {
     throw new ApiError(400, "System API keys cannot be deleted");
+  }
+}
+
+/**
+ * Delete a secret stored for a key row that was then not written, so a
+ * failed insert or update does not leave a secret that no key refers to.
+ * In read-only Vault mode this removes only the stored reference.
+ */
+async function deleteUnusedSecret(secretId: string): Promise<void> {
+  try {
+    await secretManager().deleteSecret(secretId);
+  } catch (error) {
+    // Keep the write's own error for the caller; this one is only logged.
+    logger.error(
+      { error, secretId },
+      "Failed to delete the secret of a provider API key that was not saved",
+    );
   }
 }
 

@@ -70,6 +70,17 @@ jobs:
             echo "::error::docs/openapi.json does not name a platform release: $version"
             exit 1
           fi
+          # Release Please tags first and publishes the GitHub release after the
+          # images. Until then provider CI cannot pull the image, so skip and let
+          # a later run propose the release.
+          published="$(gh release view "platform-v${version}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft | not' 2>/dev/null || true)"
+          if [ "$published" != "true" ]; then
+            reason="platform-v${version} is not a published release yet; a later run proposes it."
+            echo "::notice::$reason"
+            mkdir -p provider-update
+            python3 -c 'import json, sys; json.dump({"skipped": sys.argv[1]}, open(sys.argv[2], "w"))' "$reason" provider-update/result.json
+            exit 0
+          fi
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --no-tags --depth=1 origin "refs/tags/platform-v${version}"
@@ -82,6 +93,7 @@ jobs:
       # provider main. platform-version.txt must be added by the provider first.
       - name: Generate and record test results
         id: generate
+        if: steps.release.outputs.spec != ''
         working-directory: platform
         env:
           RELEASE_SPEC: ${{ steps.release.outputs.spec }}

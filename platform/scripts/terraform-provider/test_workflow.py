@@ -162,14 +162,34 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
             subprocess.run([*git, 'commit', '-qam', 'main'], check=True)
             checkout = root/'checkout'
             subprocess.run(['git', 'clone', '-q', '--depth=1', f'file://{upstream}', str(checkout)], check=True)
+            # Stub gh: the release is published, a draft, or missing.
+            bin_path = root/'bin'
+            bin_path.mkdir()
+            (bin_path/'gh').write_text('#!/bin/sh\n'
+                                       'test "$*" = "release view platform-v1.2.3-rc.4 --repo archestra-ai/archestra '
+                                       '--json isDraft --jq .isDraft | not" || exit 9\n'
+                                       'test "$RELEASE" != missing || exit 1\necho "$RELEASE"\n')
+            (bin_path/'gh').chmod(0o755)
             env = os.environ | {'RUNNER_TEMP': work, 'GITHUB_OUTPUT': str(root/'output'),
-                                'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused'}
-            subprocess.run(['bash', '-c', script], cwd=checkout, check=True, capture_output=True, env=env)
+                                'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused',
+                                'GITHUB_REPOSITORY': 'archestra-ai/archestra',
+                                'PATH': f"{bin_path}:{os.environ['PATH']}"}
+            for state in ('false', 'missing'):
+                result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                        env=env | {'RELEASE': state})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('is not a published release yet', result.stdout)
+                self.assertIn('skipped', json.loads((checkout/'provider-update/result.json').read_text()))
+                self.assertFalse((root/'output').exists())
+                self.assertFalse((root/'openapi-release.json').exists())
+            subprocess.run(['bash', '-c', script], cwd=checkout, check=True, capture_output=True,
+                           env=env | {'RELEASE': 'true'})
             self.assertEqual((root/'openapi-release.json').read_text(), released)
             self.assertIn(f'commit={release}\n', (root/'output').read_text())
             self.assertIn('platform-v1.2.3-rc.4', (root/'summary').read_text())
             (checkout/'docs/openapi.json').write_text('{"info": {"version": "1.2.3; touch injected"}}\n')
-            result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True, env=env)
+            result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                    env=env | {'RELEASE': 'true'})
             self.assertEqual(result.returncode, 1)
             self.assertIn('does not name a platform release', result.stdout)
             self.assertFalse((checkout/'injected').exists())

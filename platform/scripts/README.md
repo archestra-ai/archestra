@@ -176,7 +176,9 @@ change the spec, this workflow or the scripts above, and by hand on `main`.
 The release is the version in `docs/openapi.json` on `main`. The spec comes from
 that release's `platform-v<version>` tag, not from `main`: provider CI
 regenerates the client from the release in `platform-version.txt` and fails on
-any difference.
+any difference. The updater uses a release only after Release Please has
+published it on GitHub, which happens after the images are pushed. Before that,
+a run skips with a notice and the next run proposes the release.
 
 - The pull request is opened even when the regenerated client does not build or
   its tests fail. The failure is in the pull request body and in the

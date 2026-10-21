@@ -68,6 +68,7 @@ import {
   internalCallHeader,
 } from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
+import { createMinimaxFetch } from "@/clients/minimax-request";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
@@ -805,7 +806,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         apiKey,
         baseURL,
         headers,
-        fetch,
+        fetch: createMinimaxFetch(fetch ?? globalThis.fetch),
         // @ai-sdk/openai always sends stream_options.include_usage; the compatible
         // provider only sends it when asked. Keep it on so the final usage chunk
         // still arrives and cost/usage metrics are unaffected.

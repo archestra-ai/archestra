@@ -19346,6 +19346,7 @@
               "type": {
                 "type": "string",
                 "enum": [
+                  "adaptive",
                   "enabled",
                   "disabled"
                 ]
@@ -19355,11 +19356,49 @@
               "type"
             ]
           },
+          "reasoning_effort": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
           "extra_body": {
             "type": "object",
             "properties": {
               "reasoning_split": {
                 "type": "boolean"
+              },
+              "thinking": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive",
+                      "enabled",
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "reasoning_effort": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
               }
             }
           }
@@ -41137,6 +41176,7 @@
               "type": {
                 "type": "string",
                 "enum": [
+                  "adaptive",
                   "enabled",
                   "disabled"
                 ]
@@ -41147,11 +41187,50 @@
             ],
             "additionalProperties": false
           },
+          "reasoning_effort": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
           "extra_body": {
             "type": "object",
             "properties": {
               "reasoning_split": {
                 "type": "boolean"
+              },
+              "thinking": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "adaptive",
+                      "enabled",
+                      "disabled"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "reasoning_effort": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
               }
             },
             "additionalProperties": false

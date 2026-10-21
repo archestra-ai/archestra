@@ -1,6 +1,9 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  isSuggestedMinimaxModel,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -76,9 +79,17 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
 
   // `sortDirection` price-sorts for `autoSelectFirst`; the dropdown itself is
   // ordered by the shared model ordering inside LlmModelSearchableSelect.
+  const selectedValues = Array.isArray(props.value)
+    ? props.value
+    : [props.value];
+  const suggestedModels = models.filter(
+    (model) =>
+      selectedValues.includes(model.model) ||
+      isSuggestedMinimaxModel(model.provider as SupportedProvider, model.model),
+  );
   const sortedModels = sortDirection
-    ? sortModelsByPrice(models, sortDirection)
-    : models;
+    ? sortModelsByPrice(suggestedModels, sortDirection)
+    : suggestedModels;
 
   const isSingle = !props.multiple;
   const value = isSingle ? props.value : props.value;

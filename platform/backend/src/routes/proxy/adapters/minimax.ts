@@ -1,5 +1,6 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
+import { normalizeMinimaxRequest } from "@/clients/minimax-request";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
@@ -360,14 +361,14 @@ class MinimaxRequestAdapter
     // returning it in `reasoning_details`.
     const { extra_body, ...request } = this.request;
 
-    return {
-      ...request,
+    return normalizeMinimaxRequest({
       ...extra_body,
+      ...request,
       reasoning_split:
         this.request.reasoning_split ?? extra_body?.reasoning_split ?? true,
       model: this.getModel(),
       messages: convertReasoningContentToDetails(processedMessages),
-    };
+    });
   }
 
   // ---------------------------------------------------------------------------

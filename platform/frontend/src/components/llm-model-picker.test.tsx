@@ -53,6 +53,36 @@ beforeEach(() => {
 });
 
 describe("LlmModelPicker", () => {
+  it.each([
+    "",
+    "MiniMax-M2.7",
+  ])("filters suggestions and preserves saved value %s", async (value) => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <LlmModelPicker
+        value={value}
+        onValueChange={onValueChange}
+        editable
+        models={["MiniMax-M2.7", "MiniMax-M3.1-Flash", "MiniMax-M3"].map(
+          (model) => ({
+            provider: "minimax",
+            model,
+            pricePerMillionInput: "0",
+            pricePerMillionOutput: "0",
+          }),
+        )}
+      />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.queryAllByText("MiniMax-M2.7").length > 0).toBe(
+      Boolean(value),
+    );
+    expect(screen.getByText("MiniMax-M3.1-Flash")).toBeInTheDocument();
+    expect(screen.getByText("MiniMax-M3")).toBeInTheDocument();
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
   describe("single select mode", () => {
     it("renders dropdown with model options", async () => {
       const user = userEvent.setup();

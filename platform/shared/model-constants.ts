@@ -723,13 +723,28 @@ export const PERPLEXITY_AGENT_MODELS = [
  * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
+  { id: "MiniMax-M3.1-Flash", displayName: "MiniMax-M3.1-Flash" },
   { id: "MiniMax-M3", displayName: "MiniMax-M3" },
-  { id: "MiniMax-M3-highspeed", displayName: "MiniMax-M3-highspeed" },
-  { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
-  { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
-  { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
-  { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
 ] as const;
+
+/** Filter suggestions only; saved selections and custom request IDs stay valid. */
+export function isSuggestedMinimaxModel(
+  provider: SupportedProvider,
+  modelId: string,
+): boolean {
+  if (provider === "minimax" && /^(minimax-m|abab)/i.test(modelId)) {
+    return MINIMAX_MODELS.some((model) => model.id === modelId);
+  }
+  if (
+    provider === "openrouter" &&
+    /^minimax\/(minimax-m|abab)/i.test(modelId)
+  ) {
+    return ["minimax/minimax-m3.1-flash:free", "minimax/minimax-m3"].includes(
+      modelId,
+    );
+  }
+  return true;
+}
 
 /**
  * The single pseudo-model exposed by the Microsoft 365 Copilot provider. The Graph
@@ -934,7 +949,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
   deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
-  minimax: ["minimax-m3", "minimax-m2.7"],
+  minimax: ["minimax-m3.1-flash", "minimax-m3"],
   kimi: [
     "kimi-k2-thinking",
     "kimi-k2-turbo",
@@ -1018,7 +1033,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   zhipuai: "glm-5.1",
   deepseek: "deepseek-v4-pro",
   bedrock: "anthropic.claude-opus-4-8",
-  minimax: "MiniMax-M3",
+  minimax: "MiniMax-M3.1-Flash",
   kimi: "kimi-k2-0711-preview",
   azure: "gpt-5.5",
   "github-copilot": "gpt-4o",

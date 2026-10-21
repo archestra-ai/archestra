@@ -104,16 +104,25 @@ export const ChatCompletionRequestSchema = z
      */
     thinking: z
       .object({
-        type: z.enum(["enabled", "disabled"]),
+        type: z.enum(["adaptive", "enabled", "disabled"]),
       })
       .optional(),
     /**
      * Accepted for compatibility with clients written against MiniMax's Python
      * examples; the adapter unwraps it into the top-level body before sending.
      */
+    reasoning_effort: z
+      .enum(["none", "low", "medium", "high", "xhigh", "max"])
+      .optional(),
     extra_body: z
       .object({
         reasoning_split: z.boolean().optional(),
+        thinking: z
+          .object({ type: z.enum(["adaptive", "enabled", "disabled"]) })
+          .optional(),
+        reasoning_effort: z
+          .enum(["none", "low", "medium", "high", "xhigh", "max"])
+          .optional(),
       })
       .optional(),
   })

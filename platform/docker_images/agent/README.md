@@ -29,8 +29,8 @@ Docker or Kubernetes. The Rust toolchain is read-only; Cargo's registry and
 agent runs `initdb` under HOME, and the shared `/var/run/postgresql` socket
 directory lets `psql` connect without flags.
 
-`environment.md` describes this machine to the agent: where to work, what is
-installed, and how to install more without root. Every maintained launcher
+`environment.md` states the facts of this machine to the agent: its user and
+working directory, what is installed, and what is not running. Every maintained launcher
 appends it to the Agent's instructions (`archestra-agent-instructions`), after
 the platform's own section on persistent files and forwarded ports. Update it
 whenever the image's tools change.

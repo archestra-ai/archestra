@@ -145,7 +145,9 @@ export function ChooseToolsView({
         agentId,
         add: toAdd,
         remove: toRemove,
-        builtIn,
+        // Playwright is a built-in catalog entry but a local server, so its
+        // tools still need a credential mode; only Archestra's own take none.
+        builtIn: catalog.serverType === "builtin",
         credential:
           mode === "static" && pinnedServerId
             ? { mode: "static", mcpServerId: pinnedServerId }

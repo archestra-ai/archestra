@@ -163,10 +163,15 @@ python3 -m unittest discover -s scripts/terraform-provider -p 'test_*.py'
 ## Provider update pull requests
 
 `.github/workflows/update-terraform-provider.yml` regenerates the provider client
-from the platform spec and opens or updates a pull request on the provider
-branch `automation/platform-api`. It runs daily at 06:37 UTC, on pushes to
-`main` that change the spec, this workflow or the scripts above, and by hand on
-`main`.
+for the latest platform release, sets `platform-version.txt` to that release
+and opens or updates a pull request on the provider branch
+`automation/platform-api`. It runs daily at 06:37 UTC, on pushes to `main` that
+change the spec, this workflow or the scripts above, and by hand on `main`.
+
+The release is the version in `docs/openapi.json` on `main`. The spec comes from
+that release's `platform-v<version>` tag, not from `main`: provider CI
+regenerates the client from the release in `platform-version.txt` and fails on
+any difference.
 
 - The pull request is opened even when the regenerated client does not build or
   its tests fail. The failure is in the pull request body and in the
@@ -188,18 +193,17 @@ branch `automation/platform-api`. It runs daily at 06:37 UTC, on pushes to
   pull-request write access.
 - Reruns reuse the branch and pull request, keep commits from people, push
   without force and create nothing when the output is unchanged.
-  `platform-api.json` records the spec hash and the provider `main` commit
-  whose tools generated the client. A new spec or new tools regenerate the
+  `platform-api.json` records the spec hash, the release commit and the
+  provider `main` commit whose tools generated the client. A new spec or new tools regenerate the
   client. While the update branch exists, changes from people to generated
   files are kept only while both stay the same. If they conflict, the run fails
   without changing the branch; fix the conflict on the branch, update
   `platform-api.json` and run it again. After the pull request merges, provider
   `main` is the new starting point.
 
-The updater needs `platform-version.txt` on provider `main`, which provider v3
-does not have yet. Until a provider change adds that file and makes the
-acceptance tests read it, each run ends with a warning that says so, and
-nothing is published. The compatibility check does not need the file.
+The updater needs `platform-version.txt` on provider `main`. Without it, each
+run ends with a warning that says so, and nothing is published. The
+compatibility check does not need the file.
 
 The tests in `platform/scripts/terraform-provider/` use bare Git repositories and
 a stub `gh`. They cover pull request creation after a failed build, unchanged

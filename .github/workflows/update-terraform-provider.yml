@@ -55,19 +55,43 @@ jobs:
           cache-dependency-path: |
             provider-tools/go.sum
             provider-tools/tools/go.sum
+      # Provider CI regenerates its client from the release in
+      # platform-version.txt and fails on any difference. So generate from that
+      # release's spec, not from the newer spec on main. The token is passed to
+      # this one git command only, as in Terraform Provider Compatibility.
+      - name: Read the released platform spec
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["info"]["version"])' docs/openapi.json)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::docs/openapi.json does not name a platform release: $version"
+            exit 1
+          fi
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --no-tags --depth=1 origin "refs/tags/platform-v${version}"
+          spec="$RUNNER_TEMP/openapi-release.json"
+          git show FETCH_HEAD:docs/openapi.json > "$spec"
+          echo "spec=$spec" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse 'FETCH_HEAD^{commit}')" >> "$GITHUB_OUTPUT"
+          echo "Platform release: platform-v${version}" >> "$GITHUB_STEP_SUMMARY"
       # The trusted helper detects single-client or legacy bridge layout from
       # provider main. platform-version.txt must be added by the provider first.
       - name: Generate and record test results
         id: generate
         working-directory: platform
         env:
-          PLATFORM_COMMIT: ${{ github.sha }}
+          RELEASE_SPEC: ${{ steps.release.outputs.spec }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
         run: |
           git -C ../provider-candidate config user.name "Archestra releaser automation"
           git -C ../provider-candidate config user.email "releaser-bot@users.noreply.github.com"
           python3 scripts/terraform-provider/update_provider.py prepare \
             --provider ../provider-candidate --tools ../provider-tools \
-            --spec ../docs/openapi.json --platform-commit "$PLATFORM_COMMIT" \
+            --spec "$RELEASE_SPEC" --platform-commit "$RELEASE_COMMIT" \
             --output ../provider-update
       - name: Retain generated patch and test failures
         if: always()

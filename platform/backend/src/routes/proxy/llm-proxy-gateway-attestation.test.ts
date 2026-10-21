@@ -1339,6 +1339,27 @@ describe("Gateway tool attestation on the LLM proxy", () => {
         },
       ]);
     });
+
+    test("refuses a call to a declared tool's name in a namespace the session has not loaded", async () => {
+      block = false;
+      codex.modelCalls({
+        name: "get_weather",
+        namespace: "mcp__other",
+        input: { location: "SF" },
+      });
+
+      const response = await codex.send([
+        codex.namespace("mcp__weather", [WEATHER]),
+        search,
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(codex.released(response.body)).toEqual([]);
+      expect(toolCallEvents()).toEqual([]);
+      expect(response.body).toContain(
+        "get_weather is not loaded in this session. Search for it with your tool search, then call it again.",
+      );
+    });
   });
 
   describe("a session with no tools of this platform's gateway", () => {

@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.5.0-rc.1](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.56...platform-v1.5.0-rc.1) (2026-10-21)
+
+
+### Features
+
+* **api:** add the read contracts the Terraform provider needs ([#9396](https://github.com/archestra-ai/archestra/issues/9396)) ([f0ab6bf](https://github.com/archestra-ai/archestra/commit/f0ab6bf6f3bed888cba137ea847c3847aef51dc4))
+* **settings:** configure default personal tool mode ([#9412](https://github.com/archestra-ai/archestra/issues/9412)) ([da3b62d](https://github.com/archestra-ai/archestra/commit/da3b62d5a0c16dfa1c9dfb6751e71ae609503769)), closes [#9072](https://github.com/archestra-ai/archestra/issues/9072)
+
+
+### Bug Fixes
+
+* **a2a:** repair interrupted tool results when replaying history ([#9411](https://github.com/archestra-ai/archestra/issues/9411)) ([bcc6471](https://github.com/archestra-ai/archestra/commit/bcc6471836fedc2356702bfd1e56c991ed570e5d)), closes [#8573](https://github.com/archestra-ai/archestra/issues/8573)
+* clean up deleted environment engines and caches ([#9398](https://github.com/archestra-ai/archestra/issues/9398)) ([246a719](https://github.com/archestra-ai/archestra/commit/246a7199dcab370f16a26023013a89b020871b1e))
+* **connect:** refresh generated startup checks automatically ([#9389](https://github.com/archestra-ai/archestra/issues/9389)) ([db8b377](https://github.com/archestra-ai/archestra/commit/db8b377f6b8639e8bb156d4bfba0223bfe428044))
+* **costs:** preserve scroll while date ranges load ([#9401](https://github.com/archestra-ai/archestra/issues/9401)) ([af64083](https://github.com/archestra-ai/archestra/commit/af640839cf14d56777e290468fd8cc1909d02ee7))
+* **knowledge:** add Salesforce OAuth migration with legacy compatibility ([#9403](https://github.com/archestra-ai/archestra/issues/9403)) ([408c4da](https://github.com/archestra-ai/archestra/commit/408c4da70bb97e04699fe7dd0db093a311d63102))
+* **llm-proxy:** prepare Claude Desktop subscription background requests ([#9387](https://github.com/archestra-ai/archestra/issues/9387)) ([a438c0f](https://github.com/archestra-ai/archestra/commit/a438c0f467a7651af582f58d705165682ca8dffa))
+* **openappa:** accept the proxy's own native question in a session that defers tools ([#9407](https://github.com/archestra-ai/archestra/issues/9407)) ([25e089f](https://github.com/archestra-ai/archestra/commit/25e089f87054581a07bd68adfe23a248722b6172))
+* **openappa:** always explain the starting policy before asking to save it ([#9397](https://github.com/archestra-ai/archestra/issues/9397)) ([525072a](https://github.com/archestra-ai/archestra/commit/525072a99a95ef2043a10408e823371b6cee7ba1))
+
+
+### Documentation
+
+* **release:** note that Release Please needs a platform/ commit after a stable cut ([#9409](https://github.com/archestra-ai/archestra/issues/9409)) ([ab25022](https://github.com/archestra-ai/archestra/commit/ab250226fa8b1f9ad3edf95018d787f180e7a8f6))
+
+
+### Miscellaneous Chores
+
+* **agents:** revert rename Agent Runtime to Managed Agents ([#9415](https://github.com/archestra-ai/archestra/issues/9415)) ([f041c3b](https://github.com/archestra-ai/archestra/commit/f041c3b92bba8f51e96bf209aacf3da52d0f66f8))
+
 ## [1.4.0-rc.56](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.55...platform-v1.4.0-rc.56) (2026-10-21)
 
 

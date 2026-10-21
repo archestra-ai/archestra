@@ -192,7 +192,8 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.liveness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.liveness.failureThreshold }}
           # Readiness probe - marks the container as ready to receive traffic
-          # Uses /ready endpoint which checks database connectivity
+          # Uses /ready endpoint which checks database connectivity and, with
+          # Guardrails enabled, that the OpenAPPA runtime is open
           readinessProbe:
             httpGet:
               path: /ready

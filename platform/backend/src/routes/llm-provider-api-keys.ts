@@ -446,6 +446,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
       if (!body.shared && isServiceAccountUserId(user.id)) {
+        // Without an apiKey (a Vault reference, a keyless provider) only the
+        // provider decides whether the credential is per-user.
         const credential = { provider: body.provider, apiKey: body.apiKey };
         throw new ApiError(
           400,

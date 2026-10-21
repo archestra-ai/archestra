@@ -113,5 +113,6 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
       userId: null,
       createdBy: { name: "Terraform", type: "service_account" },
     });
+    expect(testProviderApiKey).toHaveBeenCalledOnce();
   });
 });

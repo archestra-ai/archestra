@@ -167,6 +167,7 @@ export { default as SkillTeamModel } from "./skill-team";
 export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillUserModel } from "./skill-user";
 export { default as SkillVersionModel } from "./skill-version";
+export { default as SreRuntimeModel } from "./sre-runtime";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";

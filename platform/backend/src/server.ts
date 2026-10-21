@@ -125,6 +125,7 @@ import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { createStartupHealthServer } from "@/startup-health";
@@ -752,6 +753,14 @@ const startMcpServerRuntime = async (
             "Failed to finalize managed Playwright runtime initialization",
           ),
         );
+        void sreAgentService
+          .finalize()
+          .catch((error) =>
+            fastify.log.error(
+              { err: error },
+              "Failed to finalize the SRE agent",
+            ),
+          );
       };
 
       McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {

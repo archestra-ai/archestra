@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1815,6 +1816,26 @@ export const parseEngineDeniedCidrs = (
 };
 
 /**
+ * The Kubernetes API server CIDRs the SRE agent's MCP server may reach. Invalid
+ * entries are dropped loudly: one bad entry would otherwise make the API
+ * server reject the environment's whole egress policy.
+ *
+ * @public — exported for testability
+ */
+export const parseSreApiServerCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => !isValidCidr(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_SRE_APISERVER_CIDRS ignoring invalid CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return [...new Set(entries.filter(isValidCidr))];
+};
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
  * undefined when it is not one.
  *
@@ -1915,6 +1936,21 @@ export function parseLabelSelector(
 
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
+
+function isValidCidr(value: string): boolean {
+  const [address, prefix, ...rest] = value.split("/");
+  if (!address || !prefix || rest.length > 0 || !/^\d+$/.test(prefix)) {
+    return false;
+  }
+  switch (isIP(address)) {
+    case 4:
+      return Number(prefix) <= 32;
+    case 6:
+      return Number(prefix) <= 128;
+    default:
+      return false;
+  }
+}
 
 /**
  * Whether the code execution sandbox is enabled.
@@ -3161,6 +3197,19 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
     },
+  },
+  /**
+   * The pre-installed read-only Kubernetes MCP server and the SRE agent that
+   * uses it (see services/sre-agent). Off by default; turning it off removes
+   * what it seeded.
+   */
+  sreAgent: {
+    enabled: process.env.ARCHESTRA_SRE_AGENT_ENABLED === "true",
+    k8sServiceAccount:
+      process.env.ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT?.trim() || undefined,
+    apiServerCidrs: parseSreApiServerCidrs(
+      process.env.ARCHESTRA_SRE_APISERVER_CIDRS,
+    ),
   },
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that

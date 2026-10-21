@@ -72,6 +72,41 @@ describe("matchBatteries", () => {
     ).toEqual([{ battery: "linear", evidence: "name" }]);
   });
 
+  test("the Kubernetes MCP server matches by a digest-pinned image or by name", () => {
+    const withKubernetes = new Set(["kubernetes"]);
+    expect(
+      matchBatteries(
+        {
+          name: "Cluster reader",
+          serverUrl: null,
+          localConfig: {
+            dockerImage:
+              "ghcr.io/containers/kubernetes-mcp-server@sha256:e47f6ccc5347e1ea6be495d8d9ab55ac8a995fe87800fb984fa770cebe14ad44",
+          },
+        },
+        withKubernetes,
+      ),
+    ).toEqual([{ battery: "kubernetes", evidence: "image" }]);
+    expect(
+      matchBatteries(
+        {
+          name: "Cluster reader",
+          serverUrl: null,
+          localConfig: {
+            dockerImage: "quay.io/containers/kubernetes_mcp_server:v0.0.67",
+          },
+        },
+        withKubernetes,
+      ),
+    ).toEqual([{ battery: "kubernetes", evidence: "image" }]);
+    expect(
+      matchBatteries(
+        { name: "K8s staging", serverUrl: null, localConfig: null },
+        withKubernetes,
+      ),
+    ).toEqual([{ battery: "kubernetes", evidence: "name" }]);
+  });
+
   test("the monday Platform MCP server matches the monday battery", () => {
     expect(
       matchBatteries(

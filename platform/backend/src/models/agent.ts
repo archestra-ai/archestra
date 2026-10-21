@@ -725,6 +725,8 @@ class AgentModel {
       // but a real column create() honours for internal callers and fixtures.
       accessAllSkills?: boolean;
       slug?: string;
+      /** A fixed id for a system-seeded agent; random otherwise. */
+      id?: string;
     },
     authorId?: string,
     options?: {

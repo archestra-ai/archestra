@@ -143,6 +143,8 @@ class EnvironmentModel {
   }
 
   static async create(params: {
+    /** A fixed id for a system-seeded environment; random otherwise. */
+    id?: string;
     organizationId: string;
     name: string;
     description?: string | null;
@@ -167,6 +169,7 @@ class EnvironmentModel {
       const [row] = await tx
         .insert(schema.environmentsTable)
         .values({
+          ...(params.id ? { id: params.id } : {}),
           organizationId,
           name,
           description: description ?? null,
@@ -288,16 +291,28 @@ class EnvironmentModel {
   static async delete(id: string, organizationId: string): Promise<boolean> {
     // The FK is ON DELETE SET NULL as a safety net, but the service blocks
     // deletion while catalog items are still assigned (see deleteEnvironment).
-    const deleted = await db
-      .delete(schema.environmentsTable)
-      .where(
-        and(
-          eq(schema.environmentsTable.id, id),
-          eq(schema.environmentsTable.organizationId, organizationId),
-        ),
-      )
-      .returning({ id: schema.environmentsTable.id });
-    return deleted.length > 0;
+    return withDbTransaction(async (tx) => {
+      const deleted = await tx
+        .delete(schema.environmentsTable)
+        .where(
+          and(
+            eq(schema.environmentsTable.id, id),
+            eq(schema.environmentsTable.organizationId, organizationId),
+          ),
+        )
+        .returning({ id: schema.environmentsTable.id });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (deleted.length > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx,
+          resources: ["environment"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return deleted.length > 0;
+    });
   }
 
   // === Internal helpers ===

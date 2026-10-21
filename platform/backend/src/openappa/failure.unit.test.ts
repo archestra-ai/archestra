@@ -167,7 +167,7 @@ describe("openappaFailure", () => {
 
   test.each([
     "OpenAPPA processing interrupted: annotator unavailable",
-    "OpenAPPA remedy awaiting an answer: consult pending",
+    "OpenAPPA remedy interrupted: storage unavailable",
     "OpenAPPA remedy is still executing; retry later",
     "OpenAPPA result refused: transport unavailable",
   ])("keeps an interrupted native operation retryable: %s", (message) => {

@@ -480,6 +480,9 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
+    const download = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
       id: "desktop-setup",
@@ -500,7 +503,7 @@ describe("ConnectCommandPanel", () => {
       true,
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Prepare installer" }),
+      screen.getByRole("button", { name: "Download installer" }),
     );
     const link = await screen.findByRole("link", {
       name: "Download installer",
@@ -509,6 +512,8 @@ describe("ConnectCommandPanel", () => {
       "href",
       "https://proxy.example/desktop-installer",
     );
+    expect(download).toHaveBeenCalledTimes(1);
+    download.mockRestore();
     expect(createSetupMock).toHaveBeenCalledWith(
       expect.objectContaining({ clientId: "claude-desktop" }),
     );

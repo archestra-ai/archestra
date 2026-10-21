@@ -167,7 +167,7 @@ async function remove(name: string) {
 }
 
 function picker() {
-  return within(screen.getByRole("list", { name: "Coding agents" }));
+  return within(screen.getByRole("list", { name: "Managed agents" }));
 }
 
 function savedOverrides(ids: string[]) {
@@ -182,7 +182,7 @@ function savedOverrides(ids: string[]) {
 async function ready() {
   await waitFor(() =>
     expect(
-      screen.queryByRole("status", { name: "Loading coding agents" }),
+      screen.queryByRole("status", { name: "Loading managed agents" }),
     ).not.toBeInTheDocument(),
   );
 }
@@ -205,14 +205,14 @@ describe("popular agent configuration", () => {
         <IntegrationAvailabilitySection
           catalogKey="popularAgentOverrides"
           catalog={PopularAgentIdSchema.options}
-          title="Coding agents"
+          title="Managed agents"
           options={PopularAgentIdSchema.options.map((id) => ({
             value: id,
             label: AGENT_CATALOG_TEMPLATE_NAMES[id],
           }))}
-          placeholder="Select coding agents…"
+          placeholder="Select managed agents…"
           emptyMessage="No agents found."
-          savedMessage="Coding agents updated"
+          savedMessage="Managed agents updated"
         />
       </QueryClientProvider>,
     );
@@ -255,7 +255,7 @@ describe("popular agent configuration", () => {
       responseReady.resolve();
     }
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load coding agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load managed agents")).toHaveLength(
         2,
       ),
     );
@@ -334,7 +334,7 @@ describe("popular agent configuration", () => {
     );
     renderFlow();
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load coding agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load managed agents")).toHaveLength(
         2,
       ),
     );
@@ -346,7 +346,7 @@ describe("popular agent configuration", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
     await screen.findByRole("button", { name: /Claude Code / });
-    expect(screen.queryAllByText("Could not load coding agents")).toHaveLength(
+    expect(screen.queryAllByText("Could not load managed agents")).toHaveLength(
       0,
     );
     expect(
@@ -364,11 +364,11 @@ describe("popular agent configuration", () => {
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
     expect(
-      screen.getByRole("button", { name: "Add coding agent" }),
+      screen.getByRole("button", { name: "Add managed agent" }),
     ).toBeDisabled();
     await remove("Codex");
     expect(
-      screen.getByRole("button", { name: "Add coding agent" }),
+      screen.getByRole("button", { name: "Add managed agent" }),
     ).toBeEnabled();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -408,7 +408,7 @@ describe("popular agent configuration", () => {
     );
     renderFlow();
     await screen.findByRole("button", {
-      name: "Add coding agent",
+      name: "Add managed agent",
     });
     await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
     expect(
@@ -419,7 +419,7 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
     await ready();
     const codingAgents = screen
-      .getByRole("heading", { name: "Coding agents Beta" })
+      .getByRole("heading", { name: "Managed agents Beta" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)
@@ -434,11 +434,11 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Add coding agent" }),
+        screen.getByRole("button", { name: "Add managed agent" }),
       ).toBeEnabled(),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Add coding agent" }),
+      screen.getByRole("button", { name: "Add managed agent" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -500,7 +500,7 @@ describe("popular agent configuration", () => {
     await ready();
     await remove("Codex");
     await userEvent.click(
-      screen.getByRole("button", { name: "Add coding agent" }),
+      screen.getByRole("button", { name: "Add managed agent" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -568,7 +568,7 @@ describe("popular agent configuration", () => {
     await ready();
     expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
     const section = screen
-      .getByRole("heading", { name: "Coding agents Beta" })
+      .getByRole("heading", { name: "Managed agents Beta" })
       .closest("section");
     if (!section) throw new Error("Missing catalog section");
     expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
@@ -609,7 +609,7 @@ describe("popular agent configuration", () => {
     }))
       expect(button).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Add coding agent" }),
+      screen.getByRole("button", { name: "Add managed agent" }),
     ).toBeDisabled();
     expect(writes).toEqual([]);
   });

@@ -318,33 +318,34 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * Monotonic format version of the installed startup guard. It is NOT the
  * platform release version — it is a plain counter that increments by one
  * whenever the generated guard's behavior or install layout changes in a way
- * that warrants asking users to re-run connect.
+ * that warrants refreshing the installed startup check.
  *
  * The connect setup stamps this number into the guard it installs; the public
  * `/v1/health` endpoint reports the running instance's current value. On every
- * launch the guard flags an update ONLY when the instance reports a STRICTLY
+ * launch the guard refreshes ONLY when the instance reports a STRICTLY
  * GREATER number than the one it was stamped with. Comparing a monotonic
  * counter — rather than release strings — is what keeps a rollback or an older
  * instance silent: a guard from a newer deploy simply sees an equal-or-lower
- * number and says nothing. Bump this by exactly one when, and only when, a
- * guard change should prompt a re-connect.
+ * number and says nothing. Bump this by exactly one when a guard change
+ * should refresh installed generated checks. User settings and permissions
+ * are never replayed by this update.
  *
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 5;
+export const STARTUP_GUARD_FORMAT_VERSION = 6;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It
- * names the deployment's own Cloud runtime, so users of Claude Code or Codex
- * don't mistake it for their client vendor's.
+ * names the deployment's own managed agents, so users of Claude Code or Codex
+ * don't mistake them for their client vendor's cloud.
  */
 export function defaultRuntimeHandoffInstructions(appName: string): string {
-  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to a managed agent in ${appName}' to continue this session in the cloud." Say this only once per session. When asked, use the Managed Agent Handoff skill and create a managed agent if needed.`;
 }
 
 /**
- * The managed instructions in effect. Unedited ones (stored as null, or the
+ * The managed instructions in effect. Unedited ones (stored as null, or an
  * earlier default's exact text) follow the current default, so a deployment
  * that never changed them picks up new wording.
  */
@@ -353,12 +354,18 @@ export function resolveRuntimeHandoffInstructions(params: {
   appName: string;
 }): string {
   const { stored, appName } = params;
-  return stored == null || stored === LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS
+  return stored == null ||
+    legacyRuntimeHandoffInstructions(appName).includes(stored)
     ? defaultRuntimeHandoffInstructions(appName)
     : stored;
 }
 
-const LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+function legacyRuntimeHandoffInstructions(appName: string): string[] {
+  return ["Cloud runtime", `${appName} Cloud runtime`].map(
+    (target) =>
+      `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${target}' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`,
+  );
+}
 
 /**
  * Header name for external agent ID.

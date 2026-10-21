@@ -2,7 +2,7 @@
 title: Skills
 description: Reusable SKILL.md instruction sets that agents load on demand
 order: 3
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,7 @@ Archestra ships these skills:
 
 - **Archestra Platform Operations:** set up MCP servers, tools, team access, and policies through Archestra's own tools.
 - **Build App:** build an interactive [app](/docs/chat/apps) from chat.
-- **Agent Runtime Handoff:** move work between your machine and [Agent Runtime](/docs/agents/runtime).
+- **Managed Agent Handoff:** move work between your machine and a [managed agent](/docs/agents/managed-agents).
 - **appa-guide:** configure [Guardrails](/docs/agents/guardrails). It appears only when guardrails are on.
 
 ## Skills vs Agents

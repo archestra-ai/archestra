@@ -155,6 +155,35 @@ it("requests the list once, leaving out the viewer's automatic pins that load af
   expect(listRequests[0].get("excludeIds")).toBe("personal-1");
 });
 
+it("lists what a bookmarked Admin access, Shared with, Owner and Built-in selection asks for", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(
+      "access=mine,shared,org,others&sharedWith=org&owner=user-alex&builtIn=true",
+    ) as unknown as ReturnType<typeof useSearchParams>,
+  );
+  const listRequests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/agent-catalog`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (params.get("pinned") === "false") listRequests.push(params);
+      return HttpResponse.json(
+        makeAgentCatalog({
+          agents: [makeAgent({ id: "listed-1", name: "Listed agent" })],
+        }),
+      );
+    }),
+  );
+
+  renderPage({ defaultAgentId: null, personalChatAgentId: null });
+
+  await waitFor(() => expect(listRequests).toHaveLength(1));
+  const [params] = listRequests;
+  expect(params.toString()).toContain("others");
+  expect(params.toString()).toContain("sharedWith=org");
+  expect(params.toString()).toContain("owner=user-alex");
+  expect(params.get("includeBuiltIn")).toBe("true");
+});
+
 it("renders the catalog the server streamed without requesting it from the browser", async () => {
   let releaseList!: () => void;
   const listHeld = new Promise<void>((resolve) => {

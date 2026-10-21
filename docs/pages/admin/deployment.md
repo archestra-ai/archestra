@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.55" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.56" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -202,7 +202,7 @@ Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/reference/conf
 
 ## Code Sandbox
 
-Archestra's managed Dagger engines need Linux nodes that permit privileged root pods with all Linux capabilities, plus dynamically provisioned `ReadWriteOnce` storage. Engine pods are separate from agent runtime containers.
+Archestra's managed Dagger engines need Linux nodes that permit privileged root pods with all Linux capabilities, plus dynamically provisioned `ReadWriteOnce` storage. Engine pods are separate from managed agent containers.
 
 If your cluster does not admit these pods, set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST) to an external `tcp://` or `kube-pod://` engine, or disable the sandbox with [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) or Helm's `archestra.codeRuntime.enabled: false`.
 
@@ -355,7 +355,7 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 | Default client, Default MCP Gateway | Pre-selected for everyone. Users can still switch. |
 | LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
 | Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
-| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
+| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to a managed agent. CLI wrappers fetch saved changes before the next launch. |
 
 Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
 

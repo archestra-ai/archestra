@@ -85,6 +85,9 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
 export const THREAD_MUTE_HINT =
   'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies; @mention me to resume';
 
+/** Slack's native Stop control cancels a turn without muting the thread. */
+export const SLACK_THREAD_MUTE_HINT = `Press Stop to cancel only the current answer. ${THREAD_MUTE_HINT}`;
+
 /**
  * In group conversations the agent hears every message but should not answer
  * every one. When it decides no reply is needed it answers with exactly this

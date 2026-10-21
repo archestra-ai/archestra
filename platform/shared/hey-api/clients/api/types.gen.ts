@@ -43995,6 +43995,125 @@ export type DisconnectConnectedClientResponses = {
 
 export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
 
+export type RenderStartupGuardData = {
+    body: {
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo';
+        platform: 'bash' | 'windows';
+        context: {
+            appName: string;
+            healthUrl: string | null;
+            mcp: {
+                serverName: string;
+                url: string;
+                ref: string | null;
+            } | null;
+            proxy: {
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerLabel: string;
+                url: string;
+                ref: string | null;
+                proxyName: string;
+                authMode?: 'provider-key' | 'virtual-key' | 'primary-providers';
+                usesModelCatalog?: boolean;
+                passthroughVirtualKey?: 'ARCH_GUARD_PRIVATE_KEY';
+            } | null;
+            skills: {
+                marketplaceName: string;
+                cloneUrl: 'ARCH_GUARD_PRIVATE_CLONE_URL';
+                hasSkills?: boolean;
+                pluginNames?: Array<string>;
+            } | null;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups/startup-guard';
+};
+
+export type RenderStartupGuardErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RenderStartupGuardError = RenderStartupGuardErrors[keyof RenderStartupGuardErrors];
+
+export type RenderStartupGuardResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        format: 1;
+        version: number;
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo';
+        platform: 'bash' | 'windows';
+        source: string;
+        sha256: string;
+    };
+};
+
+export type RenderStartupGuardResponse = RenderStartupGuardResponses[keyof RenderStartupGuardResponses];
+
 export type GetConnectionRuntimeData = {
     body?: never;
     path?: never;

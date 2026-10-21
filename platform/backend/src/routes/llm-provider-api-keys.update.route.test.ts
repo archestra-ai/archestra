@@ -77,7 +77,7 @@ describe("provider key writes that fail after the secret is stored", () => {
     ["the update conflicts", "conflict"],
     ["the key is gone", "gone"],
   ] as const)("PATCH deletes the secret it stored for a key that had none when %s", async ([
-    ,
+    _label,
     effect,
   ], { makeLlmProviderApiKey }) => {
     const apiKey = await makeLlmProviderApiKey(organizationId, null, {
@@ -92,6 +92,9 @@ describe("provider key writes that fail after the secret is stored", () => {
       payload: { apiKey: "sk-new-key", isPrimary: true },
     });
 
+    // Only the conflict has a fixed status. The "gone" trigger skips the
+    // update but keeps the row, so the route answers with it; a key that is
+    // really deleted answers 404. The secret count is what both cases pin.
     if (effect === "conflict") {
       expect(response.statusCode, response.body).toBe(409);
     }

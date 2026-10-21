@@ -20,7 +20,7 @@ export function GatewayCell({
   const name = isApp
     ? (row.appName ?? "Deleted app")
     : (gateway?.name ??
-      (row.agentId === null ? "Deleted MCP gateway" : "Unknown gateway"));
+      (row.agentId === null ? "Deleted MCP Gateway" : "Unknown gateway"));
   const kind: GatewayKind = isApp
     ? "app"
     : gateway?.agentType === "agent"
@@ -62,7 +62,7 @@ type GatewayKind = "gateway" | "agent" | "app";
 
 const GATEWAY_KINDS: Record<GatewayKind, { icon: LucideIcon; label: string }> =
   {
-    gateway: { icon: Boxes, label: "MCP gateway" },
+    gateway: { icon: Boxes, label: "MCP Gateway" },
     agent: { icon: Bot, label: "Agent" },
     app: { icon: AppWindow, label: "App" },
   };

@@ -16,6 +16,7 @@ import {
   TOOL_LIST_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_POST_RUN_MESSAGE_FULL_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -2341,6 +2342,7 @@ describe("createAgentServer tools/list", () => {
         TOOL_LIST_RUNS_FULL_NAME,
         TOOL_STEER_RUN_FULL_NAME,
         TOOL_CANCEL_RUN_FULL_NAME,
+        TOOL_POST_RUN_MESSAGE_FULL_NAME,
       ]) {
         expect(names.has(runtimeTool)).toBe(agentType === "agent");
       }

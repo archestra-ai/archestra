@@ -9,6 +9,7 @@ import {
 import {
   Braces,
   Download,
+  Info,
   MessageSquareText,
   ShieldAlert,
   TriangleAlert,
@@ -32,7 +33,11 @@ import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { GhostThread, OverviewFact } from "./overview-parts";
 import { PayloadTree } from "./payload-tree";
-import { type RequestSpan, SPAN_KINDS } from "./session-timeline";
+import {
+  type RequestKind,
+  type RequestSpan,
+  SPAN_KINDS,
+} from "./session-timeline";
 
 /**
  * The right column for a selected request: what it said and what came back,
@@ -125,7 +130,7 @@ export function RequestContent({
               <TabsContent value="conversation">
                 <ConversationView
                   record={record}
-                  auxiliary={kind === "auxiliary"}
+                  kind={kind}
                   label={label}
                   profileName={profileName}
                   latest={latest}
@@ -163,7 +168,7 @@ type ContentView = (typeof CONTENT_VIEWS)[number]["value"];
 
 function ConversationView({
   record,
-  auxiliary,
+  kind,
   label,
   profileName,
   latest,
@@ -171,7 +176,8 @@ function ConversationView({
   onJumpToLatest,
 }: {
   record: InteractionRecord;
-  auxiliary: boolean;
+  /** Side requests and sub-agents carry their own prompt, not the thread. */
+  kind: RequestKind;
   label: string;
   profileName: string | null;
   latest: boolean;
@@ -181,7 +187,7 @@ function ConversationView({
   const thread = useMemo(() => {
     const interaction = new DynamicInteraction(record);
     return {
-      messages: interaction.mapToUiMessages(),
+      messages: interaction.mapToUiMessages().map(fenceJsonReplies),
       modelName: interaction.modelName,
     };
   }, [record]);
@@ -216,16 +222,14 @@ function ConversationView({
 
   return (
     <>
-      {auxiliary ? (
-        <div className="px-4 pt-3">
-          <InlineNotice variant="warning">
-            <TriangleAlert />
-            <InlineNoticeText>
-              This was a side request ({label}), so this is its prompt, not the
-              main chat thread.
-            </InlineNoticeText>
-          </InlineNotice>
-        </div>
+      {kind !== "main" ? (
+        <p className="flex items-center gap-1.5 px-4 pt-3 text-xs text-muted-foreground">
+          <Info className="size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            {kind === "subagent" ? "Sub-agent" : "Side request"} ({label}): its
+            own prompt, not the main conversation.
+          </span>
+        </p>
       ) : null}
       <MessageThread
         messages={thread.messages}
@@ -604,4 +608,33 @@ function formatAuthMethod(
     default:
       return authMethod;
   }
+}
+
+/**
+ * A reply that is a bare JSON document (a title or a structured answer) reads
+ * as a run-on line of braces in prose; fenced, it renders as code.
+ */
+function fenceJsonReplies<
+  T extends { role: string; parts: Array<{ type: string }> },
+>(message: T): T {
+  if (message.role !== "assistant") return message;
+  return {
+    ...message,
+    parts: message.parts.map((part) => {
+      if (part.type !== "text") return part;
+      const text = (part as { text?: unknown }).text;
+      if (typeof text !== "string") return part;
+      const trimmed = text.trim();
+      if (!/^[[{]/.test(trimmed)) return part;
+      try {
+        const parsed = JSON.parse(trimmed);
+        return {
+          ...part,
+          text: `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``,
+        };
+      } catch {
+        return part;
+      }
+    }),
+  };
 }

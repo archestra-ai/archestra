@@ -12,6 +12,8 @@ You manage the policy by chatting with the APPA Keeper: change rules in plain wo
 
 <a id="change-the-policy"></a>
 
+<span id="keep-a-policy-snapshot-for-new-sessions"></span>
+
 ## Changing the Policy
 
 You change the policy by chatting with the APPA Keeper, the built-in agent that writes the rules for you. On **Overview**, click **Chat with APPA Keeper**, or pick one of the suggested questions next to it.

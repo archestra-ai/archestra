@@ -1,7 +1,7 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { CallerIdentity } from "@/components/executed-as-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { throwOnApiError } from "@/lib/utils/api";
@@ -89,6 +89,9 @@ export function useMcpToolCalls({
       limit,
       cursor,
     ],
+    // A new page or a minute tick keeps the rows on screen until the
+    // answer lands, so the table never blanks and loses its scroll.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await getMcpToolCalls({
         query: {

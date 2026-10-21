@@ -376,6 +376,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   requestType: RequestTypeSchema,
   /** Origin of the call (`chat`, `chat:compaction`, …). Used to badge sub-agent rows. */
   source: InteractionSourceSchema.nullable().optional(),
+  /**
+   * The latest user text this request carried, from its stored preview: names
+   * a turn by the prompt it served. Null when none was captured.
+   */
+  userMessagePreview: z.string().nullable().optional(),
 });
 
 /**
@@ -816,6 +821,13 @@ export const InsertInteractionSchema = createInsertSchema(
   // Override profileId - required for proxy interactions, nullable for system interactions
   // (e.g., knowledge base embeddings/reranking have no associated profile)
   profileId: z.string().uuid().nullable(),
+  /** Accounting metadata is stored separately from encrypted log content. */
+  billingAttribution: z
+    .custom<import("@/utils/billable-usage").BillingAttribution>()
+    .optional(),
+  billingUsage: z
+    .custom<import("@/utils/billable-usage").PricedBillingUsage>()
+    .optional(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
@@ -935,6 +947,12 @@ export const SessionSummarySchema = z.object({
     ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
+  connectorName: z
+    .string()
+    .nullable()
+    .describe(
+      "Name of the knowledge-base connector a knowledge:* session ran for, when exactly one connector owns it.",
+    ),
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;

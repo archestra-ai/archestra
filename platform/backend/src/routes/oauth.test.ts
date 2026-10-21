@@ -1349,7 +1349,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 
@@ -1553,7 +1555,10 @@ describe("OAuth routes", () => {
       });
 
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
       const refreshedSecret = await secretManager().getSecret(
         callbackResponse.json().secretId,
@@ -1564,7 +1569,10 @@ describe("OAuth routes", () => {
         client_secret: "registered-secret",
       });
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
 
       const refreshRequest = fetchMock.mock.calls.find(([, init]) => {
@@ -1628,7 +1636,9 @@ describe("OAuth routes", () => {
       .spyOn(secretManager(), "updateSecret")
       .mockRejectedValueOnce(new Error("vault unavailable"));
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1677,7 +1687,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     const updateSpy = vi.spyOn(secretManager(), "updateSecret");
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1715,7 +1727,9 @@ describe("OAuth routes", () => {
       true,
     );
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "no_refresh_token",
@@ -1744,7 +1758,10 @@ describe("OAuth routes", () => {
     });
 
     await expect(
-      refreshOAuthToken("00000000-0000-0000-0000-000000000000", catalog.id),
+      refreshOAuthToken({
+        secretId: "00000000-0000-0000-0000-000000000000",
+        catalogId: catalog.id,
+      }),
     ).resolves.toEqual({
       ok: false,
       kind: "terminal",
@@ -1828,7 +1845,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 

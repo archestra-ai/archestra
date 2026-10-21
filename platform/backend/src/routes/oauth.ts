@@ -13,6 +13,11 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
+  createMcpOAuthFetch,
+  type McpOAuthContext,
+  McpOAuthOutboundError,
+} from "@/services/mcp-oauth-fetch";
+import {
   classifyRefreshResponse,
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
@@ -37,6 +42,7 @@ export function generateCodeChallenge(verifier: string): string {
 }
 
 interface OAuthDiscoveryOverrides {
+  fetchFn?: typeof fetch;
   authServerUrl?: string;
   resourceMetadataUrl?: string;
   wellKnownUrl?: string;
@@ -77,12 +83,15 @@ async function discoverOAuthResourceMetadata(
   let lastError: unknown;
   for (const wellKnownUrl of wellKnownUrls) {
     try {
-      const response = await fetch(wellKnownUrl, {
-        headers: {
-          "MCP-Protocol-Version": "2025-06-18",
-          Accept: "application/json",
+      const response = await (overrides?.fetchFn ?? createMcpOAuthFetch())(
+        wellKnownUrl,
+        {
+          headers: {
+            "MCP-Protocol-Version": "2025-06-18",
+            Accept: "application/json",
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -92,6 +101,7 @@ async function discoverOAuthResourceMetadata(
 
       return await response.json();
     } catch (error) {
+      if (error instanceof McpOAuthOutboundError) throw error;
       lastError = error;
     }
   }
@@ -130,6 +140,7 @@ export async function discoverScopes(
         return resourceMetadata.scopes_supported;
       }
     } catch (error) {
+      if (error instanceof McpOAuthOutboundError) throw error;
       logger.error(error);
     }
   }
@@ -148,6 +159,7 @@ export async function discoverScopes(
       return metadata.scopes_supported;
     }
   } catch (error) {
+    if (error instanceof McpOAuthOutboundError) throw error;
     logger.error(error);
   }
 
@@ -157,6 +169,7 @@ export async function discoverScopes(
 
 export async function resolveOAuthScopesForAuthorization(params: {
   oauthConfig: OAuthScopeConfig;
+  fetchFn?: typeof fetch;
 }): Promise<{
   configuredScopes: string[];
   discoveredScopes: string[];
@@ -206,6 +219,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
     params.oauthConfig.supports_resource_metadata || false,
     fallbackScopes,
     {
+      fetchFn: params.fetchFn,
       authServerUrl: params.oauthConfig.auth_server_url,
       resourceMetadataUrl: params.oauthConfig.resource_metadata_url,
       wellKnownUrl: params.oauthConfig.well_known_url,
@@ -279,11 +293,14 @@ async function discoverAuthorizationServerMetadataWithOverrides(
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
-        headers: {
-          "MCP-Protocol-Version": "2025-06-18",
+      const response = await (overrides?.fetchFn ?? createMcpOAuthFetch())(
+        url,
+        {
+          headers: {
+            "MCP-Protocol-Version": "2025-06-18",
+          },
         },
-      });
+      );
 
       // If we get a 4xx error, try the next URL
       if (!response.ok && response.status >= 400 && response.status < 500) {
@@ -307,6 +324,7 @@ async function discoverAuthorizationServerMetadataWithOverrides(
       }
       fallback ??= { url, metadata };
     } catch (error) {
+      if (error instanceof McpOAuthOutboundError) throw error;
       if (url === urls[urls.length - 1]) {
         lastUrlError = error;
       }
@@ -396,11 +414,15 @@ export async function discoverOAuthEndpoints(
     well_known_url?: string;
     token_endpoint?: string;
   },
-  log?: {
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
+  options?: {
+    log?: {
+      info: (...args: unknown[]) => void;
+      warn: (...args: unknown[]) => void;
+    };
+    fetchFn?: typeof fetch;
   },
 ): Promise<DiscoveredEndpoints> {
+  const log = options?.log;
   const explicitEndpoints = getExplicitOAuthEndpoints(oauthConfig);
   let discoveryServerUrl =
     oauthConfig.auth_server_url || oauthConfig.server_url;
@@ -417,6 +439,7 @@ export async function discoverOAuthEndpoints(
       const resourceMetadata = await discoverOAuthResourceMetadata(
         oauthConfig.server_url,
         {
+          fetchFn: options?.fetchFn,
           resourceMetadataUrl: oauthConfig.resource_metadata_url,
         },
       );
@@ -433,6 +456,7 @@ export async function discoverOAuthEndpoints(
         );
       }
     } catch (error) {
+      if (error instanceof McpOAuthOutboundError) throw error;
       log?.warn(
         { error },
         "Resource metadata discovery failed; continuing with standard discovery",
@@ -444,6 +468,7 @@ export async function discoverOAuthEndpoints(
     const metadata = await discoverAuthorizationServerMetadataWithOverrides(
       discoveryServerUrl,
       {
+        fetchFn: options?.fetchFn,
         authServerUrl: oauthConfig.auth_server_url,
         resourceMetadataUrl: oauthConfig.resource_metadata_url,
         wellKnownUrl: oauthConfig.well_known_url,
@@ -493,6 +518,7 @@ export async function discoverOAuthEndpoints(
         metadata.authorization_response_iss_parameter_supported === true,
     };
   } catch (error) {
+    if (error instanceof McpOAuthOutboundError) throw error;
     if (
       explicitEndpoints.authorizationEndpoint &&
       explicitEndpoints.tokenEndpoint
@@ -518,8 +544,8 @@ export async function discoverOAuthEndpoints(
 /**
  * Perform dynamic client registration (RFC 7591)
  */
-async function registerOAuthClient(
-  registrationEndpoint: string,
+async function registerOAuthClient(params: {
+  registrationEndpoint: string;
   clientMetadata: {
     client_name: string;
     /** OIDC application_type; see SEP-837. */
@@ -529,10 +555,12 @@ async function registerOAuthClient(
     response_types?: string[];
     scope?: string;
     token_endpoint_auth_method?: OAuthClientAuthMethod;
-  },
-) {
+  };
+  fetchFn: typeof fetch;
+}) {
+  const { registrationEndpoint, clientMetadata, fetchFn } = params;
   try {
-    const response = await fetch(registrationEndpoint, {
+    const response = await fetchFn(registrationEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -541,7 +569,9 @@ async function registerOAuthClient(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = config.mcpOAuth.enforceOutboundValidation
+        ? "Upstream registration rejected"
+        : await response.text();
       throw new Error(
         `Client registration failed: ${response.status} ${errorText}`,
       );
@@ -558,6 +588,7 @@ async function registerOAuthClient(
     );
     return result;
   } catch (error) {
+    if (error instanceof McpOAuthOutboundError) throw error;
     throw new Error(
       `Dynamic client registration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
@@ -569,6 +600,8 @@ async function registerOAuthClient(
  */
 interface OAuthStateData {
   catalogId: string;
+  /** Callback is public: retain the authorized initiating organization. */
+  organizationId?: string;
   codeVerifier: string;
   clientId?: string;
   clientSecret?: string;
@@ -629,13 +662,15 @@ const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
  * Refresh an OAuth access token using the stored refresh token, called when an
  * access token is expired or about to expire.
  *
- * @param secretId - The ID of the secret containing the OAuth tokens
- * @param catalogId - The ID of the catalog item (MCP server) for OAuth config
+ * The secret and catalog identify stored credentials; runtime context resolves
+ * the organization for global built-ins without changing compatibility mode.
  */
-export async function refreshOAuthToken(
-  secretId: string,
-  catalogId: string,
-): Promise<OAuthRefreshOutcome> {
+export async function refreshOAuthToken(params: {
+  secretId: string;
+  catalogId: string;
+  context?: Omit<McpOAuthContext, "catalog">;
+}): Promise<OAuthRefreshOutcome> {
+  const { secretId, catalogId, context } = params;
   try {
     const secret = await secretManager().getSecret(secretId);
     if (!secret?.secret) {
@@ -691,13 +726,15 @@ export async function refreshOAuthToken(
     }
 
     const oauthConfig = catalogItem.oauthConfig;
+    const fetchFn = createMcpOAuthFetch({ catalog: catalogItem, ...context });
 
     // Discover token endpoint
     let tokenEndpoint: string;
     try {
-      const endpoints = await discoverOAuthEndpoints(oauthConfig);
+      const endpoints = await discoverOAuthEndpoints(oauthConfig, { fetchFn });
       tokenEndpoint = endpoints.tokenEndpoint;
-    } catch {
+    } catch (error) {
+      if (error instanceof McpOAuthOutboundError) throw error;
       // Fallback to config or constructed endpoint
       tokenEndpoint =
         oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
@@ -758,7 +795,7 @@ export async function refreshOAuthToken(
         currentTokens.token_endpoint_auth_method ?? "client_secret_post",
     });
 
-    const tokenResponse = await fetch(tokenEndpoint, {
+    const tokenResponse = await fetchFn(tokenEndpoint, {
       method: "POST",
       headers: tokenRequestHeaders,
       body: tokenRequestBody,
@@ -783,7 +820,10 @@ export async function refreshOAuthToken(
 
     const outcome = classifyRefreshResponse({
       status: tokenResponse.status,
-      body,
+      body:
+        config.mcpOAuth.enforceOutboundValidation && body
+          ? { ...body, error_description: undefined }
+          : body,
     });
 
     if (!outcome.ok) {
@@ -865,6 +905,7 @@ export async function refreshOAuthToken(
 
     return { ok: true };
   } catch (error) {
+    if (error instanceof McpOAuthOutboundError) throw error;
     const outcome = classifyThrownRefreshError(error);
     logger.error(
       {
@@ -919,6 +960,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         const oauthConfig = catalogItem.oauthConfig;
+        const fetchFn = createMcpOAuthFetch({
+          catalog: catalogItem,
+          organizationId,
+        });
 
         // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
         // This ensures the redirect URI matches where the user initiated the OAuth flow from
@@ -944,6 +989,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Discover actual scopes from the OAuth server (like desktop app does)
         const resolvedScopes = await resolveOAuthScopesForAuthorization({
           oauthConfig,
+          fetchFn,
         });
         const { configuredScopes, discoveredScopes } = resolvedScopes;
         // Mutable: a successful dynamic registration may narrow this to the
@@ -985,10 +1031,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           registrationEndpoint = undefined;
         } else {
           try {
-            const endpoints = await discoverOAuthEndpoints(
-              oauthConfig,
-              fastify.log,
-            );
+            const endpoints = await discoverOAuthEndpoints(oauthConfig, {
+              log: fastify.log,
+              fetchFn,
+            });
             authorizationEndpoint = endpoints.authorizationEndpoint;
             registrationEndpoint = endpoints.registrationEndpoint;
             tokenEndpointAuthMethodsSupported =
@@ -996,6 +1042,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             discoveredIssuer = endpoints.issuer;
             discoveredIssSupported = endpoints.issParameterSupported;
           } catch (error) {
+            if (error instanceof McpOAuthOutboundError) throw error;
             fastify.log.error(
               { error },
               "Authorization server discovery failed",
@@ -1056,18 +1103,20 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             let registeredWithoutScope = scopesToUse.length === 0;
             try {
-              registrationResult = await registerOAuthClient(
+              registrationResult = await registerOAuthClient({
                 registrationEndpoint,
                 // RFC 7591 makes `scope` optional. With no scopes to request,
                 // omit the key rather than registering with `scope: ""`.
-                registeredWithoutScope
+                clientMetadata: registeredWithoutScope
                   ? registrationMetadata
                   : {
                       ...registrationMetadata,
                       scope: scopesToUse.join(" "),
                     },
-              );
+                fetchFn,
+              });
             } catch (error) {
+              if (error instanceof McpOAuthOutboundError) throw error;
               if (registeredWithoutScope) {
                 // The first attempt already omitted `scope`, so every fallback
                 // below is the same request again. Let the outer handler
@@ -1094,6 +1143,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       oauthConfig.supports_resource_metadata || false,
                       [],
                       {
+                        fetchFn,
                         authServerUrl: oauthConfig.auth_server_url,
                         resourceMetadataUrl: oauthConfig.resource_metadata_url,
                         wellKnownUrl: oauthConfig.well_known_url,
@@ -1105,15 +1155,18 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 advertisedScopes.join(" ") !== scopesToUse.join(" ")
               ) {
                 try {
-                  registrationResult = await registerOAuthClient(
+                  registrationResult = await registerOAuthClient({
                     registrationEndpoint,
-                    {
+                    clientMetadata: {
                       ...registrationMetadata,
                       scope: advertisedScopes.join(" "),
                     },
-                  );
+                    fetchFn,
+                  });
                   scopesToUse = advertisedScopes;
                 } catch (retryError) {
+                  if (retryError instanceof McpOAuthOutboundError)
+                    throw retryError;
                   fastify.log.warn(
                     {
                       error:
@@ -1129,10 +1182,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Last resort: RFC 7591 makes `scope` optional — let the
                 // server assign its default scope set instead of dead-ending
                 // the install.
-                registrationResult = await registerOAuthClient(
+                registrationResult = await registerOAuthClient({
                   registrationEndpoint,
-                  registrationMetadata,
-                );
+                  clientMetadata: registrationMetadata,
+                  fetchFn,
+                });
                 registeredWithoutScope = true;
               }
             }
@@ -1165,6 +1219,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Dynamic registration successful",
             );
           } catch (error) {
+            if (error instanceof McpOAuthOutboundError) throw error;
             registrationError =
               error instanceof Error ? error.message : String(error);
             fastify.log.warn(
@@ -1196,6 +1251,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store state temporarily (will be used in callback)
         await setOAuthState(state, {
           catalogId,
+          organizationId,
           codeVerifier,
           clientId,
           clientSecret,
@@ -1232,6 +1288,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           state,
         });
       } catch (error) {
+        if (error instanceof McpOAuthOutboundError) throw error;
         // Handled client errors (bad/missing catalog config, no client id, etc.)
         // are formatted by the centralized error handler but filtered from Sentry,
         // so surface them here with the catalogId for triage.
@@ -1280,7 +1337,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { code, state, iss } }, reply) => {
+    async ({ body: { code, state, iss }, organizationId }, reply) => {
       // Retrieve OAuth state (also deletes it to prevent replay attacks)
       const oauthState = await getAndDeleteOAuthState(state);
       if (!oauthState) {
@@ -1323,6 +1380,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const oauthConfig = catalogItem.oauthConfig;
+      const fetchFn = createMcpOAuthFetch({
+        catalog: catalogItem,
+        organizationId: oauthState.organizationId ?? organizationId,
+      });
 
       // Use client credentials from state (dynamically registered) or fall back to config
       const clientId = oauthState.clientId || oauthConfig.client_id;
@@ -1364,11 +1425,16 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             codeVerifier: oauthState.codeVerifier,
             redirectUri,
             resource: oauthResourceUrl,
+            fetchFn,
           });
 
           fastify.log.info("MCP SDK token exchange successful");
           tokenData = tokens;
         } catch (error) {
+          if (error instanceof McpOAuthOutboundError) throw error;
+          if (config.mcpOAuth.enforceOutboundValidation) {
+            throw new ApiError(400, "MCP OAuth token exchange failed");
+          }
           fastify.log.error({ error }, "MCP SDK token exchange failed");
 
           throw new ApiError(
@@ -1380,12 +1446,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // For non-proxy servers, use standard OAuth token exchange
         let tokenEndpoint: string;
         try {
-          const endpoints = await discoverOAuthEndpoints(
-            oauthConfig,
-            fastify.log,
-          );
+          const endpoints = await discoverOAuthEndpoints(oauthConfig, {
+            log: fastify.log,
+            fetchFn,
+          });
           tokenEndpoint = endpoints.tokenEndpoint;
         } catch (error) {
+          if (error instanceof McpOAuthOutboundError) throw error;
           fastify.log.error(
             { error },
             "Token endpoint discovery failed, using fallback",
@@ -1416,14 +1483,16 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           clientSecret,
           authMethod: tokenEndpointAuthMethod ?? "client_secret_post",
         });
-        const tokenResponse = await fetch(tokenEndpoint, {
+        const tokenResponse = await fetchFn(tokenEndpoint, {
           method: "POST",
           headers: tokenRequestHeaders,
           body: tokenRequestBody,
         });
 
         if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text();
+          const errorText = config.mcpOAuth.enforceOutboundValidation
+            ? "Upstream token exchange rejected"
+            : await tokenResponse.text();
           fastify.log.error(
             `Token exchange failed: ${tokenResponse.status} ${errorText}`,
           );
@@ -1452,6 +1521,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Some OAuth providers return 200 with error in body, or MCP SDK might return error object
       if (!tokenData.access_token) {
         // Cast to unknown first to access potential error fields
+        if (config.mcpOAuth.enforceOutboundValidation) {
+          throw new ApiError(
+            400,
+            "MCP OAuth token response did not include an access token",
+          );
+        }
         const errorData = tokenData as unknown as {
           error?: string;
           error_description?: string;

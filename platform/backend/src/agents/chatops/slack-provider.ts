@@ -136,10 +136,10 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: 10 * TimeInMs.Minute,
   });
   /**
-   * Reads the channel description on the way to a reply, so it must fail fast:
-   * the default client retries for minutes, holding the reply back.
+   * Optional descriptions and startup acknowledgments must fail fast; the
+   * default client can retry for minutes and hold the final reply back.
    */
-  private descriptionClient: WebClient | null = null;
+  private bestEffortClient: WebClient | null = null;
   /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
@@ -229,8 +229,9 @@ class SlackProvider implements ChatOpsProvider {
     await slackAppFactory.ensureManifestScopes(this.config);
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
-    this.descriptionClient = new WebClient(botToken, {
+    this.bestEffortClient = new WebClient(botToken, {
       retryConfig: { retries: 0 },
+      rejectRateLimitedCalls: true,
       timeout: 3 * TimeInMs.Second,
     });
 
@@ -316,6 +317,7 @@ class SlackProvider implements ChatOpsProvider {
     this.eventHandler = null;
     this.socketDedup.clear();
     this.client = null;
+    this.bestEffortClient = null;
     this.botUserId = null;
     this.botId = null;
     this.botDisplayName = null;
@@ -632,7 +634,8 @@ class SlackProvider implements ChatOpsProvider {
     options: ChatReplyOptions,
     replaceTs?: string,
   ): Promise<string> {
-    if (!this.client) {
+    const client = options.bestEffort ? this.bestEffortClient : this.client;
+    if (!client) {
       throw new Error("SlackProvider not initialized");
     }
 
@@ -699,7 +702,7 @@ class SlackProvider implements ChatOpsProvider {
         options.originalMessage.threadId ?? (firstTs || undefined);
 
       if (i === 0 && replaceTs) {
-        await this.client.chat.update({
+        await client.chat.update({
           channel: options.originalMessage.channelId,
           ts: replaceTs,
           text: fallbackText,
@@ -724,7 +727,7 @@ class SlackProvider implements ChatOpsProvider {
         },
         "[SlackProvider] chat.postMessage (sendReply)",
       );
-      const result = await this.client.chat.postMessage(postArgs);
+      const result = await client.chat.postMessage(postArgs);
       if (i === 0) firstTs = (result.ts as string) || "";
     }
 
@@ -1207,7 +1210,7 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async getChannelDescription(channelId: string): Promise<string | null> {
-    const client = this.descriptionClient ?? this.client;
+    const client = this.bestEffortClient ?? this.client;
     if (!client) return null;
     const cached = this.channelDescriptionCache.get(channelId);
     if (cached !== undefined) return cached || null;

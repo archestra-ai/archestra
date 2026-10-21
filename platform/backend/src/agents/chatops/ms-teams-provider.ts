@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { AzureIdentityAuthenticationProvider } from "@microsoft/kiota-authentication-azure";
 import {
@@ -27,12 +28,14 @@ import {
   TurnContext,
   type WebResponse,
 } from "@microsoft/agents-hosting";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { LRUCacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
+import { mimeFromExtension } from "@/skills-sandbox/mime-sniff";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -79,6 +82,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   private adapter: CloudAdapter | null = null;
   private authorize: ReturnType<typeof authorizeJWT> | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private graphCredential: ClientSecretCredential | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
@@ -156,10 +160,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         graph.clientSecret,
       );
       const authProvider = new AzureIdentityAuthenticationProvider(credential, [
-        "https://graph.microsoft.com/.default",
+        GRAPH_DEFAULT_SCOPE,
       ]);
       const requestAdapter = new GraphRequestAdapter(authProvider);
       this.graphClient = createGraphServiceClient(requestAdapter);
+      this.graphCredential = credential;
       logger.info("[MSTeamsProvider] Graph client initialized");
     } else {
       logger.info(
@@ -172,6 +177,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     this.adapter = null;
     this.authorize = null;
     this.graphClient = null;
+    this.graphCredential = null;
     this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
   }
@@ -283,7 +289,14 @@ class MSTeamsProvider implements ChatOpsProvider {
       activity.text ?? "",
       activity.recipient?.name,
     );
-    if (!cleanedText && !hasFileAttachment) {
+    // Files sent in a channel or group chat never ride on the activity; they
+    // are read from Graph once the bot decides to answer (see
+    // downloadMessageFiles), so a message that looks empty here may still
+    // carry one.
+    const mayCarryGraphFiles =
+      this.graphClient !== null &&
+      isGraphFileConversation(activity.conversation?.conversationType);
+    if (!cleanedText && !hasFileAttachment && !mayCarryGraphFiles) {
       return null;
     }
 
@@ -308,8 +321,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
     // Download file attachments (skip Adaptive Cards and other non-file
-    // attachments). Current-message drops are intentionally not surfaced for
-    // Teams (unlike Slack) — only the delivered attachments are used.
+    // attachments). Files that could not be delivered are passed on as
+    // skipped, so the agent explains the miss instead of saying it sees
+    // nothing.
     const fileOutcomes = await this.downloadTeamsFiles(
       filterTeamsFileAttachments(activity.attachments),
       activity.serviceUrl,
@@ -317,11 +331,18 @@ class MSTeamsProvider implements ChatOpsProvider {
     const attachments = fileOutcomes.flatMap((o) =>
       o.status === "delivered" ? [o.attachment] : [],
     );
+    const skippedAttachments = fileOutcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
 
-    // A file-only message (empty text) is kept only when a file actually
-    // survived download — oversized, expired, or failed downloads must not
-    // leave the bot answering an empty turn.
-    if (!cleanedText && attachments.length === 0) {
+    // A file-only message (empty text) is answered when a file was delivered
+    // or skipped: a skipped screenshot still deserves "I couldn't open it".
+    if (
+      !cleanedText &&
+      attachments.length === 0 &&
+      skippedAttachments.length === 0 &&
+      !mayCarryGraphFiles
+    ) {
       return null;
     }
 
@@ -353,6 +374,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
+      ...(skippedAttachments.length > 0 && { skippedAttachments }),
     };
   }
 
@@ -1337,6 +1359,9 @@ class MSTeamsProvider implements ChatOpsProvider {
             channelId: params.message.channelId,
             workspaceId: params.message.workspaceId,
             originalMessageText: params.message.text || undefined,
+            pendingAttachmentsKey: await this.stashAgentSelectionAttachments(
+              params.message,
+            ),
           },
         },
       ],
@@ -1363,10 +1388,37 @@ class MSTeamsProvider implements ChatOpsProvider {
     // No-op: MS Teams permissions are managed in Azure AD and can't be detected at runtime
   }
 
+  /**
+   * Files of the message that triggered an agent-selection card, so the
+   * replay after **Confirm Selection** answers the whole message. Only the
+   * original sender, in the original conversation, receives them, once.
+   */
+  async takeAgentSelectionAttachments(params: {
+    key: string;
+    senderId: string;
+    channelId: string;
+  }): Promise<A2AAttachment[]> {
+    if (!isUuid(params.key)) return [];
+    const cacheKey =
+      `${CacheKey.TeamsAgentSelectionAttachments}-${params.key}` as const;
+    const pending =
+      await cacheManager.get<PendingAgentSelectionAttachments>(cacheKey);
+    if (
+      !pending ||
+      pending.senderId !== params.senderId ||
+      pending.channelId !== params.channelId
+    ) {
+      return [];
+    }
+    await cacheManager.delete(cacheKey);
+    return pending.attachments;
+  }
+
   async downloadFiles(
     files: ChatThreadMessageFile[],
   ): Promise<ThreadFileOutcome[]> {
-    // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
+    // No serviceUrl for history messages: Azure Blob URLs are pre-authenticated
+    // and Graph hosted-content images authenticate with the Graph app token.
     return this.downloadTeamsFiles(
       files.map((f) => ({
         contentType: f.mimetype,
@@ -1377,8 +1429,205 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
   }
 
+  /**
+   * Download the files of a channel or group-chat message. Teams does not put
+   * them on the bot's activity: each is a SharePoint `reference` attachment
+   * that only Graph returns. Reading the message uses the app's RSC message
+   * permission; reading the file needs the app's Graph `Sites.Selected`
+   * permission plus a read grant on the team's site, and without one the
+   * file comes back as skipped. Group-chat files sit in each sender's
+   * OneDrive, which a site grant does not cover.
+   */
+  async downloadMessageFiles(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]> {
+    const conversationType = message.metadata?.conversationType;
+    if (
+      !this.graphClient ||
+      typeof conversationType !== "string" ||
+      !isGraphFileConversation(conversationType)
+    ) {
+      return [];
+    }
+    try {
+      const graphMessage =
+        conversationType === "channel"
+          ? await this.getChannelMessage(message)
+          : await this.graphClient.chats
+              .byChatId(message.channelId)
+              .messages.byChatMessageId(message.messageId)
+              .get();
+      const files: ChatThreadMessageFile[] = (graphMessage?.attachments ?? [])
+        .filter(
+          (a) => a.contentType === GRAPH_REFERENCE_ATTACHMENT && a.contentUrl,
+        )
+        .map((a) => ({
+          url: a.contentUrl as string,
+          mimetype: GRAPH_REFERENCE_ATTACHMENT,
+          name: a.name ?? undefined,
+        }));
+      return files.length > 0 ? this.downloadFiles(files) : [];
+    } catch (error) {
+      logger.warn(
+        {
+          error: errorMessage(error),
+          channelId: message.channelId,
+          conversationType,
+        },
+        "[MSTeamsProvider] Could not read the message's files from Graph",
+      );
+      return [];
+    }
+  }
+
   // ===========================================================================
   // Private Methods
+
+  private async getChannelMessage(
+    message: IncomingChatMessage,
+  ): Promise<ChatMessage | undefined> {
+    const client = this.graphClient;
+    if (!client) return undefined;
+    const teamId =
+      message.workspaceId && isUuid(message.workspaceId)
+        ? message.workspaceId
+        : await this.lookupTeamIdFromChannel(
+            message.channelId,
+            message.workspaceId || undefined,
+          );
+    if (!teamId) return undefined;
+    const messages = client.teams
+      .byTeamId(teamId)
+      .channels.byChannelId(message.channelId).messages;
+    const rootId = message.threadId;
+    return rootId && rootId !== message.messageId
+      ? messages
+          .byChatMessageId(rootId)
+          .replies.byChatMessageId1(message.messageId)
+          .get()
+      : messages.byChatMessageId(message.messageId).get();
+  }
+
+  /**
+   * Fetch a SharePoint or OneDrive file by its page URL through Graph. The
+   * URL is resolved to its site and document library rather than through
+   * `/shares`, so a `Sites.Selected` grant on that one site is enough.
+   * Failures come back as an error response, for the caller's skip handling.
+   */
+  private async fetchSharePointFile(fileUrl: string): Promise<Response> {
+    const token = await this.getGraphToken();
+    if (!token) return new Response(null, { status: 401 });
+    const headers = { Authorization: `Bearer ${token}` };
+    const location = await this.locateSharePointFile({ fileUrl, headers });
+    if ("status" in location) {
+      if (location.status === 401 || location.status === 403) {
+        logger.warn(
+          { host: safeHostname(fileUrl), status: location.status },
+          "[MSTeamsProvider] Graph denied a Teams file. Grant the app Sites.Selected and read access to this site",
+        );
+      }
+      return new Response(null, { status: location.status });
+    }
+    // Graph answers with a redirect to a pre-signed download URL; fetch drops
+    // the Authorization header on that cross-origin hop.
+    return fetch(
+      `${GRAPH_V1}/drives/${encodeURIComponent(location.driveId)}/root:/${encodeGraphPath(location.itemPath)}:/content`,
+      { headers },
+    );
+  }
+
+  private async locateSharePointFile(params: {
+    fileUrl: string;
+    headers: Record<string, string>;
+  }): Promise<{ driveId: string; itemPath: string[] } | { status: number }> {
+    const url = new URL(params.fileUrl);
+    const segments = pathSegments(url.pathname);
+    // `/sites/<name>`, `/teams/<name>` or `/personal/<user>`, then the
+    // library, then the file.
+    if (segments.length < 4) return { status: 404 };
+    const sitePath = segments.slice(0, 2);
+    const cacheKey = `${url.hostname}/${sitePath.join("/")}`;
+    let drives = this.sharePointDriveCache.get(cacheKey);
+    if (!drives) {
+      const siteResponse = await fetch(
+        `${GRAPH_V1}/sites/${url.hostname}:/${encodeGraphPath(sitePath)}?$select=id`,
+        { headers: params.headers },
+      );
+      if (!siteResponse.ok) return { status: siteResponse.status };
+      const site = (await siteResponse.json()) as { id?: string };
+      if (!site.id) return { status: 404 };
+      const drivesResponse = await fetch(
+        `${GRAPH_V1}/sites/${encodeURIComponent(site.id)}/drives?$select=id,webUrl`,
+        { headers: params.headers },
+      );
+      if (!drivesResponse.ok) return { status: drivesResponse.status };
+      const body = (await drivesResponse.json()) as {
+        value?: Array<{ id?: string; webUrl?: string }>;
+      };
+      drives = (body.value ?? []).flatMap((drive) =>
+        drive.id && drive.webUrl
+          ? [
+              {
+                id: drive.id,
+                segments: pathSegments(new URL(drive.webUrl).pathname),
+              },
+            ]
+          : [],
+      );
+      this.sharePointDriveCache.set(cacheKey, drives);
+    }
+    // The library whose URL is the longest prefix of the file's URL.
+    const drive = drives
+      .filter((candidate) =>
+        candidate.segments.every((segment, i) => segments[i] === segment),
+      )
+      .sort((a, b) => b.segments.length - a.segments.length)[0];
+    if (!drive || drive.segments.length >= segments.length) {
+      return { status: 404 };
+    }
+    return {
+      driveId: drive.id,
+      itemPath: segments.slice(drive.segments.length),
+    };
+  }
+
+  private sharePointDriveCache = new LRUCacheManager<
+    Array<{ id: string; segments: string[] }>
+  >({
+    maxSize: CHATOPS_TEAM_CACHE.MAX_SIZE,
+    defaultTtl: CHATOPS_TEAM_CACHE.TTL_MS,
+  });
+
+  /**
+   * Hold the message's files until the agent is picked. The card carries only
+   * the returned key: Teams echoes card data back from the client, so file
+   * references placed in it could be swapped for another conversation's.
+   */
+  private async stashAgentSelectionAttachments(
+    message: IncomingChatMessage,
+  ): Promise<string | undefined> {
+    if (!message.attachments?.length) return undefined;
+    const key = randomUUID();
+    const pending: PendingAgentSelectionAttachments = {
+      senderId: message.senderId,
+      channelId: message.channelId,
+      attachments: message.attachments,
+    };
+    try {
+      await cacheManager.set(
+        `${CacheKey.TeamsAgentSelectionAttachments}-${key}`,
+        pending,
+        AGENT_SELECTION_ATTACHMENTS_TTL_MS,
+      );
+      return key;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not hold attachments for the agent-selection replay",
+      );
+      return undefined;
+    }
+  }
 
   /**
    * Download Teams file attachments and convert to A2AAttachment format.
@@ -1391,6 +1640,8 @@ class MSTeamsProvider implements ChatOpsProvider {
    * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
    * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
    * using client credentials (appId/appSecret) to obtain a Bot Connector token.
+   * Images pasted inline into a message reach thread history only as Graph
+   * hosted-content URLs, which take the Graph app token instead.
    */
   private async downloadTeamsFiles(
     files: TeamsFileAttachment[],
@@ -1450,9 +1701,21 @@ class MSTeamsProvider implements ChatOpsProvider {
       }
 
       try {
+        const isSharePointReference =
+          attachment.contentType === GRAPH_REFERENCE_ATTACHMENT;
         // Determine if the URL needs authentication (same host as serviceUrl)
         const headers: Record<string, string> = {};
-        if (serviceUrl && needsBotAuth(attachment.contentUrl, serviceUrl)) {
+        if (isSharePointReference) {
+          // Resolved below through Graph; the page URL itself is not fetchable.
+        } else if (isGraphUrl(attachment.contentUrl)) {
+          const graphToken = await this.getGraphToken();
+          if (graphToken) {
+            headers.Authorization = `Bearer ${graphToken}`;
+          }
+        } else if (
+          serviceUrl &&
+          needsBotAuth(attachment.contentUrl, serviceUrl)
+        ) {
           if (!botToken) {
             botToken = await this.getBotConnectorToken();
           }
@@ -1461,10 +1724,12 @@ class MSTeamsProvider implements ChatOpsProvider {
           }
         }
 
-        const response = await fetch(
-          attachment.contentUrl,
-          Object.keys(headers).length > 0 ? { headers } : undefined,
-        );
+        const response = isSharePointReference
+          ? await this.fetchSharePointFile(attachment.contentUrl)
+          : await fetch(
+              attachment.contentUrl,
+              Object.keys(headers).length > 0 ? { headers } : undefined,
+            );
 
         if (!response.ok) {
           logger.warn(
@@ -1556,10 +1821,14 @@ class MSTeamsProvider implements ChatOpsProvider {
           response.headers.get("content-type")?.split(";")[0]?.trim() || "";
         const isGenericContentType = (ct: string) =>
           !ct || ct === "application/octet-stream" || ct.includes("*");
+        // A SharePoint reference names no media type; its extension does.
+        const declaredContentType = isSharePointReference
+          ? mimeFromExtension(attachment.name ?? "")
+          : attachment.contentType;
         const resolvedContentType = !isGenericContentType(httpContentType)
           ? httpContentType
-          : !isGenericContentType(attachment.contentType)
-            ? attachment.contentType
+          : !isGenericContentType(declaredContentType)
+            ? declaredContentType
             : detectImageType(buffer);
         outcomes.push({
           status: "delivered",
@@ -1603,6 +1872,25 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     return outcomes;
+  }
+
+  /**
+   * Graph app token for hosted-content downloads. The credential caches and
+   * refreshes the token itself, so this does not hold one.
+   */
+  private async getGraphToken(): Promise<string | null> {
+    if (!this.graphCredential) return null;
+    try {
+      const accessToken =
+        await this.graphCredential.getToken(GRAPH_DEFAULT_SCOPE);
+      return accessToken?.token ?? null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Error obtaining Graph token for attachment download",
+      );
+      return null;
+    }
   }
 
   /**
@@ -1770,19 +2058,23 @@ class MSTeamsProvider implements ChatOpsProvider {
         .map((msg) => {
           const isUserMessage = Boolean(msg.from?.user);
 
-          // Extract file attachment metadata from Graph API ChatMessage.attachments
-          const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
-            .filter(
-              (a) =>
-                a.contentUrl &&
-                a.contentType &&
-                !a.contentType.startsWith("application/vnd.microsoft.card."),
-            )
-            .map((a) => ({
-              url: a.contentUrl as string,
-              mimetype: a.contentType as string,
-              name: a.name ?? undefined,
-            }));
+          // Extract file attachment metadata from Graph API ChatMessage.attachments,
+          // plus images pasted inline: Graph lists those only in the HTML body.
+          const files: ChatThreadMessageFile[] = [
+            ...(msg.attachments ?? [])
+              .filter(
+                (a) =>
+                  a.contentUrl &&
+                  a.contentType &&
+                  !a.contentType.startsWith("application/vnd.microsoft.card."),
+              )
+              .map((a) => ({
+                url: a.contentUrl as string,
+                mimetype: a.contentType as string,
+                name: a.name ?? undefined,
+              })),
+            ...extractHostedContentImages(msg.body?.content ?? undefined),
+          ];
 
           return {
             messageId: msg.id as string,
@@ -1826,6 +2118,15 @@ export default MSTeamsProvider;
 // Internal Helpers
 // =============================================================================
 
+interface PendingAgentSelectionAttachments {
+  senderId: string;
+  channelId: string;
+  attachments: A2AAttachment[];
+}
+
+/** How long an unanswered agent-selection card can still replay its files. */
+const AGENT_SELECTION_ATTACHMENTS_TTL_MS = 60 * 60 * 1000;
+
 /** A Teams attachment that points at a downloadable file (not a card). */
 interface TeamsFileAttachment {
   contentType: string;
@@ -1842,17 +2143,41 @@ function filterTeamsFileAttachments(
   attachments?: Array<{
     contentType?: string;
     contentUrl?: string;
-    content?: string;
+    content?: unknown;
     name?: string;
   }>,
 ): TeamsFileAttachment[] {
-  return (attachments ?? []).flatMap((a) =>
-    a.contentUrl &&
-    a.contentType &&
-    !a.contentType.startsWith("application/vnd.microsoft.card.")
+  return (attachments ?? []).flatMap((a): TeamsFileAttachment[] => {
+    // A file sent in a 1:1 chat is uploaded to the sender's OneDrive. Its
+    // `contentUrl` is the SharePoint page, which the bot cannot open; the
+    // pre-signed `downloadUrl` returns the bytes without any credential.
+    if (a.contentType === TEAMS_FILE_DOWNLOAD_INFO) {
+      const downloadUrl = readDownloadUrl(a.content);
+      return downloadUrl
+        ? [
+            {
+              contentType: mimeFromExtension(a.name ?? ""),
+              contentUrl: downloadUrl,
+              name: a.name,
+            },
+          ]
+        : [];
+    }
+    return a.contentUrl &&
+      a.contentType &&
+      !a.contentType.startsWith("application/vnd.microsoft.card.")
       ? [{ contentType: a.contentType, contentUrl: a.contentUrl, name: a.name }]
-      : [],
-  );
+      : [];
+  });
+}
+
+const TEAMS_FILE_DOWNLOAD_INFO =
+  "application/vnd.microsoft.teams.file.download.info";
+
+function readDownloadUrl(content: unknown): string | undefined {
+  if (typeof content !== "object" || content === null) return undefined;
+  const downloadUrl = (content as { downloadUrl?: unknown }).downloadUrl;
+  return typeof downloadUrl === "string" ? downloadUrl : undefined;
 }
 
 function cleanBotMention(text: string, botName?: string): string {
@@ -2030,7 +2355,8 @@ function isAllowedTeamsFileHost(
     const hostname = new URL(contentUrl).hostname;
     if (
       hostname.endsWith(".blob.core.windows.net") ||
-      hostname.endsWith(".sharepoint.com")
+      hostname.endsWith(".sharepoint.com") ||
+      isGraphUrl(contentUrl)
     ) {
       return true;
     }
@@ -2044,6 +2370,60 @@ function isAllowedTeamsFileHost(
     return false;
   }
 }
+
+const GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default";
+
+const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
+
+/** How Graph lists a file shared in a Teams message: a link to SharePoint. */
+const GRAPH_REFERENCE_ATTACHMENT = "reference";
+
+/** Channels and group chats keep files in SharePoint, reachable via Graph. */
+function isGraphFileConversation(conversationType?: string): boolean {
+  return conversationType === "channel" || conversationType === "groupChat";
+}
+
+function pathSegments(pathname: string): string[] {
+  return pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => decodeURIComponent(segment));
+}
+
+function encodeGraphPath(segments: string[]): string {
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+/** An https URL on the Microsoft Graph host, the only one the Graph token may reach. */
+function isGraphUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" && parsed.hostname === "graph.microsoft.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Images pasted inline into a message, read from its Graph HTML body. Graph
+ * never lists them in `attachments`: each is an `<img>` pointing at the
+ * message's hosted content, so thread history would otherwise drop them.
+ */
+function extractHostedContentImages(html?: string): ChatThreadMessageFile[] {
+  if (!html) return [];
+  const files: ChatThreadMessageFile[] = [];
+  for (const match of html.matchAll(/<img\b[^>]*?\bsrc="([^"]+)"/gi)) {
+    const url = match[1].replaceAll("&amp;", "&");
+    if (isGraphUrl(url) && HOSTED_CONTENT_PATH.test(new URL(url).pathname)) {
+      files.push({ url, mimetype: "image/*" });
+    }
+  }
+  return files;
+}
+
+const HOSTED_CONTENT_PATH = /\/hostedContents\/[^/]+\/\$value$/;
 
 function safeHostname(url: string): string {
   try {

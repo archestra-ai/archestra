@@ -92,78 +92,12 @@ an organization has been loaded. Three seams handle those:
 - `enrichOpenApiWithRbac()` — OpenAPI `description`/`summary`, per request,
   because route schemas register before the branding singleton syncs.
 
-# Terraform Provider Compatibility and Updates
+# Terraform Provider Updates
 
-Two workflows keep `archestra-ai/terraform-provider-archestra` in step with the
-platform API in `docs/openapi.json`.
-
-## Compatibility check
-
-`.github/workflows/terraform-provider-compatibility.yml` checks provider `main`
-against the spec of a pull request. It runs when a pull request changes one of:
-
-- `docs/openapi.json`
-- `platform/scripts/check-terraform-provider.py` or `platform/scripts/terraform-provider/`
-- the compatibility, updater or `on-pull-requests.yml` workflow
-
-It does not run in the merge queue. It is not a required check: a failure shows
-red on the pull request but does not block the merge. For now, do not add it to
-the branch protection required checks.
-
-To run it by hand, open **Actions → Terraform Provider Compatibility → Run
-workflow**. The button appears only after the workflow is on the default
-branch. Both inputs are prefilled with `main` and accept a branch, tag or
-commit SHA:
-
-- `platform_ref`: the platform revision whose `docs/openapi.json` is checked.
-  The run reads only that file from it, so it can be older than the checker:
-  the scripts come from the workflow branch.
-- `provider_ref`: the provider revision to check. It must be a branch or tag of
-  the provider repository, or a commit on one of them. A commit that exists only
-  in a fork's pull request is refused, because the check runs provider code and
-  a run from `main` shares the default branch's cache.
-
-The run summary shows the commits that were checked. Manual runs do not cancel
-each other; a new push to a pull request cancels its older run.
-
-The checker:
-
-1. Copies the provider and runs its own `make codegen-api-client` (and
-   `codegen-credential-client` if the Makefile has it) with `OPENAPI_SPEC` and
-   `ARCHESTRA_OPENAPI_SPEC` set to the selected spec.
-2. Confirms that generation read that spec: the SHA-256 of
-   `.codegen/openapi.raw.json` (and `.codegen/credentials-source.json` for the
-   two-client layout) must match it.
-3. Builds the provider's real agent, gateway and catalog create and update
-   request bodies in an untouched copy and validates them against the request
-   schemas, including the first update after an import. Nothing is sent to a
-   server. A retired field such as `teams` fails.
-4. Runs the provider unit tests against the regenerated client.
-
-Exit codes:
-
-| Exit | Meaning |
-| ---- | ------- |
-| 0 | Requests match the spec, and the provider builds and passes its unit tests with the regenerated client. |
-| 1 | The provider is not compatible: a request does not match, generation fails on the spec, or the build or unit tests fail. |
-| 2 | The check could not run. Most often the provider revision does not read `OPENAPI_SPEC`; offline generation starts with provider v3. |
-
-The check uses provider `main`, so a red run can come from drift that is
-already on provider `main`, not from the pull request. Fix request mismatches
-on provider `main`. Fix build or unit-test failures with the regenerated client
-in the provider update pull request (see below).
-
-The check needs no credentials, platform server or Terraform apply. It does not
-cover nested payloads or full resource lifecycles; the provider acceptance tests
-do.
-
-Run it locally from `platform/`:
-
-```bash
-python3 scripts/check-terraform-provider.py --provider /path/to/terraform-provider-archestra
-python3 scripts/check-terraform-provider.py --provider /path/to/terraform-provider-archestra --spec /path/to/openapi.json
-python3 -m unittest discover -s scripts/terraform-provider -p 'test_*.py'
-```
+One workflow keeps `archestra-ai/terraform-provider-archestra` in step with the
+platform API in `docs/openapi.json`. Pull requests here are not checked against
+the provider. API changes reach the provider through the update pull request
+for the next release, and provider CI tests them there against that release.
 
 ## Provider update pull requests
 
@@ -171,7 +105,8 @@ python3 -m unittest discover -s scripts/terraform-provider -p 'test_*.py'
 for the latest platform release, sets `platform-version.txt` to that release
 and opens or updates a pull request on the provider branch
 `automation/platform-api`. It runs daily at 06:37 UTC, on pushes to `main` that
-change the spec, this workflow or the scripts above, and by hand on `main`.
+change the spec, this workflow or `platform/scripts/terraform-provider/`, and by
+hand on `main`.
 
 The release is the version in `docs/openapi.json` on `main`. The spec comes from
 that release's `platform-v<version>` tag, not from `main`: provider CI
@@ -209,9 +144,15 @@ a run skips with a notice and the next run proposes the release.
   `main` is the new starting point.
 
 The updater needs `platform-version.txt` on provider `main`. Without it, each
-run ends with a warning that says so, and nothing is published. The
-compatibility check does not need the file.
+run ends with a warning that says so, and nothing is published. It also needs
+provider `main` to read `OPENAPI_SPEC` in `make codegen-api-client`, which
+starts with provider v3.
 
 The tests in `platform/scripts/terraform-provider/` use bare Git repositories and
 a stub `gh`. They cover pull request creation after a failed build, unchanged
 output, reruns, kept commits, conflicts and recovery, without writing to GitHub.
+Run them from `platform/`:
+
+```bash
+python3 -m unittest discover -s scripts/terraform-provider -p 'test_*.py'
+```

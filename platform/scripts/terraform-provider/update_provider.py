@@ -7,7 +7,6 @@ provider code. The candidate's tests run only in the unprivileged prepare job.
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,14 +19,63 @@ BRANCH = "automation/platform-api"
 REPOSITORY = "archestra-ai/terraform-provider-archestra"
 CLIENTS = ("internal/client/archestra_client.go", "internal/client/archestra_client_manual.go")
 MANIFEST = "platform-api.json"
-checker = importlib.util.spec_from_file_location(
-    "compatibility", Path(__file__).resolve().parents[1] / "check-terraform-provider.py")
-runner = importlib.util.module_from_spec(checker)
-checker.loader.exec_module(runner)
+
+
+class OfflineGenerationError(ValueError):
+    pass
+
+
+class ClientGenerationError(ValueError):
+    pass
+
+
+def clean_env():
+    env = os.environ | {"GOFLAGS": "-mod=readonly", "TF_ACC": ""}
+    for key in ("GH_TOKEN", "GITHUB_TOKEN", "ARCHESTRA_API_KEY", "ARCHESTRA_BASE_URL"):
+        env.pop(key, None)
+    return env
+
+
+def verify_source(source, selected_hash):
+    if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != selected_hash:
+        raise OfflineGenerationError(
+            "Provider main does not read OPENAPI_SPEC in make codegen-api-client; "
+            "the updater needs offline generation (provider v3 or later)."
+        )
+
+
+def has_credential_target(makefile):
+    # Inspect declarations only; never execute tooling to discover the layout.
+    return bool(re.search(r"^codegen-credential-client\s*:(?!=)", makefile, re.M))
+
+
+def generate_client(*, provider, spec, env):
+    # The provider owns normalization, operation selection, flags and bridges.
+    # Run its canonical pipeline only in the isolated trusted checkout copy.
+    selected_hash = hashlib.sha256(spec.read_bytes()).hexdigest()
+    credential = has_credential_target((provider / "Makefile").read_text())
+    targets = ["codegen-api-client"] + (["codegen-credential-client"] if credential else [])
+    result = subprocess.run(
+        ["make", "-C", str(provider), *targets],
+        env=env | {"OPENAPI_SPEC": str(spec.resolve()),
+                   "ARCHESTRA_OPENAPI_SPEC": str(spec.resolve()),
+                   "ARCHESTRA_BASE_URL": "http://127.0.0.1:9"},
+    )
+    # Provider main reads OPENAPI_SPEC, so a failed make is a codegen failure,
+    # even when it stops before writing the raw spec.
+    if result.returncode:
+        raise ClientGenerationError(
+            f"Client generation failed for the selected spec (make exit {result.returncode}); "
+            "the provider's codegen must handle this API change."
+        )
+    verify_source(provider / ".codegen/openapi.raw.json", selected_hash)
+    if credential:
+        verify_source(provider / ".codegen/credentials-source.json", selected_hash)
+    print(f"All generated-client source SHA256 hashes match the selected spec: {selected_hash}", flush=True)
 
 
 def clients(makefile):
-    return CLIENTS if runner.has_credential_target(makefile) else CLIENTS[:1]
+    return CLIENTS if has_credential_target(makefile) else CLIENTS[:1]
 
 
 def git(repo, *args, check=True):
@@ -65,7 +113,7 @@ def generate(tools, candidate, spec):
     with tempfile.TemporaryDirectory(prefix="provider-codegen-") as work:
         copy = Path(work) / "provider"
         shutil.copytree(tools, copy, ignore=shutil.ignore_patterns(".git", ".codegen", "crossplane"))
-        runner.generate_client(provider=copy, spec=spec, env=runner.clean_env())
+        generate_client(provider=copy, spec=spec, env=clean_env())
         for name in clients((tools / "Makefile").read_text()):
             shutil.copyfile(copy / name, candidate / name)
 
@@ -136,7 +184,7 @@ def prepare_candidate(args, repo, out):
     # Test failure is evidence attached to the PR, not a prerequisite for repair.
     with (out / "tests.log").open("w") as log:
         tests = subprocess.run(["go", "-C", str(repo), "test", "./...", "-count=1", "-timeout=120s"],
-                               env=runner.clean_env(), stdout=log, stderr=subprocess.STDOUT)
+                               env=clean_env(), stdout=log, stderr=subprocess.STDOUT)
     metadata.update({"test_exit": tests.returncode, "changed": bool(patch),
                      "generator_commit": generator_commit,
                      "platform_commit": sha(args.platform_commit), "version": version})

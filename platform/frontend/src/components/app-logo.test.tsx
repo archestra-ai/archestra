@@ -67,7 +67,7 @@ describe("AppLogo", () => {
     expect(screen.queryByText("Archestra.AI")).not.toBeInTheDocument();
   });
 
-  it("uses stable dimensions for the default logo and marks it decorative", () => {
+  it("renders the default wordmark with the brand name as alt text", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     mockUseOrgTheme.mockReturnValue({
       isLoadingAppearance: false,
@@ -77,9 +77,8 @@ describe("AppLogo", () => {
 
     const { container } = render(<AppLogo />);
 
-    // Decorative (alt="") because the app name is visible text beside it
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("alt", "");
-    expect(screen.getByText("Archestra.AI")).toBeInTheDocument();
+    expect(img).toHaveAttribute("alt", "Archestra.AI");
+    expect(img).toHaveAttribute("src", "/logo.svg");
   });
 });

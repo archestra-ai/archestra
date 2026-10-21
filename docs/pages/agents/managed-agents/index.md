@@ -8,7 +8,7 @@ lastUpdated: 2026-10-21
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A managed agent gets a dedicated runtime: its own container, running an agent such as Claude Code or Hermes. You get a live terminal, and the files persist. Send follow-ups and continue later with the same files.
+A managed agent gets a dedicated runtime: its own container, running an agent such as Claude Code or Codex. You get a live terminal, and the files persist. Send follow-ups and continue later with the same files.
 
 Managed Agents become available when your Kubernetes cluster serves the Agent Sandbox API. They need persistent storage and the [Agent Sandbox controller](/docs/agents/managed-agents/setup#cluster-prerequisites). See [Setup](/docs/agents/managed-agents/setup).
 

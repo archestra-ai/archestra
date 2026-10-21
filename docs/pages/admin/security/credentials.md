@@ -29,7 +29,7 @@ A **GitHub user credential** links your account to an organization-managed App. 
 
 The organization App needs an OAuth client ID and client secret for personal authorization. Register `<frontend URL>/settings/credentials/github/callback` as its callback URL. Keep expiring user authorization tokens enabled. Personal authorization requires writable secret storage.
 
-GitHub user credentials and installation credentials have separate ownership policies. Interactive managed agents can use personal credentials. Unattended agents can use the organization's installation credential.
+GitHub user credentials and installation credentials have separate ownership policies. Interactive agents can use personal credentials. Unattended agents can use the organization's installation credential.
 
 ## Ownership
 

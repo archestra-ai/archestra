@@ -20,7 +20,20 @@ All targets inherit the same tools from `agent-base`:
 | Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
 | Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
 | Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
-| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, C/C++ build tools, tmux |
+| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
+| Local database | PostgreSQL 18 with pgvector, from the PostgreSQL project's Debian repository |
+
+These are enough to run the Archestra platform itself from a checkout, without
+Docker or Kubernetes. The Rust toolchain is read-only; Cargo's registry and
+`cargo install` output go to `~/.cargo`. PostgreSQL ships without a cluster: an
+agent runs `initdb` under HOME, and the shared `/var/run/postgresql` socket
+directory lets `psql` connect without flags.
+
+`environment.md` describes this machine to the agent: where to work, what is
+installed, and how to install more without root. Every maintained launcher
+appends it to the Agent's instructions (`archestra-agent-instructions`), after
+the platform's own section on persistent files and forwarded ports. Update it
+whenever the image's tools change.
 
 Browser tools live in `/opt/agent-tools`, with their commands exposed on PATH.
 Python scripts importing Playwright can use `/opt/agent-tools/bin/python`;
@@ -98,6 +111,14 @@ invocation, including Git credential-helper calls. Custom clients that cache
 a token must adopt the file contract described in `runtime-contract.md`. GitHub SSH clone URLs are normalized
 to that authenticated HTTPS transport, so a catalog Agent does not also need a
 separate SSH key.
+
+Initialization also reads the credential's GitHub account (`GET /user`) on
+every turn and sets the global Git author to its name and
+`<id>+<login>@users.noreply.github.com`, so commits in any repository link to
+that account. A rejected credential stops the run with
+`github_credential_rejected` before the client starts. Tokens without a user
+profile, such as GitHub App installation tokens, and an unreachable API leave
+the author unset and do not block the run.
 
 The five public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package

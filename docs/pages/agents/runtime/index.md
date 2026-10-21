@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -61,18 +61,18 @@ What to know:
 
 ### Clone a Private GitHub Repository
 
-The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands, including `git clone`.
+Give a built-in coding agent a `GITHUB_TOKEN`, and it can clone, commit, push, and open pull requests as that token's GitHub account.
 
 1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
 3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
-4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the Agent's container.
+4. Save the agent, start a new run, and ask it to clone the repository, make a change, and open a pull request. The pull request's commits show the token's GitHub account as their author. If GitHub rejects the token, the run stops before the agent starts.
 
 What to know:
 
 - For a token used only by this agent, choose **Resource-specific secret** instead. Secret values are provided after saving; turn on **Required variable** to have Chat prompt for a missing value before a run.
 - **Accept credentials from a connected client** controls [credential transfers during handoff](/docs/agents/runtime/handoff#pass-a-credential). It is not required for secrets configured under **Environment**.
-- To compile code with an additional toolchain, such as Go, [extend the agent image](/docs/agents/runtime/custom-images#add-a-toolchain).
+- The built-in images include Node.js, Python, Rust, and PostgreSQL with pgvector. To compile code with another toolchain, such as Go, [extend the agent image](/docs/agents/runtime/custom-images#add-a-toolchain).
 
 ## Run a Task
 

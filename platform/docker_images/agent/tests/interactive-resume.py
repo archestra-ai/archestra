@@ -57,6 +57,9 @@ class InteractiveResumeTest(unittest.TestCase):
                 image_bin.mkdir()
                 entrypoint = image_bin / "archestra-claude-code"
                 entrypoint.write_text((BIN / "archestra-claude-code").read_text())
+                (image_bin / "archestra-agent-instructions").symlink_to(
+                    BIN / "archestra-agent-instructions"
+                )
                 (image_bin / "archestra-claude-tui-start").write_text(
                     'import os, sys\ntask = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")\n'
                     'os.execvp(sys.argv[1], sys.argv[1:] + ([task] if task else []))\n'

@@ -105,8 +105,9 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
     exit 78
   fi
 fi
-if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
-  args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
+system_prompt="$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")"
+if [[ -n "${system_prompt}" ]]; then
+  args+=(--append-system-prompt "${system_prompt}")
 fi
 
 # Claude Code knows when it is waiting for a person. Reflect its native hook

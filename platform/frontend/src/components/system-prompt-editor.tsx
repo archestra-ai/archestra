@@ -367,11 +367,8 @@ function PerTurnHelperWarning() {
         {SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentTime}
       </code>{" "}
       changes the instruction on every turn, which disables prompt caching and
-      makes conversations cost more. Use{" "}
-      <code className="font-mono">
-        {SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentDate}
-      </code>{" "}
-      unless the agent needs the exact time.
+      makes conversations cost more. Leave it out unless the agent needs the
+      exact time.
     </output>
   );
 }

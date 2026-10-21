@@ -1,6 +1,3 @@
-const SUBSCRIPTION_PREAMBLE =
-  "You are Claude Code, Anthropic's official CLI for Claude.";
-
 /**
  * Desktop's native health checks and title generation omit the client preamble
  * its CLI-backed inference sends. Anthropic rejects those subscription calls
@@ -32,3 +29,6 @@ export function withClaudeDesktopSubscriptionPreamble<T>(request: T): T {
     system: [{ type: "text", text: SUBSCRIPTION_PREAMBLE }, ...blocks],
   };
 }
+
+const SUBSCRIPTION_PREAMBLE =
+  "You are Claude Code, Anthropic's official CLI for Claude.";

@@ -5,7 +5,6 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   InteractionModel,
-  McpServerModel,
   McpToolCallModel,
   OrganizationModel,
   UserOnboardingSeenItemModel,
@@ -106,45 +105,6 @@ const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await forwardSurveyToWebsite(body);
       }
       return reply.send({ ok: true });
-    },
-  );
-
-  fastify.get(
-    "/api/onboarding/feedback-popup-activation",
-    {
-      schema: {
-        operationId: RouteId.GetFeedbackPopupActivation,
-        description:
-          "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened, and always null on enterprise-licensed instances.",
-        tags: ["Onboarding"],
-        response: constructResponseSchema(
-          z.object({ activatedAt: z.string().datetime().nullable() }),
-        ),
-      },
-    },
-    async (_request, reply) => {
-      // Never nudge licensed customers for feedback (raw env flag, same gate
-      // as the first-login survey), and respect the analytics opt-out — a
-      // deployment that disabled phone-home shouldn't be asked to phone home.
-      if (config.enterpriseFeatures.core || !config.analytics.enabled) {
-        return reply.send({ activatedAt: null });
-      }
-      const [firstServerAt, firstSuccessfulCallAt] = await Promise.all([
-        McpServerModel.getFirstCreatedAt(),
-        McpToolCallModel.getFirstSuccessfulToolCallAt(),
-      ]);
-      // Activation is complete only once both signals exist; it happened when
-      // the later of the two did.
-      const activatedAt =
-        firstServerAt && firstSuccessfulCallAt
-          ? new Date(
-              Math.max(
-                firstServerAt.getTime(),
-                firstSuccessfulCallAt.getTime(),
-              ),
-            )
-          : null;
-      return reply.send({ activatedAt: activatedAt?.toISOString() ?? null });
     },
   );
 };

@@ -1499,6 +1499,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  // Config reads match their writes so Terraform-style drift checks need no
+  // more access than the apply.
+  [RouteId.GetSlackChatOpsConfig]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.GetMsTeamsChatOpsConfig]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.ListSlackAgentBots]: {
     organizationSettings: ["read"],
   },
@@ -1536,6 +1544,9 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.GetTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
   // Any authenticated user can link or unlink their own Telegram account
@@ -1705,6 +1716,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryInstall]: { guardrailsPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
@@ -1716,6 +1728,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetOpenappaCredentialBinding]: {
     guardrailsPolicy: ["update"],
   },
+  [RouteId.GetOpenappaCredentialBindings]: { guardrailsPolicy: ["update"] },
+  [RouteId.GetOpenappaCredentialBinding]: { guardrailsPolicy: ["update"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { guardrailsPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.

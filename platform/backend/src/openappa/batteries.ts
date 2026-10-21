@@ -41,6 +41,8 @@ import type {
   BatterySummary,
   CompositionView,
   CreateBatteryInstall,
+  CredentialBinding,
+  CredentialBindingView,
   EffectivePolicy,
   EffectivePolicyView,
   PolicyBatteryView,
@@ -122,6 +124,40 @@ class OpenAppaBatteriesService {
         installs: installsByBattery.get(battery.name) ?? [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** One install row, as {@link listBatteries} lists it under its battery. */
+  async getInstall(params: {
+    organizationId: string;
+    id: string;
+  }): Promise<BatteryInstall> {
+    const { installs } = await this.current(params.organizationId);
+    const install = installs.find((row) => row.id === params.id);
+    if (!install) throw new ApiError(404, "Battery install not found");
+    return install;
+  }
+
+  /** The organization's stored credential bindings, without any credential value. */
+  async listCredentialBindings(
+    organizationId: string,
+  ): Promise<CredentialBindingView[]> {
+    const [bindings, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.list(organizationId),
+      this.bindableKeys(organizationId),
+    ]);
+    return bindings.map((binding) => credentialBindingView(binding, bindable));
+  }
+
+  async getCredentialBinding(params: {
+    organizationId: string;
+    variable: string;
+  }): Promise<CredentialBindingView> {
+    const [binding, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.find(params),
+      this.bindableKeys(params.organizationId),
+    ]);
+    if (!binding) throw new ApiError(404, "Credential binding not found");
+    return credentialBindingView(binding, bindable);
   }
 
   /** What each battery this organization can include asks of the person setting it up. */
@@ -2345,6 +2381,20 @@ const RECOMPILE_CONCURRENCY = 4;
 const EDIT_ATTEMPTS = 3;
 /** Base wait after a lost store, doubled per attempt and jittered on top. */
 const RECOMPILE_BACKOFF_MS = 25;
+
+function credentialBindingView(
+  binding: CredentialBinding,
+  bindable: ReadonlySet<string>,
+): CredentialBindingView {
+  return {
+    variable: binding.variable,
+    credentialKey: binding.credentialKey,
+    hasValue: bindable.has(binding.credentialKey),
+    updatedBy: binding.updatedBy,
+    createdAt: binding.createdAt,
+    updatedAt: binding.updatedAt,
+  };
+}
 
 function recomposeBackoffMs(attempt: number): number {
   const delay = RECOMPILE_BACKOFF_MS * 2 ** attempt;

@@ -52,6 +52,31 @@ export const ChatOpsProviderInfoSchema = z.object({
   dmInfo: ChatOpsDmInfoSchema,
 });
 
+/**
+ * Stored chatops config as the config routes read it back: only what is not a
+ * secret, and whether the credentials the provider needs are stored.
+ */
+const ChatOpsStoredConfigBaseSchema = z.object({
+  configured: z.boolean(),
+  /** When the stored config last changed; null when none is stored. */
+  updatedAt: z.date().nullable(),
+  enabled: z.boolean(),
+});
+
+export const SlackChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    connectionMode: ChatOpsConnectionModeSchema,
+  });
+
+export const MsTeamsChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    tenantId: z.string().nullable(),
+  });
+
+export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
   providers: z.array(ChatOpsProviderInfoSchema),

@@ -98,6 +98,17 @@ function getJson(path: string, body: JsonBodyType): HttpHandler[] {
   return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
 }
 
+function notFound(path: string): HttpHandler[] {
+  return paths(path).map((url) =>
+    http.get(url, () =>
+      HttpResponse.json(
+        { error: { message: "Not found", type: "api_not_found_error" } },
+        { status: 404 },
+      ),
+    ),
+  );
+}
+
 function statisticsJson(
   path: string,
   build: (query: URLSearchParams) => JsonBodyType,
@@ -201,6 +212,11 @@ export const handlers: HttpHandler[] = [
       },
     ),
   ),
+  // Read-back routes for API clients such as Terraform; no install or binding
+  // is seeded, so single reads answer as the backend does for an unknown id.
+  ...getJson("/api/openappa/credential-bindings", []),
+  ...notFound("/api/openappa/credential-bindings/:variable"),
+  ...notFound("/api/openappa/battery-installs/:id"),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [
@@ -437,6 +453,25 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  ...getJson("/api/chatops/config/slack", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    connectionMode: "socket",
+  }),
+  ...getJson("/api/chatops/config/ms-teams", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    tenantId: null,
+  }),
+  ...getJson("/api/chatops/config/telegram", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+  }),
   // The record's Slack bot section: no bots, Slack not connected. The agent
   // edit page mounts it on every step, so it is read whichever step opens.
   ...getJson("/api/chatops/config/slack/agents", {

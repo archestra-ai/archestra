@@ -25,6 +25,11 @@ const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
 const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
 const NGROK_SECRET_NAME = "chatops-ngrok";
+const PROVIDER_SECRET_NAMES = {
+  "ms-teams": MS_TEAMS_SECRET_NAME,
+  slack: SLACK_SECRET_NAME,
+  telegram: TELEGRAM_SECRET_NAME,
+} as const;
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -49,6 +54,16 @@ class ChatOpsConfigModel {
       connectionMode: inferredMode,
       appLevelToken: raw.appLevelToken ?? "",
     };
+  }
+
+  /** When a provider's stored config last changed; null when none is stored. */
+  async getConfigUpdatedAt(
+    provider: "ms-teams" | "slack" | "telegram",
+  ): Promise<Date | null> {
+    const secretRow = await SecretModel.findByName(
+      PROVIDER_SECRET_NAMES[provider],
+    );
+    return secretRow?.updatedAt ?? null;
   }
 
   async saveMsTeamsConfig(value: MsTeamsDbConfig): Promise<void> {

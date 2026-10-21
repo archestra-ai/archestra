@@ -1849,11 +1849,14 @@ async function governedRunOutput(params: {
 }): Promise<CallToolResult | undefined> {
   const gate = await guardRuntimeCrossing(params.context);
   if (gate.kind === "inactive") return undefined;
-  if (gate.kind === "refused") return errorResult(gate.reason);
   const session = await AgentRunModel.findByTaskId(params.task.id);
   const workspace = session
     ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
     : null;
+  if (gate.kind === "refused") {
+    // A task with no runtime has no output to govern.
+    return session && workspace ? errorResult(gate.reason) : undefined;
+  }
   const withheld = () =>
     structuredSuccessResult(
       {

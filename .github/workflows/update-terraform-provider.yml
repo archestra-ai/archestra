@@ -72,8 +72,14 @@ jobs:
           fi
           # Release Please tags first and publishes the GitHub release after the
           # images. Until then provider CI cannot pull the image, so skip and let
-          # a later run propose the release.
-          published="$(gh release view "platform-v${version}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft | not' 2>/dev/null || true)"
+          # a later run propose the release. A draft is not found with this token.
+          # Any other gh error fails the run, so a broken token stays visible.
+          if ! published="$(gh release view "platform-v${version}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft | not' 2>&1)"; then
+            case "$published" in
+              *"release not found"*) published=false ;;
+              *) echo "::error::Could not read release platform-v${version}: ${published}"; exit 1 ;;
+            esac
+          fi
           if [ "$published" != "true" ]; then
             reason="platform-v${version} is not a published release yet; a later run proposes it."
             echo "::notice::$reason"

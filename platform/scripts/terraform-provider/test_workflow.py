@@ -168,7 +168,10 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
             (bin_path/'gh').write_text('#!/bin/sh\n'
                                        'test "$*" = "release view platform-v1.2.3-rc.4 --repo archestra-ai/archestra '
                                        '--json isDraft --jq .isDraft | not" || exit 9\n'
-                                       'test "$RELEASE" != missing || exit 1\necho "$RELEASE"\n')
+                                       'case "$RELEASE" in\n'
+                                       '  missing) echo "release not found" >&2; exit 1 ;;\n'
+                                       '  broken) echo "HTTP 401: Bad credentials" >&2; exit 1 ;;\n'
+                                       'esac\necho "$RELEASE"\n')
             (bin_path/'gh').chmod(0o755)
             env = os.environ | {'RUNNER_TEMP': work, 'GITHUB_OUTPUT': str(root/'output'),
                                 'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused',
@@ -182,6 +185,11 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
                 self.assertIn('skipped', json.loads((checkout/'provider-update/result.json').read_text()))
                 self.assertFalse((root/'output').exists())
                 self.assertFalse((root/'openapi-release.json').exists())
+            result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                    env=env | {'RELEASE': 'broken'})
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('::error::Could not read release platform-v1.2.3-rc.4: HTTP 401: Bad credentials', result.stdout)
+            self.assertFalse((root/'output').exists())
             subprocess.run(['bash', '-c', script], cwd=checkout, check=True, capture_output=True,
                            env=env | {'RELEASE': 'true'})
             self.assertEqual((root/'openapi-release.json').read_text(), released)

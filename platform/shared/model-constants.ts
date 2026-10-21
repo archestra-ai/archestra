@@ -569,7 +569,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   ) {
     return {
       compatible: false,
-      message: `This managed agent image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible managed agent image.`,
+      message: `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,
     };
   }
   if (
@@ -578,7 +578,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   ) {
     return {
       compatible: false,
-      message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this managed agent image.`,
+      message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
     };
   }
   return { compatible: true };
@@ -620,7 +620,7 @@ export function getAgentRuntimeModelCompatibility(params: {
   ) {
     return {
       compatible: false,
-      message: `This managed agent image uses Chat Completions, but model "${params.modelId}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
+      message: `This Agent Runtime image uses Chat Completions, but model "${params.modelId}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
     };
   }
   return { compatible: true };

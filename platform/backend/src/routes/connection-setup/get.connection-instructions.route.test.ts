@@ -90,7 +90,7 @@ test("installed connections fetch updated prompts after ticket expiry, and obser
   expect((await fetchInstructions()).statusCode).toBe(403);
 });
 
-test("unedited instructions name the deployment's own managed agents, including earlier defaults", async ({
+test("unedited instructions name the deployment's own Cloud runtime, including the earlier default", async ({
   makeMember,
   makeAgent,
 }) => {
@@ -131,15 +131,13 @@ test("unedited instructions name the deployment's own managed agents, including 
     connectionRuntimeHandoffInstructions: null,
   });
   const unedited = await fetchInstructions();
-  expect(unedited).toContain("'move this to a managed agent in Acme Platform'");
+  expect(unedited).toContain("'move this to Acme Platform Cloud runtime'");
 
-  // Earlier defaults, saved verbatim, still follow the current one.
-  for (const target of ["Cloud runtime", "Acme Platform Cloud runtime"]) {
-    await OrganizationModel.patch(ctx.organizationId, {
-      connectionRuntimeHandoffInstructions: `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${target}' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`,
-    });
-    expect(await fetchInstructions()).toBe(unedited);
-  }
+  // The default before it named the runtime, saved verbatim, still follows it.
+  await OrganizationModel.patch(ctx.organizationId, {
+    connectionRuntimeHandoffInstructions: `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`,
+  });
+  expect(await fetchInstructions()).toBe(unedited);
 });
 
 test("unsigned requests and unconsumed installations cannot read managed instructions", async ({

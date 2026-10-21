@@ -3455,7 +3455,7 @@ describe("AgentForm save payload and failure handling", () => {
     useAgentRuntimePreflightMock.mockReturnValue({
       data: {
         ready: false,
-        incompatible: "This managed agent image expects the Anthropic API.",
+        incompatible: "This Agent Runtime image expects the Anthropic API.",
         missing: [],
         misconfigured: [],
       },
@@ -3524,7 +3524,7 @@ describe("AgentForm save payload and failure handling", () => {
     useAgentRuntimePreflightMock.mockReturnValue({
       data: {
         ready: false,
-        incompatible: "This managed agent image expects the Anthropic API.",
+        incompatible: "This Agent Runtime image expects the Anthropic API.",
         missing: [],
         misconfigured: [],
       },

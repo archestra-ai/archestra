@@ -3,9 +3,9 @@ import type { BuiltInSkill } from "./built-in-skills";
 
 export const RUNTIME_HANDOFF_SKILL: BuiltInSkill = {
   builtInSkillId: "runtime-handoff",
-  name: "Agent Runtime Handoff",
-  description: `Hand work over to ${DEFAULT_APP_NAME}, spin it up there, or bring it back and resume locally. Move repository work, documents, and other ongoing tasks between a local client and Agent Runtime; preserve the same runtime session for every remote follow-up.`,
-  content: `# Agent Runtime Handoff
+  name: "Remote Agents",
+  description: `Hand work over to ${DEFAULT_APP_NAME}, spin it up there, or bring it back and resume locally. Move repository work, documents, and other ongoing tasks between a local client and a Remote Agent in ${DEFAULT_APP_NAME}; preserve the same runtime session for every remote follow-up.`,
+  content: `# Remote Agents
 
 Use this flow for "hand this over to ${DEFAULT_APP_NAME}" or "spin this up in ${DEFAULT_APP_NAME}". Reuse this work's existing runtime session. "Bring it back", "resume locally", and "continue here" mean retrieve the work and continue in this client.
 

@@ -186,6 +186,21 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+def stop_retained_client(tmux, env):
+    # A retained TUI has a separate foreground process group. Killing
+    # only tmux leaves that client writing into the temporary home.
+    pane = subprocess.run(tmux + ["display-message", "-p", "-t", "agent:0.0", "#{pane_pid}"], env=env, capture_output=True, text=True)
+    if pane.returncode == 0:
+        foreground = subprocess.run(["ps", "-o", "tpgid=", "-p", pane.stdout.strip()], capture_output=True, text=True)
+        if foreground.returncode == 0:
+            group = int(foreground.stdout.strip() or "-1")
+            if group > 0 and group != os.getpgrp():
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
 class StartupTest(unittest.TestCase):
     def test_missing_runtime_binding_is_fail_closed(self):
         self.run_client("one_shot", missing_binding=True)
@@ -367,18 +382,7 @@ class StartupTest(unittest.TestCase):
                 self.assertIsNone(status, "Interactive client exited")
             print(f"{CLIENT} {mode} plain={plain}: barrier, all recovery tools executed, transcript, exit OK", flush=True)
         finally:
-            # A retained TUI has a separate foreground process group. Killing
-            # only tmux leaves that client writing into the temporary home.
-            pane = subprocess.run(["tmux", "-L", tmux_socket, "display-message", "-p", "-t", "agent:0.0", "#{pane_pid}"], env=env, capture_output=True, text=True)
-            if pane.returncode == 0:
-                foreground = subprocess.run(["ps", "-o", "tpgid=", "-p", pane.stdout.strip()], capture_output=True, text=True)
-                if foreground.returncode == 0:
-                    group = int(foreground.stdout.strip() or "-1")
-                    if group > 0 and group != os.getpgrp():
-                        try:
-                            os.killpg(group, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
+            stop_retained_client(["tmux", "-L", tmux_socket], env)
             server.release.set()
             if status is None:
                 try:

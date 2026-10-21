@@ -200,11 +200,11 @@ a run skips with a notice and the next run proposes the release.
   pull-request write access.
 - Reruns reuse the branch and pull request, keep commits from people, push
   without force and create nothing when the output is unchanged.
-  `platform-api.json` records the spec hash, the release commit and the
-  provider `main` commit whose tools generated the client. A new spec or new tools regenerate the
-  client. While the update branch exists, changes from people to generated
-  files are kept only while both stay the same. If they conflict, the run fails
-  without changing the branch; fix the conflict on the branch, update
+  `platform-api.json` records the spec hash, the release commit and the provider
+  `main` commit whose tools generated the client. A new spec or new tools
+  regenerate the client. While the update branch exists, changes from people to
+  generated files are kept only while both stay the same. If they conflict, the
+  run fails without changing the branch; fix the conflict on the branch, update
   `platform-api.json` and run it again. After the pull request merges, provider
   `main` is the new starting point.
 

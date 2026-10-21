@@ -43,9 +43,7 @@ export const SRE_AGENT_TOOL_NAMES = [
 ] as const;
 
 /** Where the source is cloned from; its tags are `platform-v<version>`. */
-const SRE_SOURCE_REPOSITORY =
-  "https://github.com/archestra-ai/archestra";
-export const SRE_SOURCE_HOSTS = ["github.com", "codeload.github.com"];
+const SRE_SOURCE_REPOSITORY = "https://github.com/archestra-ai/archestra";
 const SRE_SOURCE_CHECKOUT = `${SKILL_SANDBOX_HOME}/archestra`;
 
 export function sreAgentSystemPrompt(params: {

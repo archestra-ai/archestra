@@ -226,10 +226,11 @@ Ask an agent why a pod keeps restarting, and it reads that pod's events and logs
 What to know:
 
 - Only Admins and Platform Admins can see and use the agent, the **Kubernetes** server, and the **SRE** environment. The server can read the specs of every MCP server pod in the namespace, and their arguments can hold resolved credentials.
-- The MCP server runs in its own **SRE** environment, whose egress allows only `apiServerCidrs`. Without them, the server reaches the API server only on clusters that do not enforce egress policies.
+- The MCP server runs in its own **SRE** environment. Its egress is your organization's [default network policy](/docs/admin/environments), or public internet with private ranges blocked when none is set, plus `apiServerCidrs`. So, like other MCP servers, the Kubernetes server can reach the internet; it runs a pinned, read-only image. Without `apiServerCidrs`, it reaches the API server only on clusters that do not enforce egress policies.
+- The policy is applied at startup. Changing `apiServerCidrs` or the default policy does not restart the MCP server pod, so connections it already holds stay open until the pod restarts.
 - Deleting the agent or its MCP server keeps it deleted across restarts, as long as the deleted item is kept. If it is permanently purged, the next start creates it again.
 - Setting `enabled: false` permanently removes the agent, the server, and the environment, including any changes you made to the agent, such as its prompt, tools, and schedules. Turning it back on creates them again from the defaults.
-- With the [code sandbox](/docs/agents#code-sandbox) on, the agent also gets its sandbox tools and clones the source of the running version from GitHub to tie errors to code. For that, the **SRE** environment also allows `github.com` and `codeload.github.com`. These domains then apply to the Kubernetes MCP server too, and they need a [supported FQDN policy provider](/docs/admin/environments); with Kubernetes `NetworkPolicy` alone, the clone fails and the agent works without the source.
+- With the [code sandbox](/docs/agents#code-sandbox) on, the agent also gets its sandbox tools and clones the source of the running version from GitHub to tie errors to code. The sandbox runs under the **SRE** environment's egress, so a default policy that blocks GitHub or the sandbox image registry blocks this too.
 - The agent appears once the server's tools are discovered. If it is missing, check the **Kubernetes** server under **MCP Registry** for a startup error.
 
 ## Collect a Support Bundle
@@ -238,10 +239,10 @@ When you report a problem, a support bundle gives us the pods, restarts, events,
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/scripts/support-bundle.sh
-bash support-bundle.sh archestra archestra
+bash support-bundle.sh <namespace> <release>
 ```
 
-It needs `kubectl`, `helm`, and `jq` with read access to the namespace, and prints the path of the `.tar.gz` it wrote.
+Find the release name with `helm list -n <namespace>`. It needs `kubectl`, `helm`, and `jq` with read access to the namespace, and prints the path of the `.tar.gz` it wrote.
 
 What to know:
 

@@ -4,11 +4,13 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
+import type * as k8s from "@kubernetes/client-node";
 import { beforeEach } from "vitest";
 import { getAppVersion } from "@/app-version";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
+import { buildDaggerEgressPolicies } from "@/k8s/dagger-environment-runtime/network-policy";
 import {
   AgentModel,
   AgentTeamModel,
@@ -17,6 +19,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  OrganizationModel,
   SreRuntimeModel,
   ToolModel,
 } from "@/models";
@@ -31,7 +34,6 @@ import {
   SRE_CATALOG_ID,
   SRE_ENVIRONMENT_ID,
   SRE_SERVER_NAME,
-  SRE_SOURCE_HOSTS,
 } from "./definition";
 import { sreAgentService } from "./index";
 
@@ -64,7 +66,7 @@ describe("sreAgentService", () => {
       organizationId,
       namespace: null,
       networkPolicy: {
-        egressMode: "restricted",
+        egressMode: "unrestricted",
         allowedDomains: [],
         allowedCidrs: ["10.0.0.1/32"],
       },
@@ -82,6 +84,65 @@ describe("sreAgentService", () => {
     const servers = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     expect(servers).toHaveLength(1);
     expect(servers[0]).toMatchObject({ scope: "org", ownerId: adminId });
+  });
+
+  test("the environment gets the built-in public-internet floor plus only the API server", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    await seedAdmin({ makeOrganization, makeUser, makeMember });
+    await sreAgentService.seed();
+    const environment = await EnvironmentModel.findById(SRE_ENVIRONMENT_ID);
+
+    const [policy] = buildDaggerEgressPolicies({
+      environmentId: SRE_ENVIRONMENT_ID,
+      effectivePolicy: {
+        source: "environment",
+        policy: environment?.networkPolicy ?? null,
+      },
+    });
+    const [builtIn] = buildDaggerEgressPolicies({
+      environmentId: SRE_ENVIRONMENT_ID,
+      effectivePolicy: { source: "built_in", policy: null },
+    });
+
+    const egress = (object: typeof policy) =>
+      (object.object as k8s.V1NetworkPolicy).spec?.egress ?? [];
+    expect(egress(policy)).toEqual([
+      ...egress(builtIn),
+      { to: [{ ipBlock: { cidr: "10.0.0.1/32" } }] },
+    ]);
+  });
+
+  test("the environment keeps the organization's default egress and adds the API server", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const defaultPolicy = {
+      egressMode: "restricted" as const,
+      domainPreset: "package_managers" as const,
+      allowedDomains: ["registry.npmjs.org"],
+      allowedCidrs: ["203.0.113.0/24"],
+    };
+    await OrganizationModel.patch(organizationId, {
+      defaultNetworkPolicy: defaultPolicy,
+    });
+
+    await sreAgentService.seed();
+
+    expect(
+      (await EnvironmentModel.findById(SRE_ENVIRONMENT_ID))?.networkPolicy,
+    ).toEqual({
+      ...defaultPolicy,
+      allowedCidrs: ["203.0.113.0/24", "10.0.0.1/32"],
+    });
   });
 
   test("re-applies the configured egress and service account on the next start", async ({
@@ -486,10 +547,6 @@ describe("sreAgentService", () => {
         archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME),
       ),
     ).toBe(sandbox);
-    const environment = await EnvironmentModel.findById(SRE_ENVIRONMENT_ID);
-    expect(environment?.networkPolicy?.allowedDomains).toEqual(
-      sandbox ? SRE_SOURCE_HOSTS : [],
-    );
     const agent = await AgentModel.findById(SRE_AGENT_ID);
     const rendered = renderSystemPrompt(agent?.systemPrompt ?? null, {
       user: { name: "", email: "", role: "", teams: [] },

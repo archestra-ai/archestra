@@ -33,7 +33,6 @@ import {
   SRE_ENVIRONMENT_NAME,
   SRE_OPENAPPA_BATTERY,
   SRE_SERVER_NAME,
-  SRE_SOURCE_HOSTS,
   sreAgentSystemPrompt,
   sreLocalConfig,
 } from "./definition";
@@ -306,8 +305,7 @@ class SreAgentService {
     const catalog = await SreRuntimeModel.findCatalog(SRE_CATALOG_ID);
     if (catalog?.deletedAt) return;
 
-    const networkPolicy = sreNetworkPolicy(config.sreAgent.apiServerCidrs);
-    if (!networkPolicy) {
+    if (config.sreAgent.apiServerCidrs.length === 0) {
       logger.warn(
         "ARCHESTRA_SRE_APISERVER_CIDRS is empty; the SRE MCP server can reach the Kubernetes API only where egress is not enforced",
       );
@@ -315,10 +313,11 @@ class SreAgentService {
     const localConfig = sreLocalConfig(serviceAccount);
 
     if (catalog) {
+      const organizationId = catalog.organizationId ?? "";
       await EnvironmentModel.update({
         id: SRE_ENVIRONMENT_ID,
-        organizationId: catalog.organizationId ?? "",
-        networkPolicy,
+        organizationId,
+        networkPolicy: await sreNetworkPolicy(organizationId),
       });
       await InternalMcpCatalogModel.update(catalog.id, { localConfig });
       // No install row at all, not even an uninstalled one: an earlier run
@@ -342,7 +341,7 @@ class SreAgentService {
         organizationId: organization.id,
         name: SRE_ENVIRONMENT_NAME,
         description: "Runs the SRE agent's read-only Kubernetes MCP server.",
-        networkPolicy,
+        networkPolicy: await sreNetworkPolicy(organization.id),
         authorId: adminUserId,
         initialPermissionGrants: SRE_ADMIN_GRANTS,
       });
@@ -384,12 +383,32 @@ const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
   PLATFORM_ADMIN_ROLE_NAME,
 ].map((id) => ({ subject: { type: "role", id }, actions: ["read", "use"] }));
 
-function sreNetworkPolicy(apiServerCidrs: string[]): NetworkPolicy | null {
+/**
+ * The organization's default egress (or the built-in public-internet floor)
+ * plus the API server, which the floor's private-range block would otherwise
+ * cut off. Without API server CIDRs the environment simply inherits the default.
+ */
+async function sreNetworkPolicy(
+  organizationId: string,
+): Promise<NetworkPolicy | null> {
+  const apiServerCidrs = config.sreAgent.apiServerCidrs;
   if (apiServerCidrs.length === 0) return null;
-  return {
-    egressMode: "restricted",
+  const base: NetworkPolicy = (await OrganizationModel.getDefaultNetworkPolicy(
+    organizationId,
+  )) ?? {
+    egressMode: "unrestricted",
     domainPreset: "none",
-    allowedDomains: config.skillsSandbox.enabled ? SRE_SOURCE_HOSTS : [],
-    allowedCidrs: apiServerCidrs,
+    allowedDomains: [],
+    allowedCidrs: [],
+  };
+  if (base.egressMode === "off") {
+    logger.warn(
+      "The organization's default egress is off; the SRE MCP server cannot reach the Kubernetes API",
+    );
+    return base;
+  }
+  return {
+    ...base,
+    allowedCidrs: [...new Set([...base.allowedCidrs, ...apiServerCidrs])],
   };
 }

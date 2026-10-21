@@ -5,6 +5,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -159,6 +160,120 @@ describe("sreAgentService", () => {
     expect(
       (await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).sort(),
     ).toEqual(expectedToolIds);
+  });
+
+  test("version 1 of the agent already has its tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+
+    await sreAgentService.ensureAgent({
+      organizationId,
+      authorId: adminId,
+      mcpServerId: server.id,
+    });
+
+    const version = await AgentVersionModel.findByAgentAndVersion({
+      agentId: SRE_AGENT_ID,
+      version: 1,
+      organizationId,
+    });
+    expect(version?.snapshot.tools).toHaveLength(SRE_AGENT_TOOL_NAMES.length);
+  });
+
+  test("an agent an interrupted run left without tools gets them; an admin's later removal stays", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    const tools = await discoverTools(SRE_AGENT_TOOL_NAMES);
+    await AgentModel.create(
+      {
+        id: SRE_AGENT_ID,
+        organizationId,
+        name: "SRE",
+        agentType: "agent",
+      },
+      adminId,
+      { skipCreationDefaultTools: true },
+    );
+    const ensure = () =>
+      sreAgentService.ensureAgent({
+        organizationId,
+        authorId: adminId,
+        mcpServerId: server.id,
+      });
+
+    await ensure();
+    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).toHaveLength(
+      SRE_AGENT_TOOL_NAMES.length,
+    );
+
+    await AgentToolModel.delete({
+      agentId: SRE_AGENT_ID,
+      toolId: tools[0].id,
+    });
+    await ensure();
+    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).not.toContain(
+      tools[0].id,
+    );
+  });
+
+  test("no agent is created for an install uninstalled during discovery", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+    await McpServerModel.delete(server.id);
+
+    await sreAgentService.ensureAgent({
+      organizationId,
+      authorId: adminId,
+      mcpServerId: server.id,
+    });
+
+    expect(await SreRuntimeModel.findAgent(SRE_AGENT_ID)).toBeNull();
+  });
+
+  test("a catalog item left without any install by an interrupted run gets one", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    await seedAdmin({ makeOrganization, makeUser, makeMember });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    await McpServerModel.hardDelete(server.id);
+
+    await sreAgentService.seed();
+
+    const servers = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    expect(servers).toHaveLength(1);
+    expect(servers[0].id).not.toBe(server.id);
   });
 
   test("an agent an admin deleted is not created again", async ({

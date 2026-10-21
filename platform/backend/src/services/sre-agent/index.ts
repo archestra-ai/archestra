@@ -6,6 +6,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -117,14 +118,16 @@ class SreAgentService {
 
   /**
    * Creates the agent with exactly the SRE tools, only when every one of them
-   * was discovered and the agent was never created before.
+   * was discovered and the agent was never created before. An agent left with
+   * none of them by an interrupted earlier run gets them now.
    */
   async ensureAgent(params: {
     organizationId: string;
     authorId: string | null;
     mcpServerId: string;
   }): Promise<void> {
-    if (await SreRuntimeModel.findAgent(SRE_AGENT_ID)) return;
+    const existing = await SreRuntimeModel.findAgent(SRE_AGENT_ID);
+    if (existing?.deletedAt) return;
 
     const tools = await SreRuntimeModel.findToolsByRawName({
       catalogId: SRE_CATALOG_ID,
@@ -140,29 +143,47 @@ class SreAgentService {
       return;
     }
 
-    const agent = await AgentModel.create(
-      {
-        id: SRE_AGENT_ID,
-        organizationId: params.organizationId,
-        name: SRE_AGENT_NAME,
-        agentType: "agent",
-        description:
-          "Investigates this installation's pods, logs, and events in Kubernetes, read-only.",
-        systemPrompt: sreAgentSystemPrompt({
-          appName: archestraMcpBranding.appName,
-          namespace: config.orchestrator.kubernetes.namespace,
-        }),
-        environmentId: SRE_ENVIRONMENT_ID,
-      },
-      params.authorId ?? undefined,
-      { publishToOrganization: true, skipCreationDefaultTools: true },
-    );
-    await AgentToolModel.bulkCreateForAgentsAndTools(
-      [agent.id],
-      tools.map(({ id }) => id),
-      { mcpServerId: params.mcpServerId },
-    );
-    logger.info({ agentId: agent.id }, "Created the SRE agent");
+    const toolIds = tools.map(({ id }) => id);
+    if (existing) {
+      const assigned = new Set(
+        await AgentToolModel.findToolIdsByAgent(existing.id),
+      );
+      // Any SRE tool assigned means setup completed; what an admin changed
+      // since then stays.
+      if (toolIds.some((id) => assigned.has(id))) return;
+    }
+    // An admin may have uninstalled the server while discovery ran.
+    if (!(await this.isInstallLive(params.mcpServerId))) return;
+
+    if (!existing) {
+      await AgentModel.create(
+        {
+          id: SRE_AGENT_ID,
+          organizationId: params.organizationId,
+          name: SRE_AGENT_NAME,
+          agentType: "agent",
+          description:
+            "Investigates this installation's pods, logs, and events in Kubernetes, read-only.",
+          systemPrompt: sreAgentSystemPrompt({
+            appName: archestraMcpBranding.appName,
+            namespace: config.orchestrator.kubernetes.namespace,
+          }),
+          environmentId: SRE_ENVIRONMENT_ID,
+        },
+        params.authorId ?? undefined,
+        {
+          publishToOrganization: true,
+          skipCreationDefaultTools: true,
+          deferInitialVersionFork: true,
+        },
+      );
+    }
+    await AgentToolModel.bulkCreateForAgentsAndTools([SRE_AGENT_ID], toolIds, {
+      mcpServerId: params.mcpServerId,
+    });
+    // Version 1 includes the tools, so restoring it keeps them.
+    await AgentVersionModel.forkIfChangedBestEffort(SRE_AGENT_ID);
+    logger.info({ agentId: SRE_AGENT_ID }, "Set up the SRE agent");
     if (params.authorId) {
       await this.bindOpenappaBattery({
         organizationId: params.organizationId,
@@ -199,6 +220,27 @@ class SreAgentService {
   }
 
   // === Internal helpers ===
+
+  private async createInstall(ownerId: string | null): Promise<void> {
+    await McpServerModel.create({
+      name: SRE_SERVER_NAME,
+      catalogId: SRE_CATALOG_ID,
+      serverType: "local",
+      scope: "org",
+      ownerId,
+      teamId: null,
+    });
+  }
+
+  private async isInstallLive(mcpServerId: string): Promise<boolean> {
+    const [catalog, server] = await Promise.all([
+      SreRuntimeModel.findCatalog(SRE_CATALOG_ID),
+      McpServerModel.findById(mcpServerId),
+    ]);
+    return (
+      !!catalog && !catalog.deletedAt && server?.catalogId === SRE_CATALOG_ID
+    );
+  }
 
   /**
    * Governs the SRE tools with the OpenAPPA kubernetes battery when it is
@@ -261,6 +303,11 @@ class SreAgentService {
         networkPolicy,
       });
       await InternalMcpCatalogModel.update(catalog.id, { localConfig });
+      // No install row at all, not even an uninstalled one: an earlier run
+      // stopped between the catalog item and its install.
+      if ((await SreRuntimeModel.findServerIds(catalog.id)).length === 0) {
+        await this.createInstall(catalog.authorId);
+      }
       return;
     }
 
@@ -298,14 +345,7 @@ class SreAgentService {
         publishToOrganization: true,
       },
     );
-    await McpServerModel.create({
-      name: SRE_SERVER_NAME,
-      catalogId: SRE_CATALOG_ID,
-      serverType: "local",
-      scope: "org",
-      ownerId: adminUserId,
-      teamId: null,
-    });
+    await this.createInstall(adminUserId);
     logger.info(
       { organizationId: organization.id },
       "Seeded the SRE MCP server",

@@ -12545,7 +12545,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       const text = first.json().content[0].text;
       const footer = text.match(
-        /▄█▄▄▄█▄\n██▄█▄██\s+started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\./,
+        /▄█▄▄▄█▄\s+started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\./,
       )?.[0];
       expect(footer).toBeDefined();
       options = {

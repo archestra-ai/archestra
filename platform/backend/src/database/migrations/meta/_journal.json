@@ -4110,6 +4110,13 @@
       "when": 1792594889854,
       "tag": "0586_normal_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 587,
+      "version": "7",
+      "when": 1792615407451,
+      "tag": "0587_salty_paibok",
+      "breakpoints": true
     }
   ]
 }

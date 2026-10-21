@@ -498,6 +498,32 @@ describe("ModelsPage", () => {
     expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
   });
 
+  it("loads the selected instance's prices and keeps an unknown cache direction visible", async () => {
+    keyCreated = true;
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(`apiKey=${providerKey.id}`) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, ({ request }) => {
+        const selected = new URL(request.url).searchParams.get("apiKeyIds");
+        return HttpResponse.json([
+          {
+            ...model,
+            pricePerMillionInput: selected === providerKey.id ? "2" : null,
+            pricePerMillionOutput: selected === providerKey.id ? "8" : null,
+            pricePerMillionCacheRead: "0.5",
+            pricePerMillionCacheWrite: null,
+          },
+        ]);
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("$2.00 / $8.00")).toBeVisible();
+    expect(screen.getByText("$0.50 / -")).toBeVisible();
+  });
+
   it("hydrates filter state from the URL query params", async () => {
     keyCreated = true;
     // A chat model filtered to embedding-only should drop out entirely.

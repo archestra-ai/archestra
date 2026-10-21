@@ -3404,11 +3404,10 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             false,
             render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
         ),
-        RemedyOutcome::NoAnswer { feedback } => {
-            return Err(remedy_refused(format!(
-                "OpenAPPA remedy awaiting an answer: {feedback}"
-            )));
-        }
+        // The offer stands and the feedback tells the model what to do next:
+        // an answer for it, not a runtime failure that ends the turn. It is an
+        // error result because nothing was released.
+        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, true, feedback),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
         } => {
@@ -4742,6 +4741,25 @@ mod remedy_tests {
 
     fn text(response: &Value) -> &str {
         response["approved_output"].as_str().unwrap()
+    }
+
+    #[test]
+    fn a_remedy_with_no_answer_reaches_the_model_as_an_error_result() {
+        let feedback = "[appa] the return declaration is refused: the reserved attest-schema \
+                        sanitizer is not registered, or its rank is above this trajectory's; \
+                        the offer stands and may be executed again";
+        let response = render(
+            RemedyOutcome::NoAnswer {
+                feedback: feedback.to_owned(),
+            },
+            &owner(None),
+            None,
+        );
+
+        assert_eq!(text(&response), feedback);
+        assert_eq!(response["result"]["content"][0]["text"], feedback);
+        assert_eq!(response["result"]["isError"], true);
+        assert_eq!(response["output_source"], "runtime");
     }
 
     #[test]

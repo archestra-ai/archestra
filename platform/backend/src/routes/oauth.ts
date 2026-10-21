@@ -5,6 +5,7 @@ import {
   RouteId,
 } from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -12,6 +13,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { loadOAuthCatalogForCaller } from "@/services/mcp-oauth-access";
 import {
   classifyRefreshResponse,
   classifyThrownRefreshError,
@@ -521,23 +523,26 @@ async function registerOAuthClient(
 /**
  * OAuth state data stored in cache during the OAuth flow.
  */
-interface OAuthStateData {
-  catalogId: string;
-  codeVerifier: string;
-  clientId?: string;
-  clientSecret?: string;
-  tokenEndpointAuthMethod?: OAuthClientAuthMethod;
-  registrationResult?: Record<string, unknown>;
-  /**
-   * Issuer of the authorization server this flow was started against, and
-   * whether it advertised RFC 9207 support. Recorded here because the callback
-   * has to compare against the server the flow *began* with — reading it from
-   * config at callback time would compare a value the attacker may have
-   * influenced against itself.
-   */
-  issuer?: string;
-  issParameterSupported?: boolean;
-}
+const OAuthStateSchema = z.object({
+  version: z.literal(2),
+  callerBinding: z.string().length(64),
+  catalogId: UuidIdSchema,
+  serverId: UuidIdSchema.optional(),
+  configurationFingerprint: z.string().length(64),
+  redirectUri: z.string().url(),
+  tokenEndpoint: z.string().url().optional(),
+  codeVerifier: z.string().min(1),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  tokenEndpointAuthMethod: z
+    .enum(["client_secret_basic", "client_secret_post", "none"])
+    .optional(),
+  registrationResult: z.record(z.string(), z.unknown()).optional(),
+  // Preserve the original issuer for RFC 9207 validation at callback.
+  issuer: z.string().optional(),
+  issParameterSupported: z.boolean().optional(),
+});
+type OAuthStateData = z.infer<typeof OAuthStateSchema>;
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -546,8 +551,32 @@ const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
  */
 function getOAuthStateCacheKey(
   state: string,
+  callerBinding: string,
 ): `${typeof CacheKey.OAuthState}-${string}` {
-  return `${CacheKey.OAuthState}-${state}`;
+  return `${CacheKey.OAuthState}-v2-${callerBinding}-${state}`;
+}
+
+function getOAuthCallerBinding(request: FastifyRequest): string {
+  const { user, organizationId, authMethod, sessionInfo } = request;
+  if (
+    !user?.id ||
+    !organizationId ||
+    !authMethod ||
+    (authMethod === "session" && !sessionInfo?.id)
+  ) {
+    throw new ApiError(401, "Unauthenticated");
+  }
+  // Keep this tuple's order stable across replicas and deployments.
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        organizationId,
+        user.id,
+        authMethod,
+        authMethod === "session" ? sessionInfo?.id : null,
+      ]),
+    )
+    .digest("hex");
 }
 
 /**
@@ -558,7 +587,7 @@ async function setOAuthState(
   data: OAuthStateData,
 ): Promise<void> {
   await cacheManager.set(
-    getOAuthStateCacheKey(state),
+    getOAuthStateCacheKey(state, data.callerBinding),
     data,
     OAUTH_STATE_TTL_MS,
   );
@@ -571,10 +600,14 @@ async function setOAuthState(
  */
 async function getAndDeleteOAuthState(
   state: string,
+  callerBinding: string,
 ): Promise<OAuthStateData | null> {
-  const key = getOAuthStateCacheKey(state);
-  const data = await cacheManager.getAndDelete<OAuthStateData>(key);
-  return data ?? null;
+  const key = getOAuthStateCacheKey(state, callerBinding);
+  const data = await cacheManager.getAndDelete<unknown>(key);
+  const parsed = OAuthStateSchema.safeParse(data);
+  return parsed.success && parsed.data.callerBinding === callerBinding
+    ? parsed.data
+    : null;
 }
 
 const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
@@ -858,19 +891,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { catalogId }, organizationId }, reply) => {
+    async (request, reply) => {
+      const { catalogId, serverId } = request.body;
+      const { organizationId } = request;
       try {
-        // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
-        const catalogItem =
-          await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
-
-        if (!catalogItem) {
-          throw new ApiError(404, "Catalog item not found");
-        }
-
-        if (!catalogItem.oauthConfig) {
-          throw new ApiError(400, "This server does not support OAuth");
-        }
+        const callerBinding = getOAuthCallerBinding(request);
+        const { catalogItem, configurationFingerprint } =
+          await loadOAuthCatalogForCaller({ request, catalogId, serverId });
 
         const oauthConfig = catalogItem.oauthConfig;
 
@@ -926,6 +953,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let tokenEndpointAuthMethodsSupported: string[] = [];
         let discoveredIssuer: string | undefined;
         let discoveredIssSupported: boolean | undefined;
+        let discoveredTokenEndpoint: string | undefined;
 
         // For proxy servers, skip discovery and use the MCP server URL directly
         if (oauthConfig.requires_proxy) {
@@ -944,6 +972,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               fastify.log,
             );
             authorizationEndpoint = endpoints.authorizationEndpoint;
+            discoveredTokenEndpoint = endpoints.tokenEndpoint;
             registrationEndpoint = endpoints.registrationEndpoint;
             tokenEndpointAuthMethodsSupported =
               endpoints.tokenEndpointAuthMethodsSupported ?? [];
@@ -1149,10 +1178,18 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Store state temporarily (will be used in callback)
         await setOAuthState(state, {
+          version: 2,
+          callerBinding,
           catalogId,
+          serverId,
+          configurationFingerprint,
+          redirectUri,
+          tokenEndpoint: discoveredTokenEndpoint,
           codeVerifier,
           clientId,
-          clientSecret,
+          // Configured credentials are resolved again at callback so rotation
+          // works without caching another copy of the static client secret.
+          clientSecret: oauthConfig.client_id ? undefined : clientSecret,
           tokenEndpointAuthMethod,
           registrationResult,
           issuer: discoveredIssuer,
@@ -1234,9 +1271,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { code, state, iss } }, reply) => {
+    async (request, reply) => {
+      const { code, state, iss } = request.body;
       // Retrieve OAuth state (also deletes it to prevent replay attacks)
-      const oauthState = await getAndDeleteOAuthState(state);
+      const oauthState = await getAndDeleteOAuthState(
+        state,
+        getOAuthCallerBinding(request),
+      );
       if (!oauthState) {
         throw new ApiError(400, "Invalid or expired OAuth state");
       }
@@ -1266,16 +1307,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
-      const catalogItem =
-        await InternalMcpCatalogModel.findByIdWithResolvedSecrets(
-          oauthState.catalogId,
-        );
-
-      if (!catalogItem || !catalogItem.oauthConfig) {
-        throw new ApiError(400, "Invalid catalog item or OAuth configuration");
-      }
-
+      const { catalogItem } = await loadOAuthCatalogForCaller({
+        request,
+        catalogId: oauthState.catalogId,
+        serverId: oauthState.serverId,
+        configurationFingerprint: oauthState.configurationFingerprint,
+      });
       const oauthConfig = catalogItem.oauthConfig;
 
       // Use client credentials from state (dynamically registered) or fall back to config
@@ -1289,7 +1326,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Use the same redirect URI that was registered during initiation
       // This must match exactly what was used in the authorization request
-      const redirectUri = oauthConfig.redirect_uris[0];
+      const redirectUri = oauthState.redirectUri;
       let tokenData: {
         access_token: string;
         refresh_token?: string;
@@ -1332,21 +1369,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else {
         // For non-proxy servers, use standard OAuth token exchange
-        let tokenEndpoint: string;
-        try {
-          const endpoints = await discoverOAuthEndpoints(
-            oauthConfig,
-            fastify.log,
-          );
-          tokenEndpoint = endpoints.tokenEndpoint;
-        } catch (error) {
-          fastify.log.error(
-            { error },
-            "Token endpoint discovery failed, using fallback",
-          );
-          // Fallback to config or constructed endpoint
-          tokenEndpoint =
-            oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
+        const tokenEndpoint = oauthState.tokenEndpoint;
+        if (!tokenEndpoint) {
+          throw new ApiError(400, "Invalid or expired OAuth state");
         }
 
         const oauthResource = getOAuthTokenResource(oauthConfig);

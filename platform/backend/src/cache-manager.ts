@@ -1,7 +1,7 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
 import { sql } from "drizzle-orm";
-import Keyv from "keyv";
+import Keyv, { type KeyvStoreAdapter } from "keyv";
 import QuickLRU from "quick-lru";
 import config from "@/config";
 import db from "@/database";
@@ -151,29 +151,31 @@ class CacheManager {
    * Start the cache manager by initializing the Keyv connection.
    * Should be called once during server startup.
    */
-  start(): void {
+  start(storeOverride?: KeyvStoreAdapter): void {
     if (this.keyv) {
       return;
     }
 
-    const store = new KeyvPostgres({
-      uri: config.database.url,
-      table: "keyv_cache",
-      max: 10,
-      /**
-       * From the PostgreSQL documentation:
-       * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
-       * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
-       * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
-       * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
-       * automatically unlogged as well.
-       *
-       * We use this to improve performance of the cache manager.
-       *
-       * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
-       */
-      useUnloggedTable: true,
-    });
+    const store =
+      storeOverride ??
+      new KeyvPostgres({
+        uri: config.database.url,
+        table: "keyv_cache",
+        max: 10,
+        /**
+         * From the PostgreSQL documentation:
+         * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
+         * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
+         * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
+         * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
+         * automatically unlogged as well.
+         *
+         * We use this to improve performance of the cache manager.
+         *
+         * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
+         */
+        useUnloggedTable: true,
+      });
 
     this.keyv = new Keyv({ store });
 

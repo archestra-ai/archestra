@@ -109,6 +109,7 @@ describe("useMcpInstallOrchestrator", () => {
     await waitFor(() => {
       expect(mutateAsyncMock).toHaveBeenCalledWith({
         catalogId: "catalog-posthog",
+        serverId: "server-123",
       });
     });
 

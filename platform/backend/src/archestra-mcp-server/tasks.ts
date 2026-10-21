@@ -894,6 +894,14 @@ const registry = defineArchestraTools([
           : undefined;
         const narrow = await isGuardrailsV2Active();
 
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId: actor.organizationId,
+          agentIds: requestedAgentIds,
+        });
+        if (agents.length !== requestedAgentIds.length) {
+          return errorResult("Agent not found");
+        }
+
         if (args.mine_only) {
           const { tasks, totalSize } = await A2ATaskModel.listForActor({
             actorKind: actor.kind,
@@ -902,6 +910,7 @@ const registry = defineArchestraTools([
             state,
             pageSize: args.limit,
             currentTurnsOnly: true,
+            organizationId: actor.organizationId,
           });
           const runIds = await AgentRunModel.findRunIdsByTaskIds(
             tasks.map((task) => task.id),
@@ -926,18 +935,13 @@ const registry = defineArchestraTools([
           scope: "*",
           action: "update",
         });
-        const [agents, accessibleAgentIds] = await Promise.all([
-          AgentModel.findBasicByOrganizationIdAndIds({
-            organizationId: actor.organizationId,
-            agentIds: requestedAgentIds,
-          }),
-          AgentTeamModel.getUserAccessibleAgentIds(actor.id, isAgentAdmin),
-        ]);
-        const accessible = new Set(accessibleAgentIds);
-        if (
-          agents.length !== requestedAgentIds.length ||
-          agents.some((agent) => !accessible.has(agent.id))
-        ) {
+        const accessible = new Set(
+          await AgentTeamModel.getUserAccessibleAgentIds(
+            actor.id,
+            isAgentAdmin,
+          ),
+        );
+        if (agents.some((agent) => !accessible.has(agent.id))) {
           return errorResult("Agent not found");
         }
 

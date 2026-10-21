@@ -251,6 +251,46 @@ describe("run tools", () => {
     });
   });
 
+  test("list_agent_runs does not list the caller's runs on another organization's Agent", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreign = await makeAgent({ organizationId: otherOrg.id });
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: actorId,
+    });
+    await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: foreign.id,
+      state: "TASK_STATE_WORKING",
+    });
+
+    for (const mine_only of [true, false]) {
+      const result = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [foreign.id], mine_only },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: "text", text: "Error: Agent not found" },
+      ]);
+    }
+    expect(
+      (
+        await A2ATaskModel.listForActor({
+          actorKind: "user",
+          actorId,
+          agentIds: [foreign.id],
+          pageSize: 10,
+          organizationId,
+        })
+      ).tasks,
+    ).toEqual([]);
+  });
+
   test("start_agent_run refuses an Agent without Agent Runtime and starts nothing", async ({
     makeAgent,
   }) => {

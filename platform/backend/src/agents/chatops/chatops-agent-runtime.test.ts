@@ -488,6 +488,9 @@ test.each([
   expect(prompt.includes(TOOL_POST_RUN_MESSAGE_FULL_NAME)).toBe(
     providerId === "slack",
   );
+  expect(prompt.includes("proactively send brief updates")).toBe(
+    providerId === "slack",
+  );
   expect(prompt).not.toContain("Reply by default");
   expect(prompt).toContain("Directly @mentioned: no");
   expect(prompt).toContain("Thread reference:");
@@ -617,6 +620,9 @@ test.each([
     `${providerId === "slack" ? "Slack" : "MS Teams"}: Help me with this`,
   );
   const prompt = JSON.stringify(launch.mock.calls[0][0]);
+  expect(prompt.includes("proactively send brief updates")).toBe(
+    providerId === "slack",
+  );
   expect(prompt).toContain("You are replying via");
   expect(prompt).toContain("Your final answer is posted");
   expect(prompt).toContain("Reply by default");

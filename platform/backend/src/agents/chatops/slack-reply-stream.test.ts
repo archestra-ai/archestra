@@ -166,7 +166,12 @@ describe("SlackReplyStream", () => {
     });
     await flush();
     expect(chat.appendStream.mock.calls[1][0].chunks).toEqual([
-      { ...running, status: "complete" },
+      {
+        type: "task_update",
+        id: "pending-1",
+        title: "tracker__find_task",
+        status: "complete",
+      },
     ]);
     expect(JSON.stringify(chat.startStream.mock.calls)).not.toContain(
       "fixture-partial-secret",
@@ -278,10 +283,15 @@ describe("SlackReplyStream", () => {
       id: "cancelled",
       status: "error",
       output: "Stopped",
-      details: expect.stringContaining("EXAMPLE-42"),
     });
     expect(JSON.stringify(chat.stopStream.mock.calls)).not.toContain(
       "fixture-secret",
+    );
+    expect(chat.stopStream.mock.calls[0][0].chunks[0]).not.toHaveProperty(
+      "details",
+    );
+    expect(chat.startStream.mock.calls[0][0].chunks[0].details).toContain(
+      "EXAMPLE-42",
     );
     stream.push({
       type: "tool-output-available",
@@ -320,8 +330,10 @@ describe("SlackReplyStream", () => {
     await flush();
     expect(chat.appendStream.mock.calls[0][0].chunks[0]).toMatchObject({
       status: "complete",
-      details: started.details,
     });
+    expect(chat.appendStream.mock.calls[0][0].chunks[0]).not.toHaveProperty(
+      "details",
+    );
     expect(JSON.stringify(chat.appendStream.mock.calls)).not.toContain(
       "result for model only",
     );

@@ -88,12 +88,21 @@ describe("Slack reply stream HTTP boundary", () => {
     expect(chunks[3]).toMatchObject({
       id: "call-2",
       status: "complete",
-      details: chunks[2].details,
     });
     for (const chunk of chunks) {
-      expect(chunk.details.length).toBeLessThanOrEqual(256);
+      if (chunk.details) expect(chunk.details.length).toBeLessThanOrEqual(256);
       expect(chunk.title.length).toBeLessThanOrEqual(256);
       if (chunk.output) expect(chunk.output.length).toBeLessThanOrEqual(256);
+    }
+    // Live Slack appends the details of successive task_update chunks. Pin
+    // the stored result, including its bound, across the status transition.
+    for (const id of ["call-1", "call-2"]) {
+      const details = chunks
+        .filter((chunk: { id: string }) => chunk.id === id)
+        .map((chunk: { details?: string }) => chunk.details ?? "")
+        .join("");
+      expect(details.match(/Arguments:/g)).toHaveLength(1);
+      expect(details.length).toBeLessThanOrEqual(256);
     }
     expect(JSON.stringify(requests)).not.toMatch(
       /fixture-header-secret|fixture-password|withheld-tool-output/,

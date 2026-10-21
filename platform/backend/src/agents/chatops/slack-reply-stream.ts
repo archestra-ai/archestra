@@ -38,10 +38,9 @@ export class SlackReplyStream implements ChatOpsReplyStream {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private sending: Promise<void> = Promise.resolve();
   /** Tool calls shown as task cards, by toolCallId, until they settle. */
-  private readonly openTasks = new Map<
-    string,
-    Pick<TaskUpdate, "title" | "details">
-  >();
+  private readonly openTasks = new Map<string, string>();
+  /** Slack appends details for an id rather than replacing them on updates. */
+  private readonly tasksWithDetails = new Set<string>();
   /** Open tool calls paused on a human approval. */
   private readonly awaitingApproval = new Set<string>();
 
@@ -59,9 +58,9 @@ export class SlackReplyStream implements ChatOpsReplyStream {
         this.scheduleFlush();
         return;
       case "tool-input-start": {
-        const task = { title: slackTaskText(chunk.toolName) };
-        this.openTasks.set(chunk.toolCallId, task);
-        this.enqueueTask({ id: chunk.toolCallId, ...task, status: "pending" });
+        const title = slackTaskText(chunk.toolName);
+        this.openTasks.set(chunk.toolCallId, title);
+        this.enqueueTask({ id: chunk.toolCallId, title, status: "pending" });
         return;
       }
       case "tool-input-available": {
@@ -70,15 +69,16 @@ export class SlackReplyStream implements ChatOpsReplyStream {
           toolName: chunk.toolName,
           args: chunk.input,
         });
-        const details = toolArgumentsDetail(toolInput);
-        const task = {
-          title: slackTaskText(toolName),
-          ...(details && { details }),
-        };
-        this.openTasks.set(chunk.toolCallId, task);
+        const details = this.tasksWithDetails.has(chunk.toolCallId)
+          ? undefined
+          : toolArgumentsDetail(toolInput);
+        if (details) this.tasksWithDetails.add(chunk.toolCallId);
+        const title = slackTaskText(toolName);
+        this.openTasks.set(chunk.toolCallId, title);
         this.enqueueTask({
           id: chunk.toolCallId,
-          ...task,
+          title,
+          ...(details && { details }),
           status: "in_progress",
         });
         return;
@@ -98,9 +98,7 @@ export class SlackReplyStream implements ChatOpsReplyStream {
         );
         return;
       case "tool-input-error":
-        this.openTasks.set(chunk.toolCallId, {
-          title: slackTaskText(chunk.toolName),
-        });
+        this.openTasks.set(chunk.toolCallId, slackTaskText(chunk.toolName));
         this.settleTask(chunk.toolCallId, {
           status: "error",
           output: slackTaskText(chunk.errorText),
@@ -119,12 +117,12 @@ export class SlackReplyStream implements ChatOpsReplyStream {
         });
         return;
       case "tool-approval-request": {
-        const task = this.openTasks.get(chunk.toolCallId);
-        if (task) {
+        const title = this.openTasks.get(chunk.toolCallId);
+        if (title !== undefined) {
           this.awaitingApproval.add(chunk.toolCallId);
           this.enqueueTask({
             id: chunk.toolCallId,
-            ...task,
+            title,
             status: "pending",
           });
         }
@@ -247,20 +245,20 @@ export class SlackReplyStream implements ChatOpsReplyStream {
     toolCallId: string,
     result: Pick<TaskUpdate, "status" | "output">,
   ): void {
-    const task = this.openTasks.get(toolCallId);
-    if (task === undefined) return;
+    const title = this.openTasks.get(toolCallId);
+    if (title === undefined) return;
     this.openTasks.delete(toolCallId);
     this.awaitingApproval.delete(toolCallId);
-    this.enqueueTask({ id: toolCallId, ...task, ...result });
+    this.enqueueTask({ id: toolCallId, title, ...result });
   }
 
   private closeOpenTasks(
     result: Pick<TaskUpdate, "status" | "output">,
   ): AnyChunk[] {
-    const updates = [...this.openTasks].map(([id, task]) => ({
+    const updates = [...this.openTasks].map(([id, title]) => ({
       type: "task_update" as const,
       id,
-      ...task,
+      title,
       ...result,
       ...(result.status === "pending" && !this.awaitingApproval.has(id)
         ? { status: "error" as const, output: "Tool did not finish" }

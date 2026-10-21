@@ -41,6 +41,7 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  agentRuntimeAttachmentsManifestPath,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -359,10 +360,20 @@ class AgentRuntimeManager {
       throw new Error("This session ended before its input files were staged");
     }
     const readyFile = `/var/run/archestra/turns/${params.session.taskId}.inputs-ready`;
+    const manifestFile = agentRuntimeAttachmentsManifestPath(
+      params.session.taskId,
+    );
     const alreadyReady = await this.execInPod({
       session: params.session,
       podName: pod,
-      command: ["/bin/sh", "-c", 'test -f "$1"', "check-inputs", readyFile],
+      command: [
+        "/bin/sh",
+        "-c",
+        'test -f "$1" && test -f "$2"',
+        "check-inputs",
+        readyFile,
+        manifestFile,
+      ],
     })
       .then(() => true)
       .catch(() => false);
@@ -401,8 +412,11 @@ class AgentRuntimeManager {
       command: [
         "/bin/sh",
         "-c",
-        'umask 077; cat > "$1" && mkdir -p /var/run/archestra/turns && touch "$2" "$3"',
+        // Retain the current-turn alias for existing custom images while
+        // prompts refer to a durable manifest that later turns cannot replace.
+        'umask 077; mkdir -p /var/run/archestra/turns && cat > "$1" && cp "$1" "$2" && touch "$3" "$4"',
         "archestra-stage-input",
+        manifestFile,
         AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
         AGENT_RUNTIME_INPUTS_READY_FILE,
         readyFile,

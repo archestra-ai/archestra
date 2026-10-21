@@ -77,11 +77,14 @@ validates and persists this provider-neutral artifact independently of the
 terminal recording. Custom images can opt into the same completed-run view by
 implementing the [runtime image contract](runtime-contract.md#readable-transcript). The same reference covers required tools, input files, steering, and injected environment variables.
 
-Files attached to the initial Chat instruction are written under
-`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` before the client
-starts. The task names their absolute paths, and
-`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` contains their
-original names, paths, media types, and sizes.
+Files attached to an instruction are written under
+`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` before the client starts.
+For Slack, Teams, and Telegram messages, the task points to a turn-specific
+JSON manifest containing their original names, paths, media types, and sizes.
+Clients read this manifest and the relevant files through their normal tools
+after submission, avoiding native image-paste processing in the prompt box.
+Web, API, and other callers continue to receive attachment paths directly in
+the task text, including web continuations of runs started from messaging.
 
 Native clients receive the provider's own model slug so their built-in model
 metadata and capability detection continue to work. The task's single-provider virtual

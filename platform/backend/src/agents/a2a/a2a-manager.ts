@@ -690,6 +690,7 @@ export class A2AManager {
                 completionTarget: systemParams?.completionTarget,
                 onRuntimeSessionCreated: systemParams?.onRuntimeSessionCreated,
                 task: executedTurnText,
+                source: systemParams?.source,
                 title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,

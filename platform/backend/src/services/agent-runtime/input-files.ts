@@ -1,3 +1,4 @@
+import type { InteractionSource } from "@archestra/shared";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { AgentRunInputModel } from "@/models";
 import type { AgentRunInput } from "@/types";
@@ -5,7 +6,10 @@ import {
   nextAvailableName,
   sanitizeUploadFilename,
 } from "@/utils/upload-filename";
-import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
+import {
+  AGENT_RUNTIME_ATTACHMENTS_DIR,
+  agentRuntimeAttachmentsManifestPath,
+} from "./runtime-contract";
 
 /** Persist browser/messaging inputs before the detached task is allowed to run. */
 export async function persistAgentRunInputs(params: {
@@ -37,12 +41,25 @@ export async function persistAgentRunInputs(params: {
   );
 }
 
-/** Add stable paths to the instruction without rewriting the persisted prompt. */
+/** Use manifests for messaging inputs; preserve direct paths for other callers. */
 export function taskWithAgentRunInputs(params: {
+  taskId: string;
   task: string | null | undefined;
   inputs: AgentRunInput[];
+  source?: InteractionSource;
 }): string | null | undefined {
   if (params.inputs.length === 0) return params.task;
+  if (
+    params.source === "chatops:slack" ||
+    params.source === "chatops:ms-teams" ||
+    params.source === "chatops:telegram"
+  ) {
+    // Keep messaging attachments out of the prompt: some TUIs expand image
+    // paths asynchronously and can swallow the submit key while doing so.
+    // The current message's source decides this, not its reply destination,
+    // which can survive a later continuation from the web UI.
+    return `${params.task ?? ""}\n\nAttached files for this turn are listed in ${agentRuntimeAttachmentsManifestPath(params.taskId)}. Read the manifest, then use your file tools to inspect the relevant attachments.`.trim();
+  }
   const paths = params.inputs
     .map((input) => `- ${input.runtimePath}`)
     .join("\n");

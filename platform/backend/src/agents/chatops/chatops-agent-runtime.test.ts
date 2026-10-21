@@ -21,6 +21,7 @@ import agentRuntimeRoutes from "@/routes/agent-runtime/agent-runtime.routes";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { agentRuntimeAttachmentsManifestPath } from "@/services/agent-runtime/runtime-contract";
 import { afterEach, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -156,6 +157,100 @@ test("a message to an Agent Runtime agent starts a run in its runtime and report
   await expect
     .poll(() => vi.mocked(provider.clearTypingStatus)?.mock.calls.length)
     .toBe(1);
+});
+
+test.each([
+  ["slack", false],
+  ["slack", true],
+  ["ms-teams", false],
+  ["ms-teams", true],
+  ["telegram", false],
+  ["telegram", true],
+] as const)("%s submits attachments through a manifest (resumed: %s)", async (providerId, resumed) => {
+  if (providerId !== "slack") {
+    binding = await ChatOpsChannelBindingModel.create({
+      organizationId: agent.organizationId,
+      provider: providerId,
+      channelId: "C-runtime",
+      workspaceId: "T-runtime",
+      agentId: agent.id,
+    });
+    provider = { ...provider, providerId };
+  }
+  if (resumed) await retainedRun({ state: "idle" });
+  const launch = vi
+    .spyOn(backend, resumed ? "continueRun" : "launch")
+    .mockRejectedValue(new Error("Runtime transport unavailable"));
+  const incoming = {
+    ...message("Inspect this screenshot."),
+    attachments: [
+      {
+        name: "screenshot.png",
+        contentType: "image/png",
+        contentBase64: Buffer.from("image bytes").toString("base64"),
+      },
+    ],
+  };
+  const result = await chatOpsManager.processMessage({
+    message: incoming,
+    provider,
+  });
+  expect(result.success).toBe(true);
+  await expect.poll(() => launch.mock.calls.length).toBe(1);
+  const launchArgs = launch.mock.calls[0][0];
+  const spec = "spec" in launchArgs ? launchArgs.spec : launchArgs;
+  const prompt = spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_TASK;
+  expect(prompt).toContain(incoming.text);
+  expect(prompt).toContain(agentRuntimeAttachmentsManifestPath(spec.taskId));
+  const inputs = await AgentRunInputModel.findByTaskId(spec.taskId);
+  expect(inputs.some((input) => input.originalName === "screenshot.png")).toBe(
+    true,
+  );
+  for (const input of inputs) expect(prompt).not.toContain(input.runtimePath);
+  expect(prompt).not.toContain("screenshot.png");
+});
+
+test("a web continuation keeps direct attachment paths even when replies still go to Slack", async () => {
+  const previous = await retainedRun({ state: "idle" });
+  const continuation = vi
+    .spyOn(backend, "continueRun")
+    .mockRejectedValue(new Error("Runtime transport unavailable"));
+  const app = createFastifyInstance();
+  app.addHook("onRequest", async (request) => {
+    Object.assign(request, {
+      user: { id: userId },
+      organizationId: agent.organizationId,
+    });
+  });
+  await app.register(agentRuntimeRoutes);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${previous.taskId}/continue`,
+      payload: {
+        message: "Inspect this screenshot from the web.",
+        attachments: [
+          {
+            name: "web-screenshot.png",
+            contentType: "image/png",
+            contentBase64: Buffer.from("image bytes").toString("base64"),
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    await expect.poll(() => continuation.mock.calls.length).toBe(1);
+    const { spec } = continuation.mock.calls[0][0];
+    const run = await AgentRunModel.findByTaskId(spec.taskId);
+    expect(run?.completionTarget?.type).toBe("chatops");
+    const inputs = await AgentRunInputModel.findByTaskId(spec.taskId);
+    expect(inputs).toHaveLength(1);
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_TASK).toBe(
+      `Inspect this screenshot from the web.\n\nAttached files are available for this run:\n- ${inputs[0].runtimePath}`,
+    );
+  } finally {
+    await app.close();
+  }
 });
 
 test.each([
@@ -540,7 +635,8 @@ test.each([
   expect(transcript).toContain(incoming.senderId);
   expect(transcript).toContain(incoming.channelId);
   expect(transcript).toContain(THREAD_ID);
-  expect(prompt).toContain(snapshot?.runtimePath);
+  expect(prompt).toContain(agentRuntimeAttachmentsManifestPath(spec.taskId));
+  for (const input of inputs) expect(prompt).not.toContain(input.runtimePath);
   expect(
     inputs.find((input) => input.originalName === "earlier.txt")?.fileData,
   ).toEqual(historicBytes);

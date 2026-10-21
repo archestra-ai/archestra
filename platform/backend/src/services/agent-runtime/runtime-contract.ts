@@ -13,6 +13,10 @@ export const AGENT_RUNTIME_SHELL_INIT_SCRIPT = `${AGENT_RUNTIME_DIR}/shell-init`
 /** Stable input location shared by every runtime backend and Agent image. */
 export const AGENT_RUNTIME_ATTACHMENTS_DIR = `${AGENT_RUNTIME_DIR}/attachments`;
 export const AGENT_RUNTIME_ATTACHMENTS_MANIFEST = `${AGENT_RUNTIME_DIR}/attachments.json`;
+/** Preserve attachment references in earlier messages when a workspace resumes. */
+export function agentRuntimeAttachmentsManifestPath(taskId: string): string {
+  return `${AGENT_RUNTIME_DIR}/turns/${taskId}.attachments.json`;
+}
 export const AGENT_RUNTIME_INPUTS_READY_FILE = `${AGENT_RUNTIME_DIR}/inputs-ready`;
 export const AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE = `${AGENT_RUNTIME_DIR}/readable-transcript.json`;
 

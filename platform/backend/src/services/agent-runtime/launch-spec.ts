@@ -1,5 +1,6 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  type InteractionSource,
   isDefaultBrandedAppName,
   providerDisplayNames,
   type ResourcePermissionGrant,
@@ -79,6 +80,8 @@ export async function buildAgentRunLaunchSpec(params: {
   appName: string;
   /** The first instruction, when the task started with one. */
   task?: string | null;
+  /** Origin of this turn, independent of where its result will be delivered. */
+  source?: InteractionSource;
   /** Whether the Agent owns a live TUI or exits after its first result. */
   runMode: "interactive" | "one_shot";
   inputFiles?: AgentRunInput[];
@@ -347,8 +350,10 @@ export async function buildAgentRunLaunchSpec(params: {
   };
 
   const task = taskWithAgentRunInputs({
+    taskId: params.taskId,
     task: params.task,
     inputs: params.inputFiles ?? [],
+    source: params.source,
   });
   const deadline = boundWorkspace
     ? Math.max(

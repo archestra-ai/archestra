@@ -277598,6 +277598,17 @@
                                           "salesforce"
                                         ]
                                       },
+                                      "authMethod": {
+                                        "type": "string",
+                                        "enum": [
+                                          "oauth_client_credentials",
+                                          "soap_legacy"
+                                        ]
+                                      },
+                                      "clientId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
                                       "loginUrl": {
                                         "default": "https://login.salesforce.com"
                                       },
@@ -279140,6 +279151,17 @@
                               "salesforce"
                             ]
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "oauth_client_credentials",
+                              "soap_legacy"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
                           "loginUrl": {
                             "type": "string"
                           },
@@ -280412,6 +280434,17 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "oauth_client_credentials",
+                                "soap_legacy"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "loginUrl": {
                               "default": "https://login.salesforce.com"
@@ -281910,6 +281943,17 @@
                                     "salesforce"
                                   ]
                                 },
+                                "authMethod": {
+                                  "type": "string",
+                                  "enum": [
+                                    "oauth_client_credentials",
+                                    "soap_legacy"
+                                  ]
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
                                 "loginUrl": {
                                   "default": "https://login.salesforce.com"
                                 },
@@ -283278,6 +283322,17 @@
                               "salesforce"
                             ]
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "oauth_client_credentials",
+                              "soap_legacy"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
                           "loginUrl": {
                             "type": "string"
                           },
@@ -284416,6 +284471,17 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "oauth_client_credentials",
+                                "soap_legacy"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "loginUrl": {
                               "default": "https://login.salesforce.com"

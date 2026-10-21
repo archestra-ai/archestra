@@ -71928,6 +71928,8 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
             } | {
                 type: 'salesforce';
+                authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+                clientId?: string;
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
@@ -72162,6 +72164,8 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72469,6 +72473,8 @@ export type CreateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72854,6 +72860,8 @@ export type GetConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -73070,6 +73078,8 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -73359,6 +73369,8 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;

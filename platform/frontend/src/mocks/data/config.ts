@@ -91,6 +91,7 @@ export function makeConfig(
           "http://localhost:3000/api/connectors/gdrive/oauth/callback",
       },
       mcpGatewaySkillsEnabled: false,
+      devFeedbackEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

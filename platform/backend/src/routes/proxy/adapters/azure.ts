@@ -38,11 +38,13 @@ import type {
   LLMRequestAdapter,
   LLMResponseAdapter,
   LLMStreamAdapter,
+  OpenAi,
   StreamAccumulatorState,
 } from "@/types";
 import { ApiError } from "@/types";
 import type { ReasoningEffort } from "@/types/model";
 import {
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
@@ -126,7 +128,7 @@ class AzureResponseAdapter implements LLMResponseAdapter<AzureResponse> {
   readonly provider = "azure" as const;
   private delegate: OpenAIResponseAdapter;
 
-  constructor(response: AzureResponse) {
+  constructor(private readonly response: AzureResponse) {
     this.delegate = new OpenAIResponseAdapter(response);
   }
 
@@ -137,7 +139,11 @@ class AzureResponseAdapter implements LLMResponseAdapter<AzureResponse> {
     return this.delegate.getModel();
   }
   getText() {
-    return this.delegate.getText();
+    return (
+      this.delegate.getText() ||
+      this.response.choices[0]?.message.audio?.transcript ||
+      ""
+    );
   }
   getToolCalls() {
     return this.delegate.getToolCalls();
@@ -169,6 +175,13 @@ class AzureStreamAdapter
 {
   readonly provider = "azure" as const;
   private delegate: OpenAIStreamAdapter;
+  private audio: {
+    id?: string;
+    expires_at?: number;
+    transcript: string;
+  } | null = null;
+  private audioChunks: Buffer[] = [];
+  private audioBytes = 0;
 
   constructor() {
     this.delegate = new OpenAIStreamAdapter();
@@ -179,7 +192,51 @@ class AzureStreamAdapter
   }
 
   processChunk(chunk: AzureStreamChunk) {
-    return this.delegate.processChunk(chunk);
+    const result = this.delegate.processChunk(chunk);
+    // The SDK's chunk type does not declare Azure's native audio deltas. They
+    // contain model-authored output, even when accompanied by a role preamble.
+    const delta = chunk.choices?.[0]?.delta;
+    const audio = (
+      delta as
+        | {
+            audio?: {
+              id?: string;
+              data?: string;
+              expires_at?: number;
+              transcript?: string;
+            };
+          }
+        | undefined
+    )?.audio;
+    if (!audio) return result;
+    this.audio ??= { transcript: "" };
+    if (audio.id) this.audio.id = audio.id;
+    if (audio.expires_at !== undefined)
+      this.audio.expires_at = audio.expires_at;
+    if (audio.transcript) {
+      this.audio.transcript += audio.transcript;
+      // Native audio has a transcript instead of delta.content; expose it to
+      // response policies and logs without duplicating Realtime's text delta.
+      if (!delta?.content) this.state.text += audio.transcript;
+    }
+    if (audio.data) {
+      const bytes = Buffer.from(audio.data, "base64");
+      this.audioBytes += bytes.length;
+      if (this.audioBytes > 16 * 1024 * 1024)
+        throw new ApiError(502, "Azure audio output exceeded the size limit.");
+      this.audioChunks.push(bytes);
+    }
+    // Preserve the original audio frame, while leaving tool calls under the
+    // delegate's policy gate. A pure audio delta otherwise produces no SSE.
+    if (!result.sseData && delta) {
+      const { tool_calls: _toolCalls, ...safeDelta } = delta;
+      result.sseData = `data: ${JSON.stringify({
+        ...chunk,
+        choices: [{ ...chunk.choices[0], delta: safeDelta }],
+      })}\n\n`;
+    }
+    result.isResponsePreamble = false;
+    return result;
   }
   getSSEHeaders() {
     return this.delegate.getSSEHeaders();
@@ -193,6 +250,12 @@ class AzureStreamAdapter
   getRawToolCallEvents() {
     return this.delegate.getRawToolCallEvents();
   }
+  prepareResponseReplacement() {
+    this.audio = null;
+    this.audioChunks = [];
+    this.audioBytes = 0;
+    this.delegate.prepareResponseReplacement();
+  }
   formatCompleteTextSSE(text: string) {
     return this.delegate.formatCompleteTextSSE(text);
   }
@@ -203,7 +266,13 @@ class AzureStreamAdapter
     return this.delegate.formatEndSSE();
   }
   toProviderResponse() {
-    return this.delegate.toProviderResponse();
+    const response = this.delegate.toProviderResponse();
+    if (this.audio)
+      response.choices[0].message.audio = {
+        ...this.audio,
+        data: Buffer.concat(this.audioChunks).toString("base64"),
+      };
+    return response;
   }
 }
 
@@ -365,6 +434,46 @@ export const azureAdapterFactory: LLMProvider<
   },
 };
 
+/** Azure embeddings need Azure authentication and deployment-scoped classic URLs. */
+export const azureEmbeddingsAdapterFactory = {
+  ...makeOpenAiCompatibleEmbeddingsAdapterFactory(
+    "azure",
+    () => config.llm.azure.baseUrl || undefined,
+  ),
+  createClient: azureAdapterFactory.createClient,
+  async execute(client: unknown, request: OpenAi.Types.EmbeddingRequest) {
+    return getAzureClientForRequest(client, request.model).embeddings.create(
+      request as Parameters<OpenAIProvider["embeddings"]["create"]>[0],
+    );
+  },
+};
+
+export function getAzureClientForRequest(
+  client: unknown,
+  model: string,
+): OpenAIProvider {
+  const azureClient = client as AzureClient;
+  const deploymentBaseUrl = buildAzureDeploymentBaseUrl({
+    baseUrl: azureClient.baseUrl,
+    deploymentName: model,
+  });
+
+  if (!deploymentBaseUrl || deploymentBaseUrl === azureClient.baseUrl) {
+    return azureClient.openai;
+  }
+
+  return new OpenAIProvider({
+    maxRetries: PROXY_SDK_MAX_RETRIES,
+    apiKey:
+      azureClient.apiKey ??
+      getAzureOpenAiBearerTokenProvider(deploymentBaseUrl),
+    baseURL: deploymentBaseUrl,
+    defaultQuery: getAzureDefaultQuery(deploymentBaseUrl),
+    fetch: azureClient.fetch,
+    defaultHeaders: azureClient.defaultHeaders,
+  });
+}
+
 /**
  * Reasoning models on Foundry only split their thinking into
  * `reasoning_content` when the request asks for it; with no `reasoning_effort`
@@ -433,30 +542,4 @@ function getAzureDefaultQuery(
   return shouldUseAzureOpenAiApiVersion(baseUrl)
     ? { "api-version": config.llm.azure.apiVersion }
     : undefined;
-}
-
-function getAzureClientForRequest(
-  client: unknown,
-  model: string,
-): OpenAIProvider {
-  const azureClient = client as AzureClient;
-  const deploymentBaseUrl = buildAzureDeploymentBaseUrl({
-    baseUrl: azureClient.baseUrl,
-    deploymentName: model,
-  });
-
-  if (!deploymentBaseUrl || deploymentBaseUrl === azureClient.baseUrl) {
-    return azureClient.openai;
-  }
-
-  return new OpenAIProvider({
-    maxRetries: PROXY_SDK_MAX_RETRIES,
-    apiKey:
-      azureClient.apiKey ??
-      getAzureOpenAiBearerTokenProvider(deploymentBaseUrl),
-    baseURL: deploymentBaseUrl,
-    defaultQuery: getAzureDefaultQuery(deploymentBaseUrl),
-    fetch: azureClient.fetch,
-    defaultHeaders: azureClient.defaultHeaders,
-  });
 }

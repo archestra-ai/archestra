@@ -180,6 +180,38 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     });
   }
 
+  describe.each([
+    "gpt-image-1",
+    "gpt-audio",
+    "gpt-realtime-2.1",
+    "gpt-realtime-translate",
+  ])("media conversation %s", (modelName) => {
+    test("does not generate media while naming the conversation", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        access: "personal",
+      });
+      const conversation = await makeConversationWithExchange(agent.id);
+      const model = await makeModelRow("azure", modelName);
+      await ConversationModel.update(
+        conversation.id,
+        currentUser.id,
+        organizationId,
+        { modelId: model.id },
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/chat/conversations/${conversation.id}/generate-title`,
+        payload: {},
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+  });
+
   test("skips generation when the title LLM resolves to Microsoft 365 Copilot", async ({
     makeAgent,
     makeSecret,

@@ -36,9 +36,11 @@ describe("isUsableGeminiCatalogModel", () => {
     ["gemini-1.0-pro-vision-latest", false],
     ["gemini-pro", false],
     ["gemini-pro-vision", false],
-    // Non-text output families are dropped.
+    // Image generation is supported in Chat; other media transports are not.
+    ["gemini-2.5-flash-image", true],
+    ["gemini-3.1-flash-image-preview", true],
+    ["gemini-2.0-flash-exp-image-generation", false],
     ["gemini-2.5-flash-preview-tts", false],
-    ["gemini-2.5-flash-image", false],
     ["gemini-2.0-flash-live-001", false],
     ["gemini-live-2.5-flash-native-audio", false],
     // Unbranded / non-Gemini families are dropped.

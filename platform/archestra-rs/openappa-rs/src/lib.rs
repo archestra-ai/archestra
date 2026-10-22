@@ -2095,6 +2095,8 @@ pub async fn load_child_addresses(
         }
         if records.len() > unsealed {
             records.sort_by_key(|(created_at, _)| *created_at);
+            // The same bound the SQL applies, over the merged list.
+            records.truncate(10_001);
         }
         Ok(records.into_iter().map(|(_, record)| record).collect())
     })

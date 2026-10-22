@@ -323,6 +323,9 @@ const PromptInputContent = ({
   const { data: canReadProviderKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
+  const { data: canReadLlmModels } = useHasPermissions({
+    llmModel: ["read"],
+  });
   const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
     enabled: canReadProviderKeys === true,
     toastOnError: false,
@@ -398,6 +401,7 @@ const PromptInputContent = ({
   // choosing modality instructions, including an auto-selected model.
   const { data: composerModels } = useLlmModels({
     apiKeyId: selectedCredentialId ?? undefined,
+    enabled: canReadLlmModels === true,
   });
   const composerModel = composerModels?.find(
     (model) => model.dbId === selectedModel,

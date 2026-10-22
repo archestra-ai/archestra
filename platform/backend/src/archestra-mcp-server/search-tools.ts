@@ -14,7 +14,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -475,7 +475,7 @@ async function getSearchableTools(params: {
     assignedTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
+        TOOL_START_AGENT_RUN_SHORT_NAME,
     );
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass

@@ -1757,7 +1757,7 @@ export class A2AManager {
     const { tasks, totalSize } = await A2ATaskModel.listForActor({
       actorKind: params.actor.kind,
       actorId: params.actor.id,
-      agentId: params.agentId,
+      agentIds: [params.agentId],
       contextId: request.contextId,
       state: request.status,
       statusChangedAfter: request.statusTimestampAfter

@@ -3440,7 +3440,7 @@ describe("asking through the client's own question tool", () => {
     try {
       await plugin.onSessionInit(context);
       const first = await askCard();
-      expect(first.card.question).toBe("Run archestra__start_run?");
+      expect(first.card.question).toBe("Run archestra__start_agent_run?");
       expect(first.card.options.map((option) => option.label)).toEqual([
         "Allow",
         "Deny",
@@ -8205,8 +8205,8 @@ describe("AppaPluginArchestra", () => {
   }
 
   for (const { name, wrapped } of [
-    { name: "archestra__get_run", wrapped: false },
-    { name: "archestra__get_run", wrapped: true },
+    { name: "archestra__get_agent_run", wrapped: false },
+    { name: "archestra__get_agent_run", wrapped: true },
     { name: "agent__worker", wrapped: false },
     { name: "agent__worker", wrapped: true },
   ]) {
@@ -8278,7 +8278,8 @@ describe("AppaPluginArchestra", () => {
             proof,
             organizationId: organization.id,
             callerId: "user:user",
-            action: name === "archestra__get_run" ? "get_run" : name,
+            action:
+              name === "archestra__get_agent_run" ? "get_agent_run" : name,
             arguments: original,
             secret: config.openappa.offerSigningSecret,
           }),

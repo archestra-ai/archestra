@@ -16,7 +16,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -102,6 +102,7 @@ import {
   processProxyResults,
   returnRuntimeValue,
   type SpawnReturnDeclaration,
+  SUBAGENT_TOOL,
   sendPeerMessage,
   sharedPolicy,
   startRuntimeChild,
@@ -149,6 +150,10 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { pendingExports } from "@/services/agent-runtime/pending-exports";
+import {
+  agentRunUrl,
+  submittedRunNextStep,
+} from "@/services/agent-runtime/run-handle";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
@@ -2427,7 +2432,8 @@ async function resolveRuntimeCalls(params: {
   if (
     [...result.values()].some(
       (call) =>
-        call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
+        call.action === TOOL_START_AGENT_RUN_SHORT_NAME ||
+        isAgentTool(call.action),
     )
   ) {
     const { organizationId } = params;
@@ -2446,7 +2452,7 @@ async function resolveRuntimeCalls(params: {
     ]);
     for (const call of result.values()) {
       call.spawn =
-        call.action === TOOL_START_RUN_SHORT_NAME
+        call.action === TOOL_START_AGENT_RUN_SHORT_NAME
           ? typeof call.args.agent_id === "string" &&
             ids.has(call.args.agent_id)
           : names.has(call.action);
@@ -2496,7 +2502,7 @@ async function admitSubagentReturns(params: {
 /**
  * An Archestra delegation call declares its own child's return: as spoken by
  * default, schema-attested when it names a `return_schema`. A runtime launch
- * through `start_run` keeps the explicit declaration flow.
+ * through `start_agent_run` keeps the explicit declaration flow.
  */
 function delegationReturnDeclaration(
   call: RuntimeCall | undefined,
@@ -2538,7 +2544,9 @@ async function releasedRuntimeSpawns(params: {
           archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
         return (
           call.spawn &&
-          (action === TOOL_START_RUN_SHORT_NAME || isAgentTool(action))
+          (action === TOOL_START_AGENT_RUN_SHORT_NAME ||
+            action === SUBAGENT_TOOL ||
+            isAgentTool(action))
         );
       })
       .map(([id]) => id),
@@ -2556,9 +2564,12 @@ function runtimeLaunchResult(
   if (!outcome) return "The runtime launch returned no verifiable handle.";
   if (outcome.kind === "launched") {
     return JSON.stringify({
-      session_id: outcome.session_id,
+      run_id: outcome.session_id,
       ...(outcome.state ? { state: outcome.state } : {}),
-      message: "Use get_run to retrieve admitted runtime output.",
+      run_url: agentRunUrl(outcome.session_id),
+      next_step: submittedRunNextStep({
+        reportsToThread: outcome.reports_to_thread === true,
+      }),
     });
   }
   const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];

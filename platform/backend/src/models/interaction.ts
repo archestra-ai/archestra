@@ -666,6 +666,7 @@ class InteractionModel {
                     userId: data.userId ?? null,
                     billingTeamId: data.billingTeamId ?? null,
                     billingMode: data.billingMode ?? "metered",
+                    attributionLabels: data.attributionLabels,
                     logIdentity: {
                       profileId: data.profileId,
                       appId: data.appId ?? null,

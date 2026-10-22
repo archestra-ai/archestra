@@ -113,6 +113,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -128,6 +129,7 @@ import {
   type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
@@ -196,6 +198,7 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  attributionLabels?: AttributionLabels;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
@@ -500,6 +503,7 @@ export async function handleLLMProxy<
   // The first credential that names a billing team pays; the passthrough key
   // resolves first, matching its precedence for per-key limits.
   let billingTeamId = authOverride?.billingTeamId;
+  let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -1666,7 +1670,18 @@ export async function handleLLMProxy<
         entity,
       ]),
     );
+    attributionLabels = await resolveRequestAttributionLabels({
+      organizationId: resolvedAgent.organizationId,
+      authMethod,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      oauthClientId: authenticatedApp?.id,
+      serviceAccountId,
+      billingTeamId,
+      proxyLabels: resolvedAgent.labels,
+    });
     const ctx: LLMProxyContext<TRequest> = {
+      attributionLabels,
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
@@ -1809,7 +1824,12 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1904,6 +1924,7 @@ async function handleStreaming<
   ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -2055,7 +2076,12 @@ async function handleStreaming<
         outputTokens: 0,
         toolCallBlock,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2216,7 +2242,12 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
+        await persistProxyInteraction({
+          record,
+          encryptedChat,
+          streamTiming,
+          attributionLabels,
+        });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2911,6 +2942,7 @@ async function handleNonStreaming<
   ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -3044,6 +3076,7 @@ async function handleNonStreaming<
             record,
             encryptedChat,
             streamTiming,
+            attributionLabels,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3419,6 +3452,7 @@ async function handleNonStreaming<
         record: refusalRecord,
         encryptedChat,
         streamTiming,
+        attributionLabels,
       });
 
       if (pluginRegistry && pluginContext) {
@@ -3593,7 +3627,12 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction({ record, encryptedChat, streamTiming });
+    await persistProxyInteraction({
+      record,
+      encryptedChat,
+      streamTiming,
+      attributionLabels,
+    });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3974,15 +4013,18 @@ async function persistProxyInteraction({
   record,
   encryptedChat,
   streamTiming,
+  attributionLabels,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
+  attributionLabels?: AttributionLabels;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
   await InteractionModel.create(

@@ -45,6 +45,7 @@ import {
   SummaryTable,
 } from "./cost-explorer-parts";
 import { fmtMetric, KpiTile } from "./cost-overview";
+import { LabelAttributionPanel } from "./label-attribution-panel";
 
 export default function CostExplorer() {
   const { timeframe, enabled } = useCostsTimeRange();
@@ -497,6 +498,7 @@ export default function CostExplorer() {
           </div>
         </div>
       </section>
+      <LabelAttributionPanel timeframe={timeframe} enabled={enabled} />
     </div>
   );
 }

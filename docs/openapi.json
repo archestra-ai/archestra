@@ -191244,6 +191244,13 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -191640,6 +191647,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -191801,6 +191809,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -192802,6 +192817,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -192963,6 +192979,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -193480,6 +193503,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -193641,6 +193665,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -194158,6 +194189,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -194319,6 +194351,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -194836,6 +194875,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -194997,6 +195037,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -195514,6 +195561,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -195675,6 +195723,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -196072,6 +196127,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -196233,6 +196289,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -196630,6 +196693,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -196791,6 +196855,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -199242,6 +199313,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -199403,6 +199475,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -202590,6 +202669,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -202751,6 +202831,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -203148,6 +203235,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -203309,6 +203397,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -203706,6 +203801,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -203867,6 +203963,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -204264,6 +204367,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -204425,6 +204529,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -204822,6 +204933,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -204983,6 +205095,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -205380,6 +205499,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -205541,6 +205661,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -205938,6 +206065,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -206099,6 +206227,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -206496,6 +206631,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -206657,6 +206793,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -207054,6 +207197,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -207215,6 +207359,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -207612,6 +207763,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -207773,6 +207925,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -208170,6 +208329,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -208331,6 +208491,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -208728,6 +208895,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -208889,6 +209057,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -209286,6 +209461,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -209447,6 +209623,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -212318,6 +212501,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -212479,6 +212663,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -215345,6 +215536,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -215506,6 +215698,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -218377,6 +218576,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -218538,6 +218738,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -218935,6 +219142,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -219096,6 +219304,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -219729,6 +219944,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -219890,6 +220106,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -222771,6 +222994,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -222932,6 +223156,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -223529,6 +223760,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -223690,6 +223922,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -224509,6 +224748,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -224670,6 +224910,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -225489,6 +225736,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -225650,6 +225898,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -226460,6 +226715,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -226621,6 +226877,13 @@
                               "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "attributionLabels": {
+                                "nullable": true,
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
                               },
                               "request": {
                                 "anyOf": [
@@ -227011,6 +227274,7 @@
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "billingTeamId",
+                              "attributionLabels",
                               "request",
                               "response",
                               "type",
@@ -229732,6 +229996,13 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -230128,6 +230399,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -230289,6 +230561,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -231290,6 +231569,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -231451,6 +231731,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -231968,6 +232255,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -232129,6 +232417,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -232646,6 +232941,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -232807,6 +233103,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -233324,6 +233627,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -233485,6 +233789,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -234002,6 +234313,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -234163,6 +234475,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -234560,6 +234879,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -234721,6 +235041,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -235118,6 +235445,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -235279,6 +235607,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -237730,6 +238065,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -237891,6 +238227,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -241078,6 +241421,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -241239,6 +241583,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -241636,6 +241987,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -241797,6 +242149,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -242194,6 +242553,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -242355,6 +242715,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -242752,6 +243119,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -242913,6 +243281,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -243310,6 +243685,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -243471,6 +243847,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -243868,6 +244251,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -244029,6 +244413,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -244426,6 +244817,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -244587,6 +244979,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -244984,6 +245383,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -245145,6 +245545,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -245542,6 +245949,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -245703,6 +246111,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -246100,6 +246515,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -246261,6 +246677,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -246658,6 +247081,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -246819,6 +247243,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -247216,6 +247647,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -247377,6 +247809,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -247774,6 +248213,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -247935,6 +248375,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -250806,6 +251253,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -250967,6 +251415,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -253833,6 +254288,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -253994,6 +254450,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -256865,6 +257328,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -257026,6 +257490,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -257423,6 +257894,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -257584,6 +258056,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -258217,6 +258696,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -258378,6 +258858,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -261259,6 +261746,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -261420,6 +261908,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -262017,6 +262512,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -262178,6 +262674,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -262997,6 +263500,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -263158,6 +263662,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -263977,6 +264488,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -264138,6 +264650,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -264948,6 +265467,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -265109,6 +265629,13 @@
                         "billingTeamId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "attributionLabels": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
                         },
                         "request": {
                           "anyOf": [
@@ -265499,6 +266026,7 @@
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "billingTeamId",
+                        "attributionLabels",
                         "request",
                         "response",
                         "type",
@@ -451795,7 +452323,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated credential labels override billing-team labels, then service-account labels, then proxy defaults. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -451866,6 +452394,37 @@
             "in": "query",
             "name": "credentialId",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "labelKey",
+            "required": false,
+            "description": "Group by the admission-time value of this server-owned label."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "in": "query",
+            "name": "labelValue",
+            "required": false,
+            "description": "Match this exact historical label value. Requires labelKey; cannot be combined with labelUnassigned=true."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "labelUnassigned",
+            "required": false,
+            "description": "Match requests without a snapshot value for labelKey, including older requests. Requires labelKey."
           },
           {
             "schema": {
@@ -452096,6 +452655,80 @@
                         "limit",
                         "offset",
                         "total"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "labels": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "number"
+                              },
+                              "inputTokens": {
+                                "type": "number"
+                              },
+                              "outputTokens": {
+                                "type": "number"
+                              },
+                              "cacheReadTokens": {
+                                "type": "number"
+                              },
+                              "billedCost": {
+                                "type": "number"
+                              },
+                              "subscriptionCost": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "requests",
+                              "inputTokens",
+                              "outputTokens",
+                              "cacheReadTokens",
+                              "billedCost",
+                              "subscriptionCost",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "limit": {
+                              "type": "number"
+                            },
+                            "offset": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "limit",
+                            "offset",
+                            "total"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "groups",
+                        "pagination"
                       ],
                       "additionalProperties": false
                     }

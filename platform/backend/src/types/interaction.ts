@@ -10,6 +10,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AgentTypeSchema } from "./agent";
+import { AttributionLabelsSchema } from "./attribution-label";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -293,6 +294,7 @@ const BaseSelectInteractionSchema = createSelectSchema(
     // Required on read: the column is NOT NULL, so every row carries a concrete
     // BillingMode. (The default override belongs on the insert schema only.)
     billingMode: BillingModeSchema,
+    attributionLabels: AttributionLabelsSchema.nullable(),
   },
 );
 
@@ -848,6 +850,7 @@ export const InsertInteractionSchema = createInsertSchema(
     // Optional on write: the column has a DB default ("metered"), so callers may
     // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
     billingMode: BillingModeSchema.optional(),
+    attributionLabels: AttributionLabelsSchema.nullish(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),

@@ -51,7 +51,9 @@ export const requestScope = new RequestScope();
  * answer for hours.
  *
  * An LLM proxy call, of any method, resolves its caller several times while
- * authenticating and never writes members, roles or teams. The other routes
+ * authenticating and never writes members, roles or teams. A streamed proxy
+ * call keeps these answers for its whole life, so an access check made
+ * mid-stream must not rely on them; read the database directly. The other routes
  * under /v1/ (MCP gateway, A2A, health) are not proxy routes and keep no memo.
  */
 export function shouldShareCallerLookups(request: {

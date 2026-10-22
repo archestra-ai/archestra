@@ -70,8 +70,9 @@ class AgentTeamModel {
   }
 
   /**
-   * Check if a user has access to a specific agent: a grant decides for an
-   * agent or MCP gateway; see the end of the method for an LLM proxy.
+   * Check if a user has access to a specific agent: an LLM proxy serves its
+   * organization's members (any proxy for an admin); a grant decides for an
+   * agent or MCP gateway.
    */
   static async userHasAgentAccess(params: {
     userId: string;

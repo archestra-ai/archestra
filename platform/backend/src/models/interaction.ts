@@ -553,6 +553,9 @@ class InteractionModel {
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
+   *
+   * Do not mutate the returned row: for a delta-encoded request its
+   * `request.messages` entries are shared with the reconstruction cache.
    */
   static async create(
     data: InsertInteraction,

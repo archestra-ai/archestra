@@ -1451,19 +1451,9 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: `true`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Sends new agent diagnostic reports to the shared OpenAPPA reporting service when the reporting tool is enabled. Independent of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS): setting analytics to `disabled` does not block this explicit opt-in, and enabling forwarding does not turn analytics on.
-  - Default: `false` in every environment, including deployments with analytics enabled. Upgrades require explicit opt-in to continue external forwarding.
-  - Values: `true`, `false`. Unset or empty keeps forwarding off; other values stop startup. Restart the backend after changing it.
-  - Reports contain filtered policy and decision diagnostics, policy-defined names, build information, and the configured frontend hostname. Prompts, tool argument values, tool results, credential values, and raw session identifiers are excluded by the native reporter. The free-text message is sent as written: do not include secrets, customer data, or conversation content.
-  - Encrypted-chat reports and automatic client-failure reports always remain local. Enabling this setting does not automatically resend stored reports; delivery failures keep the local archive.
-  - With Helm, set this variable through `archestra.env`; for example, to enable diagnostics while analytics stays disabled:
-
-  ```yaml
-  archestra:
-    env:
-      ARCHESTRA_ANALYTICS: "disabled"
-      ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED: "true"
-  ```
+- **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
+  - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.
+  - Encrypted-chat and automatic client-failure reports stay local. Messages are sent verbatim; exclude secrets and conversation content.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

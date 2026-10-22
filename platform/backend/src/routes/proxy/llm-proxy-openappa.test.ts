@@ -3008,9 +3008,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
       expect(answered.statusCode, answered.body).toBe(200);
       const sent = providerRequests.at(-1) as {
+        system?: unknown;
         messages: { role: string; content: unknown }[];
       };
-      // The model receives the user's answer as the result of its question.
+      // Preserve the answer and put turn-specific guidance after it, not in system.
       expect(sent.messages.at(-1)).toEqual({
         role: "user",
         content: [
@@ -3019,8 +3020,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             tool_use_id: question.id,
             content: answer,
           }),
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "Question tools collect the user's decisions.",
+            ),
+          },
         ],
       });
+      expect(JSON.stringify(sent.system ?? "")).not.toContain(
+        "Question tools collect the user's decisions.",
+      );
     });
 
     test.each([

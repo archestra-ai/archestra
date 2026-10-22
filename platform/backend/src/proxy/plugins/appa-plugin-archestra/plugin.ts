@@ -6186,6 +6186,7 @@ function deliverReturnContract(params: {
     request: params.request,
     interactionType: params.interactionType,
     guidance: params.contract,
+    scope: "request",
   });
   if (
     !requestCarriesInstruction({
@@ -6265,7 +6266,7 @@ function insertRequestGuidance(params: {
     !isRecord(request) ||
     !Array.isArray(request.input)
   ) {
-    appendQuestionContinuation(params);
+    appendQuestionContinuation({ ...params, scope: "request" });
     return;
   }
   if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
@@ -6292,6 +6293,8 @@ function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
   guidance?: string;
+  /** Fixed request instructions precede history; turn guidance follows it. */
+  scope?: "request" | "turn";
   /**
    * On a provider-thread continue: `skip` guidance the thread already holds
    * (fixed for the session), or deliver `turn` guidance in the new user turn,
@@ -6365,6 +6368,12 @@ function appendQuestionContinuation(params: {
     return;
   }
   if (params.interactionType === "anthropic:messages") {
+    // Keep transient guidance after the cached prefix. Changing system would
+    // invalidate all cached messages, including signed thinking blocks.
+    if (params.scope !== "request") {
+      appendToLastUserTurn(params.request, guidance);
+      return;
+    }
     if (Array.isArray(params.request.system)) {
       if (
         !params.request.system.some(
@@ -6383,25 +6392,45 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds a text block to the newest user message of a Messages request. */
+/** Adds turn guidance without placing user text after native SDK control frames. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
 ): void {
   const messages = request.messages;
   if (!Array.isArray(messages)) return;
-  const last = messages.findLast(
-    (message) => isRecord(message) && message.role === "user",
-  );
-  if (!isRecord(last)) return;
+  let index = messages.length - 1;
+  // Native SDKs can end a turn with system control messages. They must remain
+  // last (or immediately before an assistant); they are not conversation turns.
+  while (
+    index >= 0 &&
+    isRecord(messages[index]) &&
+    messages[index].role === "system"
+  )
+    index--;
+  const last = messages[index];
+  if (!isRecord(last) || last.role !== "user") {
+    messages.splice(index + 1, 0, {
+      role: "user",
+      content: [{ type: "text", text }],
+    });
+    return;
+  }
+  if (last.content === text) return;
   if (typeof last.content === "string")
     last.content = [
       { type: "text", text: last.content },
       { type: "text", text },
     ];
-  else if (Array.isArray(last.content))
-    last.content.push({ type: "text", text });
-  else last.content = [{ type: "text", text }];
+  else if (Array.isArray(last.content)) {
+    if (
+      !last.content.some(
+        (block) =>
+          isRecord(block) && block.type === "text" && block.text === text,
+      )
+    )
+      last.content.push({ type: "text", text });
+  } else last.content = [{ type: "text", text }];
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

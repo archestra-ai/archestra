@@ -40,6 +40,14 @@ export type ProxyResourcePrincipal = {
 export type ProxyResourceCredential = {
   agent: GatewayAgent;
   principal: ProxyResourcePrincipal;
+  /** Validated financial identities for the same common limit checks as inference. */
+  limitContext: {
+    userId?: string;
+    virtualKeyId?: string;
+    passthroughVirtualKeyId?: string;
+    llmOauthClientId?: string;
+    billingTeamId?: string;
+  };
   providerAccount: {
     providerApiKeyId: string;
     baseUrl: string;
@@ -92,6 +100,10 @@ export async function resolveProxyResourceCredential(params: {
         })
       : undefined;
     let principal: ProxyResourcePrincipal | undefined;
+    const limitContext: ProxyResourceCredential["limitContext"] = {
+      passthroughVirtualKeyId: passthrough?.passthroughVirtualKeyId,
+      billingTeamId: passthrough?.billingTeamId,
+    };
     let apiKey: string | undefined;
     let providerApiKeyId: string | undefined;
     const jwks = token
@@ -140,6 +152,8 @@ export async function resolveProxyResourceCredential(params: {
               : undefined;
         apiKey = resolved.apiKey;
         providerApiKeyId = resolved.chatApiKeyId;
+        limitContext.virtualKeyId = resolved.virtualKeyId;
+        limitContext.billingTeamId ??= resolved.billingTeamId;
       }
     } else if (token) {
       const oauth = await validateLlmOAuthAccessToken({
@@ -158,6 +172,8 @@ export async function resolveProxyResourceCredential(params: {
               : undefined;
         apiKey = oauth.apiKey;
         providerApiKeyId = oauth.chatApiKeyId;
+        limitContext.llmOauthClientId = oauth.authenticatedApp?.id;
+        limitContext.billingTeamId ??= oauth.billingTeamId;
       } else if (passthrough) {
         // A changing bearer token is not a stable provider-account identity.
         // Configured keyless rows are supported through managed credentials.
@@ -190,6 +206,13 @@ export async function resolveProxyResourceCredential(params: {
         401,
         "Resource requests require a mapped platform credential and a configured provider account.",
       );
+    if (principal.kind === "service_account" && passthrough?.userId)
+      throw new ApiError(
+        401,
+        "Credentials identify both a user and a service account.",
+      );
+    limitContext.userId =
+      principal.kind === "user" ? principal.id : passthrough?.userId;
     if (principal.kind === "user")
       await assertResourceUserAccess(principal.id, agent);
     if (
@@ -277,6 +300,7 @@ export async function resolveProxyResourceCredential(params: {
     return {
       agent,
       principal,
+      limitContext,
       providerAccount: { providerApiKeyId, baseUrl, credentialBinding },
       apiKey,
       defaultHeaders: row.extraHeaders ?? undefined,

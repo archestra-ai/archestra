@@ -7980,7 +7980,7 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 });
 
 /**
- * List the organization's model pools with their members
+ * List the organization's model pools with their members, and which members are benched after a failure
  *
  * Authentication:
  *

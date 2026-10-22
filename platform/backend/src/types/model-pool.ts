@@ -5,13 +5,23 @@ import { schema } from "@/database";
 
 export const SelectModelPoolMemberSchema = createSelectSchema(
   schema.modelPoolMembersTable,
-);
+).extend({ providerApiKeyName: z.string() });
 
 export const SelectModelPoolSchema = createSelectSchema(
   schema.modelPoolsTable,
 ).extend({
   provider: SupportedProvidersSchema,
   members: z.array(SelectModelPoolMemberSchema),
+});
+
+/** A pool as the admin page lists it: each member with whether it is benched. */
+export const ModelPoolWithHealthSchema = SelectModelPoolSchema.extend({
+  members: z.array(
+    SelectModelPoolMemberSchema.extend({
+      benchedUntil: z.string().datetime().nullable(),
+      benchReason: z.string().nullable(),
+    }),
+  ),
 });
 
 export const ModelPoolMemberInputSchema = z.object({
@@ -30,4 +40,5 @@ export const ModelPoolInputSchema = z.object({
 
 export type ModelPoolMember = z.infer<typeof SelectModelPoolMemberSchema>;
 export type ModelPool = z.infer<typeof SelectModelPoolSchema>;
+export type ModelPoolWithHealth = z.infer<typeof ModelPoolWithHealthSchema>;
 export type ModelPoolInput = z.infer<typeof ModelPoolInputSchema>;

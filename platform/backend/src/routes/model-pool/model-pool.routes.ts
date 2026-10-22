@@ -7,8 +7,10 @@ import {
   constructResponseSchema,
   type ModelPoolInput,
   ModelPoolInputSchema,
+  ModelPoolWithHealthSchema,
   SelectModelPoolSchema,
 } from "@/types";
+import { withMemberHealth } from "../proxy/model-pool-failover";
 
 const ModelPoolParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -18,13 +20,16 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetModelPools,
-        description: "List the organization's model pools with their members",
+        description:
+          "List the organization's model pools with their members, and which members are benched after a failure",
         tags: ["Model Pools"],
-        response: constructResponseSchema(z.array(SelectModelPoolSchema)),
+        response: constructResponseSchema(z.array(ModelPoolWithHealthSchema)),
       },
     },
     async ({ organizationId }, reply) =>
-      reply.send(await ModelPoolModel.list(organizationId)),
+      reply.send(
+        await withMemberHealth(await ModelPoolModel.list(organizationId)),
+      ),
   );
 
   fastify.post(
@@ -41,6 +46,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       await assertValidMembers({ organizationId, input: body });
+      await assertModelHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
       );
@@ -61,6 +67,11 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, params, body }, reply) => {
       await assertValidMembers({ organizationId, input: body });
+      await assertModelHasNoOtherPool({
+        organizationId,
+        input: body,
+        poolId: params.id,
+      });
       const pool = await ModelPoolModel.update({
         organizationId,
         id: params.id,
@@ -92,6 +103,25 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/** One pool per model: a request has to know which pool it belongs to. */
+async function assertModelHasNoOtherPool(params: {
+  organizationId: string;
+  input: ModelPoolInput;
+  poolId?: string;
+}): Promise<void> {
+  const existing = await ModelPoolModel.findIdByModel({
+    organizationId: params.organizationId,
+    provider: params.input.provider,
+    modelId: params.input.modelId,
+  });
+  if (existing && existing !== params.poolId) {
+    throw new ApiError(
+      409,
+      `A pool for ${params.input.modelId} on ${params.input.provider} already exists.`,
+    );
+  }
+}
 
 /**
  * Members must be distinct shared keys of this organization for the pool's

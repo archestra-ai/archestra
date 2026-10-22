@@ -1,5 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ModelPool, ModelPoolInput, ModelPoolMember } from "@/types";
 
@@ -77,6 +77,25 @@ class ModelPoolModel {
     return withMembers;
   }
 
+  /** The id of the pool that already serves this model, if any. */
+  static async findIdByModel(params: {
+    organizationId: string;
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<string | null> {
+    const [pool] = await db
+      .select({ id: schema.modelPoolsTable.id })
+      .from(schema.modelPoolsTable)
+      .where(
+        and(
+          eq(schema.modelPoolsTable.organizationId, params.organizationId),
+          eq(schema.modelPoolsTable.provider, params.provider),
+          eq(schema.modelPoolsTable.modelId, params.modelId),
+        ),
+      );
+    return pool?.id ?? null;
+  }
+
   static async create(params: {
     organizationId: string;
     input: ModelPoolInput;
@@ -150,8 +169,18 @@ class ModelPoolModel {
   ): Promise<ModelPool[]> {
     if (pools.length === 0) return [];
     const members = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.modelPoolMembersTable),
+        providerApiKeyName: schema.llmProviderApiKeysTable.name,
+      })
       .from(schema.modelPoolMembersTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.llmProviderApiKeysTable.id,
+          schema.modelPoolMembersTable.providerApiKeyId,
+        ),
+      )
       .where(
         and(
           inArray(

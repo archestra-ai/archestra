@@ -990,6 +990,11 @@ class InteractionModel {
           baselineCost: schema.interactionsTable.baselineCost,
           durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
+          providerApiKeyId: schema.interactionsTable.providerApiKeyId,
+          modelPoolId: schema.interactionsTable.modelPoolId,
+          attempt: schema.interactionsTable.attempt,
+          attemptOutcome: schema.interactionsTable.attemptOutcome,
+          failureReason: schema.interactionsTable.failureReason,
           source: schema.interactionsTable.source,
           // The row's small stored preview (not the payload), so the trace can
           // name a turn by the prompt it served; decrypted below.

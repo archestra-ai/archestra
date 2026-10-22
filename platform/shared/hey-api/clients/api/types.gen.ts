@@ -14573,8 +14573,6 @@ export type GetAgentCatalogResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -14954,8 +14952,6 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -15102,8 +15098,6 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -15369,8 +15363,6 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16633,8 +16625,6 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16933,8 +16923,6 @@ export type ImportAgentResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17242,8 +17230,6 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17372,8 +17358,6 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -17541,8 +17525,6 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17955,14 +17937,6 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
-            fastModel: {
-                id: string;
-                externalId: string;
-            } | null;
-            smartModel: {
-                id: string;
-                externalId: string;
-            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -18124,8 +18098,6 @@ export type RestoreAgentVersionResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18362,8 +18334,6 @@ export type CloneAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20839,8 +20809,6 @@ export type RestoreAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -21388,6 +21356,183 @@ export type UpdateMemberDefaultAgentResponses = {
 };
 
 export type UpdateMemberDefaultAgentResponse = UpdateMemberDefaultAgentResponses[keyof UpdateMemberDefaultAgentResponses];
+
+export type GetMemberDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/members/default-model';
+};
+
+export type GetMemberDefaultModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMemberDefaultModelError = GetMemberDefaultModelErrors[keyof GetMemberDefaultModelErrors];
+
+export type GetMemberDefaultModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        modelId: string | null;
+        chatApiKeyId: string | null;
+    };
+};
+
+export type GetMemberDefaultModelResponse = GetMemberDefaultModelResponses[keyof GetMemberDefaultModelResponses];
+
+export type UpdateMemberDefaultModelData = {
+    body: {
+        modelId: string | null;
+        chatApiKeyId: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/members/default-model';
+};
+
+export type UpdateMemberDefaultModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMemberDefaultModelError = UpdateMemberDefaultModelErrors[keyof UpdateMemberDefaultModelErrors];
+
+export type UpdateMemberDefaultModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        modelId: string | null;
+        chatApiKeyId: string | null;
+    };
+};
+
+export type UpdateMemberDefaultModelResponse = UpdateMemberDefaultModelResponses[keyof UpdateMemberDefaultModelResponses];
 
 export type ReadAgentWorkspaceFileData = {
     body?: never;
@@ -35527,8 +35672,6 @@ export type GetBootstrapResponses = {
             defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             defaultModelId: string | null;
             defaultLlmApiKeyId: string | null;
-            defaultFastModelId: string | null;
-            defaultSmartModelId: string | null;
             defaultUserLimitValue: number | null;
             defaultUserLimitModel: Array<string> | null;
             defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -35747,6 +35890,10 @@ export type GetBootstrapResponses = {
         memberDefaultAgent: {
             defaultAgentId: string | null;
             personalChatAgentId: string | null;
+        };
+        memberDefaultModel: {
+            modelId: string | null;
+            chatApiKeyId: string | null;
         };
     };
 };
@@ -36022,8 +36169,6 @@ export type GetNewChatBootstrapResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -36212,6 +36357,37 @@ export type GetNewChatBootstrapResponses = {
                 requiresUserConnection?: boolean;
                 isConnected?: boolean;
             }> | null;
+        } | null;
+        memberDefaultKeyModels: {
+            apiKeyId: string;
+            models: Array<{
+                id: string;
+                dbId: string;
+                displayName: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                createdAt?: string;
+                capabilities?: {
+                    contextLength: number | null;
+                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                    supportsToolCalling: boolean | null;
+                    supportsReasoningEffort: boolean | null;
+                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    recommendedForAgents: boolean | null;
+                    pricePerMillionInput: string | null;
+                    pricePerMillionOutput: string | null;
+                    isCustomPrice: boolean;
+                    priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    pricePerMillionCacheRead: string | null;
+                    pricePerMillionCacheWrite: string | null;
+                    cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                };
+                isBest?: boolean;
+                isFree: boolean;
+                embeddingDimensions?: EmbeddingDimensions | null;
+                requiresUserConnection?: boolean;
+                isConnected?: boolean;
+            }>;
         } | null;
     };
 };
@@ -36573,8 +36749,6 @@ export type GetConversationBootstrapResponses = {
                     llmApiKeyId: string | null;
                     llmModel: string | null;
                     modelId: string | null;
-                    fastModelId: string | null;
-                    smartModelId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {
@@ -36763,6 +36937,37 @@ export type GetConversationBootstrapResponses = {
                     requiresUserConnection?: boolean;
                     isConnected?: boolean;
                 }> | null;
+            } | null;
+            memberDefaultKeyModels: {
+                apiKeyId: string;
+                models: Array<{
+                    id: string;
+                    dbId: string;
+                    displayName: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    createdAt?: string;
+                    capabilities?: {
+                        contextLength: number | null;
+                        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                        supportsToolCalling: boolean | null;
+                        supportsReasoningEffort: boolean | null;
+                        supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                        recommendedForAgents: boolean | null;
+                        pricePerMillionInput: string | null;
+                        pricePerMillionOutput: string | null;
+                        isCustomPrice: boolean;
+                        priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                        pricePerMillionCacheRead: string | null;
+                        pricePerMillionCacheWrite: string | null;
+                        cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    };
+                    isBest?: boolean;
+                    isFree: boolean;
+                    embeddingDimensions?: EmbeddingDimensions | null;
+                    requiresUserConnection?: boolean;
+                    isConnected?: boolean;
+                }>;
             } | null;
         };
     };
@@ -53928,9 +54133,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -54019,9 +54221,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -54258,9 +54457,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54370,9 +54566,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54482,9 +54675,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54594,9 +54784,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54706,9 +54893,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: GeminiGenerateContentRequest | {
                 [key: string]: unknown;
             };
@@ -54797,9 +54981,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: AnthropicMessagesRequest | {
                 [key: string]: unknown;
             };
@@ -54888,9 +55069,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -55420,9 +55598,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model?: string;
                 messages: Array<{
@@ -56051,9 +56226,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56142,9 +56314,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56233,9 +56402,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56324,9 +56490,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56415,9 +56578,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56506,9 +56666,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: OpenrouterChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56597,9 +56754,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: VllmChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56688,9 +56842,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: OllamaChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56779,9 +56930,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: OllamaNativeChatRequest | {
                 [key: string]: unknown;
             };
@@ -56870,9 +57018,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: CohereChatRequest | {
                 [key: string]: unknown;
             };
@@ -56961,9 +57106,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: ZhipuaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -57052,9 +57194,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: DeepSeekChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -57143,9 +57282,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 /**
@@ -57958,9 +58094,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 /**
@@ -58773,9 +58906,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 /**
@@ -59588,9 +59718,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: MinimaxChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -59679,9 +59806,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -59838,9 +59962,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 /**
@@ -60653,9 +60774,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 prompt: string;
@@ -60783,9 +60901,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -60981,9 +61096,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -61179,9 +61291,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -61377,9 +61486,6 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
-            attributionLabels: {
-                [key: string]: string;
-            } | null;
             request: JevDecisionsRequest | {
                 [key: string]: unknown;
             };
@@ -61566,9 +61672,11 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
-            attributionLabels?: {
-                [key: string]: string;
-            } | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
@@ -61702,12 +61810,6 @@ export type GetInteractionSessionsResponses = {
      */
     200: {
         data: Array<{
-            /**
-             * Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.
-             */
-            attributionLabels?: {
-                [key: string]: string;
-            } | null;
             sessionId: string | null;
             sessionSource: string | null;
             source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -62141,9 +62243,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -62232,9 +62331,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -62471,9 +62567,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62583,9 +62676,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62695,9 +62785,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62807,9 +62894,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62919,9 +63003,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: GeminiGenerateContentRequest | {
             [key: string]: unknown;
         };
@@ -63010,9 +63091,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: AnthropicMessagesRequest | {
             [key: string]: unknown;
         };
@@ -63101,9 +63179,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             modelId: string;
             messages?: Array<{
@@ -63633,9 +63708,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model?: string;
             messages: Array<{
@@ -64264,9 +64336,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64355,9 +64424,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64446,9 +64512,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64537,9 +64600,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64628,9 +64688,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64719,9 +64776,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: OpenrouterChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64810,9 +64864,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: VllmChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64901,9 +64952,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: OllamaChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64992,9 +65040,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: OllamaNativeChatRequest | {
             [key: string]: unknown;
         };
@@ -65083,9 +65128,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: CohereChatRequest | {
             [key: string]: unknown;
         };
@@ -65174,9 +65216,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: ZhipuaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -65265,9 +65304,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: DeepSeekChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -65356,9 +65392,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             /**
@@ -66171,9 +66204,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             /**
@@ -66986,9 +67016,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             /**
@@ -67801,9 +67828,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: MinimaxChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -67892,9 +67916,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -68051,9 +68072,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             /**
@@ -68866,9 +68884,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             prompt: string;
@@ -68996,9 +69011,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -69194,9 +69206,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -69392,9 +69401,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -69590,9 +69596,6 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
-        attributionLabels: {
-            [key: string]: string;
-        } | null;
         request: JevDecisionsRequest | {
             [key: string]: unknown;
         };
@@ -91664,6 +91667,9 @@ export type GetModelPoolsResponses = {
             weight: number;
             enabled: boolean;
             createdAt: string;
+            providerApiKeyName: string;
+            benchedUntil: string | null;
+            benchReason: string | null;
         }>;
     }>;
 };
@@ -91775,6 +91781,7 @@ export type CreateModelPoolResponses = {
             weight: number;
             enabled: boolean;
             createdAt: string;
+            providerApiKeyName: string;
         }>;
     };
 };
@@ -91976,6 +91983,7 @@ export type UpdateModelPoolResponses = {
             weight: number;
             enabled: boolean;
             createdAt: string;
+            providerApiKeyName: string;
         }>;
     };
 };
@@ -102722,8 +102730,6 @@ export type GetOrganizationResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -103062,8 +103068,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -103280,8 +103284,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -103496,8 +103498,6 @@ export type UpdateMcpSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -103711,8 +103711,6 @@ export type UpdateSkillsSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -103815,8 +103813,6 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
-        defaultFastModelId?: string | null;
-        defaultSmartModelId?: string | null;
     };
     path?: never;
     query?: never;
@@ -103929,8 +103925,6 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -104167,8 +104161,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -104418,8 +104410,6 @@ export type UpdateIntegrationSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -104643,8 +104633,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -104863,8 +104851,6 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -105085,8 +105071,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -105297,8 +105281,6 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -105871,8 +105853,6 @@ export type CompleteOnboardingResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
-        defaultFastModelId: string | null;
-        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -120084,22 +120064,6 @@ export type GetProxyCostStatisticsData = {
         serviceAccountId?: string;
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         credentialId?: string;
-        /**
-         * Include the distinct historical label keys in the filtered proxy usage.
-         */
-        includeLabelKeys?: string;
-        /**
-         * Group by the admission-time value of this server-owned label.
-         */
-        labelKey?: string;
-        /**
-         * Match this exact historical label value. Requires labelKey; cannot be combined with labelUnassigned=true.
-         */
-        labelValue?: string;
-        /**
-         * Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.
-         */
-        labelUnassigned?: string;
         limit?: number;
         offset?: number;
     };
@@ -120220,24 +120184,6 @@ export type GetProxyCostStatisticsResponses = {
             limit: number;
             offset: number;
             total: number;
-        };
-        labelKeys?: Array<string>;
-        labels?: {
-            key: string;
-            groups: Array<{
-                requests: number;
-                inputTokens: number;
-                outputTokens: number;
-                cacheReadTokens: number;
-                billedCost: number;
-                subscriptionCost: number;
-                value: string | null;
-            }>;
-            pagination: {
-                limit: number;
-                offset: number;
-                total: number;
-            };
         };
     };
 };

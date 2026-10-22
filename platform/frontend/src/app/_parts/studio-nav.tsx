@@ -11,6 +11,7 @@ import {
   Files,
   FolderKanban,
   KeyRound,
+  Layers,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -242,6 +243,13 @@ export const contentNavGroups: NavGroup[] = [
         icon: Brain,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/models"),
+      },
+      {
+        title: "Model Pools",
+        url: "/llm/model-pools",
+        icon: Layers,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-pools"),
       },
       {
         // The one row in this list that still covers two pages. Costs and

@@ -7,6 +7,7 @@ import {
   orderPoolMembers,
   planModelPool,
   type UpstreamAttempt,
+  withMemberHealth,
 } from "./model-pool-failover";
 
 setupTestCacheManager();
@@ -177,6 +178,19 @@ describe("planModelPool", () => {
     expect((await planModelPool(planParams))?.memberKeyIds).toEqual([
       second.id,
       first.id,
+    ]);
+    const [health] = await withMemberHealth(await ModelPoolModel.list(org.id));
+    expect(health.members).toEqual([
+      expect.objectContaining({
+        providerApiKeyId: first.id,
+        benchedUntil: expect.any(String),
+        benchReason: "rate_limited (429)",
+      }),
+      expect.objectContaining({
+        providerApiKeyId: second.id,
+        benchedUntil: null,
+        benchReason: null,
+      }),
     ]);
   });
 });

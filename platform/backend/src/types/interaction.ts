@@ -381,6 +381,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineCost: true,
   durationMs: true,
   createdAt: true,
+  providerApiKeyId: true,
+  modelPoolId: true,
+  attempt: true,
+  attemptOutcome: true,
+  failureReason: true,
 }).extend({
   attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,

@@ -14,7 +14,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ModelPoolModel } from "@/models";
-import type { ModelPoolMember } from "@/types";
+import type { ModelPool, ModelPoolMember, ModelPoolWithHealth } from "@/types";
 import { poolFailoverReason } from "./llm-proxy-helpers";
 import { openUpstreamWithRetry } from "./upstream-connection-retry";
 
@@ -48,13 +48,10 @@ export async function planModelPool(params: {
 }): Promise<ModelPoolPlan | null> {
   const pool = await ModelPoolModel.findForMemberKey(params);
   if (!pool || pool.members.length === 0) return null;
-  const benched = await cacheManager.getMany<number>(
-    pool.members.map((member) => benchKey(pool.id, member.providerApiKeyId)),
-  );
+  const benches = await readBenches(pool);
   const benchedUntil = new Map<string, number>();
-  for (const member of pool.members) {
-    const until = benched.get(benchKey(pool.id, member.providerApiKeyId));
-    if (until !== undefined) benchedUntil.set(member.providerApiKeyId, until);
+  for (const [providerApiKeyId, bench] of benches) {
+    benchedUntil.set(providerApiKeyId, bench.until);
   }
   return {
     poolId: pool.id,
@@ -65,6 +62,28 @@ export async function planModelPool(params: {
       seed: params.sessionId ?? undefined,
     }),
   };
+}
+
+/** Each pool with when its benched members come back, for the admin page. */
+export async function withMemberHealth(
+  pools: ModelPool[],
+): Promise<ModelPoolWithHealth[]> {
+  return Promise.all(
+    pools.map(async (pool) => {
+      const benches = await readBenches(pool);
+      return {
+        ...pool,
+        members: pool.members.map((member) => {
+          const bench = benches.get(member.providerApiKeyId);
+          return {
+            ...member,
+            benchedUntil: bench ? new Date(bench.until).toISOString() : null,
+            benchReason: bench?.reason ?? null,
+          };
+        }),
+      };
+    }),
+  );
 }
 
 /**
@@ -155,6 +174,7 @@ export async function openThroughModelPool<TClient, T>(params: {
       await benchMember({
         poolId: plan.poolId,
         providerApiKeyId,
+        reason: failover.reason,
         retryAfterMs: failover.retryAfterMs,
       });
       const isLast = index === plan.memberKeyIds.length - 1;
@@ -192,9 +212,16 @@ const DEFAULT_BENCH_MS = 30_000;
 /** A member never sits out longer than this; a longer wait just moves on. */
 const MAX_BENCH_MS = 60_000;
 
+/** A benched member: when it comes back, and the failure that benched it. */
+interface Bench {
+  until: number;
+  reason: string;
+}
+
 async function benchMember(params: {
   poolId: string;
   providerApiKeyId: string;
+  reason: string;
   retryAfterMs?: number;
 }): Promise<void> {
   const ms = Math.min(
@@ -204,13 +231,27 @@ async function benchMember(params: {
   try {
     await cacheManager.set(
       benchKey(params.poolId, params.providerApiKeyId),
-      Date.now() + ms,
+      { until: Date.now() + ms, reason: params.reason } satisfies Bench,
       ms,
     );
   } catch (error) {
     // Benching only steers later requests; this one moves on regardless.
     logger.warn({ err: error, ...params }, "Failed to bench model pool member");
   }
+}
+
+async function readBenches(
+  pool: Pick<ModelPool, "id" | "members">,
+): Promise<Map<string, Bench>> {
+  const benches = await cacheManager.getMany<Bench>(
+    pool.members.map((member) => benchKey(pool.id, member.providerApiKeyId)),
+  );
+  const byMember = new Map<string, Bench>();
+  for (const member of pool.members) {
+    const bench = benches.get(benchKey(pool.id, member.providerApiKeyId));
+    if (bench) byMember.set(member.providerApiKeyId, bench);
+  }
+  return byMember;
 }
 
 function benchKey(poolId: string, providerApiKeyId: string) {

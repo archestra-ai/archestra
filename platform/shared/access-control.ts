@@ -2062,6 +2062,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxy/virtual-keys": { llmVirtualKey: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
+  "/llm/model-pools": { llmModel: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },

@@ -35,6 +35,7 @@ import {
   OverviewSection,
   paneHeight,
 } from "./overview-parts";
+import { PoolAttempt } from "./pool-attempt";
 import { RequestContent } from "./request-content";
 import { KindChip } from "./request-waterfall";
 import {
@@ -421,6 +422,8 @@ function RequestOverview({
             </p>
           ) : null}
         </OverviewSection>
+
+        <PoolAttempt row={row} />
 
         <OverviewSection
           title="Cost"

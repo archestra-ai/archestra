@@ -54,12 +54,21 @@ describe("POST /api/model-pools", () => {
       {
         name: "haiku",
         members: [
-          { providerApiKeyId: first.id, priority: 1, weight: 1, enabled: true },
+          {
+            providerApiKeyId: first.id,
+            providerApiKeyName: first.name,
+            priority: 1,
+            weight: 1,
+            enabled: true,
+            benchedUntil: null,
+          },
           {
             providerApiKeyId: second.id,
+            providerApiKeyName: second.name,
             priority: 2,
             weight: 3,
             enabled: true,
+            benchedUntil: null,
           },
         ],
       },
@@ -93,5 +102,37 @@ describe("POST /api/model-pools", () => {
       });
       expect(response.statusCode, response.body).toBe(400);
     }
+  });
+
+  test("refuses a second pool for the same model", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null);
+    const payload = {
+      name: "haiku",
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+      members: [{ providerApiKeyId: key.id }],
+    };
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { ...payload, name: "haiku again" },
+    });
+    expect(second.statusCode, second.body).toBe(409);
+
+    const renamed = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${first.json().id}`,
+      payload: { ...payload, name: "haiku renamed" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
   });
 });

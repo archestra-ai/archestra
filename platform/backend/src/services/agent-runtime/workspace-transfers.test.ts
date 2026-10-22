@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { vi } from "vitest";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -14,7 +15,6 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
 import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
-  WorkspaceTransferTickets,
   workspaceTransferTickets,
 } from "./workspace-transfers";
 
@@ -22,11 +22,11 @@ setupTestCacheManager();
 
 /**
  * The tool call that mints a ticket and the curl command that redeems it hit
- * whichever replica the load balancer picks. A second instance of the ticket
- * service shares nothing with the first but the database, which is exactly
- * what another replica shares with it.
+ * whichever replica the load balancer picks, and the only thing replicas
+ * share is the database. A ticket that is not in the shared cache is a
+ * ticket another replica cannot honour.
  */
-describe("transfer tickets across replicas", () => {
+describe("transfer tickets in the shared cache", () => {
   beforeEach(() => {
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   });
@@ -35,7 +35,7 @@ describe("transfer tickets across replicas", () => {
     vi.useRealTimers();
   });
 
-  test("an upload authorized on one replica is received by another", async ({
+  test("an upload ticket is written to the shared cache and gone from it once redeemed", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -57,9 +57,17 @@ describe("transfer tickets across replicas", () => {
       sha256,
     });
 
-    const replica = new WorkspaceTransferTickets();
-    const ticket = await replica.resolve(minted.ticket.id, minted.token);
-    const received = await replica.receive({
+    expect(await cachedTicket(minted.ticket.id)).toMatchObject({
+      direction: "upload",
+      path: "probe/incoming/hello.txt",
+      sha256,
+    });
+
+    const ticket = await workspaceTransferTickets.resolve(
+      minted.ticket.id,
+      minted.token,
+    );
+    const received = await workspaceTransferTickets.receive({
       ticket,
       body: Readable.from([bytes]),
     });
@@ -73,13 +81,14 @@ describe("transfer tickets across replicas", () => {
     expect(pod.finalized).toEqual([
       [ticket.entryId, "probe/incoming/hello.txt", sha256, "-", "0"],
     ]);
-    // A redeemed ticket is gone on the replica that minted it too.
+    // A redeemed ticket is gone for every replica.
+    expect(await cachedTicket(minted.ticket.id)).toBeUndefined();
     await expect(
       workspaceTransferTickets.resolve(minted.ticket.id, minted.token),
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  test("a download authorized on one replica streams from another, and a wrong token, an unknown id or an expired ticket is not found on any", async ({
+  test("a download ticket stays in the shared cache for resumes, and a wrong token, an unknown id or an expired ticket is not found", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -98,24 +107,37 @@ describe("transfer tickets across replicas", () => {
       path: "reports/summary.md",
     });
 
-    const replica = new WorkspaceTransferTickets();
-    const ticket = await replica.resolve(minted.ticket.id, minted.token);
+    const ticket = await workspaceTransferTickets.resolve(
+      minted.ticket.id,
+      minted.token,
+    );
     expect(ticket).toMatchObject({
       direction: "download",
       size: file.length,
       sha256: digest(file),
     });
-    const resumed = await replica.read({ ticket, offset: 8, length: -1 });
+    const resumed = await workspaceTransferTickets.read({
+      ticket,
+      offset: 8,
+      length: -1,
+    });
     const parts: Buffer[] = [];
     for await (const part of resumed.stdout) parts.push(Buffer.from(part));
     await resumed.completed;
     expect(Buffer.concat(parts).equals(file.subarray(8))).toBe(true);
+    // Still there: the next Range request may come from any replica.
+    expect(await cachedTicket(minted.ticket.id)).toMatchObject({
+      direction: "download",
+    });
 
     await expect(
-      replica.resolve(minted.ticket.id, `${minted.token.slice(1)}x`),
+      workspaceTransferTickets.resolve(
+        minted.ticket.id,
+        `${minted.token.slice(1)}x`,
+      ),
     ).rejects.toMatchObject({ statusCode: 404 });
     await expect(
-      replica.resolve("not-a-ticket", minted.token),
+      workspaceTransferTickets.resolve("not-a-ticket", minted.token),
     ).rejects.toMatchObject({ statusCode: 404 });
 
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -132,6 +154,13 @@ describe("transfer tickets across replicas", () => {
 
 function digest(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** What any replica would find for this ticket. */
+async function cachedTicket(id: string) {
+  return cacheManager.get<Record<string, unknown>>(
+    `${CacheKey.AgentWorkspaceTransferTicket}-${id}`,
+  );
 }
 
 /** The in-Pod helper, as far as the ticket service can tell. */

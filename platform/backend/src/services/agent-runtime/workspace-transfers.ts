@@ -88,10 +88,8 @@ type WorkspaceTransferTicket = {
  * live in the shared cache and this class keeps no state of its own. The
  * only large field, a protected export's admitted bytes, is bounded by
  * `PROTECTED_EXPORT_CHUNK_BYTES` per ticket and expires with it.
- *
- * @public — exported for testability (one instance per simulated replica)
  */
-export class WorkspaceTransferTickets {
+class WorkspaceTransferTickets {
   /**
    * Authorizes one download. With a crossing, the pinned bytes must first pass
    * the parent's guardrail. A runtime that is mid-call cannot return anything
@@ -127,10 +125,16 @@ export class WorkspaceTransferTickets {
       actor: params.actor,
       taskId: params.taskId,
     };
-    if (!params.crossing) return this.store(download);
     const { crossing } = params;
+    // The snapshot is released unless a stored ticket refers to it: a ticket
+    // the cache failed to write must not leave a pin behind.
     let keepSnapshot = false;
     try {
+      if (!crossing) {
+        const minted = await this.store(download);
+        keepSnapshot = true;
+        return minted;
+      }
       if (snapshot.size <= PROTECTED_EXPORT_CHUNK_BYTES) {
         const bytes = await readSnapshotRange({
           driver,
@@ -186,11 +190,12 @@ export class WorkspaceTransferTickets {
       });
       // A larger file is served from its snapshot, chunk by chunk against the
       // admitted digests.
-      keepSnapshot = true;
-      return await this.store({
+      const minted = await this.store({
         ...download,
         chunkDigests: advanced.progress.digests,
       });
+      keepSnapshot = true;
+      return minted;
     } finally {
       if (!keepSnapshot)
         await discardSnapshot({

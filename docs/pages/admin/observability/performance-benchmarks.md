@@ -1,70 +1,56 @@
 ---
 title: Performance & Latency
-description: Reproducible LLM proxy latency measurements with a mock inference upstream
+description: LLM proxy throughput, response latency, and repeatable release benchmarks
 order: 5
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-The LLM proxy benchmark measures client latency against a local mock upstream. It makes no real inference requests. Results cover the OpenAI chat-completions route.
+Archestra's LLM proxy benchmark separates gateway performance from model inference. It sends requests through the production backend to a local mock model, with request persistence enabled.
 
-## Local Baseline
+<span id="local-baseline"></span>
+<span id="complete-non-streaming-responses"></span>
+<span id="streaming-first-content"></span>
 
-The September 12, 2026 run uses backend commit `2973854af23bbcddc5152de071aa9a8653c0059c`. Percentiles pool samples across all three repeats. Throughput uses their combined measured duration. The run completes 37,800 measured requests, excluding warmup, and every one returns the expected response.
+## Results
 
-### Complete Non-Streaming Responses
+The reference local run handled 128 chat requests per second with 50 requests in flight.
 
-| Workload | Concurrency | Direct P50 ms | Proxy P50 ms | Added P50 ms | Proxy P99 ms | Proxy req/s |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chat | 1 | 0.06 | 7.22 | 7.16 | 10.73 | 134.7 |
-| Chat | 10 | 0.32 | 25.89 | 25.57 | 37.31 | 381.1 |
-| Chat | 50 | 1.56 | 119.62 | 118.07 | 170.70 | 413.0 |
-| Tools | 1 | 0.05 | 7.26 | 7.21 | 11.24 | 131.3 |
-| Tools | 10 | 0.25 | 25.79 | 25.54 | 40.47 | 379.9 |
-| Tools | 50 | 1.45 | 121.91 | 120.46 | 167.04 | 405.3 |
+| Metric | Result |
+| --- | ---: |
+| Successful requests | 100% |
+| Chat requests per second | 128 |
+| Complete response latency, P50 | 371 ms |
+| Complete response latency, P99 | 492 ms |
+| Streaming first content, P50 | 309 ms |
 
-### Streaming First Content
+Streaming first content is measured separately from complete responses. The mock sends 20 content events, spaced 10 ms apart.
 
-| Concurrency | Direct P50 ms | Proxy P50 ms | Added P50 ms | Proxy P99 ms | Direct Gap P99 ms | Proxy Gap P99 ms |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 12.64 | 29.91 | 17.27 | 36.70 | 12.43 | 12.94 |
-| 10 | 11.88 | 40.33 | 28.45 | 50.99 | 13.05 | 15.46 |
-| 50 | 12.75 | 113.87 | 101.12 | 129.54 | 13.06 | 15.84 |
+<span id="environment"></span>
+<span id="method"></span>
 
-Added P50 is the proxy median minus the direct mock median. It estimates added latency across separate request populations. Proxy P99 uses observed latencies for each table's metric, not the P99 of added overhead.
+## Test Setup
 
-### Environment
+These results come from one production web process on an Apple M5 Pro with 64 GiB RAM, Node.js 24 and PostgreSQL 17. The client, proxy and mock run locally. Authentication validates a passthrough virtual key, paired with a synthetic provider key. No real inference provider is called.
 
-- **Host:** Apple M5 Pro, 18 logical CPUs, 64 GiB RAM
-- **Runtime:** Node.js 24.19.0, macOS Darwin 25.6, arm64
-- **Backend:** One production web process, default info logging, no trace exporter
-- **Database:** PostgreSQL 17.11 with pgvector, Docker, tmpfs storage, pool size 20
-- **Network:** Client, backend, and mock on local loopback; database through Docker
-- **Data:** Disposable database, default configuration, synthetic requests
-- **Authentication:** Synthetic provider-key passthrough
+The test covers OpenAI chat completions, with and without a tool definition, plus streaming. It uses fixed concurrency and measures successful responses after warmup. It does not measure model generation time or virtual-key budget enforcement.
 
-The backend uses the standard request path, including interaction persistence. Saving a streaming interaction does not delay the response to the client. The run excludes virtual-key validation, configured policy decisions and MCP execution.
+Compare throughput only when hardware, prompt size, streaming mix, concurrency and enabled features match. A local result is not a production capacity guarantee.
 
-## Method
+## Release Benchmarks
 
-Each workload runs at concurrency 1, 10, and 50. Each concurrency has three repeats. Non-streaming blocks contain 1,000 measured requests; streaming blocks contain 100. Each block warms its keep-alive pool with at least 30 requests. At concurrency 50, warmup contains 50 requests.
+Each platform release PR runs the same mock workloads and updates one benchmark comment with throughput, success rate and latency. The linked workflow retains the detailed measurements and diagnostics for 14 days.
 
-Direct and proxy blocks alternate order between repeats. Each client starts its next request after the previous response completes. This measures fixed concurrency, not a fixed request arrival rate.
-
-The chat workload returns a fixed JSON completion without artificial delay. The tools workload adds one fictional `benchmark_lookup` function definition. Its response contains no tool call.
-
-Streaming returns 20 content events, each after a requested 10 ms delay. First-content latency excludes role-only and usage events. Content events can contain multiple tokens.
+Use those results to compare release candidates on the same runner configuration. Shared-runner timing can vary; failed requests fail the benchmark rather than disappearing from its report.
 
 ## Reproduction
 
-The [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) contains setup instructions and workload options. The [baseline record](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/2026-09-12-local.json) contains per-repeat summaries and environment details.
-
-Prerequisites: Docker and pnpm. Clone the [Archestra repository](https://github.com/archestra-ai/archestra) and run from a clean checkout's `platform/` directory:
+Run the benchmark from a clean checkout's `platform/` directory with Node.js, pnpm, Rust and Docker installed:
 
 ```bash
 pnpm install --frozen-lockfile
-bash benchmarks/ci.sh
+bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
 ```
 
-The launcher builds the backend and creates a disposable database. It removes the stack after measurement. Results land in `benchmarks/results/ci/`: `summary.md` holds the comparison tables.
+The launcher creates a disposable database, measures the proxy and removes the stack. See the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) for workload options and the [reference measurements](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/local-authenticated.json) for the local results above.

@@ -6,7 +6,7 @@ Measure client latency through the real production backend against a determinist
 
 Use a clean worktree with no `platform/.env`. The isolated backend refuses that file and supplies its own environment. Existing development or deployment credentials are not loaded.
 
-Prerequisites: the repository's Node and pnpm versions, Docker with Compose, and Tilt. Run commands from `platform/`:
+Prerequisites: the repository's Node, pnpm and Rust versions, Docker with Compose, and Tilt. Run commands from `platform/`:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -29,7 +29,7 @@ For a single run without file watching, use the same launcher as CI:
 bash benchmarks/ci.sh
 ```
 
-This builds, migrates, measures, and tears down the disposable stack. It refuses an existing benchmark stack or occupied ports. PostgreSQL uses tmpfs; teardown discards benchmark data. The reserved ports are 15432 (database), 19000 (backend), 19050 (metrics), and 19092 (mock).
+This builds, migrates, measures, and tears down the disposable stack. It refuses an existing benchmark stack or occupied ports. PostgreSQL uses tmpfs; teardown discards benchmark data. The default ports are 15432 (database), 19000 (backend), 19050 (metrics), and 19092 (mock). If they are occupied, use `bash benchmarks/ci.sh --port-offset=400` to shift all four ports and use a separate Compose project. The launcher never takes over an existing stack.
 
 ## Workloads
 
@@ -39,7 +39,7 @@ This builds, migrates, measures, and tears down the disposable stack. It refuses
 | `tools` | Short prompt and one function definition | Same JSON completion; no tool invocation |
 | `stream` | Short prompt, streaming enabled | 20 content events with a requested 10 ms delay before each event |
 
-All scenarios use the standard OpenAI chat proxy route and synthetic provider-key passthrough. This exercises the existing backend and its interaction persistence. It does not exercise virtual-key validation, configured security rules or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
+All scenarios use the standard OpenAI chat proxy route. The isolated launcher signs in through the public API and creates a disposable passthrough virtual key, paired with a synthetic provider key. This exercises the existing backend and its interaction persistence. It exercises virtual-key validation but does not configure spend limits, security rules or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
 
 Defaults: concurrency 1, 10, and 50; three repeats; 1,000 measured requests per non-streaming block; 100 per streaming block. Each block first warms its own keep-alive connection pool with `max(30, concurrency)` requests. Direct and proxy blocks alternate order between repeats.
 
@@ -50,11 +50,11 @@ node benchmarks/run.mjs --requests=100 --stream-requests=20 --repeats=2 --concur
 node benchmarks/run.mjs --scenarios=stream --stream-requests=500 --warmup=50
 ```
 
-Additional flags: `--output=path`, `--proxy-url=URL`, and `--mock-url=URL`. URL flags take complete chat-completion endpoint URLs. An alternate deployment must already route this model to the same benchmark mock. The runner validates the direct mock's health marker and every response's exact content. It cannot verify an arbitrary proxy's routing configuration before sending requests. `ARCHESTRA_BENCHMARK_API_KEY` can supply an alternate credential; results never contain its value.
+Additional flags: `--output=path`, `--proxy-url=URL`, and `--mock-url=URL`. URL flags take complete chat-completion endpoint URLs. An alternate deployment must already route this model to the same benchmark mock. The runner validates the direct mock's health marker and every response's exact content. It cannot verify an arbitrary proxy's routing configuration before sending requests. `ARCHESTRA_BENCHMARK_API_KEY` can supply an alternate bearer credential; `ARCHESTRA_BENCHMARK_VIRTUAL_KEY` supplies a passthrough virtual key when required. Credentials are sent only to the proxy, never the direct mock, and their values are excluded from results.
 
 ## Measurements
 
-`results.json` contains every measured request, failures, block summaries, environment metadata, and the tested commit. `summary.md` contains comparison tables. Results are ignored by Git. The [recorded local baseline](baselines/2026-09-12-local.json) retains block summaries and environment details without individual samples.
+`results.json` contains every measured request, failures, block summaries, environment metadata, and the tested commit. `summary.md` contains a compact three-workload report at the highest tested concurrency. `report.json` is its machine-readable form; `details.md` retains every concurrency and repeat. Percentiles pool successful request samples across repeats; throughput divides their combined success count by combined measured duration. Results are ignored by Git. The [recorded local baseline](baselines/local-authenticated.json) retains block summaries and environment details without individual samples.
 
 - Total latency ends when the complete validated response arrives.
 - First-byte latency starts at request submission and ends at the first response body bytes.
@@ -69,7 +69,7 @@ The runner stops scheduling after the first measured failure, lets in-flight req
 
 ## CI
 
-The `LLM Proxy Benchmark` workflow runs on benchmark changes and supports manual dispatch. It uses 300 non-streaming and 60 streaming requests per block, two repeats, and concurrency 1, 10, and 50. It uploads raw measurements and stack logs for 14 days and publishes a job summary. Failures fail CI; latency has no absolute threshold on shared runners. Compare equivalent runner types and workload settings.
+The `LLM Proxy Benchmark` workflow runs on benchmark changes, on every platform Release Please PR update, and on manual dispatch. Release PRs get one sticky summary comment, updated in place for the current head. Superseded runs cannot overwrite a newer head; failed runs replace the success table with diagnostics or clearly marked partial measurements. Benchmark code runs without a write token; a separate publisher uses trusted base-branch code and can comment only on same-repository release PRs. It uses 300 non-streaming and 60 streaming requests per block, two repeats, and concurrency 1, 10, and 50. It uploads raw measurements and stack logs for 14 days and publishes a job summary. The launcher builds the native bindings and backend before measurement. Failures fail CI; latency has no absolute threshold on shared runners. Compare equivalent runner types and workload settings.
 
 ## Historical GCP Scripts
 

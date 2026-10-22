@@ -24,9 +24,18 @@ test.for([
   await makeMember(user.id, agent.organizationId);
   const upstream = Fastify();
   const captured: Record<string, unknown>[] = [];
-  upstream.post("/openai/v1/images/generations", async (request) => {
+  upstream.post("/openai/v1/images/generations", async (request, reply) => {
     expect(request.headers["api-key"]).toBe("synthetic-upstream-key");
     captured.push(request.body as Record<string, unknown>);
+    if ((request.body as { prompt: string }).prompt === "Synthetic failure") {
+      return reply
+        .header("retry-after", "17")
+        .header("x-should-retry", "false")
+        .code(429)
+        .send({
+          error: { message: "Synthetic rate limit", type: "rate_limit_error" },
+        });
+    }
     return {
       created: 1,
       data: [{ b64_json: "aW1hZ2U=" }],
@@ -132,6 +141,32 @@ test.for([
       "synthetic-upstream-key",
     );
     expect(JSON.stringify(interactions)).not.toContain(value);
+    const ErrorSDK = (
+      await import(process.env.ARCHESTRA_TEST_IMAGE_JS_SDK ?? "openai")
+    ).default as typeof OpenAI;
+    const failingClient = new ErrorSDK({
+      apiKey: value,
+      baseURL: `${proxyUrl}/v1/azure/${agent.id}`,
+      maxRetries: 0,
+    });
+    const previousCalls = captured.length;
+    await expect(
+      failingClient.images.generate({ ...body, prompt: "Synthetic failure" }),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(captured).toHaveLength(previousCalls + 1);
+    const failedRows = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(failedRows.at(-1)).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      cost: null,
+      response: {
+        __mediaUsage: { tokensAvailable: false, costAvailable: false },
+      },
+    });
+    expect(JSON.stringify(failedRows)).not.toContain("synthetic-upstream-key");
+    expect(JSON.stringify(failedRows)).not.toContain(value);
   } finally {
     app.server.closeAllConnections();
     upstream.server.closeAllConnections();

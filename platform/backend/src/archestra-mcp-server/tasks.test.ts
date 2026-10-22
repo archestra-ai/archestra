@@ -1407,18 +1407,18 @@ describe("run tools", () => {
 
       const read = await executeArchestraTool(
         "archestra__read_workspace_file",
-        { task_id: task.id, path: "reports/notes.md" },
+        { run_id: task.id, path: "reports/notes.md" },
         context,
       );
       const written = await executeArchestraTool(
         "archestra__write_workspace_file",
-        { task_id: task.id, path: "reports/notes.md", content: "hello" },
+        { run_id: task.id, path: "reports/notes.md", content: "hello" },
         context,
       );
       const download = await executeArchestraTool(
         "archestra__transfer_workspace_file",
         {
-          task_id: task.id,
+          run_id: task.id,
           direction: "download",
           path: "reports/notes.md",
           local_path: "/tmp/notes.md",
@@ -1474,12 +1474,12 @@ describe("run tools", () => {
 
       const asText = await executeArchestraTool(
         "archestra__read_workspace_file",
-        { task_id: task.id, path: "image.png" },
+        { run_id: task.id, path: "image.png" },
         context,
       );
       const asBase64 = await executeArchestraTool(
         "archestra__read_workspace_file",
-        { task_id: task.id, path: "image.png", encoding: "base64" },
+        { run_id: task.id, path: "image.png", encoding: "base64" },
         context,
       );
 
@@ -1507,7 +1507,7 @@ describe("run tools", () => {
 
       const read = await executeArchestraTool(
         "archestra__read_workspace_file",
-        { task_id: task.id, path: "notes.md" },
+        { run_id: task.id, path: "notes.md" },
         context,
       );
 

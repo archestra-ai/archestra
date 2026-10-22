@@ -24,8 +24,8 @@ You need an Azure subscription where you can create an Azure Bot, and a Teams te
 What to know:
 
 - Teams must reach Archestra. A local instance can use the wizard's **Configure ngrok** step instead.
-- To expose only the webhook, set [`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`](/docs/reference/configuration#ARCHESTRA_PUBLIC_ENDPOINTS_PORT). The rest of the API can then stay internal.
-- To configure Teams with environment variables, see the [Configuration reference](/docs/reference/configuration#chatops).
+- To expose only the webhook, set [`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`](/docs/admin/deployment/configuration#ARCHESTRA_PUBLIC_ENDPOINTS_PORT). The rest of the API can then stay internal.
+- To configure Teams with environment variables, see the [Configuration reference](/docs/admin/deployment/configuration#chatops).
 
 <span id="dedicated-webhook-port"></span><span id="usage"></span><span id="first-message"></span><span id="default-agent"></span><span id="direct-messages"></span>
 
@@ -135,7 +135,7 @@ What to know:
 | Problem | Fix |
 | --- | --- |
 | **"You don't have access to this app"** | Your organization blocks custom apps. Ask your Teams admin to allow them in the [Teams Admin Center](https://admin.teams.microsoft.com/). |
-| **The bot does not answer** | Check that [`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED), that Teams can reach your URL, and that the app ID and password are correct. |
+| **The bot does not answer** | Check that [`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED), that Teams can reach your URL, and that the app ID and password are correct. |
 | **"Could not verify your identity"** | Add the `TeamMember.Read.Group` and `ChatMember.Read.Chat` permissions to the app manifest. Then install the app again. |
 | **No history in a channel thread, or Answer all messages does nothing** | Add the `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` permissions to the manifest. Install the app again, and have the team owner approve them. |
 | **Direct messages do not work** | Upload the latest app manifest. Older manifests do not include the `personal` scope. |
@@ -148,6 +148,6 @@ What to know:
 
 - **Memory:** in a channel, the agent reads the thread. In a direct message or group chat, Archestra keeps the history. See [Conversation History](/docs/agents/triggers-and-channels#conversation-history).
 - **New people:** someone who messages the bot without an Archestra account gets one. It has the organization's default role for new users, set in **Settings → Auth**. Find these accounts in **Settings → Users**.
-- **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
+- **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
 - **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives. Files in channels need [read access to the team's site](#read-files-in-channels).
 - **File limits:** 20 files per message, 10 MB per file, 25 MB in total. When a file is too large or cannot be read, the agent says so.

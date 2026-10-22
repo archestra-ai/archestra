@@ -1,4 +1,4 @@
-import { RouteId, SupportedProviders } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import {
   buildForbiddenErrorMessage,
   requiredEndpointPermissionsMap,
@@ -16,7 +16,6 @@ import {
   SessionModel,
   UserModel,
 } from "@/models";
-import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
@@ -30,6 +29,7 @@ import {
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
+  isLlmProxyPath,
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
@@ -167,19 +167,10 @@ export class Authnz {
       return true;
     }
     const isGetOrHead = method === "GET" || method === "HEAD";
-    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
-    const isLlmProxyRoute = SupportedProviders.some((provider) =>
-      url.startsWith(`/v1/${provider}`),
-    );
-    // Prefer route consts here instead of hardcoding paths; these checks must
-    // stay in sync with route registration.
-    const isModelRouterRoute = url.startsWith(MODEL_ROUTER_PREFIX);
-
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
-      isLlmProxyRoute ||
-      isModelRouterRoute ||
+      isLlmProxyPath(url) ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||

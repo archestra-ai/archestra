@@ -26,7 +26,7 @@ Paste a key, and Archestra tests it and loads the provider's models.
 
 The new key appears in the **Provider API keys** table as **Configured**, and its models appear under **Models**. To choose who can use it, edit the key and add people or teams under its permissions.
 
-You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` (for example [`ARCHESTRA_CHAT_OPENAI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_OPENAI_API_KEY)). It is the fallback when no stored key applies.
+You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` (for example [`ARCHESTRA_CHAT_OPENAI_API_KEY`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_OPENAI_API_KEY)). It is the fallback when no stored key applies.
 
 <span id="turning-providers-off"></span>
 
@@ -41,7 +41,7 @@ Already pay for ChatGPT, GitHub Copilot, Microsoft 365 Copilot, or SuperGrok? Us
 These credentials belong to one person and cannot be shared. An agent that uses one always runs on the chatting user's own subscription. A user who has not connected sees a sign-in prompt in chat. If the vendor rejects the sign-in later, click **Connect** again; the credential keeps its model and agent selections.
 
 - **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on.
-- **SuperGrok**: unavailable when [Bring Your Own Secrets](/docs/admin/security) uses a read-only external Vault, because Archestra cannot store the rotating sign-in token there. Use an xAI API key instead.
+- **SuperGrok**: unavailable when [Bring Your Own Secrets](/docs/admin) uses a read-only external Vault, because Archestra cannot store the rotating sign-in token there. Use an xAI API key instead.
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
 ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
@@ -86,7 +86,7 @@ Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with 
 | [Google Gemini](/docs/llm-proxy/providers/gemini) | `gemini` | Generate Content, Embeddings | Yes | Google AI Studio or Vertex AI |
 | Groq | `groq` | Chat Completions | Yes | |
 | Jev | `jev` | Decisions | No | Scores content, such as a tool call. It does not chat. See [Jev](#jev). |
-| Kimi (Moonshot AI) | `kimi` | Chat Completions | No | China endpoint: set [`ARCHESTRA_KIMI_BASE_URL`](/docs/reference/configuration#ARCHESTRA_KIMI_BASE_URL) to `https://api.moonshot.cn/v1` |
+| Kimi (Moonshot AI) | `kimi` | Chat Completions | No | China endpoint: set [`ARCHESTRA_KIMI_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_KIMI_BASE_URL) to `https://api.moonshot.cn/v1` |
 | [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot) | `microsoft-365-copilot` | Chat Completions | No | Personal sign-in only, no tools |
 | MiniMax | `minimax` | Chat Completions | Yes | Text only |
 | Mistral AI | `mistral` | Chat Completions, Embeddings | Yes | |
@@ -98,7 +98,7 @@ Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with 
 | xAI (Grok) | `xai` | Chat Completions | Yes | SuperGrok subscription through **Connect** |
 | Zhipu AI | `zhipuai` | Chat Completions, Embeddings | Yes | |
 
-Each provider's default endpoint can be changed with its `ARCHESTRA_<PROVIDER>_BASE_URL` variable, listed under [LLM Provider Configuration](/docs/reference/configuration#llm-providers).
+Each provider's default endpoint can be changed with its `ARCHESTRA_<PROVIDER>_BASE_URL` variable, listed under [LLM Provider Configuration](/docs/admin/deployment/configuration#llm-providers).
 
 ### OpenRouter Free Models
 
@@ -108,7 +108,7 @@ OpenRouter's `:free` model variants cost nothing, though they still need an Open
 
 [Jev](https://typesafe.ai) is TypeSafe's decision model. It scores content, such as a tool call, and does not chat. Send requests to `https://<archestra-host>/v1/jev/decisions` with `Authorization: Bearer <your-api-key>`.
 
-To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`. To change the default endpoint, set [`ARCHESTRA_JEV_BASE_URL`](/docs/reference/configuration#ARCHESTRA_JEV_BASE_URL).
+To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`. To change the default endpoint, set [`ARCHESTRA_JEV_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_JEV_BASE_URL).
 
 <span id="model-context-and-output-limits"></span>
 

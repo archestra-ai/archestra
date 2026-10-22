@@ -121,7 +121,7 @@ For an app where people sign in. Each call uses that person's provider keys, cos
 2. In your app, run the authorization code flow with PKCE. Ask for `scope=llm:proxy`. Add `offline_access` to get a refresh token.
 3. Send the person's access token on a provider route or the Model Router.
 
-- A public app can register itself, with no secret. To allow only clients you register, set [`ARCHESTRA_AUTH_DCR_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_AUTH_DCR_ENABLED).
+- A public app can register itself, with no secret. To allow only clients you register, set [`ARCHESTRA_AUTH_DCR_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_DCR_ENABLED).
 - Set how long tokens last under **Settings → Auth → OAuth token lifetime**.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-user-oauth).
 

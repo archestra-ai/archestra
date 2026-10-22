@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Prints the Agent's instructions followed by this image's description of the
+# machine. Each maintained launcher passes the result to its native client, so
+# a run knows where to work and what is installed without per-Agent prompts.
+environment=/etc/archestra/agent-environment.md
+printf '%s' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
+if [ -r "$environment" ]; then
+  if [ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]; then
+    printf '\n\n'
+  fi
+  cat "$environment"
+fi

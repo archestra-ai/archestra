@@ -6,8 +6,10 @@ import {
   INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
   isInlineableTextMimeType,
+  type ModelSelection,
   PLAYWRIGHT_MCP_CATALOG_ID,
   requiresOpenAiResponsesApi,
+  type SubagentModelTier,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UIMessageChunk, UserContent } from "ai";
@@ -62,7 +64,11 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  type ModelTrioTiers,
+  resolveForkParentSelection,
+  resolveSubagentTierSelection,
+} from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -95,7 +101,25 @@ export interface A2AAttachment {
 export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
-export interface A2AExecuteParams {
+/**
+ * The caller forks itself: a fresh-context copy of the calling agent. It may
+ * repeat its direct parent in the chain once, and never forks again. Only a
+ * fork starts from its parent's model, optionally moved to a tier.
+ */
+type ForkOptions =
+  | { selfFork?: false }
+  | {
+      selfFork: true;
+      /** The model and key the forking parent runs on. */
+      parentLlm?: ModelSelection;
+      /** The model tier the fork runs on, relative to `parentLlm`. */
+      tier?: SubagentModelTier;
+    };
+
+/** @public — exercised by the a2a route tests (knip --production ignores tests) */
+export type A2AExecuteParams = A2AExecuteParamsBase & ForkOptions;
+
+interface A2AExecuteParamsBase {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
    */
@@ -125,11 +149,6 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
-  /**
-   * The caller forks itself: a fresh-context copy of the calling agent. It may
-   * repeat its direct parent in the chain once, and never forks again.
-   */
-  selfFork?: boolean;
   /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
   appaSubagent?: SubagentBinding;
   /**
@@ -312,20 +331,15 @@ export async function executeA2AMessage(
   }
 
   const {
+    modelId: resolvedModelId,
     selectedModel,
     selectedProvider: provider,
     chatApiKeyId: resolvedApiKeyId,
-  } = await resolveConversationLlmSelectionForAgent({
-    agent: {
-      llmApiKeyId: agent.llmApiKeyId,
-      modelId: agent.modelId,
-    },
+  } = await resolveRunLlmSelection({
+    agent,
     organizationId,
     userId,
-    // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-    // the user driving the /chat model selector, so they resolve from the
-    // agent's own configuration rather than the caller's personal chat default.
-    includeMemberChatDefault: false,
+    ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
   });
   // Run on the key that was selected with the model (the agent's own, or the
   // organization default's). Without it, key lookup prefers the caller's
@@ -365,6 +379,9 @@ export async function executeA2AMessage(
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      parentLlm: resolvedModelId
+        ? { modelId: resolvedModelId, apiKeyId: resolvedApiKeyId }
+        : undefined,
       // A delegated run's pause would never reach whoever answers the root.
       openappaReviewPause:
         params.openappaReviewPause === true &&
@@ -378,6 +395,7 @@ export async function executeA2AMessage(
       organizationId,
       userId,
       agentId: agent.id,
+      isFork: params.selfFork === true,
     });
 
     logger.info(
@@ -1213,6 +1231,37 @@ export async function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/**
+ * A fork starts from its parent's model, moved to its tier when one is asked
+ * for; any other run resolves from the agent's own configuration.
+ */
+async function resolveRunLlmSelection(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
+  organizationId: string;
+  userId: string;
+  parentLlm?: ModelSelection;
+  tier?: SubagentModelTier;
+}) {
+  const { llmApiKeyId, modelId } = params.agent;
+  const base = await resolveForkParentSelection({
+    agent: { llmApiKeyId, modelId },
+    organizationId: params.organizationId,
+    userId: params.userId,
+    parentLlm: params.parentLlm,
+  });
+  return params.tier
+    ? resolveSubagentTierSelection({
+        tier: params.tier,
+        parent: base,
+        agentTrio: params.agent,
+        organizationId: params.organizationId,
+      })
+    : base;
+}
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {

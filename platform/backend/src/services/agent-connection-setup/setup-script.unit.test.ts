@@ -23,7 +23,7 @@ import {
   KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
-import { DEFAULT_MODELS } from "@archestra/shared/model-constants";
+import { PROVIDER_MODEL_TIERS } from "@archestra/shared/model-constants";
 import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
@@ -2153,7 +2153,8 @@ ${script.slice(start, end)}
         stat(path.join(home, ".archestra", "opencode-connection-state.json")),
       ).rejects.toMatchObject({ code: "ENOENT" });
 
-      restored.model = `openai/${DEFAULT_MODELS.openai}`;
+      // What a pre-runtime-routing connection pinned as the default.
+      restored.model = "openai/gpt-5.5";
       await writeFile(configPath, JSON.stringify(restored));
       await execFileAsync("bash", [block], {
         env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
@@ -3549,7 +3550,9 @@ describe("renderSetupScript (windows)", () => {
     expect(script).not.toContain("GITHUB_TOKEN");
     expect(script).toContain("$env:ARCHESTRA_COPILOT_API_KEY = $ArchGhcpToken");
     expect(script).not.toContain("+ $ArchGhcpToken");
-    expect(script).toContain('"model":"gpt-4o"');
+    expect(script).toContain(
+      `"model":"${PROVIDER_MODEL_TIERS["github-copilot"].normal}"`,
+    );
     expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
   });
 

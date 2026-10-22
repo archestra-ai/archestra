@@ -370,6 +370,53 @@ describe("createStepContextGuard — prompt cache breakpoint", () => {
   });
 });
 
+describe("createStepContextGuard — parallel tool results", () => {
+  test("results finished out of order reach the model in call order, the breakpoint on the last", async () => {
+    const guard = createStepContextGuard({
+      contextLength: null,
+      promptCache: {
+        provider: "openrouter",
+        model: "anthropic/claude-haiku-4.5",
+        anthropicNativeEndpoint: false,
+      },
+    });
+    const call = (toolCallId: string) => ({
+      type: "tool-call" as const,
+      toolCallId,
+      toolName: "agent__self",
+      input: {},
+    });
+    const result = (toolCallId: string) => ({
+      type: "tool-result" as const,
+      toolCallId,
+      toolName: "agent__self",
+      output: { type: "text" as const, value: toolCallId },
+    });
+
+    const { messages } = await guard({
+      messages: [
+        { role: "user", content: "review all three" },
+        { role: "assistant", content: [call("a"), call("b"), call("c")] },
+        { role: "tool", content: [result("c"), result("a"), result("b")] },
+      ],
+    });
+
+    const results = messages[2]?.content;
+    if (!Array.isArray(results)) throw new Error("expected tool parts");
+    expect(
+      results.map((part) =>
+        part.type === "tool-result"
+          ? [part.toolCallId, part.providerOptions !== undefined]
+          : null,
+      ),
+    ).toEqual([
+      ["a", false],
+      ["b", false],
+      ["c", true],
+    ]);
+  });
+});
+
 function anthropicCacheControl(message: ModelMessage | undefined) {
   return (
     message?.providerOptions as

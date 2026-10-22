@@ -611,6 +611,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return undefined;
         if (binding.request.restoredNoticeCallIds?.has(answer.id))
           return "pending";
+        if (childReturns.failedSpawns.has(answer.id)) return "failed";
         return (
           binding.adapter.classifySpawnResult?.(answer) ??
           (answer.isError ? "failed" : "pending")
@@ -2606,6 +2607,8 @@ async function approveChildReturnCarriers(params: {
   updates: Record<string, string>;
   /** Results of children that ran while enforcement was off, with no crossing. */
   ignored: Set<string>;
+  /** Spawn results that carry no return: the child failed before it returned. */
+  failedSpawns: Set<string>;
 }> {
   const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
@@ -2615,8 +2618,9 @@ async function approveChildReturnCarriers(params: {
       adapter?.isChildCompletionResult?.(result) === true,
   );
   const ignored = new Set<string>();
+  const failedSpawns = new Set<string>();
   if (completions.length === 0 && completionResults.length === 0) {
-    return { updates: {}, ignored };
+    return { updates: {}, ignored, failedSpawns };
   }
   // Display markers carry no authority. Assistant quotes are stripped from
   // the request but never treated as parent-bound completions.
@@ -2828,7 +2832,40 @@ async function approveChildReturnCarriers(params: {
       arrived.set(child, { ...record, spawnCallId });
     }
   }
-  const unrecordedResult = completionResults.find(
+  // A child's return always reaches the parent framed or marked. So when this
+  // session released a spawn, its child crossed nothing, and no collected
+  // return names the spawn's result, the result is the client's own text
+  // about a child that failed before it returned, for example on a provider
+  // error before its first request. The runtime closes that spawn and
+  // withholds the text, so the parent can go on and spawn again. A spawn this
+  // session never released, or one a fork carries, is still refused below.
+  const released = new Set(params.binding.request.releasedSpawnCalls);
+  // Display-only echoes name no return, as in the matching above.
+  const named = new Set(
+    completions
+      .filter((completion) => !completion.assistantOrigin)
+      .flatMap((completion) =>
+        [completion.envelopeId, completion.spawnCallId].flatMap((id) =>
+          id ? [withoutTrajectoryStamp(id)] : [],
+        ),
+      ),
+  );
+  for (const result of completionResults) {
+    const id = withoutTrajectoryStamp(result.id);
+    if (
+      !params.binding.session.fork_of &&
+      directSpawnResults.has(id) &&
+      released.has(id) &&
+      !crossedSpawns.has(id) &&
+      !named.has(id) &&
+      !unenforcedReturn({ spawnCallId: id })
+    )
+      failedSpawns.add(result.id);
+  }
+  const returnResults = completionResults.filter(
+    (result) => !failedSpawns.has(result.id),
+  );
+  const unrecordedResult = returnResults.find(
     (result) =>
       (byEnvelope.get(withoutTrajectoryStamp(result.id)) ?? []).length === 0 &&
       !ignoredByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
@@ -2862,7 +2899,7 @@ async function approveChildReturnCarriers(params: {
   // Strips unverified text and metadata beside valid returns.
   // Reconstructs result content solely from crossed values.
   const updates: Record<string, string> = Object.create(null);
-  for (const result of completionResults) {
+  for (const result of returnResults) {
     const envelopeId = withoutTrajectoryStamp(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
@@ -2910,7 +2947,7 @@ async function approveChildReturnCarriers(params: {
             ]),
           });
   }
-  return { updates, ignored };
+  return { updates, ignored, failedSpawns };
 }
 
 /**

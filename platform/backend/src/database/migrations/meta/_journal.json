@@ -4135,8 +4135,15 @@
     {
       "idx": 590,
       "version": "7",
-      "when": 1792677669286,
-      "tag": "0590_exotic_excalibur",
+      "when": 1792675102727,
+      "tag": "0590_brave_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 591,
+      "version": "7",
+      "when": 1792682146439,
+      "tag": "0591_exotic_excalibur",
       "breakpoints": true
     }
   ]

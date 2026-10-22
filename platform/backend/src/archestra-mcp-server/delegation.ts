@@ -1,6 +1,9 @@
 import {
   AGENT_TOOL_PREFIX,
+  type ModelSelection,
   SELF_FORK_TOOL_NAME,
+  type SubagentModelTier,
+  SubagentModelTierSchema,
   slugify,
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -39,6 +42,11 @@ import {
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
+import {
+  availableSubagentTiers,
+  type ModelTrioTiers,
+  resolveForkParentSelection,
+} from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -55,6 +63,40 @@ export const delegationToolArgsSchema = z.object({
 const DELEGATION_INPUT_JSON_SCHEMA = z.toJSONSchema(delegationToolArgsSchema, {
   io: "input",
 }) as Tool["inputSchema"];
+
+export const selfForkToolArgsSchema = delegationToolArgsSchema.extend({
+  tier: SubagentModelTierSchema.optional(),
+});
+
+/**
+ * The fork's input schema. `tier` is advertised only with the tiers that would
+ * move the copy to another model; with none it is left out entirely.
+ */
+function selfForkInputSchema(
+  tiers: Exclude<SubagentModelTier, "normal">[],
+): Tool["inputSchema"] {
+  if (tiers.length === 0) return DELEGATION_INPUT_JSON_SCHEMA;
+  const descriptions = {
+    smart:
+      "`smart`: a stronger model, for hard reasoning or checking a conclusion.",
+    fast: "`fast`: a cheaper, quicker model, for bulk reading, searching, or extraction.",
+  };
+  return {
+    ...DELEGATION_INPUT_JSON_SCHEMA,
+    properties: {
+      ...DELEGATION_INPUT_JSON_SCHEMA.properties,
+      tier: {
+        type: "string",
+        enum: ["normal", ...tiers],
+        description: [
+          "Model the copy runs on.",
+          ...tiers.map((tier) => descriptions[tier]),
+          "`normal` (default): your own model.",
+        ].join(" "),
+      },
+    },
+  };
+}
 
 // === Exports ===
 
@@ -79,6 +121,10 @@ export async function getAgentTools(context: {
   /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
   skipAccessCheck?: boolean;
   lookups?: RequestLookups;
+  /** The model and key the caller runs on, which its fork starts from. */
+  parentLlm?: ModelSelection;
+  /** The caller's own delegation chain; a fork's ends in its agent twice. */
+  delegationChain?: string;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
@@ -132,7 +178,7 @@ export async function getAgentTools(context: {
       attestable,
     });
     return finishDelegationTools(
-      agentId,
+      context,
       [...outboundTools, ...localTools],
       attestable,
     );
@@ -193,7 +239,7 @@ export async function getAgentTools(context: {
     }),
   );
   return finishDelegationTools(
-    agentId,
+    context,
     [...outboundTools, ...localTools],
     attestable,
   );
@@ -211,6 +257,9 @@ export async function handleDelegation(
   if (!message) {
     return errorResult("message is required.");
   }
+
+  // Validated against the advertised schema at dispatch.
+  const tier = SubagentModelTierSchema.optional().parse(args?.tier);
 
   if (!agentId) {
     return errorResult("No agent context available.");
@@ -254,7 +303,7 @@ export async function handleDelegation(
         message,
         context,
       });
-      return successResult(text);
+      return delegationResult(message, text);
     } catch (error) {
       if (isAbortLikeError(error)) throw error;
       return errorResult(
@@ -351,7 +400,9 @@ export async function handleDelegation(
 
     const run = {
       agentId: target.id,
-      selfFork,
+      ...(selfFork
+        ? { selfFork: true as const, parentLlm: context.parentLlm, tier }
+        : {}),
       ...(spawn.binding ? { appaSubagent: spawn.binding.child } : {}),
       organizationId,
       userId: userId || "system",
@@ -377,7 +428,8 @@ export async function handleDelegation(
     const task =
       promptWithContract(message, spawn.binding?.contract) ?? message;
     if (!spawn.binding) {
-      return successResult(
+      return delegationResult(
+        message,
         (await executeA2AMessage({ ...run, message: task })).text,
       );
     }
@@ -802,11 +854,23 @@ function advertiseReturnSchema(
 
 /** The calling agent's own fork, offered first so a same-named agent never shadows it. */
 async function finishDelegationTools(
-  agentId: string,
+  context: {
+    agentId: string;
+    organizationId: string;
+    userId?: string;
+    parentLlm?: ModelSelection;
+    delegationChain?: string;
+  },
   tools: Tool[],
   attestable: boolean,
 ): Promise<Tool[]> {
-  const caller = await AgentModel.findDelegationTarget(agentId);
+  const caller = isForkRun(context)
+    ? null
+    : await AgentModel.findDelegationTarget(context.agentId);
+  const tiers =
+    caller?.agentType === "agent"
+      ? await forkTiers({ ...context, caller })
+      : [];
   const fork =
     caller?.agentType === "agent"
       ? [
@@ -814,19 +878,66 @@ async function finishDelegationTools(
             ...buildDelegationToolDescriptor({
               name: SELF_FORK_TOOL_NAME,
               targetAgent: { id: caller.id, name: caller.name },
-              inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
+              inputSchema: selfForkInputSchema(tiers),
               attestable,
             }),
             title: "Fork yourself",
-            description: SELF_FORK_DESCRIPTION,
+            description: selfForkDescription(tiers),
           },
         ]
       : [];
   return dedupeDelegationTools([...fork, ...tools]);
 }
 
-const SELF_FORK_DESCRIPTION =
-  "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters. Put everything the copy needs in `message`, and say what to return. The copy cannot fork again.";
+/**
+ * The tiers the caller's fork can move to, from the same parent selection the
+ * fork run resolves: the caller's own model and key, else the agent's config.
+ */
+async function forkTiers(params: {
+  caller: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
+  organizationId: string;
+  userId?: string;
+  parentLlm?: ModelSelection;
+}): Promise<Exclude<SubagentModelTier, "normal">[]> {
+  const { caller, organizationId, userId, parentLlm } = params;
+  if (!userId) return [];
+  const parent = await resolveForkParentSelection({
+    agent: caller,
+    organizationId,
+    userId,
+    parentLlm,
+  });
+  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+}
+
+/** A fork may not fork again, so it is not offered the fork tool. */
+function isForkRun(context: {
+  agentId: string;
+  delegationChain?: string;
+}): boolean {
+  const chain = context.delegationChain?.split(":") ?? [];
+  return chain.at(-1) === context.agentId && chain.at(-2) === context.agentId;
+}
+
+const SELF_FORK_TIER_USES = {
+  smart:
+    'With `tier: "smart"` the copy runs on a stronger model: hand it a hard reasoning step, or have it check your conclusion before you act on it.',
+  fast: 'With `tier: "fast"` it runs on a cheaper, quicker model, for bulk reading, searching, or extraction.',
+};
+
+/** The fork's description, naming what each advertised tier is for. */
+function selfForkDescription(
+  tiers: Exclude<SubagentModelTier, "normal">[],
+): string {
+  return [
+    "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters.",
+    ...tiers.map((tier) => SELF_FORK_TIER_USES[tier]),
+    "Put everything the copy needs in `message`, and say what to return. The copy cannot fork again.",
+  ].join(" ");
+}
 
 function dedupeDelegationTools(tools: Tool[]): Tool[] {
   const names = new Set<string>();
@@ -836,3 +947,20 @@ function dedupeDelegationTools(tools: Tool[]): Tool[] {
     return true;
   });
 }
+
+/**
+ * A delegated answer carries the start of the task it answers. A caller that
+ * delegates several tasks at once otherwise has to pair answers with tasks by
+ * tool call id alone, and models sometimes pair them by position instead. The
+ * excerpt is bounded so the result's size budget stays with the answer.
+ */
+function delegationResult(task: string, answer: string) {
+  const chars = Array.from(task);
+  const excerpt =
+    chars.length > TASK_ECHO_MAX_CHARS
+      ? `${chars.slice(0, TASK_ECHO_MAX_CHARS).join("")}…`
+      : task;
+  return successResult(`Task:\n${excerpt}\n\nResult:\n${answer}`);
+}
+
+const TASK_ECHO_MAX_CHARS = 500;

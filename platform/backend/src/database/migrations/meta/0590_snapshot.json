@@ -1,5 +1,5 @@
 {
-  "id": "bba764dd-ce1f-4424-885e-abaa78836b9a",
+  "id": "37de2ebf-ba91-448c-b802-841412ac3fc8",
   "prevId": "6908c407-09b3-4c6a-be91-ef461898e2ad",
   "version": "7",
   "dialect": "postgresql",
@@ -4622,6 +4622,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "fast_model_id": {
+          "name": "fast_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "smart_model_id": {
+          "name": "smart_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "identity_provider_id": {
           "name": "identity_provider_id",
           "type": "text",
@@ -5214,6 +5226,32 @@
           "tableTo": "models",
           "columnsFrom": [
             "model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_fast_model_id_models_id_fk": {
+          "name": "agents_fast_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "fast_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_smart_model_id_models_id_fk": {
+          "name": "agents_smart_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -11238,12 +11276,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attribution_labels": {
-          "name": "attribution_labels",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -11772,12 +11804,6 @@
         "billing_team_id": {
           "name": "billing_team_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attribution_labels": {
-          "name": "attribution_labels",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -20111,6 +20137,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "default_fast_model_id": {
+          "name": "default_fast_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_smart_model_id": {
+          "name": "default_smart_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "default_user_limit_value": {
           "name": "default_user_limit_value",
           "type": "integer",
@@ -20457,6 +20495,32 @@
           "tableTo": "models",
           "columnsFrom": [
             "default_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "organization_default_fast_model_id_models_id_fk": {
+          "name": "organization_default_fast_model_id_models_id_fk",
+          "tableFrom": "organization",
+          "tableTo": "models",
+          "columnsFrom": [
+            "default_fast_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "organization_default_smart_model_id_models_id_fk": {
+          "name": "organization_default_smart_model_id_models_id_fk",
+          "tableFrom": "organization",
+          "tableTo": "models",
+          "columnsFrom": [
+            "default_smart_model_id"
           ],
           "columnsTo": [
             "id"

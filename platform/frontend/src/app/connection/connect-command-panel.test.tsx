@@ -1883,13 +1883,13 @@ describe("ConnectCommandPanel", () => {
       renderPanel({ client: findClient("copilot-cli") });
 
       // first supported provider (OpenAI) → its default model is preselected
-      expect(await screen.findByText("gpt-5.5")).toBeInTheDocument();
+      expect(await screen.findByText("gpt-6.1-sol")).toBeInTheDocument();
       expect(screen.getByTestId("connect-change-model")).toBeInTheDocument();
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({
             clientId: "copilot-cli",
-            model: "gpt-5.5",
+            model: "gpt-6.1-sol",
           }),
         ),
       );
@@ -1976,7 +1976,7 @@ describe("ConnectCommandPanel", () => {
       const picker = screen.getByRole("combobox", { name: "Model" });
       await user.click(picker);
       // Keep the default reachable even when it isn't in the synced catalog.
-      expect(screen.getByRole("option", { name: "gpt-5.5" })).toBeVisible();
+      expect(screen.getByRole("option", { name: "gpt-6.1-sol" })).toBeVisible();
       const search = screen.getByPlaceholderText("Search models...");
       await user.type(search, "missing-model");
       expect(screen.getByText("No models found.")).toBeVisible();

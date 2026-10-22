@@ -55,6 +55,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { archestraMcpBranding } from "./branding";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
@@ -189,6 +190,12 @@ export const AgentModelToolInputSchemas = {
   modelId: UuidIdSchema.describe(
     `Model the agent uses: the model's id from ${TOOL_LIST_LLM_MODELS_SHORT_NAME}, not its provider name. Set together with llmApiKeyId.`,
   ),
+  fastModelId: UuidIdSchema.describe(
+    "Optional faster model on the same llmApiKeyId, used when the agent forks itself with tier fast. Omit to use the provider default.",
+  ),
+  smartModelId: UuidIdSchema.describe(
+    "Optional stronger model on the same llmApiKeyId, used when the agent forks itself with tier smart. Omit to use the provider default.",
+  ),
 };
 
 export const GetResourceToolArgsSchema = z
@@ -281,6 +288,16 @@ export const AgentDetailOutputSchema = ResourceDetailOutputSchema.extend({
     .nullable()
     .optional()
     .describe("The pinned model ID, or null for the default."),
+  fastModelId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned fast-tier model ID, or null for the default."),
+  smartModelId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned smart-tier model ID, or null for the default."),
   skillsEnabled: z
     .boolean()
     .optional()
@@ -351,6 +368,8 @@ export async function handleCreateResource<
     runtime?: AgentRuntimeToolInput;
     llmApiKeyId?: string;
     modelId?: string;
+    fastModelId?: string;
+    smartModelId?: string;
   },
 >(params: {
   args: TArgs;
@@ -393,6 +412,8 @@ export async function handleCreateResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
+      fastModelId: args.fastModelId,
+      smartModelId: args.smartModelId,
       existing: null,
     });
 
@@ -719,6 +740,8 @@ export async function handleEditResource<
     runtime?: AgentRuntimeToolInput | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
+    fastModelId?: string | null;
+    smartModelId?: string | null;
   },
 >(params: {
   args: TArgs;
@@ -777,6 +800,8 @@ export async function handleEditResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
+      fastModelId: args.fastModelId,
+      smartModelId: args.smartModelId,
       existing: existingAgent,
     });
 
@@ -899,15 +924,22 @@ async function resolveRuntimeAndModelForWrite(params: {
   runtimeInput: AgentRuntimeToolInput | null | undefined;
   llmApiKeyId: string | null | undefined;
   modelId: string | null | undefined;
-  existing: Pick<Agent, "runtime" | "llmApiKeyId" | "modelId"> | null;
-}): Promise<Partial<Pick<Agent, "runtime" | "llmApiKeyId" | "modelId">>> {
+  fastModelId: string | null | undefined;
+  smartModelId: string | null | undefined;
+  existing: Pick<Agent, AgentModelField> | null;
+}): Promise<Partial<Pick<Agent, AgentModelField>>> {
   const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
+  const { fastModelId, smartModelId } = params;
   const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
-  if (runtimeInput === undefined && !touchesModel) return {};
+  const touchesTiers =
+    llmApiKeyId !== undefined ||
+    fastModelId !== undefined ||
+    smartModelId !== undefined;
+  if (runtimeInput === undefined && !touchesModel && !touchesTiers) return {};
   if (params.agentType !== "agent") {
     throw new ApiError(
       400,
-      "runtime, llmApiKeyId, and modelId apply only to agents.",
+      "runtime, llmApiKeyId, modelId, fastModelId, and smartModelId apply only to agents.",
     );
   }
   if (!context.userId || !context.organizationId) {
@@ -949,6 +981,19 @@ async function resolveRuntimeAndModelForWrite(params: {
   if (touchesModel) {
     await assertAgentModelSelectionAvailable({ ...scope, agent: merged });
   }
+  if (touchesTiers) {
+    await assertModelTrioTiers({
+      apiKeyId: merged.llmApiKeyId,
+      fastModelId:
+        fastModelId !== undefined
+          ? fastModelId
+          : (existing?.fastModelId ?? null),
+      smartModelId:
+        smartModelId !== undefined
+          ? smartModelId
+          : (existing?.smartModelId ?? null),
+    });
+  }
   await assertAgentRuntimeModelCompatibility({
     ...scope,
     runtime: merged.runtime,
@@ -959,8 +1004,17 @@ async function resolveRuntimeAndModelForWrite(params: {
     ...(runtime !== undefined && { runtime }),
     ...(llmApiKeyId !== undefined && { llmApiKeyId }),
     ...(modelId !== undefined && { modelId }),
+    ...(fastModelId !== undefined && { fastModelId }),
+    ...(smartModelId !== undefined && { smartModelId }),
   };
 }
+
+type AgentModelField =
+  | "runtime"
+  | "llmApiKeyId"
+  | "modelId"
+  | "fastModelId"
+  | "smartModelId";
 
 function describeRuntime(runtime: AgentRuntime | null): string {
   if (!runtime) return "built-in chat harness";

@@ -49326,6 +49326,18 @@
                                     "format": "uuid",
                                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                   },
+                                  "fastModelId": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "smartModelId": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
                                   "identityProviderId": {
                                     "nullable": true,
                                     "type": "string"
@@ -49971,6 +49983,8 @@
                                   "llmApiKeyId",
                                   "llmModel",
                                   "modelId",
+                                  "fastModelId",
+                                  "smartModelId",
                                   "identityProviderId",
                                   "environmentId",
                                   "runtime",
@@ -51014,6 +51028,18 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "fastModelId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "smartModelId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
@@ -51659,6 +51685,8 @@
                           "llmApiKeyId",
                           "llmModel",
                           "modelId",
+                          "fastModelId",
+                          "smartModelId",
                           "identityProviderId",
                           "environmentId",
                           "runtime",
@@ -52052,6 +52080,18 @@
                     "type": "string"
                   },
                   "modelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "fastModelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "smartModelId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -52850,6 +52890,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -53478,6 +53530,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -58052,6 +58106,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -58692,6 +58758,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -59429,6 +59497,18 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "fastModelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "smartModelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "identityProviderId": {
                           "nullable": true,
                           "type": "string"
@@ -60057,6 +60137,8 @@
                         "llmApiKeyId",
                         "llmModel",
                         "modelId",
+                        "fastModelId",
+                        "smartModelId",
                         "identityProviderId",
                         "environmentId",
                         "runtime",
@@ -60474,6 +60556,18 @@
                       "type": "string"
                     },
                     "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -61107,6 +61201,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -61449,6 +61545,18 @@
                     "type": "string"
                   },
                   "modelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "fastModelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "smartModelId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -61936,6 +62044,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -62564,6 +62684,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -63907,6 +64029,42 @@
                           ],
                           "additionalProperties": false
                         },
+                        "fastModel": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "externalId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "externalId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "smartModel": {
+                          "default": null,
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "externalId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "externalId"
+                          ],
+                          "additionalProperties": false
+                        },
                         "llmApiKey": {
                           "nullable": true,
                           "type": "object",
@@ -64156,6 +64314,8 @@
                         "incomingEmailAllowedDomain",
                         "builtInAgentConfig",
                         "model",
+                        "fastModel",
+                        "smartModel",
                         "llmApiKey",
                         "identityProviderId",
                         "environmentId",
@@ -64571,6 +64731,18 @@
                       "type": "string"
                     },
                     "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -65204,6 +65376,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -65743,6 +65917,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -66371,6 +66557,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -73721,6 +73909,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "fastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "smartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -74349,6 +74549,8 @@
                     "llmApiKeyId",
                     "llmModel",
                     "modelId",
+                    "fastModelId",
+                    "smartModelId",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -75752,586 +75954,6 @@
                   },
                   "required": [
                     "defaultAgentId"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
-    "/api/members/default-model": {
-      "get": {
-        "operationId": "getMemberDefaultModel",
-        "tags": [
-          "Members"
-        ],
-        "description": "Get the current user's default model and API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "modelId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    }
-                  },
-                  "required": [
-                    "modelId",
-                    "chatApiKeyId"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      },
-      "put": {
-        "operationId": "updateMemberDefaultModel",
-        "tags": [
-          "Members"
-        ],
-        "description": "Set the current user's default model and API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "modelId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "chatApiKeyId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  }
-                },
-                "required": [
-                  "modelId",
-                  "chatApiKeyId"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "modelId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "chatApiKeyId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    }
-                  },
-                  "required": [
-                    "modelId",
-                    "chatApiKeyId"
                   ],
                   "additionalProperties": false
                 }
@@ -127446,6 +127068,18 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "defaultFastModelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "defaultSmartModelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "defaultUserLimitValue": {
                           "nullable": true,
                           "type": "integer",
@@ -127921,6 +127555,8 @@
                         "defaultLlmProvider",
                         "defaultModelId",
                         "defaultLlmApiKeyId",
+                        "defaultFastModelId",
+                        "defaultSmartModelId",
                         "defaultUserLimitValue",
                         "defaultUserLimitModel",
                         "defaultUserLimitCleanupInterval",
@@ -128577,28 +128213,6 @@
                         "personalChatAgentId"
                       ],
                       "additionalProperties": false
-                    },
-                    "memberDefaultModel": {
-                      "type": "object",
-                      "properties": {
-                        "modelId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "chatApiKeyId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        }
-                      },
-                      "required": [
-                        "modelId",
-                        "chatApiKeyId"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -128608,8 +128222,7 @@
                     "config",
                     "publicConfig",
                     "appearance",
-                    "memberDefaultAgent",
-                    "memberDefaultModel"
+                    "memberDefaultAgent"
                   ],
                   "additionalProperties": false
                 }
@@ -129968,6 +129581,18 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
+                            "fastModelId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "smartModelId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
                             "identityProviderId": {
                               "nullable": true,
                               "type": "string"
@@ -130596,6 +130221,8 @@
                             "llmApiKeyId",
                             "llmModel",
                             "modelId",
+                            "fastModelId",
+                            "smartModelId",
                             "identityProviderId",
                             "environmentId",
                             "runtime",
@@ -131068,217 +130695,6 @@
                         "keyModels"
                       ],
                       "additionalProperties": false
-                    },
-                    "memberDefaultKeyModels": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "apiKeyId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "models": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "dbId": {
-                                "type": "string"
-                              },
-                              "displayName": {
-                                "type": "string"
-                              },
-                              "provider": {
-                                "type": "string",
-                                "enum": [
-                                  "openai",
-                                  "gemini",
-                                  "anthropic",
-                                  "bedrock",
-                                  "cohere",
-                                  "cerebras",
-                                  "mistral",
-                                  "perplexity",
-                                  "groq",
-                                  "xai",
-                                  "openrouter",
-                                  "vllm",
-                                  "ollama",
-                                  "ollama-native",
-                                  "zhipuai",
-                                  "deepseek",
-                                  "minimax",
-                                  "kimi",
-                                  "azure",
-                                  "github-copilot",
-                                  "microsoft-365-copilot",
-                                  "archestra",
-                                  "voyage",
-                                  "jev"
-                                ]
-                              },
-                              "createdAt": {
-                                "type": "string"
-                              },
-                              "capabilities": {
-                                "type": "object",
-                                "properties": {
-                                  "contextLength": {
-                                    "nullable": true,
-                                    "type": "integer",
-                                    "minimum": -2147483648,
-                                    "maximum": 2147483647
-                                  },
-                                  "inputModalities": {
-                                    "nullable": true,
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "enum": [
-                                        "text",
-                                        "image",
-                                        "audio",
-                                        "video",
-                                        "pdf"
-                                      ]
-                                    }
-                                  },
-                                  "outputModalities": {
-                                    "nullable": true,
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "enum": [
-                                        "text",
-                                        "image",
-                                        "audio"
-                                      ]
-                                    }
-                                  },
-                                  "supportsToolCalling": {
-                                    "nullable": true,
-                                    "type": "boolean"
-                                  },
-                                  "supportsReasoningEffort": {
-                                    "nullable": true,
-                                    "type": "boolean"
-                                  },
-                                  "supportedEndpoints": {
-                                    "nullable": true,
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "enum": [
-                                        "/chat/completions",
-                                        "/responses"
-                                      ]
-                                    }
-                                  },
-                                  "recommendedForAgents": {
-                                    "nullable": true,
-                                    "type": "boolean"
-                                  },
-                                  "pricePerMillionInput": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "pricePerMillionOutput": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "isCustomPrice": {
-                                    "type": "boolean"
-                                  },
-                                  "priceSource": {
-                                    "type": "string",
-                                    "enum": [
-                                      "custom",
-                                      "models_dev",
-                                      "provider",
-                                      "aws",
-                                      "derived_multiplier",
-                                      "default"
-                                    ]
-                                  },
-                                  "pricePerMillionCacheRead": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "pricePerMillionCacheWrite": {
-                                    "nullable": true,
-                                    "type": "string"
-                                  },
-                                  "cachePriceSource": {
-                                    "nullable": true,
-                                    "type": "string",
-                                    "enum": [
-                                      "custom",
-                                      "models_dev",
-                                      "provider",
-                                      "aws",
-                                      "derived_multiplier",
-                                      "default"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "contextLength",
-                                  "inputModalities",
-                                  "outputModalities",
-                                  "supportsToolCalling",
-                                  "supportsReasoningEffort",
-                                  "recommendedForAgents",
-                                  "pricePerMillionInput",
-                                  "pricePerMillionOutput",
-                                  "isCustomPrice",
-                                  "priceSource",
-                                  "pricePerMillionCacheRead",
-                                  "pricePerMillionCacheWrite",
-                                  "cachePriceSource"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "isBest": {
-                                "type": "boolean"
-                              },
-                              "isFree": {
-                                "type": "boolean"
-                              },
-                              "embeddingDimensions": {
-                                "nullable": true,
-                                "allOf": [
-                                  {
-                                    "$ref": "#/components/schemas/EmbeddingDimensions"
-                                  }
-                                ]
-                              },
-                              "requiresUserConnection": {
-                                "type": "boolean"
-                              },
-                              "isConnected": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "dbId",
-                              "displayName",
-                              "provider",
-                              "isFree"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "apiKeyId",
-                        "models"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -131286,8 +130702,7 @@
                     "apiKeys",
                     "availableApiKeys",
                     "models",
-                    "agent",
-                    "memberDefaultKeyModels"
+                    "agent"
                   ],
                   "additionalProperties": false
                 }
@@ -133188,6 +132603,18 @@
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
+                                "fastModelId": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "smartModelId": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
                                 "identityProviderId": {
                                   "nullable": true,
                                   "type": "string"
@@ -133816,6 +133243,8 @@
                                 "llmApiKeyId",
                                 "llmModel",
                                 "modelId",
+                                "fastModelId",
+                                "smartModelId",
                                 "identityProviderId",
                                 "environmentId",
                                 "runtime",
@@ -134288,217 +133717,6 @@
                             "keyModels"
                           ],
                           "additionalProperties": false
-                        },
-                        "memberDefaultKeyModels": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "apiKeyId": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                            },
-                            "models": {
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "dbId": {
-                                    "type": "string"
-                                  },
-                                  "displayName": {
-                                    "type": "string"
-                                  },
-                                  "provider": {
-                                    "type": "string",
-                                    "enum": [
-                                      "openai",
-                                      "gemini",
-                                      "anthropic",
-                                      "bedrock",
-                                      "cohere",
-                                      "cerebras",
-                                      "mistral",
-                                      "perplexity",
-                                      "groq",
-                                      "xai",
-                                      "openrouter",
-                                      "vllm",
-                                      "ollama",
-                                      "ollama-native",
-                                      "zhipuai",
-                                      "deepseek",
-                                      "minimax",
-                                      "kimi",
-                                      "azure",
-                                      "github-copilot",
-                                      "microsoft-365-copilot",
-                                      "archestra",
-                                      "voyage",
-                                      "jev"
-                                    ]
-                                  },
-                                  "createdAt": {
-                                    "type": "string"
-                                  },
-                                  "capabilities": {
-                                    "type": "object",
-                                    "properties": {
-                                      "contextLength": {
-                                        "nullable": true,
-                                        "type": "integer",
-                                        "minimum": -2147483648,
-                                        "maximum": 2147483647
-                                      },
-                                      "inputModalities": {
-                                        "nullable": true,
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string",
-                                          "enum": [
-                                            "text",
-                                            "image",
-                                            "audio",
-                                            "video",
-                                            "pdf"
-                                          ]
-                                        }
-                                      },
-                                      "outputModalities": {
-                                        "nullable": true,
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string",
-                                          "enum": [
-                                            "text",
-                                            "image",
-                                            "audio"
-                                          ]
-                                        }
-                                      },
-                                      "supportsToolCalling": {
-                                        "nullable": true,
-                                        "type": "boolean"
-                                      },
-                                      "supportsReasoningEffort": {
-                                        "nullable": true,
-                                        "type": "boolean"
-                                      },
-                                      "supportedEndpoints": {
-                                        "nullable": true,
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string",
-                                          "enum": [
-                                            "/chat/completions",
-                                            "/responses"
-                                          ]
-                                        }
-                                      },
-                                      "recommendedForAgents": {
-                                        "nullable": true,
-                                        "type": "boolean"
-                                      },
-                                      "pricePerMillionInput": {
-                                        "nullable": true,
-                                        "type": "string"
-                                      },
-                                      "pricePerMillionOutput": {
-                                        "nullable": true,
-                                        "type": "string"
-                                      },
-                                      "isCustomPrice": {
-                                        "type": "boolean"
-                                      },
-                                      "priceSource": {
-                                        "type": "string",
-                                        "enum": [
-                                          "custom",
-                                          "models_dev",
-                                          "provider",
-                                          "aws",
-                                          "derived_multiplier",
-                                          "default"
-                                        ]
-                                      },
-                                      "pricePerMillionCacheRead": {
-                                        "nullable": true,
-                                        "type": "string"
-                                      },
-                                      "pricePerMillionCacheWrite": {
-                                        "nullable": true,
-                                        "type": "string"
-                                      },
-                                      "cachePriceSource": {
-                                        "nullable": true,
-                                        "type": "string",
-                                        "enum": [
-                                          "custom",
-                                          "models_dev",
-                                          "provider",
-                                          "aws",
-                                          "derived_multiplier",
-                                          "default"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "contextLength",
-                                      "inputModalities",
-                                      "outputModalities",
-                                      "supportsToolCalling",
-                                      "supportsReasoningEffort",
-                                      "recommendedForAgents",
-                                      "pricePerMillionInput",
-                                      "pricePerMillionOutput",
-                                      "isCustomPrice",
-                                      "priceSource",
-                                      "pricePerMillionCacheRead",
-                                      "pricePerMillionCacheWrite",
-                                      "cachePriceSource"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  "isBest": {
-                                    "type": "boolean"
-                                  },
-                                  "isFree": {
-                                    "type": "boolean"
-                                  },
-                                  "embeddingDimensions": {
-                                    "nullable": true,
-                                    "allOf": [
-                                      {
-                                        "$ref": "#/components/schemas/EmbeddingDimensions"
-                                      }
-                                    ]
-                                  },
-                                  "requiresUserConnection": {
-                                    "type": "boolean"
-                                  },
-                                  "isConnected": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "dbId",
-                                  "displayName",
-                                  "provider",
-                                  "isFree"
-                                ],
-                                "additionalProperties": false
-                              }
-                            }
-                          },
-                          "required": [
-                            "apiKeyId",
-                            "models"
-                          ],
-                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -134506,8 +133724,7 @@
                         "apiKeys",
                         "availableApiKeys",
                         "models",
-                        "agent",
-                        "memberDefaultKeyModels"
+                        "agent"
                       ],
                       "additionalProperties": false
                     }
@@ -388685,6 +387902,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -389160,6 +388389,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -389839,6 +389070,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -390314,6 +389557,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -391234,6 +390479,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -391709,6 +390966,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -392243,6 +391502,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -392718,6 +391989,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -393249,6 +392522,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -393724,6 +393009,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -394050,6 +393337,18 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "defaultFastModelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "defaultSmartModelId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -394262,6 +393561,18 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "defaultLlmApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -394742,6 +394053,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -395404,6 +394717,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -395879,6 +395204,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -396525,6 +395852,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -397000,6 +396339,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -397601,6 +396942,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -398076,6 +397429,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -398621,6 +397976,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -399096,6 +398463,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -399672,6 +399041,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -400147,6 +399528,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -400660,6 +400043,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -401135,6 +400530,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
@@ -402852,6 +402249,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultFastModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultSmartModelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
@@ -403327,6 +402736,8 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultFastModelId",
+                    "defaultSmartModelId",
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",

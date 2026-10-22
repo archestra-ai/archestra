@@ -6,6 +6,7 @@ import {
   isRequiredOpenAppaToolShortName,
   isRunControlArchestraToolShortName,
   isYellToolShortName,
+  type ModelSelection,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
@@ -238,6 +239,7 @@ const registry = defineArchestraTools([
         userId: context.userId,
         conversationId: context.conversationId,
         delegationChain: context.delegationChain,
+        parentLlm: context.parentLlm,
         tokenAuth: context.tokenAuth,
       });
 
@@ -413,6 +415,7 @@ async function getSearchableTools(params: {
   userId?: string;
   conversationId?: string;
   delegationChain?: string;
+  parentLlm?: ModelSelection;
   tokenAuth?: TargetInstallCaller;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
@@ -468,6 +471,8 @@ async function getSearchableTools(params: {
           organizationId,
           userId,
           skipAccessCheck: userId === "system",
+          parentLlm: params.parentLlm,
+          delegationChain: params.delegationChain,
         })
       : [];
   const hasTaskStarter =

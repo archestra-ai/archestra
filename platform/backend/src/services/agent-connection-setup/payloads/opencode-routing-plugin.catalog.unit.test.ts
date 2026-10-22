@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { KILO_CLIENT } from "../opencode-family";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -318,6 +319,118 @@ describe("managed catalog plugin", () => {
     expect(calls).toEqual([
       `${managedRoute}/chat/completions auth=Bearer managed-secret goog=null`,
     ]);
+  });
+
+  test("sends the managed key when the client's own sign-in for an alias replaces it", async () => {
+    const calls: Request[] = [];
+    globals[directFetch] = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      calls.push(new Request(input, init));
+      return new Response("ok");
+    };
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-signin-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    // Kilo Code keeps its own xAI sign-in here; the connection routes xAI only
+    // through its catalog twin.
+    await mkdir(path.join(root, "data", "kilo"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "kilo", "auth.json"),
+      JSON.stringify({
+        vendor: { type: "oauth", access: "native-vendor-token", refresh: "r" },
+      }),
+    );
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog,
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: {
+        vendor: { options: {} },
+        openai: { options: { apiKey: "user-openai-key" } },
+      },
+    };
+    await hooks.config(config);
+    expect(config.provider.vendor.options).toMatchObject({
+      apiKey: "managed-secret",
+      baseURL: managedRoute,
+    });
+
+    // The client's sign-in transport keeps the hook's headers and sets its
+    // own bearer token, as Kilo Code's xAI sign-in does.
+    const signedIn = async (providerId: string, url: string) => {
+      const output: { headers: Record<string, string> } = { headers: {} };
+      await hooks["chat.headers"](
+        {
+          sessionID: "ses_child",
+          agent: "explore",
+          provider: { id: providerId, options: {} },
+        },
+        output,
+      );
+      return globalThis.fetch(url, {
+        method: "POST",
+        headers: {
+          ...output.headers,
+          Authorization: `Bearer native-${providerId}-token`,
+          "ChatGPT-Account-Id": "acct",
+          "x-api-key": `native-${providerId}-key`,
+        },
+        body: "{}",
+      });
+    };
+    await signedIn("vendor", `${managedRoute}/responses`);
+    await signedIn("openai", `${nativeRoute}/responses`);
+
+    const [alias, native] = calls;
+    expect(alias.url).toBe(`${managedRoute}/responses`);
+    expect(alias.headers.get("authorization")).toBe("Bearer managed-secret");
+    expect(alias.headers.get("chatgpt-account-id")).toBeNull();
+    expect(alias.headers.get("x-api-key")).toBeNull();
+    expect(alias.headers.get("x-opencode-session")).toBe("ses_child");
+    expect(alias.headers.get("x-archestra-managed-alias")).toBeNull();
+    // A provider on its own native route keeps the user's credential.
+    expect(native.headers.get("authorization")).toBe(
+      "Bearer native-openai-token",
+    );
+    expect(native.headers.get("x-api-key")).toBe("native-openai-key");
+    expect(native.headers.get("x-archestra-virtual-key")).toBe(
+      "passthrough-secret",
+    );
+    expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
   test("a supplied empty catalog is authoritative and an omitted catalog is not", async () => {

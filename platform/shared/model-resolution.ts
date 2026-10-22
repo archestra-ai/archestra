@@ -7,7 +7,7 @@
  *
  * Resolution is a plain priority chain over foreign-key columns:
  *
- *   conversation -> member -> agent -> organization -> best available model
+ *   conversation -> agent -> organization -> default trio (`is_best`)
  *
  * Because each level stores a real FK (`ON DELETE SET NULL`), a deleted model
  * simply becomes NULL and the chain falls through — there is no orphaned-string
@@ -66,12 +66,12 @@ export type ModelSource = "agent" | "organization" | "user";
  * Resolve the effective model from the priority chain.
  *
  * `levels` must already be ordered most- to least-specific
- * (conversation -> member -> agent -> organization). A level wins only when it
+ * (conversation -> agent -> organization). A level wins only when it
  * carries *both* a `modelId` and an `apiKeyId`: a model is meaningless without
  * the key it runs through, so a half-configured level (e.g. a model pinned
  * with no key) is skipped and the chain falls through to the next level. When
- * no level is complete, falls back to the "best available" model across every
- * key the actor can use.
+ * no level is complete, falls back to the default-trio model across every key
+ * the actor can use.
  *
  * There is no key derivation: the key is never inferred from the model. The
  * same model can be reached through many keys, so a `(model, key)` pair is the

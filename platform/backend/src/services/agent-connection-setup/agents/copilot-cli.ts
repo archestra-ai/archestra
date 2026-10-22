@@ -2,8 +2,8 @@
 
 import {
   COPILOT_CLI_CLIENT_ID,
-  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
+  PROVIDER_MODEL_TIERS,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
@@ -28,7 +28,7 @@ import type {
 
 // Matches the VS Code identity in services/github-copilot-token.ts; updated by
 // the hourly client-version workflow.
-const GITHUB_COPILOT_VSCODE_VERSION = "1.142.0";
+const GITHUB_COPILOT_VSCODE_VERSION = "1.143.0";
 
 export const copilotCliSetup: ShellAgentSetup = {
   label: "Copilot CLI",
@@ -45,7 +45,7 @@ export const copilotCliSetup: ShellAgentSetup = {
 function copilotProviderConfig(proxy: SetupScriptProxySection): string {
   return JSON.stringify({
     url: proxy.url,
-    model: proxy.model ?? DEFAULT_MODELS[proxy.provider],
+    model: proxy.model ?? PROVIDER_MODEL_TIERS[proxy.provider].normal,
     headers: {
       [EXTERNAL_AGENT_ID_HEADER]: COPILOT_CLI_CLIENT_ID,
       ...(proxy.passthroughVirtualKey

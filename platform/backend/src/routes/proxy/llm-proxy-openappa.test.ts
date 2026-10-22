@@ -10805,6 +10805,109 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events.filter((event) => event.spawned_id)).toEqual([]);
     });
 
+    test.for([
+      false,
+      true,
+    ])("a Claude Code subagent that failed before it returned closes its spawn, and the parent goes on (is_error=%s)", async (isError) => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "3c1d9e2a-6f4b-4a8e-9d2c-5e7f8a9b0c1d";
+      native.loadChildReturns.mockImplementation(async () => []);
+      // The runtime closes a spawn that returned nothing and withholds the
+      // client's text.
+      const reason =
+        "the spawn did not take: no prepared fork to open this child";
+      const fallback = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_result" || event.outcome !== "failure")
+          return fallback?.(raw);
+        events.push(event);
+        return JSON.stringify({
+          decision: "block",
+          reason,
+          approved_output: `[appa] Tool output withheld: ${reason}`,
+          output_source: "runtime",
+        });
+      });
+      const send = (messages: unknown[]) => {
+        const body = payload(false, messages);
+        body.tools.push({
+          name: "Agent",
+          description: "Launch a subagent",
+          input_schema: { type: "object", properties: {} },
+        });
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.285 (external, cli)",
+            "x-claude-code-session-id": session,
+          },
+          payload: body,
+        });
+      };
+      // OpenAPPA releases the spawn and marks its prompt.
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { description: "lint", prompt: spawnPrompt },
+        },
+      };
+      const root = await send([{ role: "user", content: "Lint" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const call = noticeFrom(root.body, false);
+      expect(String(call.input.prompt)).toContain(
+        "[appa] delegated trajectory",
+      );
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await send([
+        { role: "user", content: "Lint" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: call.id,
+              name: call.name,
+              input: call.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          // The client's own text: the child failed before it returned, so
+          // the result carries no return marker.
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: call.id,
+              ...(isError ? { is_error: true } : {}),
+              content: [{ type: "text", text: "API Error: 401 CHILD FAILED" }],
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "tool_result",
+          outcome: "failure",
+        }),
+      );
+      const forwarded = JSON.stringify(providerRequests.at(-1));
+      expect(forwarded).toContain(`[appa] Tool output withheld: ${reason}`);
+      expect(forwarded).not.toContain("CHILD FAILED");
+    });
+
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({
       makeAgent,
     }) => {

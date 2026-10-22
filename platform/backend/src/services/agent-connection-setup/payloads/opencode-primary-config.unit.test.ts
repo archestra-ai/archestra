@@ -255,6 +255,94 @@ test.each([
   }
 });
 
+test.each([
+  1, 2,
+])("OpenCode %i is told which models read images, so it keeps attached images", (major) => {
+  const home = mkdtempSync(path.join(tmpdir(), "opencode-modalities-"));
+  const section = major === 2 ? "providers" : "provider";
+  try {
+    execFileSync(process.execPath, ["-e", OPENCODE_PRIMARY_CONFIG_SCRIPT], {
+      input: JSON.stringify(
+        openCodePrimaryConfig(
+          {
+            authMode: "primary-providers",
+            provider: "openai",
+            providerLabel: "OpenAI",
+            baseUrl: "https://proxy.example/v1",
+            url: "https://proxy.example/v1/openai",
+            proxyName: "proxy",
+            virtualKey: "arch_test",
+            virtualKeyName: "Primary providers",
+            passthroughVirtualKey: null,
+            model: null,
+            primaryProviders: [
+              {
+                provider: "openai",
+                name: "OpenAI",
+                models: [
+                  {
+                    id: "vision",
+                    name: "vision",
+                    context: null,
+                    output: null,
+                    inputModalities: ["text", "image", "pdf"],
+                  },
+                  {
+                    id: "text-only",
+                    name: "text-only",
+                    context: null,
+                    output: null,
+                    inputModalities: ["text"],
+                  },
+                  {
+                    id: "unknown",
+                    name: "unknown",
+                    context: null,
+                    output: null,
+                    inputModalities: null,
+                  },
+                ],
+              },
+            ],
+          },
+          "Acme",
+        ),
+      ),
+      env: {
+        ...process.env,
+        HOME: home,
+        XDG_CONFIG_HOME: path.join(home, ".config"),
+        ARCHESTRA_OC_MAJOR: String(major),
+        ARCHESTRA_OC_KEY: "arch_test",
+        ARCHESTRA_OC_PRIMARY: "stdin",
+      },
+    });
+    const { models } = JSON.parse(
+      readFileSync(path.join(home, ".config/opencode/opencode.json"), "utf8"),
+    )[section]["archestra-openai"];
+    if (major === 2) {
+      expect(models.vision.capabilities).toEqual({
+        input: ["text", "image", "pdf"],
+      });
+      expect(models["text-only"].capabilities).toEqual({ input: ["text"] });
+      expect(models.unknown).not.toHaveProperty("capabilities");
+    } else {
+      expect(models.vision).toMatchObject({
+        modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+        attachment: true,
+      });
+      expect(models["text-only"]).toMatchObject({
+        modalities: { input: ["text"], output: ["text"] },
+        attachment: false,
+      });
+      expect(models.unknown).not.toHaveProperty("modalities");
+      expect(models.unknown).not.toHaveProperty("attachment");
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 describe.each([1, 2])("OpenCode %i default model after connect", (major) => {
   const section = major === 2 ? "providers" : "provider";
   const proxy = (

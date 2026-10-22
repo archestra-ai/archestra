@@ -2088,6 +2088,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/credentials": { credential: ["read"] },
   "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/appearance/[section]": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
 };

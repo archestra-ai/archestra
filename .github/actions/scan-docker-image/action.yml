@@ -7,6 +7,10 @@ inputs:
   image:
     description: "Docker image to scan (e.g., ghcr.io/org/repo:tag)"
     required: true
+  platform:
+    description: "Explicit platform to scan (for single-architecture release indexes)"
+    required: false
+    default: ""
   additional-images:
     description: "Additional image references to scan, one per line"
     required: false
@@ -70,6 +74,7 @@ runs:
         DOCKER_SCOUT_HUB_PASSWORD: ${{ inputs.dockerhub-password }}
         SCOUT_IMAGE: ${{ inputs.image }}
         SCOUT_ADDITIONAL_IMAGES: ${{ inputs.additional-images }}
+        SCOUT_PLATFORM: ${{ inputs.platform }}
         SCOUT_CONCURRENT: ${{ inputs.concurrent }}
         SCOUT_ONLY_SEVERITIES: ${{ inputs.only-severities }}
         SCOUT_ONLY_FIXED: ${{ inputs.only-fixed }}
@@ -105,6 +110,9 @@ runs:
               "$image"
               --only-severity "${SCOUT_ONLY_SEVERITIES}"
             )
+            if [ -n "${SCOUT_PLATFORM}" ]; then
+              scout_args+=(--platform "$SCOUT_PLATFORM")
+            fi
             if [[ "${SCOUT_ONLY_FIXED}" == "true" ]]; then
               scout_args+=(--only-fixed)
             fi

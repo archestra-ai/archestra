@@ -35,6 +35,7 @@ export function openCodePrimaryConfig(
           models: entry.models.map((model) => ({
             ...model,
             wireId: routed ? `${entry.provider}:${model.id}` : model.id,
+            ...openCodeModelCapabilities(model.inputModalities),
           })),
         },
       ];
@@ -187,10 +188,12 @@ function positiveLimit(value: number | null | undefined): number {
 }
 
 /**
- * OpenCode V1 model fields for what a model reads. OpenCode copies these from
+ * What a model reads, in OpenCode V1's model fields; V2 takes
+ * `capabilities.input` from `modalities.input`. OpenCode copies these from
  * models.dev only when the config model's id matches a models.dev key, and the
- * catalog's ids never do, so without them it treats every model as text-only
- * and replaces each image with an error. Unknown modalities stay unset.
+ * catalog's ids never do, so without them V1 treats every model as text-only
+ * and replaces each image with an error. Unknown modalities stay unset, so
+ * each client applies its own default.
  */
 function openCodeModelCapabilities(
   inputModalities: ModelInputModality[] | null | undefined,
@@ -311,9 +314,8 @@ if (input) {
       // OpenCode requires both limit fields once limit is set; 0 is its value for unknown.
       const context = model.context > 0 ? model.context : 0, output = model.output > 0 ? model.output : 0;
       // Without its modalities the client treats a model as text-only and drops attached images.
-      const reads = Array.isArray(model.inputModalities) && model.inputModalities.length ? model.inputModalities : null;
-      const capabilities = !reads ? {} : v2 ? { capabilities: { input: reads } }
-        : { modalities: { input: reads, output: ["text"] }, attachment: reads.some(modality => modality !== "text") };
+      const capabilities = !model.modalities ? {} : v2 ? { capabilities: { input: model.modalities.input } }
+        : { modalities: model.modalities, attachment: model.attachment };
       return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
         ...(context || output ? { limit: { context, output } } : {}), ...capabilities }];
     }));

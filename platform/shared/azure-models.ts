@@ -101,6 +101,17 @@ export function azureModelEvidence(params: {
     default:
       operations = ["chat", "responses"];
   }
+  const operationFlags: Partial<Record<AzureModelOperation, string>> = {
+    chat: "chat_completion",
+    responses: "responses",
+    "image-generation": "image_generation",
+    "image-edit": "image_edit",
+    embedding: "embeddings",
+  };
+  operations = operations.filter((operation) => {
+    const flag = operationFlags[operation];
+    return !flag || (flags?.[flag] !== false && flags?.[flag] !== "false");
+  });
   return {
     kind,
     underlyingModelName: name ?? null,

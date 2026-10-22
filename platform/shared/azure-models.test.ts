@@ -58,4 +58,20 @@ describe("Azure backing-model evidence", () => {
       }),
     ).toMatchObject({ kind: "image", operations: ["image-generation"] });
   });
+  test("explicit negative operation evidence overrides a recognized backing family", () => {
+    expect(
+      azureModelEvidence({
+        underlyingModelName: "gpt-audio",
+        source: "deployment",
+        capabilities: { chat_completion: false },
+      })?.operations,
+    ).toEqual([]);
+    expect(
+      azureModelEvidence({
+        underlyingModelName: "gpt-image-1",
+        source: "deployment",
+        capabilities: { image_generation: "false", image_edit: false },
+      })?.operations,
+    ).toEqual([]);
+  });
 });

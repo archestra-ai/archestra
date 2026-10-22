@@ -14,7 +14,10 @@ use serde_json::Value;
 use std::time::SystemTime;
 
 /// The base64 text every plaintext escape starts with: the storage magic and
-/// the plaintext mode byte. An encrypted envelope never starts with it.
+/// the plaintext mode byte. An encrypted envelope never starts with it. The
+/// store owns the format; `only_the_store_s_plaintext_escape_is_escaped`
+/// fails when a pin changes it, so [`ESCAPED`] and [`unescape`] cannot drift
+/// from the store in silence.
 const ESCAPE_PREFIX: &str = "AGFwcGEtc3RvcmFnZS12MQAA";
 
 /// Matches a receipt whose input or decision is stored under the plaintext

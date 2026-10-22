@@ -1,4 +1,5 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -1558,6 +1559,39 @@ export async function handleLLMProxy<
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
     let billingMode = credentialBillingMode;
+
+    if (providerName === "azure") {
+      const original = requestAdapter.getOriginalRequest() as Record<
+        string,
+        unknown
+      >;
+      const metadata = original.metadata as Record<string, unknown> | undefined;
+      const type = String(provider.interactionType);
+      const operation =
+        type === "azure:images"
+          ? metadata?.operation === "image-edit"
+            ? "image-edit"
+            : "image-generation"
+          : type === "azure:audio"
+            ? original.operation === "speech"
+              ? "audio-speech"
+              : original.operation === "transcriptions"
+                ? "audio-transcription"
+                : "audio-translation"
+            : type === "azure:realtime"
+              ? "realtime-turn"
+              : provider.spanName === "embedding"
+                ? "embedding"
+                : type === "azure:responses"
+                  ? "responses"
+                  : "chat";
+      await validateAzureModelOperation({
+        providerApiKeyId: perKeyChatApiKeyId,
+        modelId: requestAdapter.getModel(),
+        operation,
+        parameters: original,
+      });
+    }
 
     // Create client with observability (each provider handles metrics internally)
     // A guardrail caller disconnects once it stops waiting for the answer,

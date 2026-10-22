@@ -79,7 +79,9 @@ Select an image or audio deployment in Chat to receive a generated file, or call
 | Realtime translation (`gpt-realtime-translate*`) | `/realtime/turns` with `target_language` | Attach WAV and enter a language code such as `es` |
 | Embeddings (`text-embedding-*`) | `/embeddings` | Vector output only; excluded from conversational model selection |
 
-Use the deployment's model name, such as `gpt-image-1`, for image and audio routing. Arbitrary deployment aliases are supported for text, but do not identify a media model's type.
+Use your deployment alias in `model`, such as `production-images`. Archestra identifies media support from Azure's deployment metadata for the selected provider key. Refresh provider models after changing a deployment or its connection settings; Chat requires current metadata to select a media API.
+
+If Azure does not expose deployment metadata, explicit proxy endpoints let Azure validate the request. Changing a model's display modalities does not establish its supported APIs.
 
 ### Generate an Image
 
@@ -93,6 +95,8 @@ curl "https://<archestra-host>/v1/azure/images/generations" \
 ```
 
 Image editing, image inputs, and partial-image streaming are unavailable on this endpoint. `stream: true` returns a validation error.
+
+Image parameters are validated against the discovered backing model. The proxy preserves `response_format` for compatible legacy models; GPT Image rejects it because its response is always base64. Unknown fields return a validation error instead of being discarded.
 
 ### Send an Audio Turn
 

@@ -21,6 +21,7 @@ import type {
   ProviderModelPricing,
   ProviderPricedModel,
 } from "@/types/provider-model-pricing";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import ModelModel from "./model";
 
 /**
@@ -116,6 +117,36 @@ class LlmProviderApiKeyModelLinkModel {
     return results.map((r) => r.model);
   }
 
+  /** Internal batched evidence lookup; callers must pass authorized key IDs. */
+  static async findCapabilitiesForApiKeyModels(apiKeyIds: string[]) {
+    if (apiKeyIds.length === 0) return [];
+    const links = schema.llmProviderApiKeyModelsTable;
+    const keys = schema.llmProviderApiKeysTable;
+    return db
+      .select({
+        apiKeyId: links.apiKeyId,
+        model: schema.modelsTable,
+        evidence: links.azureCapabilities,
+        syncedAt: links.syncedAt,
+        configuration: {
+          baseUrl: keys.baseUrl,
+          inferenceBaseUrl: keys.inferenceBaseUrl,
+          extraHeaders: keys.extraHeaders,
+          secretId: keys.secretId,
+        },
+      })
+      .from(links)
+      .innerJoin(schema.modelsTable, eq(links.modelId, schema.modelsTable.id))
+      .innerJoin(keys, eq(links.apiKeyId, keys.id))
+      .where(
+        and(
+          inArray(links.apiKeyId, apiKeyIds),
+          eq(keys.provider, "azure"),
+          eq(schema.modelsTable.provider, "azure"),
+        ),
+      );
+  }
+
   /**
    * Get all API keys linked to a specific model.
    */
@@ -194,15 +225,36 @@ class LlmProviderApiKeyModelLinkModel {
       modelId: string;
       recommendedForAgents?: boolean | null;
       providerPricing?: ProviderModelPricing | null;
+      azureCapabilities?: typeof schema.llmProviderApiKeyModelsTable.$inferInsert.azureCapabilities;
     }>,
     provider: SupportedProvider,
-    options: { overwriteRecommendedForAgents?: boolean } = {},
+    options: {
+      overwriteRecommendedForAgents?: boolean;
+      azureConfiguration?: { hash: string; defaultBaseUrl: string };
+    } = {},
   ): Promise<void> {
     const uniqueModels = Array.from(
       new Map(models.map((model) => [model.id, model])).values(),
     );
 
     await withDbTransaction(async (tx) => {
+      // A discovery request may finish after the operator changes its endpoint.
+      // Lock the key through this write so stale evidence cannot overwrite a new configuration.
+      if (provider === "azure" && options.azureConfiguration) {
+        const [key] = await tx
+          .select()
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, apiKeyId))
+          .for("update");
+        if (
+          !key ||
+          azureCapabilityConfigurationHash({
+            ...key,
+            baseUrl: key.baseUrl || options.azureConfiguration.defaultBaseUrl,
+          }) !== options.azureConfiguration.hash
+        )
+          return;
+      }
       // Delete links to models the provider no longer serves. Kept links are
       // updated in place below so their last known verdict can survive a
       // sync that learned nothing.
@@ -239,6 +291,7 @@ class LlmProviderApiKeyModelLinkModel {
           recommendedForAgents: model.recommendedForAgents ?? null,
           syncedAt,
           providerPricing: model.providerPricing ?? null,
+          azureCapabilities: model.azureCapabilities ?? null,
         }));
 
         // Batch insert
@@ -257,6 +310,7 @@ class LlmProviderApiKeyModelLinkModel {
                 isBest: sql`excluded.is_best`,
                 syncedAt: sql`excluded.synced_at`,
                 providerPricing: sql`excluded.provider_pricing`,
+                azureCapabilities: sql`excluded.azure_capabilities`,
                 recommendedForAgents: options.overwriteRecommendedForAgents
                   ? sql`excluded.recommended_for_agents`
                   : sql`COALESCE(excluded.recommended_for_agents, ${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`,

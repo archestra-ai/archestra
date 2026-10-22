@@ -4,19 +4,13 @@
  * Azure AI Foundry uses an OpenAI-compatible API at your deployment endpoint.
  */
 
-import { getAzureModelKind, RouteId } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import {
-  ApiError,
-  Azure,
-  constructResponseSchema,
-  OpenAi,
-  UuidIdSchema,
-} from "@/types";
+import { Azure, constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import { azureAdapterFactory, azureResponsesAdapterFactory } from "../adapters";
 import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
 import { azureImagesAdapterFactory } from "../adapters/azure-images";
@@ -206,7 +200,6 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Azure AI Foundry request (default agent)",
       );
-      assertTextEndpoint(request.body.model, "/chat/completions");
       return handleLLMProxy(request.body, request, reply, azureAdapterFactory);
     },
   );
@@ -230,7 +223,6 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url },
         "[UnifiedProxy] Handling Azure AI Foundry responses request (default agent)",
       );
-      assertTextEndpoint(request.body.model, "/responses");
       return handleLLMProxy(
         request.body as Azure.Types.ResponsesRequest,
         request,
@@ -262,7 +254,6 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Azure AI Foundry responses request (with agent)",
       );
-      assertTextEndpoint(request.body.model, "/responses");
       return handleLLMProxy(
         request.body as Azure.Types.ResponsesRequest,
         request,
@@ -296,29 +287,9 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Azure AI Foundry request (with agent)",
       );
-      assertTextEndpoint(request.body.model, "/chat/completions");
       return handleLLMProxy(request.body, request, reply, azureAdapterFactory);
     },
   );
 };
 
 export default azureProxyRoutes;
-
-function assertTextEndpoint(model: string, endpoint: string) {
-  const kind = getAzureModelKind(model);
-  const native =
-    kind === "image"
-      ? "/images/generations"
-      : kind === "embedding"
-        ? "/embeddings"
-        : kind === "realtime" || kind === "translation"
-          ? "/realtime/turns"
-          : kind === "audio"
-            ? "/chat/completions"
-            : endpoint;
-  if (native !== endpoint)
-    throw new ApiError(
-      400,
-      `This deployment uses ${native}; send the request to that Azure proxy endpoint.`,
-    );
-}

@@ -31342,14 +31342,17 @@ export type AzureImagesWithDefaultAgentData = {
     body: {
         model: string;
         prompt: string;
-        n?: number;
-        size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-        quality?: 'auto' | 'low' | 'medium' | 'high';
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
         background?: 'auto' | 'transparent' | 'opaque';
         output_format?: 'png' | 'jpeg' | 'webp';
-        output_compression?: number;
-        moderation?: 'auto' | 'low';
+        response_format?: 'url' | 'b64_json';
         user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
         stream?: false;
     };
     headers?: {
@@ -31467,14 +31470,17 @@ export type AzureImagesWithAgentData = {
     body: {
         model: string;
         prompt: string;
-        n?: number;
-        size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-        quality?: 'auto' | 'low' | 'medium' | 'high';
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
         background?: 'auto' | 'transparent' | 'opaque';
         output_format?: 'png' | 'jpeg' | 'webp';
-        output_compression?: number;
-        moderation?: 'auto' | 'low';
+        response_format?: 'url' | 'b64_json';
         user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
         stream?: false;
     };
     headers?: {
@@ -60221,14 +60227,17 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 prompt: string;
-                n?: number;
-                size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-                quality?: 'auto' | 'low' | 'medium' | 'high';
+                size?: string | null;
+                quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
                 background?: 'auto' | 'transparent' | 'opaque';
                 output_format?: 'png' | 'jpeg' | 'webp';
-                output_compression?: number;
-                moderation?: 'auto' | 'low';
+                response_format?: 'url' | 'b64_json';
                 user?: string;
+                safety_identifier?: string | null;
+                n?: number | null;
+                output_compression?: number | null;
+                moderation?: 'auto' | 'low';
+                style?: 'vivid' | 'natural';
                 stream?: false;
             } | {
                 [key: string]: unknown;
@@ -60236,14 +60245,17 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 prompt: string;
-                n?: number;
-                size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-                quality?: 'auto' | 'low' | 'medium' | 'high';
+                size?: string | null;
+                quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
                 background?: 'auto' | 'transparent' | 'opaque';
                 output_format?: 'png' | 'jpeg' | 'webp';
-                output_compression?: number;
-                moderation?: 'auto' | 'low';
+                response_format?: 'url' | 'b64_json';
                 user?: string;
+                safety_identifier?: string | null;
+                n?: number | null;
+                output_compression?: number | null;
+                moderation?: 'auto' | 'low';
+                style?: 'vivid' | 'natural';
                 stream?: false;
             } | {
                 [key: string]: unknown;
@@ -68393,14 +68405,17 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             prompt: string;
-            n?: number;
-            size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-            quality?: 'auto' | 'low' | 'medium' | 'high';
+            size?: string | null;
+            quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
             background?: 'auto' | 'transparent' | 'opaque';
             output_format?: 'png' | 'jpeg' | 'webp';
-            output_compression?: number;
-            moderation?: 'auto' | 'low';
+            response_format?: 'url' | 'b64_json';
             user?: string;
+            safety_identifier?: string | null;
+            n?: number | null;
+            output_compression?: number | null;
+            moderation?: 'auto' | 'low';
+            style?: 'vivid' | 'natural';
             stream?: false;
         } | {
             [key: string]: unknown;
@@ -68408,14 +68423,17 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             prompt: string;
-            n?: number;
-            size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
-            quality?: 'auto' | 'low' | 'medium' | 'high';
+            size?: string | null;
+            quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
             background?: 'auto' | 'transparent' | 'opaque';
             output_format?: 'png' | 'jpeg' | 'webp';
-            output_compression?: number;
-            moderation?: 'auto' | 'low';
+            response_format?: 'url' | 'b64_json';
             user?: string;
+            safety_identifier?: string | null;
+            n?: number | null;
+            output_compression?: number | null;
+            moderation?: 'auto' | 'low';
+            style?: 'vivid' | 'natural';
             stream?: false;
         } | {
             [key: string]: unknown;

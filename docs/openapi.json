@@ -110358,30 +110358,27 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "n": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10
-                  },
                   "size": {
+                    "nullable": true,
                     "type": "string",
-                    "enum": [
-                      "auto",
-                      "1024x1024",
-                      "1536x1024",
-                      "1024x1536"
-                    ]
+                    "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                   },
                   "quality": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
                       "low",
                       "medium",
-                      "high"
+                      "high",
+                      "xhigh",
+                      "max",
+                      "standard",
+                      "hd"
                     ]
                   },
                   "background": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
@@ -110390,6 +110387,7 @@
                     ]
                   },
                   "output_format": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "png",
@@ -110397,22 +110395,51 @@
                       "webp"
                     ]
                   },
+                  "response_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "url",
+                      "b64_json"
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "n": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
                   "output_compression": {
+                    "nullable": true,
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 100
                   },
                   "moderation": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
                       "low"
                     ]
                   },
-                  "user": {
-                    "type": "string"
+                  "style": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "vivid",
+                      "natural"
+                    ]
                   },
                   "stream": {
+                    "nullable": true,
                     "type": "boolean",
                     "enum": [
                       false
@@ -110422,7 +110449,8 @@
                 "required": [
                   "model",
                   "prompt"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -110774,30 +110802,27 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "n": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10
-                  },
                   "size": {
+                    "nullable": true,
                     "type": "string",
-                    "enum": [
-                      "auto",
-                      "1024x1024",
-                      "1536x1024",
-                      "1024x1536"
-                    ]
+                    "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                   },
                   "quality": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
                       "low",
                       "medium",
-                      "high"
+                      "high",
+                      "xhigh",
+                      "max",
+                      "standard",
+                      "hd"
                     ]
                   },
                   "background": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
@@ -110806,6 +110831,7 @@
                     ]
                   },
                   "output_format": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "png",
@@ -110813,22 +110839,51 @@
                       "webp"
                     ]
                   },
+                  "response_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "url",
+                      "b64_json"
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "n": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
                   "output_compression": {
+                    "nullable": true,
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 100
                   },
                   "moderation": {
+                    "nullable": true,
                     "type": "string",
                     "enum": [
                       "auto",
                       "low"
                     ]
                   },
-                  "user": {
-                    "type": "string"
+                  "style": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "vivid",
+                      "natural"
+                    ]
                   },
                   "stream": {
+                    "nullable": true,
                     "type": "boolean",
                     "enum": [
                       false
@@ -110838,7 +110893,8 @@
                 "required": [
                   "model",
                   "prompt"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -225298,30 +225354,27 @@
                                         "type": "string",
                                         "minLength": 1
                                       },
-                                      "n": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 10
-                                      },
                                       "size": {
+                                        "nullable": true,
                                         "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "1024x1024",
-                                          "1536x1024",
-                                          "1024x1536"
-                                        ]
+                                        "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                                       },
                                       "quality": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
                                           "low",
                                           "medium",
-                                          "high"
+                                          "high",
+                                          "xhigh",
+                                          "max",
+                                          "standard",
+                                          "hd"
                                         ]
                                       },
                                       "background": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
@@ -225330,6 +225383,7 @@
                                         ]
                                       },
                                       "output_format": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "png",
@@ -225337,22 +225391,51 @@
                                           "webp"
                                         ]
                                       },
+                                      "response_format": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "url",
+                                          "b64_json"
+                                        ]
+                                      },
+                                      "user": {
+                                        "type": "string"
+                                      },
+                                      "safety_identifier": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "n": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10
+                                      },
                                       "output_compression": {
+                                        "nullable": true,
                                         "type": "integer",
                                         "minimum": 0,
                                         "maximum": 100
                                       },
                                       "moderation": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
                                           "low"
                                         ]
                                       },
-                                      "user": {
-                                        "type": "string"
+                                      "style": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "vivid",
+                                          "natural"
+                                        ]
                                       },
                                       "stream": {
+                                        "nullable": true,
                                         "type": "boolean",
                                         "enum": [
                                           false
@@ -225385,30 +225468,27 @@
                                         "type": "string",
                                         "minLength": 1
                                       },
-                                      "n": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 10
-                                      },
                                       "size": {
+                                        "nullable": true,
                                         "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "1024x1024",
-                                          "1536x1024",
-                                          "1024x1536"
-                                        ]
+                                        "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                                       },
                                       "quality": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
                                           "low",
                                           "medium",
-                                          "high"
+                                          "high",
+                                          "xhigh",
+                                          "max",
+                                          "standard",
+                                          "hd"
                                         ]
                                       },
                                       "background": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
@@ -225417,6 +225497,7 @@
                                         ]
                                       },
                                       "output_format": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "png",
@@ -225424,22 +225505,51 @@
                                           "webp"
                                         ]
                                       },
+                                      "response_format": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "url",
+                                          "b64_json"
+                                        ]
+                                      },
+                                      "user": {
+                                        "type": "string"
+                                      },
+                                      "safety_identifier": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "n": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10
+                                      },
                                       "output_compression": {
+                                        "nullable": true,
                                         "type": "integer",
                                         "minimum": 0,
                                         "maximum": 100
                                       },
                                       "moderation": {
+                                        "nullable": true,
                                         "type": "string",
                                         "enum": [
                                           "auto",
                                           "low"
                                         ]
                                       },
-                                      "user": {
-                                        "type": "string"
+                                      "style": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "vivid",
+                                          "natural"
+                                        ]
                                       },
                                       "stream": {
+                                        "nullable": true,
                                         "type": "boolean",
                                         "enum": [
                                           false
@@ -265202,30 +265312,27 @@
                                   "type": "string",
                                   "minLength": 1
                                 },
-                                "n": {
-                                  "type": "integer",
-                                  "minimum": 1,
-                                  "maximum": 10
-                                },
                                 "size": {
+                                  "nullable": true,
                                   "type": "string",
-                                  "enum": [
-                                    "auto",
-                                    "1024x1024",
-                                    "1536x1024",
-                                    "1024x1536"
-                                  ]
+                                  "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                                 },
                                 "quality": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
                                     "low",
                                     "medium",
-                                    "high"
+                                    "high",
+                                    "xhigh",
+                                    "max",
+                                    "standard",
+                                    "hd"
                                   ]
                                 },
                                 "background": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
@@ -265234,6 +265341,7 @@
                                   ]
                                 },
                                 "output_format": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "png",
@@ -265241,22 +265349,51 @@
                                     "webp"
                                   ]
                                 },
+                                "response_format": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "url",
+                                    "b64_json"
+                                  ]
+                                },
+                                "user": {
+                                  "type": "string"
+                                },
+                                "safety_identifier": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "n": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 10
+                                },
                                 "output_compression": {
+                                  "nullable": true,
                                   "type": "integer",
                                   "minimum": 0,
                                   "maximum": 100
                                 },
                                 "moderation": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
                                     "low"
                                   ]
                                 },
-                                "user": {
-                                  "type": "string"
+                                "style": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "vivid",
+                                    "natural"
+                                  ]
                                 },
                                 "stream": {
+                                  "nullable": true,
                                   "type": "boolean",
                                   "enum": [
                                     false
@@ -265289,30 +265426,27 @@
                                   "type": "string",
                                   "minLength": 1
                                 },
-                                "n": {
-                                  "type": "integer",
-                                  "minimum": 1,
-                                  "maximum": 10
-                                },
                                 "size": {
+                                  "nullable": true,
                                   "type": "string",
-                                  "enum": [
-                                    "auto",
-                                    "1024x1024",
-                                    "1536x1024",
-                                    "1024x1536"
-                                  ]
+                                  "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
                                 },
                                 "quality": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
                                     "low",
                                     "medium",
-                                    "high"
+                                    "high",
+                                    "xhigh",
+                                    "max",
+                                    "standard",
+                                    "hd"
                                   ]
                                 },
                                 "background": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
@@ -265321,6 +265455,7 @@
                                   ]
                                 },
                                 "output_format": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "png",
@@ -265328,22 +265463,51 @@
                                     "webp"
                                   ]
                                 },
+                                "response_format": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "url",
+                                    "b64_json"
+                                  ]
+                                },
+                                "user": {
+                                  "type": "string"
+                                },
+                                "safety_identifier": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "n": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 10
+                                },
                                 "output_compression": {
+                                  "nullable": true,
                                   "type": "integer",
                                   "minimum": 0,
                                   "maximum": 100
                                 },
                                 "moderation": {
+                                  "nullable": true,
                                   "type": "string",
                                   "enum": [
                                     "auto",
                                     "low"
                                   ]
                                 },
-                                "user": {
-                                  "type": "string"
+                                "style": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "vivid",
+                                    "natural"
+                                  ]
                                 },
                                 "stream": {
+                                  "nullable": true,
                                   "type": "boolean",
                                   "enum": [
                                     false

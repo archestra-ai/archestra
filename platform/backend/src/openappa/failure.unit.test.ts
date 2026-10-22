@@ -230,6 +230,8 @@ describe("openappaFailure: annotators", () => {
     ["transport", "could not be reached"],
     ['non_success status=502 detail="upstream reset"', "returned an error"],
     ["non_success status=429", "returned an error"],
+    // A helper error that names no status may pass on a second attempt.
+    ["non_success", "returned an error"],
   ])("an annotator that can answer on a second attempt is retried: %s", (reason, phrase) => {
     const failure = openappaFailure(
       runtimeFailure(

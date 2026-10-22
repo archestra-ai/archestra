@@ -7935,6 +7935,13 @@ describe("child return contract delivery", () => {
       request: () => ({ input: [] }),
     },
     {
+      client: "Codex via a Responses alias",
+      adapter: () => new AppaCodexAdapter(),
+      headers: { originator: "codex_cli_rs" },
+      interactionType: "perplexity:responses",
+      request: () => ({ input: [] }),
+    },
+    {
       client: "OpenCode",
       adapter: () => new AppaOpenCodeAdapter(),
       headers: { "user-agent": "opencode/1.18.23" },
@@ -7974,6 +7981,90 @@ describe("child return contract delivery", () => {
       await plugin.onBeforeModel({ ...context, request: retry });
       expect(occurrences(first, contract)).toBe(1);
       expect(occurrences(retry, contract)).toBe(1);
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    {
+      name: "after an existing vLLM system prompt",
+      interactionType: "vllm:chatCompletions",
+      messages: [
+        { role: "system", content: "Base" },
+        { role: "user", content: "go" },
+      ],
+      expected: [
+        { role: "system", content: `Base\n\n${contract}` },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a leading system message on vLLM",
+      interactionType: "vllm:chatCompletions",
+      messages: [{ role: "user", content: "go" }],
+      expected: [
+        { role: "system", content: contract },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a leading system message on native Chat Completions",
+      interactionType: "openai:chatCompletions",
+      messages: [{ role: "user", content: "go" }],
+      expected: [
+        { role: "system", content: contract },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a text part of a leading developer message",
+      interactionType: "openrouter:chatCompletions",
+      messages: [
+        { role: "developer", content: [{ type: "text", text: "Base" }] },
+        { role: "user", content: "go" },
+      ],
+      expected: [
+        {
+          role: "developer",
+          content: [
+            { type: "text", text: "Base" },
+            { type: "text", text: contract },
+          ],
+        },
+        { role: "user", content: "go" },
+      ],
+    },
+  ])("merges the contract into one leading system message $name", async ({
+    interactionType,
+    messages,
+    expected,
+  }) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|child",
+      parentId: "user:user|parent",
+    });
+    context.headers = { "user-agent": "opencode/1.18.23" };
+    context.interactionType = interactionType;
+    const trusted = trustedOf(context);
+    trusted.request.tools = undefined;
+    trusted.request.declaredTools = [];
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        returnContract: contract,
+      });
+    const request = { messages: structuredClone(messages) };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({ ...context, toolResults: [] });
+      await plugin.onBeforeModel({ ...context, request });
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.messages).toEqual(expected);
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);

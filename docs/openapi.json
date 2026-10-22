@@ -79774,6 +79774,29 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "failure": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "retriable": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "retriable",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      },
                       "stateChangedAt": {
                         "nullable": true,
                         "type": "string",
@@ -79849,6 +79872,7 @@
                       "endedAt",
                       "state",
                       "statusReason",
+                      "failure",
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",
@@ -80674,6 +80698,29 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "failure": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "retriable": {
+                                "type": "boolean"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "retriable",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          },
                           "stateChangedAt": {
                             "nullable": true,
                             "type": "string",
@@ -80752,6 +80799,7 @@
                           "endedAt",
                           "state",
                           "statusReason",
+                          "failure",
                           "stateChangedAt",
                           "hardDeadlineAt",
                           "lastModelActivityAt",
@@ -81201,6 +81249,29 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "failure": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "retriable": {
+                          "type": "boolean"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "retriable",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
                     "stateChangedAt": {
                       "nullable": true,
                       "type": "string",
@@ -81375,6 +81446,7 @@
                     "endedAt",
                     "state",
                     "statusReason",
+                    "failure",
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
@@ -81804,6 +81876,29 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "failure": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "retriable": {
+                          "type": "boolean"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "retriable",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
                     "stateChangedAt": {
                       "nullable": true,
                       "type": "string",
@@ -81879,6 +81974,7 @@
                     "endedAt",
                     "state",
                     "statusReason",
+                    "failure",
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
@@ -431810,6 +431906,29 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "failure": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "retriable": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "retriable",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      },
                       "stateChangedAt": {
                         "nullable": true,
                         "type": "string",
@@ -431984,6 +432103,7 @@
                       "endedAt",
                       "state",
                       "statusReason",
+                      "failure",
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",

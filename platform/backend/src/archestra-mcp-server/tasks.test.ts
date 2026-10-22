@@ -21,6 +21,7 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -693,6 +694,41 @@ describe("run tools", () => {
         }
       ).runs[0]?.run_url,
     ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
+  });
+
+  test("get_agent_run and list_agent_runs report a classified failure", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    await settleFailedA2ATask({
+      taskId: task.id,
+      contextId: task.contextId,
+      statusReason: "The run did not start in time.",
+      failure: { code: "launch.capacity_timeout", retriable: true },
+    });
+    const failure = { code: "launch.capacity_timeout", retriable: true };
+
+    const read = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: task.id },
+      context,
+    );
+    expect(read.isError, JSON.stringify(read.content)).toBeFalsy();
+    expect(read.structuredContent).toMatchObject({
+      run: { state: "failed", failure },
+    });
+    for (const mineOnly of [false, true]) {
+      const listed = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [callingAgent.id], mine_only: mineOnly },
+        context,
+      );
+      expect(listed.isError, JSON.stringify(listed.content)).toBeFalsy();
+      expect(listed.structuredContent).toMatchObject({
+        runs: [{ state: "failed", failure }],
+      });
+    }
   });
 
   test("lists the logged telemetry key shared by continued turns, never a task or workspace handle", async ({

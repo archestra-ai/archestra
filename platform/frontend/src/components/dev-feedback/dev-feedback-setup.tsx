@@ -12,6 +12,7 @@ import {
   useDevFeedbackChannels,
   useSaveDevFeedbackSetup,
 } from "@/lib/dev-feedback/dev-feedback.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -93,10 +94,11 @@ export function DevFeedbackSetupPanel(props: {
 // ===
 
 function NoBot() {
+  const appName = useAppName();
   return (
     <div className="space-y-2 text-sm">
       <p>
-        Feedback posts as an Archestra Slack bot, and none is connected yet.
+        Feedback posts as an {appName} Slack bot, and none is connected yet.
       </p>
       <Button size="xs" asChild>
         <Link href="/settings/messaging-channels/slack">Set up Slack</Link>

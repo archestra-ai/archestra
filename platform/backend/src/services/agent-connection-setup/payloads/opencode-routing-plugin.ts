@@ -1,6 +1,7 @@
 import { DEFAULT_APP_NAME, OPENCODE_AGENT_HEADER } from "@archestra/shared";
 import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
 import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
+import { OPENCODE_QUESTION_TUI } from "./opencode-question-tui";
 
 // white-label-ok: stable OpenCode V1 plugin export, not display copy
 export const OPENCODE_V1_PROXY_EXPORT = "ArchestraLlmProxy";
@@ -54,6 +55,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 ${params.runtime ? 'const runtimeParams = JSON.parse(readFileSync(new URL("../params.json", import.meta.url), "utf8"));' : ""}
+${params.runtime ? OPENCODE_QUESTION_TUI : ""}
 ${catalogSource(params)}
 const installedRoutes = ${params.runtime ? "runtimeParams.routes ?? {}" : JSON.stringify(params.routes)};
 const routes = hasCatalog ? { ...catalogRoutes } : { ...installedRoutes };
@@ -189,12 +191,14 @@ const directFetch = ${
   const headers = new Headers(request.headers);
   headers.delete("x-archestra-client-runtime-token");
   headers.delete("x-archestra-mcp-aliases");
+  headers.delete("x-archestra-question-cards");
   const managedRoute = Object.values(activeRoutes).some(route => {
     const base = new URL(route);
     return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
   });
   if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
     const binding = sessionBindingProofs.get(headers.get("x-opencode-session"));
+    if (runtimeParams.questionCards && binding?.origin === url.origin && binding.headers["x-archestra-client-runtime-token"]) headers.set("x-archestra-question-cards", "1");
     for (const [name, value] of Object.entries(binding?.origin === url.origin ? binding.headers : {})) headers.set(name, value);
   }
   return rawDirectFetch(new Request(request, { headers, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect }));

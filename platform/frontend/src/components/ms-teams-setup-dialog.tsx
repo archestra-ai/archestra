@@ -20,9 +20,13 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
-import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops/chatops-config.query";
+import {
+  useMsTeamsChatOpsConfig,
+  useUpdateChatOpsConfigInQuickstart,
+} from "@/lib/chatops/chatops-config.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -48,6 +52,7 @@ export function MsTeamsSetupDialog({
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const creds = msTeams?.credentials;
+  const { data: msTeamsConfig } = useMsTeamsChatOpsConfig(open);
 
   const [saving, setSaving] = useState(false);
 
@@ -55,6 +60,12 @@ export function MsTeamsSetupDialog({
   const [sharedAppId, setSharedAppId] = useState("");
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
+  // null until the person flips it, so reopening shows the saved setting.
+  const [groupChatFileSignIn, setGroupChatFileSignIn] = useState<
+    boolean | null
+  >(null);
+  const groupChatFileSignInValue =
+    groupChatFileSignIn ?? msTeamsConfig?.groupChatFileSignIn ?? false;
 
   // The status endpoint exposes the real App ID (it's not a secret) — prefill
   // it on reconfigure so it also flows into the manifest step. Secret and
@@ -76,6 +87,7 @@ export function MsTeamsSetupDialog({
       setSharedAppId("");
       setSharedAppSecret("");
       setSharedTenantId("");
+      setGroupChatFileSignIn(null);
     }
   };
 
@@ -106,6 +118,17 @@ export function MsTeamsSetupDialog({
             stepNumber={index + 1}
             appId={sharedAppId || savedAppId}
             appName={configuredAppName}
+          />
+        );
+      }
+      if (step.component === "group-chat-files") {
+        return (
+          <StepGroupChatFiles
+            key={step.title}
+            stepNumber={index + 1}
+            redirectUri={msTeamsConfig?.signInRedirectUri ?? ""}
+            enabled={groupChatFileSignInValue}
+            onEnabledChange={setGroupChatFileSignIn}
           />
         );
       }
@@ -145,6 +168,8 @@ export function MsTeamsSetupDialog({
     creds?.appSecret,
     creds?.tenantId,
     savedAppId,
+    msTeamsConfig?.signInRedirectUri,
+    groupChatFileSignInValue,
   ]);
 
   const lastStepAction = {
@@ -154,18 +179,15 @@ export function MsTeamsSetupDialog({
     onClick: async () => {
       setSaving(true);
       try {
-        const body: Record<string, unknown> = { enabled: true };
+        const body: Parameters<typeof mutation.mutateAsync>[0] = {
+          enabled: true,
+        };
         if (sharedAppId) body.appId = sharedAppId;
         if (sharedAppSecret) body.appSecret = sharedAppSecret;
         if (sharedTenantId) body.tenantId = sharedTenantId;
-        const updateResult = await mutation.mutateAsync(
-          body as {
-            enabled?: boolean;
-            appId?: string;
-            appSecret?: string;
-            tenantId?: string;
-          },
-        );
+        if (groupChatFileSignIn !== null)
+          body.groupChatFileSignIn = groupChatFileSignIn;
+        const updateResult = await mutation.mutateAsync(body);
         if (updateResult?.success) {
           handleOpenChange(false);
         }
@@ -259,6 +281,10 @@ function buildSteps(appName: string) {
     {
       title: "Read Files in Channels (Optional)",
       component: "channel-files" as const,
+    },
+    {
+      title: "Read Files in Group Chats (Optional)",
+      component: "group-chat-files" as const,
     },
     {
       title: "Create App Manifest",
@@ -771,8 +797,8 @@ function StepChannelFiles({
           </li>
         </ol>
         <p className="text-xs text-muted-foreground">
-          Files in group chats stay unreadable: each one is stored in its
-          sender's OneDrive.
+          Files in group chats are stored in each sender's OneDrive instead. The
+          next step covers them.
         </p>
       </StepCard>
 
@@ -790,6 +816,98 @@ function StepChannelFiles({
           className="rounded-md w-full"
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Optional: let the bot read files shared in group chats. Teams stores each
+ * one in its sender's OneDrive, which no application permission reaches short
+ * of every OneDrive in the tenant. Instead the bot asks the sender to sign in
+ * once (delegated `Files.Read`) and reads only the files they share with it.
+ * The app registration needs the sign-in redirect URI and that permission.
+ */
+function StepGroupChatFiles({
+  stepNumber,
+  redirectUri,
+  enabled,
+  onEnabledChange,
+}: {
+  stepNumber: number;
+  redirectUri: string;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <StepCard
+        stepNumber={stepNumber}
+        title="Read Files in Group Chats (Optional)"
+      >
+        <p className="text-sm text-muted-foreground">
+          Files in group chats are stored in each sender's OneDrive. With this
+          on, the bot asks a person to sign in with Microsoft the first time
+          they share a file with it, then answers their message. It reads only
+          the files that person shares with it.
+        </p>
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5 flex-1 min-w-0">
+              In <strong>App registrations</strong>, open your bot's app, go to{" "}
+              <strong>Authentication</strong> → <strong>Add a platform</strong>{" "}
+              → <strong>Web</strong>, and add this redirect URI:
+              <span className="mt-1 flex items-center gap-1">
+                <code className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                  {redirectUri}
+                </code>
+                <span className="shrink-0">
+                  <CopyButton text={redirectUri} />
+                </span>
+              </span>
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5 flex-1 min-w-0">
+              In <strong>API permissions</strong>, add the{" "}
+              <strong>Microsoft Graph</strong> delegated permissions{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                Files.Read
+              </code>{" "}
+              and{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                offline_access
+              </code>
+              . People can consent for themselves; grant admin consent to skip
+              that prompt.
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              3
+            </span>
+            <span className="pt-0.5 flex flex-1 min-w-0 items-center gap-3">
+              <Switch
+                id="ms-teams-group-chat-file-sign-in"
+                checked={enabled}
+                onCheckedChange={onEnabledChange}
+              />
+              <Label htmlFor="ms-teams-group-chat-file-sign-in">
+                Ask people to sign in to read their group-chat files
+              </Label>
+            </span>
+          </li>
+        </ol>
+        <p className="text-xs text-muted-foreground">
+          Anyone can type <code>/sign-out</code> to the bot to remove their
+          sign-in.
+        </p>
+      </StepCard>
     </div>
   );
 }

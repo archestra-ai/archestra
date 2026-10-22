@@ -39446,6 +39446,41 @@ export type PostApiWebhooksChatopsMsTeamsResponses = {
 
 export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
 
+export type GetApiWebhooksChatopsMsTeamsSignInData = {
+    body?: never;
+    path?: never;
+    query?: {
+        key?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+        error_description?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in/callback';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type PostApiWebhooksChatopsSlackData = {
     body: unknown;
     path?: never;
@@ -40522,6 +40557,8 @@ export type GetMsTeamsChatOpsConfigResponses = {
         enabled: boolean;
         appId: string | null;
         tenantId: string | null;
+        groupChatFileSignIn: boolean;
+        signInRedirectUri: string;
     };
 };
 
@@ -40533,6 +40570,7 @@ export type UpdateChatOpsConfigInQuickstartData = {
         appId?: string;
         appSecret?: string;
         tenantId?: string;
+        groupChatFileSignIn?: boolean;
     };
     path?: never;
     query?: never;

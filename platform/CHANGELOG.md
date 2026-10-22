@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.2](https://github.com/archestra-ai/archestra/compare/platform-v1.4.1...platform-v1.4.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **agent-runtime:** keep Claude assignments open for background work (backport release/1.4) ([#9447](https://github.com/archestra-ai/archestra/issues/9447)) ([61b36bf](https://github.com/archestra-ai/archestra/commit/61b36bf1af1be0e98ade55af60c3c1303d60adf7))
+* **agent-runtime:** say why a workspace file read, write or transfer failed (backport release/1.4) ([#9450](https://github.com/archestra-ai/archestra/issues/9450)) ([6def6ef](https://github.com/archestra-ai/archestra/commit/6def6ef7f9edb4cdc4b369f4545682c7c04aa754))
+* **agent-runtime:** submit long Claude Code tasks through a tmux buffer (backport release/1.4) ([#9440](https://github.com/archestra-ai/archestra/issues/9440)) ([67cb68d](https://github.com/archestra-ai/archestra/commit/67cb68dffd70a7a07e6ac8930e1b3f90356bde89))
+* **deps:** clear release/1.4 image CVEs and queue test failures ([#9493](https://github.com/archestra-ai/archestra/issues/9493)) ([576aacf](https://github.com/archestra-ai/archestra/commit/576aacfd3146d710002d528f035ed6abee4df00b))
+* **guardrails:** allow complete approval reviews through ask_user validation (backport release/1.4) ([#9470](https://github.com/archestra-ai/archestra/issues/9470)) ([f3f3125](https://github.com/archestra-ai/archestra/commit/f3f31258569ae16570b20c4c7650646cbc9b1e63))
+* **guardrails:** send the managed key for Kilo subagents and close failed spa (backport release/1.4) ([#9479](https://github.com/archestra-ai/archestra/issues/9479)) ([fe1da32](https://github.com/archestra-ai/archestra/commit/fe1da3227888e2c106c8d27e38c0cde446c094a2))
+* **llm-proxy:** prepare Claude Desktop subscription requests (backport release/1.4) ([#9491](https://github.com/archestra-ai/archestra/issues/9491)) ([f06416f](https://github.com/archestra-ai/archestra/commit/f06416fdfcae0ce546f06862df8e6463398d02bd))
+* **openappa:** use single-line Appa crown in session and subagent markers (backport release/1.4) ([#9451](https://github.com/archestra-ai/archestra/issues/9451)) ([8f6b9be](https://github.com/archestra-ai/archestra/commit/8f6b9bebd4046f3792b32de3047f3b00614e4f5a))
+* **provider-keys:** delete the stored secret when a key write fails (backport release/1.4) ([#9457](https://github.com/archestra-ai/archestra/issues/9457)) ([772ced8](https://github.com/archestra-ai/archestra/commit/772ced88f7289f6ee145e83ec022b60d4b66d167))
+* **provider-keys:** return 400 when a service account creates a key of its ow (backport release/1.4) ([#9453](https://github.com/archestra-ai/archestra/issues/9453)) ([9a9babd](https://github.com/archestra-ai/archestra/commit/9a9babdb4a0753c4d6246dffed39b12185d3a2bf))
+* **proxy:** end failed Responses streams with response.failed (backport release/1.4) ([#9442](https://github.com/archestra-ai/archestra/issues/9442)) ([3e5a81c](https://github.com/archestra-ai/archestra/commit/3e5a81c6c734e379d8c8a1705da482494a7183e5))
+* **server:** keep failed-query SQL and parameters out of error responses (backport release/1.4) ([#9456](https://github.com/archestra-ai/archestra/issues/9456)) ([2cfff96](https://github.com/archestra-ai/archestra/commit/2cfff960958d8ae9a1d4e3014d748e7384b4f398))
+* **settings:** keep Appearance subpages on refresh (backport release/1.4) ([#9441](https://github.com/archestra-ai/archestra/issues/9441)) ([37df2af](https://github.com/archestra-ai/archestra/commit/37df2af3f9a067c3e682eb2de890ed1edb3bdd2a))
+
 ## [1.4.1](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0...platform-v1.4.1) (2026-10-21)
 
 

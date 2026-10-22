@@ -1811,11 +1811,11 @@ function transferResult(params: {
     expires_in_seconds: Math.floor(WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000),
     command:
       args.direction === "download"
-        ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
+        ? `curl --fail --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
         : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
     next_step:
       args.direction === "download"
-        ? "Run the command. Re-run the same command to resume an interrupted download."
+        ? "Run the command. Re-run the same command to resume an interrupted download. A refused request (HTTP 404 or 409) writes no file; authorize the transfer again instead."
         : "Run the command. It reports the stored path, size and checksum on success.",
   });
 }

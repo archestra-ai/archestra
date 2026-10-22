@@ -1774,7 +1774,7 @@ pub async fn load_offer_review(
                      AND entry->>'offer_id' = $3 \
                      ORDER BY o.created_at DESC \
                      LIMIT 1",
-                    sealed::SEALED
+                    sealed::ESCAPED
                 ),
                 &[&organization_id, &session_id, &target_offer_id],
             )?;
@@ -1789,6 +1789,8 @@ pub async fn load_offer_review(
             }
             let opened = sealed::read(
                 client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
                 "o.organization_id=$1 AND o.session_id=$2",
                 &[&organization_id, &session_id],
             )?;
@@ -1901,7 +1903,7 @@ pub async fn load_child_returns(
               COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS output \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {SEALED} \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') IN ('child_end', 'child_return') \
@@ -1918,7 +1920,7 @@ pub async fn load_child_returns(
               AND ($3::text IS NULL OR o.session_id=$3) \
               AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
               ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
-                SEALED = sealed::SEALED),
+                ESCAPED = sealed::ESCAPED),
             params.iter().copied(),
         )?;
         let mut records: Vec<(SystemTime, ChildReturnRecord)> = Vec::new();
@@ -1953,6 +1955,8 @@ pub async fn load_child_returns(
         // decides for them as for the rows above.
         let opened = sealed::read(
             client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
             "o.organization_id=$1 \
              AND EXISTS (SELECT 1 FROM openappa_sessions s \
                WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
@@ -2034,7 +2038,7 @@ pub async fn load_child_addresses(
                 "SELECT o.session_id AS parent_session_id, o.created_at, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {SEALED} \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
@@ -2042,7 +2046,7 @@ pub async fn load_child_addresses(
               AND o.decision->>'decision' = 'ack' \
               AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
               ORDER BY o.created_at LIMIT 10001",
-                SEALED = sealed::SEALED
+                ESCAPED = sealed::ESCAPED
             ),
             params.iter().copied(),
         )?;
@@ -2064,6 +2068,8 @@ pub async fn load_child_addresses(
         drop(rows);
         let opened = sealed::read(
             client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
             "o.organization_id=$1 AND EXISTS (SELECT 1 FROM openappa_sessions s \
                WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id)",
             params,
@@ -2122,6 +2128,8 @@ fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Result<bool> {
         }
         let opened = sealed::read(
             client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
             "o.organization_id=$1 AND o.session_id=$2",
             &[&organization_id, &parent],
         )?;
@@ -2239,9 +2247,9 @@ fn released_spawn_binding(
         if status != "complete" {
             return Ok(None);
         }
-        let input: Value = row.get("input");
+        let input = sealed::unescape(row.get("input"))?;
         let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
+        let Some(decision) = decision.map(sealed::unescape).transpose()? else {
             return Ok(None);
         };
         let semantic = input.get("semantic").unwrap_or(&input);
@@ -4060,19 +4068,19 @@ fn encrypted_receipts(
     let (organization_id, session_id) = (organization_id.to_owned(), session_id.to_owned());
     let cipher = pg.0.cipher().clone();
     pg.with_client(move |client| {
-        use postgres::fallible_iterator::FallibleIterator;
-        let mut rows = client.query_raw("SELECT operation_id, input, decision FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND status='complete' ORDER BY created_at DESC LIMIT 10001", [&organization_id, &session_id])?;
-        let mut budget = ReceiptLookupBudget::default();
-        let mut result = Vec::new();
-        while let Some(row) = rows.next()? {
-            let id: String = row.get(0);
-            let input = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "input"]), row.get(1))?;
-            let decision = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "decision"]), row.get(2))?;
-            budget.take(input.to_string().len() + decision.to_string().len())?;
-            result.push((input, decision));
-        }
-        Ok(result)
-    }).map_err(sql_failure)
+        let receipts = sealed::read(
+            client,
+            &cipher,
+            sealed::Receipts::All,
+            "o.organization_id=$1 AND o.session_id=$2",
+            &[&organization_id, &session_id],
+        )?;
+        Ok(receipts
+            .into_iter()
+            .map(|receipt| (receipt.input, receipt.decision))
+            .collect())
+    })
+    .map_err(sql_failure)
 }
 
 fn recorded_call_presentation(
@@ -4108,7 +4116,7 @@ fn recorded_call_presentation(
                      ) \
                      ORDER BY o.created_at DESC \
                      LIMIT 1",
-                    sealed::SEALED
+                    sealed::ESCAPED
                 ),
                 &[&organization_id, &session_id, &offer_id],
             )?;
@@ -4122,6 +4130,8 @@ fn recorded_call_presentation(
             }
             let opened = sealed::read(
                 client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
                 "o.organization_id=$1 AND o.session_id=$2",
                 &[&organization_id, &session_id],
             )?;

@@ -3338,16 +3338,14 @@ class AgentModel {
 
   static async findAccessContextById(
     id: string,
-  ): Promise<Pick<
-    Agent,
-    "id" | "organizationId" | "scope" | "authorId"
-  > | null> {
+  ): Promise<AgentAccessContext | null> {
     const [agent] = await db
       .select({
         id: schema.agentsTable.id,
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        agentType: schema.agentsTable.agentType,
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)

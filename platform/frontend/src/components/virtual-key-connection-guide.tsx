@@ -586,66 +586,70 @@ export function RequestExample({
           )}
         </p>
       )}
-      <div className="space-y-1.5">
-        <Label htmlFor="virtual-key-example-model">Model</Label>
-        <Select
-          value={model ?? ""}
-          onValueChange={setPickedModel}
-          disabled={isPending || modelOptions.length === 0}
-        >
-          <SelectTrigger
-            id="virtual-key-example-model"
-            className="w-full sm:w-80"
-          >
-            <SelectValue
-              placeholder={
-                isPending ? "Loading models…" : "No models found for this key"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {modelOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {usesCatalog && (
-          <p className="text-xs text-muted-foreground">
-            From your organization&apos;s model catalog. Your own key may have
-            access to different models.
-          </p>
+      <div
+        className={cn(
+          "grid gap-3",
+          isAzureImage ? "sm:grid-cols-2" : "sm:max-w-80",
         )}
-      </div>
-      {isAzureImage && (
+      >
         <div className="space-y-1.5">
-          <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+          <Label htmlFor="virtual-key-example-model">Model</Label>
           <Select
-            value={imageOperation}
-            onValueChange={(value) =>
-              setImageOperation(value as "generate" | "edit")
-            }
+            value={model ?? ""}
+            onValueChange={setPickedModel}
+            disabled={isPending || modelOptions.length === 0}
           >
-            <SelectTrigger
-              id="virtual-key-image-operation"
-              className="w-full sm:w-80"
-            >
-              <SelectValue />
+            <SelectTrigger id="virtual-key-example-model" className="w-full">
+              <SelectValue
+                placeholder={
+                  isPending ? "Loading models…" : "No models found for this key"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="generate">Generate an image</SelectItem>
-              <SelectItem value="edit">Edit an image</SelectItem>
+              {modelOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.value}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          {imageOperation === "edit" && (
+          {usesCatalog && (
             <p className="text-xs text-muted-foreground">
-              Save your input image as <InlineCode>edit.png</InlineCode> in the
-              current directory. Use a deployment that supports image editing.
-              cURL sets the multipart boundary automatically.
+              From your organization&apos;s model catalog. Your own key may have
+              access to different models.
             </p>
           )}
         </div>
+        {isAzureImage && (
+          <div className="space-y-1.5">
+            <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+            <Select
+              value={imageOperation}
+              onValueChange={(value) =>
+                setImageOperation(value as "generate" | "edit")
+              }
+            >
+              <SelectTrigger
+                id="virtual-key-image-operation"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="generate">Generate an image</SelectItem>
+                <SelectItem value="edit">Edit an image</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      {isAzureImage && imageOperation === "edit" && (
+        <p className="text-xs text-muted-foreground">
+          Save your input image as <InlineCode>edit.png</InlineCode> in the
+          current directory. Use a deployment that supports image editing. cURL
+          sets the multipart boundary automatically.
+        </p>
       )}
       {secret ? (
         <MaskedCodeExample

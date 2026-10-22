@@ -11,6 +11,32 @@ export const ProxyCostQuerySchema = z.object({
     ),
   authMethod: InteractionAuthMethodSchema.optional(),
   credentialId: z.string().min(1).max(256).optional(),
+  includeLabelKeys: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Include the distinct historical label keys in the filtered proxy usage.",
+    ),
+  labelKey: z
+    .string()
+    .min(1)
+    .max(256)
+    .optional()
+    .describe("Group by the admission-time value of this server-owned label."),
+  labelValue: z
+    .string()
+    .min(1)
+    .max(1024)
+    .optional()
+    .describe(
+      "Match this exact historical label value. Requires labelKey; cannot be combined with labelUnassigned=true.",
+    ),
+  labelUnassigned: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.",
+    ),
 });
 
 export const ProxyCostTotalsSchema = z.object({
@@ -40,6 +66,20 @@ export const ProxyCostStatisticsSchema = z.object({
     offset: z.number(),
     total: z.number(),
   }),
+  labelKeys: z.array(z.string()).optional(),
+  labels: z
+    .object({
+      key: z.string(),
+      groups: z.array(
+        ProxyCostTotalsSchema.extend({ value: z.string().nullable() }),
+      ),
+      pagination: z.object({
+        limit: z.number(),
+        offset: z.number(),
+        total: z.number(),
+      }),
+    })
+    .optional(),
 });
 
 export type ProxyCostStatistics = z.infer<typeof ProxyCostStatisticsSchema>;

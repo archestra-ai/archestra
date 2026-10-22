@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import type { AttributionLabels } from "@/types/attribution-label";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -16,6 +17,7 @@ export default class InteractionBillingModel {
     userId: string | null;
     billingTeamId: string | null;
     billingMode: string;
+    attributionLabels?: AttributionLabels | null;
     logIdentity?: {
       profileId: string | null;
       appId: string | null;
@@ -90,6 +92,9 @@ export default class InteractionBillingModel {
         userId,
         billingTeamId,
         billingMode,
+        // First settlement owns the snapshot; mutable labels are deliberately
+        // excluded from the billing identity used to recognize retries.
+        attributionLabels: params.attributionLabels,
       })
       .onConflictDoNothing()
       .returning({ id: schema.interactionBillingTable.interactionId });

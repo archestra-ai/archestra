@@ -53923,6 +53923,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -54006,6 +54009,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -54237,6 +54243,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54341,6 +54350,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54445,6 +54457,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54549,6 +54564,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -54653,6 +54671,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: GeminiGenerateContentRequest | {
                 [key: string]: unknown;
             };
@@ -54736,6 +54757,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: AnthropicMessagesRequest | {
                 [key: string]: unknown;
             };
@@ -54819,6 +54843,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -55343,6 +55370,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model?: string;
                 messages: Array<{
@@ -55966,6 +55996,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56049,6 +56082,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56132,6 +56168,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56215,6 +56254,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56298,6 +56340,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56381,6 +56426,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: OpenrouterChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56464,6 +56512,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: VllmChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56547,6 +56598,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: OllamaChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56630,6 +56684,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: OllamaNativeChatRequest | {
                 [key: string]: unknown;
             };
@@ -56713,6 +56770,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: CohereChatRequest | {
                 [key: string]: unknown;
             };
@@ -56796,6 +56856,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: ZhipuaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56879,6 +56942,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: DeepSeekChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -56962,6 +57028,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 /**
@@ -57769,6 +57838,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 /**
@@ -58576,6 +58648,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 /**
@@ -59383,6 +59458,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: MinimaxChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -59466,6 +59544,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -59617,6 +59698,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 /**
@@ -60424,6 +60508,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 prompt: string;
@@ -60546,6 +60633,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -60736,6 +60826,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -60926,6 +61019,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -61116,6 +61212,9 @@ export type GetInteractionsResponses = {
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
             request: JevDecisionsRequest | {
                 [key: string]: unknown;
             };
@@ -61302,6 +61401,9 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
+            attributionLabels?: {
+                [key: string]: string;
+            } | null;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
@@ -61435,6 +61537,12 @@ export type GetInteractionSessionsResponses = {
      */
     200: {
         data: Array<{
+            /**
+             * Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.
+             */
+            attributionLabels?: {
+                [key: string]: string;
+            } | null;
             sessionId: string | null;
             sessionSource: string | null;
             source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -61863,6 +61971,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -61946,6 +62057,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -62177,6 +62291,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62281,6 +62398,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62385,6 +62505,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62489,6 +62612,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -62593,6 +62719,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: GeminiGenerateContentRequest | {
             [key: string]: unknown;
         };
@@ -62676,6 +62805,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: AnthropicMessagesRequest | {
             [key: string]: unknown;
         };
@@ -62759,6 +62891,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             modelId: string;
             messages?: Array<{
@@ -63283,6 +63418,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model?: string;
             messages: Array<{
@@ -63906,6 +64044,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -63989,6 +64130,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64072,6 +64216,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64155,6 +64302,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64238,6 +64388,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64321,6 +64474,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: OpenrouterChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64404,6 +64560,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: VllmChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64487,6 +64646,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: OllamaChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64570,6 +64732,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: OllamaNativeChatRequest | {
             [key: string]: unknown;
         };
@@ -64653,6 +64818,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: CohereChatRequest | {
             [key: string]: unknown;
         };
@@ -64736,6 +64904,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: ZhipuaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64819,6 +64990,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: DeepSeekChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -64902,6 +65076,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             /**
@@ -65709,6 +65886,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             /**
@@ -66516,6 +66696,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             /**
@@ -67323,6 +67506,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: MinimaxChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -67406,6 +67592,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -67557,6 +67746,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             /**
@@ -68364,6 +68556,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             prompt: string;
@@ -68486,6 +68681,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -68676,6 +68874,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -68866,6 +69067,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -69056,6 +69260,9 @@ export type GetInteractionResponses = {
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
         request: JevDecisionsRequest | {
             [key: string]: unknown;
         };
@@ -119134,6 +119341,22 @@ export type GetProxyCostStatisticsData = {
         serviceAccountId?: string;
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         credentialId?: string;
+        /**
+         * Include the distinct historical label keys in the filtered proxy usage.
+         */
+        includeLabelKeys?: string;
+        /**
+         * Group by the admission-time value of this server-owned label.
+         */
+        labelKey?: string;
+        /**
+         * Match this exact historical label value. Requires labelKey; cannot be combined with labelUnassigned=true.
+         */
+        labelValue?: string;
+        /**
+         * Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.
+         */
+        labelUnassigned?: string;
         limit?: number;
         offset?: number;
     };
@@ -119254,6 +119477,24 @@ export type GetProxyCostStatisticsResponses = {
             limit: number;
             offset: number;
             total: number;
+        };
+        labelKeys?: Array<string>;
+        labels?: {
+            key: string;
+            groups: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                value: string | null;
+            }>;
+            pagination: {
+                limit: number;
+                offset: number;
+                total: number;
+            };
         };
     };
 };

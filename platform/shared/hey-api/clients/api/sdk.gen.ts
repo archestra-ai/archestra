@@ -11667,7 +11667,7 @@ export const rotateSkillShareLink = <ThrowOnError extends boolean = false>(optio
 export const revokeSkillShareLink = <ThrowOnError extends boolean = false>(options: Options<RevokeSkillShareLinkData, ThrowOnError>) => (options.client ?? client).delete<RevokeSkillShareLinkResponses, RevokeSkillShareLinkErrors, ThrowOnError>({ url: '/api/skill-share-links/{id}', ...options });
 
 /**
- * LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned.
+ * LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters.
  *
  * Authentication:
  *

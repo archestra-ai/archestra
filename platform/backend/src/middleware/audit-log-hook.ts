@@ -318,7 +318,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/chat/" },
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
-  { kind: "prefix", value: "/api/members/default-model" },
   // GitHub skill read-only POSTs: discover/preview fetch remote repo data but
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },

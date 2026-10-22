@@ -6,7 +6,6 @@ import {
 } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
-import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
 import OrganizationModel from "@/models/organization";
@@ -271,19 +270,15 @@ export async function getVirtualKeyProviderCatalog(
 
 /**
  * OpenCode starts on the first provider it is given, so lead with the one the
- * user already chats with: their default model's, else the organization's.
+ * organization's default model uses.
  * Returned in preference order; the caller uses the first one it really offers.
  */
 async function getPreferredModels(params: {
   organizationId: string;
-  userId: string;
 }): Promise<Array<{ provider: SupportedProvider; modelId: string }>> {
-  const [member, organization] = await Promise.all([
-    MemberModel.getDefaultModelSelection(params.userId, params.organizationId),
-    OrganizationModel.getById(params.organizationId),
-  ]);
-  const ids = [member.modelId, organization?.defaultModelId].filter(
-    (id): id is string => Boolean(id),
+  const organization = await OrganizationModel.getById(params.organizationId);
+  const ids = [organization?.defaultModelId].filter((id): id is string =>
+    Boolean(id),
   );
   const found = await ModelModel.findByIds(ids);
   return ids.flatMap((id) => {

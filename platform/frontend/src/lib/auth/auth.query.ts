@@ -385,7 +385,4 @@ function applyBootstrap(
   if (data.memberDefaultAgent) {
     queryClient.setQueryData(["member-default-agent"], data.memberDefaultAgent);
   }
-  if (data.memberDefaultModel) {
-    queryClient.setQueryData(["member-default-model"], data.memberDefaultModel);
-  }
 }

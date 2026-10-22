@@ -3309,12 +3309,25 @@ class AgentModel {
   static async findDelegationTarget(
     id: string,
     tx?: Transaction,
-  ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
+  ): Promise<Pick<
+    Agent,
+    | "id"
+    | "name"
+    | "agentType"
+    | "llmApiKeyId"
+    | "modelId"
+    | "fastModelId"
+    | "smartModelId"
+  > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        modelId: schema.agentsTable.modelId,
+        fastModelId: schema.agentsTable.fastModelId,
+        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))

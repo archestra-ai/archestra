@@ -126,12 +126,10 @@ import {
   useCreateConversation,
   useHasPlaywrightMcpTools,
   useKeepViewedConversationRead,
-  useMemberDefaultModel,
   useRefreshConversationFilesAfterTurn,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
-  useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
@@ -480,9 +478,6 @@ export function ChatPageContent({
     toastOnError: false,
   });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
-  // The user's saved default (model, key) pair — top of the resolution chain
-  // for a new chat ("member" level).
-  const { data: memberDefault } = useMemberDefaultModel();
 
   // A new chat started from a project (`/chat?project=<id>`) takes the
   // project's pinned agent. `isPending` stays true while the query is disabled,
@@ -530,7 +525,6 @@ export function ChatPageContent({
     defaultAgentId,
     modelsByProvider,
     chatApiKeys: usableChatApiKeys,
-    memberDefault: memberDefault ?? null,
     urlAgentId: searchParams.get("agentId"),
     urlModelId: searchParams.get("modelId"),
     projectDefaultAgentId: newChatProject?.defaultAgent?.id ?? null,
@@ -570,34 +564,8 @@ export function ChatPageContent({
     clearEncryptedChatQueryParam({ pathname, router, searchParams });
   }, [urlEncryptedChatDraft, pathname, router, searchParams]);
 
-  // Persist the user's (model, key) pick as their member default for the
-  // existing-conversation handlers below (the initial handlers persist via the
-  // hook). No-ops on an incomplete pair.
-  const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
-  const updateMemberDefaultModelMutateRef = useRef(
-    updateMemberDefaultModelMutation.mutate,
-  );
-  updateMemberDefaultModelMutateRef.current =
-    updateMemberDefaultModelMutation.mutate;
   const usableChatApiKeysRef = useRef(usableChatApiKeys);
   usableChatApiKeysRef.current = usableChatApiKeys;
-  const persistMemberDefaultModel = useCallback(
-    (modelId: string | null, apiKeyId: string | null) => {
-      if (!modelId || !apiKeyId) return;
-      // A default carries into chats on any agent, so it must be a key the
-      // viewer may use; an agent's own key works only through that agent.
-      if (!usableChatApiKeysRef.current.some((k) => k.id === apiKeyId)) return;
-      subscriptionDebug("persist member default", {
-        modelId,
-        chatApiKeyId: apiKeyId,
-      });
-      updateMemberDefaultModelMutateRef.current({
-        modelId,
-        chatApiKeyId: apiKeyId,
-      });
-    },
-    [],
-  );
 
   // Config decides whether a runtime agent can chat without a provider key,
   // so only the no-key screen waits for it (see below).
@@ -1168,8 +1136,6 @@ export function ChatPageContent({
       credentialRequiresConnection: activeAgentSubscription.requiresConnection,
       credentialConnected: activeAgentSubscription.isConnected,
       isApplyingAgentSelection,
-      memberDefaultModelId: memberDefault?.modelId ?? null,
-      memberDefaultChatApiKeyId: memberDefault?.chatApiKeyId ?? null,
       initialAgentId,
       initialModelId: initialModel,
       initialChatApiKeyId: initialApiKeyId,
@@ -1190,8 +1156,6 @@ export function ChatPageContent({
     conversationPerUserConnect.needsConnect,
     isApplyingAgentSelection,
     isAgentSubscriptionMetadataPending,
-    memberDefault?.chatApiKeyId,
-    memberDefault?.modelId,
     activeAgentSubscription.isConnected,
     activeAgentSubscription.requiresConnection,
     activeSelectionAgent?.id,
@@ -1286,39 +1250,35 @@ export function ChatPageContent({
   // stores the (model, key) pair as a unit, so a model is never persisted
   // without its key. Keep the conversation's current key when it serves the
   // model's provider, otherwise use a key the viewer may use for that provider.
-  const handleModelChange = useCallback(
-    (modelId: string) => {
-      const conv = conversationRef.current;
-      if (!conv) return;
-      const model = chatModelsRef.current.find((m) => m.dbId === modelId);
-      const chatApiKeyId = resolveConversationKeyForModel({
-        currentKeyId: conv.chatApiKeyId,
-        // A stored (model, key) pair shares one provider, so the current
-        // model tells which provider the agent's own key serves.
-        currentModelProvider: chatModelsRef.current.find(
-          (m) => m.dbId === conv.modelId,
-        )?.provider,
-        agentApiKeyId: conv.agent?.llmApiKeyId,
-        modelProvider: model?.provider,
-        usableKeys: usableChatApiKeysRef.current,
-      });
-      subscriptionDebug("model change", {
-        source: "conversation-model-selector",
-        conversationId: conv.id,
-        previousModelId: conv.modelId,
-        previousChatApiKeyId: conv.chatApiKeyId,
-        nextModelId: modelId,
-        nextChatApiKeyId: chatApiKeyId,
-      });
-      updateConversationMutateRef.current({
-        id: conv.id,
-        modelId,
-        chatApiKeyId,
-      });
-      persistMemberDefaultModel(modelId, chatApiKeyId);
-    },
-    [persistMemberDefaultModel],
-  );
+  const handleModelChange = useCallback((modelId: string) => {
+    const conv = conversationRef.current;
+    if (!conv) return;
+    const model = chatModelsRef.current.find((m) => m.dbId === modelId);
+    const chatApiKeyId = resolveConversationKeyForModel({
+      currentKeyId: conv.chatApiKeyId,
+      // A stored (model, key) pair shares one provider, so the current
+      // model tells which provider the agent's own key serves.
+      currentModelProvider: chatModelsRef.current.find(
+        (m) => m.dbId === conv.modelId,
+      )?.provider,
+      agentApiKeyId: conv.agent?.llmApiKeyId,
+      modelProvider: model?.provider,
+      usableKeys: usableChatApiKeysRef.current,
+    });
+    subscriptionDebug("model change", {
+      source: "conversation-model-selector",
+      conversationId: conv.id,
+      previousModelId: conv.modelId,
+      previousChatApiKeyId: conv.chatApiKeyId,
+      nextModelId: modelId,
+      nextChatApiKeyId: chatApiKeyId,
+    });
+    updateConversationMutateRef.current({
+      id: conv.id,
+      modelId,
+      chatApiKeyId,
+    });
+  }, []);
 
   // The composer's own state is the one source for the depth. Finishing a
   // message invalidates the conversation query, so the row cannot hold an
@@ -1422,7 +1382,6 @@ export function ChatPageContent({
           chatApiKeyId: apiKeyId,
           modelId: preferredModel.modelId,
         });
-        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
       } else {
         // No models for this provider yet, still update the key
         updateConversationMutateRef.current({
@@ -1431,7 +1390,7 @@ export function ChatPageContent({
         });
       }
     },
-    [conversation, modelsByProvider, persistMemberDefaultModel],
+    [conversation, modelsByProvider],
   );
 
   // Handle agent change in existing conversation
@@ -1491,8 +1450,6 @@ export function ChatPageContent({
             defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
           }
         : null,
-      // Reset deliberately drops the user's personal override.
-      memberDefault: null,
     });
     const agentModel = chatModels.find(
       (model) => model.dbId === agent?.modelId,
@@ -1554,13 +1511,6 @@ export function ChatPageContent({
         },
       );
     }
-
-    // Clear the saved member default too — resetting the chat override also
-    // drops the user override it came from.
-    updateMemberDefaultModelMutateRef.current({
-      modelId: null,
-      chatApiKeyId: null,
-    });
   }, [
     conversation,
     internalAgents,

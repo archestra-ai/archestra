@@ -717,8 +717,6 @@ export const RouteId = {
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
   UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
-  GetMemberDefaultModel: "getMemberDefaultModel",
-  UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
   GetUserPermissionSources: "getUserPermissionSources",

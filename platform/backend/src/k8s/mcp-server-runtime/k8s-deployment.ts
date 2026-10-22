@@ -14,6 +14,7 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
@@ -909,6 +910,11 @@ export default class K8sDeployment {
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       this.k8sApi,
     );
+    const clusterIpFamilies = await clusterIpFamilyResolver.getIpFamilies({
+      coreApi: this.k8sApi,
+      namespace: this.namespace,
+      clusterDnsIps,
+    });
 
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
       if (clusterDnsIps.length === 0) {
@@ -933,6 +939,7 @@ export default class K8sDeployment {
           labels,
           clusterDnsIps,
           allowedCidrs,
+          clusterIpFamilies,
         }),
       });
       await Promise.all([
@@ -955,6 +962,7 @@ export default class K8sDeployment {
         labels,
         clusterDnsIps,
         allowedCidrs,
+        clusterIpFamilies,
       }),
     );
     await Promise.all([

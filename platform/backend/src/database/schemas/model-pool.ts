@@ -1,4 +1,3 @@
-import type { SupportedProvider } from "@archestra/shared";
 import {
   pgTable,
   text,
@@ -8,20 +7,19 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * A pool of provider keys that serve one model. A request for `modelId` on
- * `provider` whose resolved key is a member is balanced and failed over across
- * the pool's members (see `routes/proxy/model-pool-failover.ts`), so agents and
- * clients that pin one key keep working when that key is rate limited or down.
+ * A pool is a model name that clients ask for, served by members that may sit
+ * on any provider (see `model_pool_members`). A request for `name` is balanced
+ * and failed over across the pool's members (see
+ * `routes/proxy/model-pool-failover.ts`), so a client keeps working when one
+ * provider key is rate limited or down.
  */
 const modelPoolsTable = pgTable(
   "model_pools",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
+    /** The model name clients request, e.g. `glm-5` or `claude-opus-4-8`. */
     name: text("name").notNull(),
-    provider: text("provider").$type<SupportedProvider>().notNull(),
-    /** The model id clients request, as the proxy records it. */
-    modelId: text("model_id").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -29,11 +27,10 @@ const modelPoolsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // One pool per model, so a request never has to choose between pools.
-    uniqueIndex("model_pools_org_provider_model_unique").on(
+    // One pool per name, so a request never has to choose between pools.
+    uniqueIndex("model_pools_org_name_unique").on(
       table.organizationId,
-      table.provider,
-      table.modelId,
+      table.name,
     ),
   ],
 );

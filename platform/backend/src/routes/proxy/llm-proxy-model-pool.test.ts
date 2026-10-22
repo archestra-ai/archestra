@@ -85,18 +85,18 @@ describe("Model pools - LLM Proxy", () => {
       const pool = await ModelPoolModel.create({
         organizationId: proxy.organizationId,
         input: {
-          name: "mini",
-          provider: "openai",
-          modelId: "gpt-4o-mini",
+          name: "gpt-4o-mini",
           members: [
             {
               providerApiKeyId: limited.id,
+              modelId: "gpt-4o-mini",
               priority: 1,
               weight: 1,
               enabled: true,
             },
             {
               providerApiKeyId: healthy.id,
+              modelId: "gpt-4o-mini",
               priority: 2,
               weight: 1,
               enabled: true,
@@ -125,7 +125,7 @@ describe("Model pools - LLM Proxy", () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
-      expect(response.headers["x-archestra-pool"]).toBe("mini");
+      expect(response.headers["x-archestra-pool"]).toBe("gpt-4o-mini");
       expect(response.headers["x-archestra-attempts"]).toBe("2");
       expect(response.headers["x-archestra-provider-key"]).toBe(healthy.id);
 

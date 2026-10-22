@@ -173,9 +173,16 @@ import {
 import {
   type ModelPoolPlan,
   openThroughModelPool,
+  type PlannedMember,
   planModelPool,
   type UpstreamAttempt,
 } from "./model-pool-failover";
+import {
+  inboundPoolWire,
+  type MemberTransport,
+  memberAdapter,
+  memberTransport,
+} from "./model-pool-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
@@ -213,7 +220,7 @@ export interface LLMProxyContext<TRequest> {
    * Mutated as a pool moves between members.
    */
   upstreamAttempt: UpstreamAttempt;
-  /** Set when the request's key is a member of the pool for its model. */
+  /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
@@ -282,7 +289,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
-  clientFor: (providerApiKeyId: string) => Promise<unknown>;
+  transportFor: (member: PlannedMember) => Promise<MemberTransport>;
   recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
@@ -1259,10 +1266,28 @@ export async function handleLLMProxy<
       requestAdapter.getModel(),
     );
 
-    // Ensure a model entry exists for cost tracking
-    const discovered = [
-      await ModelModel.ensureModelExists(actualModel, providerName),
-    ].filter((model) => model !== null);
+    // A request for a model pool's name is served by the pool's members,
+    // whatever key the caller resolved to. Members on a wire the client's
+    // can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    const modelPoolPlan = poolWire
+      ? await planModelPool({
+          organizationId: resolvedAgent.organizationId,
+          name: actualModel,
+          inbound: poolWire,
+          sessionId,
+        })
+      : null;
+
+    // Ensure a model entry exists for cost tracking. A pool's name is not a
+    // provider model; each member's own model is priced instead.
+    const discovered = modelPoolPlan
+      ? []
+      : [await ModelModel.ensureModelExists(actualModel, providerName)].filter(
+          (model) => model !== null,
+        );
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
     // update stay off the per-request path. Enrichment is best-effort: a model
@@ -1582,23 +1607,25 @@ export async function handleLLMProxy<
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const createUpstreamClient = (target: {
+      adapter: Pick<typeof provider, "createClient" | "provider">;
       apiKey: string | undefined;
       baseUrl: string | undefined;
       headers: Record<string, string>;
       providerApiKeyId: string | undefined;
+      model: string;
     }) =>
-      provider.createClient(target.apiKey, {
+      target.adapter.createClient(target.apiKey, {
         baseUrl: target.baseUrl,
         agent: resolvedAgent,
         abortSignal,
         source,
-        model: requestAdapter.getModel(),
+        model: target.model,
         defaultHeaders:
           Object.keys(target.headers).length > 0 ? target.headers : undefined,
         llmProviderApiKeyId: target.providerApiKeyId,
         sessionId: sessionId ?? undefined,
         onResponseHeaders: (responseHeaders) => {
-          if (providerName === "anthropic") {
+          if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
               billingMode: credentialBillingMode,
@@ -1613,93 +1640,105 @@ export async function handleLLMProxy<
           : {}),
       });
     const client = createUpstreamClient({
+      adapter: provider,
       apiKey,
       baseUrl: effectiveBaseUrl,
       headers: mergedHeaders,
       providerApiKeyId: perKeyChatApiKeyId,
+      model: requestAdapter.getModel(),
     });
 
-    // A pool takes over when the resolved key is a member of the pool for
-    // this model. Other members get their own client, built the same way.
-    const modelPoolPlan =
-      perKeyChatApiKeyId && !openAiCodexPassthrough
-        ? await planModelPool({
-            organizationId: resolvedAgent.organizationId,
-            provider: providerName,
-            modelId: actualModel,
-            providerApiKeyId: perKeyChatApiKeyId,
-            sessionId,
-          })
-        : null;
-    const modelPool: ModelPoolRouting | undefined = modelPoolPlan
-      ? {
-          plan: modelPoolPlan,
-          clientFor: async (memberKeyId) => {
-            if (memberKeyId === perKeyChatApiKeyId) return client;
-            const row = await LlmProviderApiKeyModel.findById(memberKeyId);
-            if (!row) {
-              throw new ApiError(500, "Model pool member key no longer exists");
-            }
-            return createUpstreamClient({
-              apiKey: row.secretId
-                ? await getSecretValueForLlmProviderApiKey(row.secretId)
-                : undefined,
-              baseUrl:
-                row.inferenceBaseUrl ?? row.baseUrl ?? provider.getBaseUrl(),
-              headers: { ...(row.extraHeaders ?? {}), ...headersToForward },
-              providerApiKeyId: row.id,
-            });
-          },
-          recordFailedAttempt: (attempt) =>
-            persistProxyInteraction({
-              record: {
-                profileId: resolvedAgent.id,
-                externalAgentId,
-                runId,
-                userId,
-                serviceAccountId,
-                virtualKeyId,
-                passthroughVirtualKeyId,
-                appId: attributedAppId,
-                sessionId,
-                sessionSource,
-                source,
-                authMethod,
-                authenticatedAppId: authenticatedApp?.id,
-                authenticatedAppName: authenticatedApp?.name,
-                billingTeamId,
-                type: provider.interactionType,
-                request:
-                  requestAdapter.getOriginalRequest() as InteractionRequest,
-                processedRequest: null,
-                response: { error: attempt.failureReason ?? "failed" },
-                model: actualModel,
-                baselineModel: actualModel,
-                inputTokens: 0,
-                outputTokens: 0,
-                // The provider answered nothing, so this attempt is free.
-                cost: "0",
-              },
-              encryptedChat,
-              streamTiming,
-              upstreamAttempt: attempt,
-            }),
-          setResponseHeaders: (attempt) => {
-            if (reply.raw.headersSent) return;
-            reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
-            reply.raw.setHeader(
-              "x-archestra-attempts",
-              String(attempt.attempt ?? 1),
-            );
-            if (attempt.providerApiKeyId) {
-              reply.raw.setHeader(
-                "x-archestra-provider-key",
-                attempt.providerApiKeyId,
+    // Each pool member is reached with its own provider's client, its own
+    // model id and, when it speaks another wire, a translator.
+    const modelPool: ModelPoolRouting | undefined =
+      modelPoolPlan && poolWire
+        ? {
+            plan: modelPoolPlan,
+            transportFor: async (member) => {
+              const row = await LlmProviderApiKeyModel.findById(
+                member.providerApiKeyId,
               );
-            }
-          },
-        }
-      : undefined;
+              const adapter = memberAdapter(member.provider);
+              if (!row || !adapter) {
+                throw new ApiError(
+                  500,
+                  "Model pool member key no longer exists",
+                );
+              }
+              const sameWire =
+                inboundPoolWire(adapter.interactionType) === poolWire;
+              return memberTransport({
+                inbound: poolWire,
+                provider: member.provider,
+                modelId: member.modelId,
+                client: createUpstreamClient({
+                  adapter,
+                  apiKey: row.secretId
+                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
+                    : undefined,
+                  baseUrl:
+                    row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
+                  // Protocol headers (anthropic-beta, ...) only mean something
+                  // to a member on the client's own wire.
+                  headers: {
+                    ...(row.extraHeaders ?? {}),
+                    ...(sameWire ? headersToForward : {}),
+                  },
+                  providerApiKeyId: row.id,
+                  model: member.modelId,
+                }),
+              });
+            },
+            recordFailedAttempt: (attempt) =>
+              persistProxyInteraction({
+                record: {
+                  profileId: resolvedAgent.id,
+                  externalAgentId,
+                  runId,
+                  userId,
+                  serviceAccountId,
+                  virtualKeyId,
+                  passthroughVirtualKeyId,
+                  appId: attributedAppId,
+                  sessionId,
+                  sessionSource,
+                  source,
+                  authMethod,
+                  authenticatedAppId: authenticatedApp?.id,
+                  authenticatedAppName: authenticatedApp?.name,
+                  billingTeamId,
+                  type: provider.interactionType,
+                  request:
+                    requestAdapter.getOriginalRequest() as InteractionRequest,
+                  processedRequest: null,
+                  response: { error: attempt.failureReason ?? "failed" },
+                  model: actualModel,
+                  baselineModel: actualModel,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  // The provider answered nothing, so this attempt is free.
+                  cost: "0",
+                },
+                encryptedChat,
+                streamTiming,
+                upstreamAttempt: attempt,
+              }),
+            setResponseHeaders: (attempt) => {
+              if (reply.raw.headersSent) return;
+              reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
+              reply.raw.setHeader(
+                "x-archestra-attempts",
+                String(attempt.attempt ?? 1),
+              );
+              if (attempt.providerApiKeyId) {
+                reply.raw.setHeader(
+                  "x-archestra-provider-key",
+                  attempt.providerApiKeyId,
+                );
+              }
+            },
+          }
+        : undefined;
 
     if (pluginContext) {
       await pluginRegistry.onPrompt({
@@ -2295,9 +2334,9 @@ async function handleStreaming<
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
-        actualModel,
+        actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        providerName,
+        providerName: ctx.upstreamAttempt.provider ?? providerName,
       });
 
       withSessionContext(sessionId, () => {
@@ -2424,10 +2463,10 @@ async function handleStreaming<
         }
         const stream = await openUpstream({
           ctx,
-          client,
-          open: async (upstreamClient) =>
+          transport: ownTransport(provider, client),
+          open: async (transport) =>
             withFirstChunk(
-              await provider.executeStream(upstreamClient, request),
+              (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
@@ -2571,9 +2610,9 @@ async function handleStreaming<
           const cost = await calculateUsageCost({
             usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
-            model: actualModel,
+            model: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: state.usage,
-            provider: providerName,
+            provider: ctx.upstreamAttempt.provider ?? providerName,
           });
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -3150,8 +3189,9 @@ async function handleNonStreaming<
         }
         result = await openUpstream({
           ctx,
-          client,
-          open: (upstreamClient) => provider.execute(upstreamClient, request),
+          transport: ownTransport(provider, client),
+          open: async (transport) =>
+            (await transport.execute(request)) as TResponse,
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -3169,9 +3209,9 @@ async function handleNonStreaming<
       } catch (error) {
         if (error instanceof ObservedProviderUsageError) {
           const costs = await calculateInteractionCosts({
-            actualModel,
+            actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: error.usage,
-            providerName,
+            providerName: ctx.upstreamAttempt.provider ?? providerName,
             usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
           });
@@ -3313,9 +3353,9 @@ async function handleNonStreaming<
       const cost = await calculateUsageCost({
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
-        model: actualModel,
+        model: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        provider: providerName,
+        provider: ctx.upstreamAttempt.provider ?? providerName,
       });
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -3500,9 +3540,9 @@ async function handleNonStreaming<
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
-        actualModel,
+        actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        providerName,
+        providerName: ctx.upstreamAttempt.provider ?? providerName,
       });
 
       withSessionContext(sessionId, () => {
@@ -3669,9 +3709,9 @@ async function handleNonStreaming<
   const costs = await calculateInteractionCosts({
     usageAccountingMode: ctx.usageAccountingMode,
     providerApiKeyId: ctx.providerApiKeyId,
-    actualModel,
+    actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
     usage,
-    providerName,
+    providerName: ctx.upstreamAttempt.provider ?? providerName,
   });
 
   withSessionContext(sessionId, () => {
@@ -4040,8 +4080,8 @@ function planDispatchRewrites(params: {
  */
 async function openUpstream<TRequest, T>(params: {
   ctx: LLMProxyContext<TRequest>;
-  client: unknown;
-  open: (client: unknown) => Promise<T>;
+  transport: MemberTransport;
+  open: (transport: MemberTransport) => Promise<T>;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -4050,16 +4090,16 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, client, open, ...retry } = params;
+  const { ctx, transport, open, ...retry } = params;
   const pool = ctx.modelPool;
   if (!pool) {
-    return openUpstreamWithRetry({ open: () => open(client), ...retry });
+    return openUpstreamWithRetry({ open: () => open(transport), ...retry });
   }
   try {
     return await openThroughModelPool({
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
-      clientFor: pool.clientFor,
+      transportFor: pool.transportFor,
       open,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
@@ -4068,6 +4108,20 @@ async function openUpstream<TRequest, T>(params: {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
     pool.setResponseHeaders(ctx.upstreamAttempt);
   }
+}
+
+/** The request's own provider and client, as a transport. */
+function ownTransport(
+  provider: Pick<
+    LLMProvider<unknown, unknown, unknown, unknown, unknown>,
+    "execute" | "executeStream"
+  >,
+  client: unknown,
+): MemberTransport {
+  return {
+    execute: (request) => provider.execute(client, request),
+    executeStream: (request) => provider.executeStream(client, request),
+  };
 }
 
 function logUpstreamRetry(params: {
@@ -4197,6 +4251,9 @@ async function persistProxyInteraction({
     ...record,
     attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+    // A pooled attempt records the member model it was sent as; the pool's
+    // name stays the baseline the client asked for.
+    model: upstreamAttempt?.modelId ?? record.model,
     providerApiKeyId: upstreamAttempt?.providerApiKeyId,
     modelPoolId: upstreamAttempt?.modelPoolId,
     attempt: upstreamAttempt?.attempt,

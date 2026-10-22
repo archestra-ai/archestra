@@ -28,22 +28,29 @@ describe("POST /api/model-pools", () => {
     await app.close();
   });
 
-  test("creates a pool of shared keys and lists it", async ({
+  test("creates a pool across providers and lists it", async ({
     makeLlmProviderApiKey,
   }) => {
-    const first = await makeLlmProviderApiKey(organizationId, null);
-    const second = await makeLlmProviderApiKey(organizationId, null);
+    const zai = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "zhipuai",
+    });
+    const bedrock = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "bedrock",
+    });
 
     const created = await app.inject({
       method: "POST",
       url: "/api/model-pools",
       payload: {
-        name: "haiku",
-        provider: "anthropic",
-        modelId: "claude-haiku-4-5",
+        name: "glm-5",
         members: [
-          { providerApiKeyId: first.id },
-          { providerApiKeyId: second.id, priority: 2, weight: 3 },
+          { providerApiKeyId: zai.id, modelId: "glm-5" },
+          {
+            providerApiKeyId: bedrock.id,
+            modelId: "zai.glm-5",
+            priority: 2,
+            weight: 3,
+          },
         ],
       },
     });
@@ -52,19 +59,23 @@ describe("POST /api/model-pools", () => {
     const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
     expect(listed.json()).toMatchObject([
       {
-        name: "haiku",
+        name: "glm-5",
         members: [
           {
-            providerApiKeyId: first.id,
-            providerApiKeyName: first.name,
+            providerApiKeyId: zai.id,
+            providerApiKeyName: zai.name,
+            provider: "zhipuai",
+            modelId: "glm-5",
             priority: 1,
             weight: 1,
             enabled: true,
             benchedUntil: null,
           },
           {
-            providerApiKeyId: second.id,
-            providerApiKeyName: second.name,
+            providerApiKeyId: bedrock.id,
+            providerApiKeyName: bedrock.name,
+            provider: "bedrock",
+            modelId: "zai.glm-5",
             priority: 2,
             weight: 3,
             enabled: true,
@@ -75,28 +86,30 @@ describe("POST /api/model-pools", () => {
     ]);
   });
 
-  test("rejects a personal key and a key for another provider", async ({
+  test("rejects a personal key, a provider pools can't reach, and a repeated member", async ({
     makeLlmProviderApiKey,
   }) => {
     const shared = await makeLlmProviderApiKey(organizationId, null);
     const personal = await makeLlmProviderApiKey(organizationId, null, {
       userId: user.id,
     });
-    const openai = await makeLlmProviderApiKey(organizationId, null, {
-      provider: "openai",
+    const gemini = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "gemini",
     });
 
-    for (const member of [personal, openai]) {
+    for (const member of [
+      { providerApiKeyId: personal.id, modelId: "claude-haiku-4-5" },
+      { providerApiKeyId: gemini.id, modelId: "claude-haiku-4-5" },
+      { providerApiKeyId: shared.id, modelId: "claude-haiku-4-5" },
+    ]) {
       const response = await app.inject({
         method: "POST",
         url: "/api/model-pools",
         payload: {
-          name: "haiku",
-          provider: "anthropic",
-          modelId: "claude-haiku-4-5",
+          name: "claude-haiku-4-5",
           members: [
-            { providerApiKeyId: shared.id },
-            { providerApiKeyId: member.id },
+            { providerApiKeyId: shared.id, modelId: "claude-haiku-4-5" },
+            member,
           ],
         },
       });
@@ -104,15 +117,13 @@ describe("POST /api/model-pools", () => {
     }
   });
 
-  test("refuses a second pool for the same model", async ({
+  test("refuses a second pool with the same name", async ({
     makeLlmProviderApiKey,
   }) => {
     const key = await makeLlmProviderApiKey(organizationId, null);
     const payload = {
-      name: "haiku",
-      provider: "anthropic",
-      modelId: "claude-haiku-4-5",
-      members: [{ providerApiKeyId: key.id }],
+      name: "claude-haiku-4-5",
+      members: [{ providerApiKeyId: key.id, modelId: "claude-haiku-4-5" }],
     };
     const first = await app.inject({
       method: "POST",
@@ -124,14 +135,14 @@ describe("POST /api/model-pools", () => {
     const second = await app.inject({
       method: "POST",
       url: "/api/model-pools",
-      payload: { ...payload, name: "haiku again" },
+      payload,
     });
     expect(second.statusCode, second.body).toBe(409);
 
     const renamed = await app.inject({
       method: "PUT",
       url: `/api/model-pools/${first.json().id}`,
-      payload: { ...payload, name: "haiku renamed" },
+      payload: { ...payload, name: "haiku" },
     });
     expect(renamed.statusCode, renamed.body).toBe(200);
   });

@@ -1,13 +1,14 @@
 /**
  * Load balancing and failover across the members of a model pool.
  *
- * A request whose resolved provider key is a member of the pool for its model
- * is sent to the pool's members in a planned order: lowest priority first,
- * members of one priority split by weight. A member that fails before the
- * provider answered (see `poolFailoverReason`) is benched for a while, and the
- * request moves on to the next member. Once output has reached the client, a
- * failure goes to the client as before, because it cannot accept a second
- * answer in its place.
+ * A request for a pool's name is sent to the pool's members in a planned
+ * order: lowest priority first, members of one priority split by weight. Each
+ * member is a provider key plus the model id that provider knows the model by,
+ * reached through its own transport (see `model-pool-transport.ts`). A member
+ * that fails before the provider answered (see `poolFailoverReason`) is
+ * benched for a while, and the request moves on to the next member. Once
+ * output has reached the client, a failure goes to the client as before,
+ * because it cannot accept a second answer in its place.
  */
 import { createHash } from "node:crypto";
 import type { SupportedProvider } from "@archestra/shared";
@@ -16,6 +17,11 @@ import logger from "@/logging";
 import { ModelPoolModel } from "@/models";
 import type { ModelPool, ModelPoolMember, ModelPoolWithHealth } from "@/types";
 import { poolFailoverReason } from "./llm-proxy-helpers";
+import {
+  canReachMember,
+  type MemberTransport,
+  type PoolWire,
+} from "./model-pool-transport";
 import { openUpstreamWithRetry } from "./upstream-connection-retry";
 
 /** What a request's interaction rows record about the attempt that wrote them. */
@@ -25,41 +31,80 @@ export interface UpstreamAttempt {
   attempt?: number;
   attemptOutcome?: "answered" | "failed_over" | "failed";
   failureReason?: string;
+  /** The answering member's provider and model id, which price the attempt. */
+  provider?: SupportedProvider;
+  modelId?: string;
+}
+
+/** A member as a request's plan tries it. */
+export interface PlannedMember {
+  memberId: string;
+  providerApiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
 }
 
 export interface ModelPoolPlan {
   poolId: string;
   poolName: string;
-  /** Member provider keys in the order they are tried. */
-  memberKeyIds: string[];
+  /** Members in the order they are tried. */
+  members: PlannedMember[];
 }
 
 /**
- * The plan for a request, or null when its key is in no pool for its model.
- * The session id keeps one conversation on one member while it is healthy,
- * which keeps the provider's prompt cache warm.
+ * The plan for a request whose model is a pool's name, or null when no pool
+ * has that name or none of its members can answer the client's wire. The
+ * session id keeps one conversation on one member while it is healthy, which
+ * keeps the provider's prompt cache warm.
  */
 export async function planModelPool(params: {
   organizationId: string;
-  provider: SupportedProvider;
-  modelId: string;
-  providerApiKeyId: string;
+  name: string;
+  inbound: PoolWire;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
-  const pool = await ModelPoolModel.findForMemberKey(params);
-  if (!pool || pool.members.length === 0) return null;
-  const benches = await readBenches(pool);
-  const benchedUntil = new Map<string, number>();
-  for (const [providerApiKeyId, bench] of benches) {
-    benchedUntil.set(providerApiKeyId, bench.until);
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.organizationId,
+    name: params.name,
+  });
+  if (!pool) return null;
+  const reachable = pool.members.filter((member) =>
+    canReachMember(params.inbound, member.provider),
+  );
+  if (reachable.length < pool.members.length) {
+    logger.info(
+      {
+        poolId: pool.id,
+        inbound: params.inbound,
+        skipped: pool.members
+          .filter((member) => !reachable.includes(member))
+          .map((member) => member.provider),
+      },
+      "Model pool members on a wire this client cannot reach are skipped",
+    );
   }
+  if (reachable.length === 0) return null;
+  const benches = await readBenches({ ...pool, members: reachable });
+  const benchedUntil = new Map<string, number>();
+  for (const [memberId, bench] of benches) {
+    benchedUntil.set(memberId, bench.until);
+  }
+  const byId = new Map(reachable.map((member) => [member.id, member]));
   return {
     poolId: pool.id,
     poolName: pool.name,
-    memberKeyIds: orderPoolMembers({
-      members: pool.members,
+    members: orderPoolMembers({
+      members: reachable,
       benchedUntil,
       seed: params.sessionId ?? undefined,
+    }).map((id) => {
+      const member = byId.get(id) as ModelPoolMember;
+      return {
+        memberId: member.id,
+        providerApiKeyId: member.providerApiKeyId,
+        provider: member.provider,
+        modelId: member.modelId,
+      };
     }),
   };
 }
@@ -74,7 +119,7 @@ export async function withMemberHealth(
       return {
         ...pool,
         members: pool.members.map((member) => {
-          const bench = benches.get(member.providerApiKeyId);
+          const bench = benches.get(member.id);
           return {
             ...member,
             benchedUntil: bench ? new Date(bench.until).toISOString() : null,
@@ -93,19 +138,19 @@ export async function withMemberHealth(
  * draw deterministic.
  */
 export function orderPoolMembers(params: {
-  members: Pick<ModelPoolMember, "providerApiKeyId" | "priority" | "weight">[];
+  members: Pick<ModelPoolMember, "id" | "priority" | "weight">[];
   benchedUntil: Map<string, number>;
   seed?: string;
 }): string[] {
   const available = params.members.filter(
-    (member) => !params.benchedUntil.has(member.providerApiKeyId),
+    (member) => !params.benchedUntil.has(member.id),
   );
   const benched = params.members
-    .filter((member) => params.benchedUntil.has(member.providerApiKeyId))
+    .filter((member) => params.benchedUntil.has(member.id))
     .sort(
       (a, b) =>
-        (params.benchedUntil.get(a.providerApiKeyId) ?? 0) -
-        (params.benchedUntil.get(b.providerApiKeyId) ?? 0),
+        (params.benchedUntil.get(a.id) ?? 0) -
+        (params.benchedUntil.get(b.id) ?? 0),
     );
   const priorities = [...new Set(available.map((m) => m.priority))].sort(
     (a, b) => a - b,
@@ -122,11 +167,11 @@ export function orderPoolMembers(params: {
         point -= tier[index].weight;
         index++;
       }
-      ordered.push(tier[index].providerApiKeyId);
+      ordered.push(tier[index].id);
       tier.splice(index, 1);
     }
   }
-  return [...ordered, ...benched.map((member) => member.providerApiKeyId)];
+  return [...ordered, ...benched.map((member) => member.id)];
 }
 
 /**
@@ -136,11 +181,11 @@ export function orderPoolMembers(params: {
  * tried. The last member's failure, or any failure that is not member-local,
  * goes to the caller with `attempt` describing it.
  */
-export async function openThroughModelPool<TClient, T>(params: {
+export async function openThroughModelPool<T>(params: {
   plan: ModelPoolPlan;
   attempt: UpstreamAttempt;
-  clientFor: (providerApiKeyId: string) => Promise<TClient>;
-  open: (client: TClient) => Promise<T>;
+  transportFor: (member: PlannedMember) => Promise<MemberTransport>;
+  open: (transport: MemberTransport) => Promise<T>;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -152,14 +197,16 @@ export async function openThroughModelPool<TClient, T>(params: {
 }): Promise<T> {
   const { plan, attempt } = params;
   attempt.modelPoolId = plan.poolId;
-  for (const [index, providerApiKeyId] of plan.memberKeyIds.entries()) {
-    attempt.providerApiKeyId = providerApiKeyId;
+  for (const [index, member] of plan.members.entries()) {
+    attempt.providerApiKeyId = member.providerApiKeyId;
+    attempt.provider = member.provider;
+    attempt.modelId = member.modelId;
     attempt.attempt = index + 1;
     attempt.failureReason = undefined;
     try {
-      const client = await params.clientFor(providerApiKeyId);
+      const transport = await params.transportFor(member);
       const result = await openUpstreamWithRetry({
-        open: () => params.open(client),
+        open: () => params.open(transport),
         isRetryable: params.isRetryable,
         shouldContinue: params.shouldContinue,
         onRetry: params.onRetry,
@@ -173,16 +220,17 @@ export async function openThroughModelPool<TClient, T>(params: {
       if (!failover) throw error;
       await benchMember({
         poolId: plan.poolId,
-        providerApiKeyId,
+        memberId: member.memberId,
         reason: failover.reason,
         retryAfterMs: failover.retryAfterMs,
       });
-      const isLast = index === plan.memberKeyIds.length - 1;
+      const isLast = index === plan.members.length - 1;
       if (isLast || !params.shouldContinue()) throw error;
       logger.warn(
         {
           poolId: plan.poolId,
-          providerApiKeyId,
+          providerApiKeyId: member.providerApiKeyId,
+          provider: member.provider,
           attempt: index + 1,
           reason: failover.reason,
         },
@@ -220,7 +268,7 @@ interface Bench {
 
 async function benchMember(params: {
   poolId: string;
-  providerApiKeyId: string;
+  memberId: string;
   reason: string;
   retryAfterMs?: number;
 }): Promise<void> {
@@ -230,7 +278,7 @@ async function benchMember(params: {
   );
   try {
     await cacheManager.set(
-      benchKey(params.poolId, params.providerApiKeyId),
+      benchKey(params.poolId, params.memberId),
       { until: Date.now() + ms, reason: params.reason } satisfies Bench,
       ms,
     );
@@ -244,18 +292,18 @@ async function readBenches(
   pool: Pick<ModelPool, "id" | "members">,
 ): Promise<Map<string, Bench>> {
   const benches = await cacheManager.getMany<Bench>(
-    pool.members.map((member) => benchKey(pool.id, member.providerApiKeyId)),
+    pool.members.map((member) => benchKey(pool.id, member.id)),
   );
   const byMember = new Map<string, Bench>();
   for (const member of pool.members) {
-    const bench = benches.get(benchKey(pool.id, member.providerApiKeyId));
-    if (bench) byMember.set(member.providerApiKeyId, bench);
+    const bench = benches.get(benchKey(pool.id, member.id));
+    if (bench) byMember.set(member.id, bench);
   }
   return byMember;
 }
 
-function benchKey(poolId: string, providerApiKeyId: string) {
-  return `${CacheKey.ModelPoolBench}-${poolId}:${providerApiKeyId}` as const;
+function benchKey(poolId: string, memberId: string) {
+  return `${CacheKey.ModelPoolBench}-${poolId}:${memberId}` as const;
 }
 
 /** A number in [0, 1): seeded draws repeat for the same seed. */

@@ -5,16 +5,18 @@ import {
   type ModelPoolPlan,
   openThroughModelPool,
   orderPoolMembers,
+  type PlannedMember,
   planModelPool,
   type UpstreamAttempt,
   withMemberHealth,
 } from "./model-pool-failover";
+import type { MemberTransport } from "./model-pool-transport";
 
 setupTestCacheManager();
 
 describe("orderPoolMembers", () => {
   const member = (id: string, priority: number, weight = 1) => ({
-    providerApiKeyId: id,
+    id,
     priority,
     weight,
   });
@@ -70,64 +72,96 @@ describe("orderPoolMembers", () => {
 });
 
 describe("planModelPool", () => {
-  test("plans only for a member key and the pool's model", async ({
+  test("plans every member of the pool with that name, across providers", async ({
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
-    const primary = await makeLlmProviderApiKey(org.id, null);
-    const backup = await makeLlmProviderApiKey(org.id, null);
-    const outsider = await makeLlmProviderApiKey(org.id, null);
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    const bedrock = await makeLlmProviderApiKey(org.id, null, {
+      provider: "bedrock",
+    });
     const pool = await ModelPoolModel.create({
       organizationId: org.id,
       input: {
-        name: "haiku",
-        provider: "anthropic",
-        modelId: "claude-haiku-4-5",
+        name: "glm-5",
         members: [
-          {
-            providerApiKeyId: primary.id,
-            priority: 1,
-            weight: 1,
-            enabled: true,
-          },
-          {
-            providerApiKeyId: backup.id,
-            priority: 2,
-            weight: 1,
-            enabled: true,
-          },
+          member(zai.id, "glm-5", 1),
+          member(bedrock.id, "zai.glm-5", 2),
         ],
       },
     });
 
     const plan = await planModelPool({
       organizationId: org.id,
-      provider: "anthropic",
-      modelId: "claude-haiku-4-5",
-      providerApiKeyId: backup.id,
+      name: "glm-5",
+      inbound: "openai-chat",
     });
     expect(plan).toEqual({
       poolId: pool.id,
-      poolName: "haiku",
-      memberKeyIds: [primary.id, backup.id],
+      poolName: "glm-5",
+      members: [
+        expect.objectContaining({
+          providerApiKeyId: zai.id,
+          provider: "zhipuai",
+          modelId: "glm-5",
+        }),
+        expect.objectContaining({
+          providerApiKeyId: bedrock.id,
+          provider: "bedrock",
+          modelId: "zai.glm-5",
+        }),
+      ],
     });
     await expect(
       planModelPool({
         organizationId: org.id,
-        provider: "anthropic",
-        modelId: "claude-haiku-4-5",
-        providerApiKeyId: outsider.id,
+        name: "glm-4.6",
+        inbound: "openai-chat",
       }),
     ).resolves.toBeNull();
-    await expect(
-      planModelPool({
-        organizationId: org.id,
-        provider: "anthropic",
-        modelId: "claude-opus-4-8",
-        providerApiKeyId: primary.id,
-      }),
-    ).resolves.toBeNull();
+  });
+
+  test("leaves out members the client's wire cannot reach", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    const bedrock = await makeLlmProviderApiKey(org.id, null, {
+      provider: "bedrock",
+    });
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "glm-5",
+        members: [
+          member(zai.id, "glm-5", 1),
+          member(bedrock.id, "zai.glm-5", 1),
+        ],
+      },
+    });
+
+    // Anthropic's wire reaches OpenAI-style members, not Converse ones.
+    const plan = await planModelPool({
+      organizationId: org.id,
+      name: "glm-5",
+      inbound: "anthropic",
+    });
+    expect(plan?.members.map((m) => m.providerApiKeyId)).toEqual([zai.id]);
+    // Converse reaches only Converse members.
+    const conversePlan = await planModelPool({
+      organizationId: org.id,
+      name: "glm-5",
+      inbound: "bedrock-converse",
+    });
+    expect(conversePlan?.members.map((m) => m.providerApiKeyId)).toEqual([
+      bedrock.id,
+    ]);
   });
 
   test("moves a member that failed over behind the healthy ones", async ({
@@ -140,34 +174,27 @@ describe("planModelPool", () => {
     await ModelPoolModel.create({
       organizationId: org.id,
       input: {
-        name: "haiku",
-        provider: "anthropic",
-        modelId: "claude-haiku-4-5",
+        name: "claude-haiku-4-5",
         members: [
-          { providerApiKeyId: first.id, priority: 1, weight: 1, enabled: true },
-          {
-            providerApiKeyId: second.id,
-            priority: 2,
-            weight: 1,
-            enabled: true,
-          },
+          member(first.id, "claude-haiku-4-5", 1),
+          member(second.id, "claude-haiku-4-5", 2),
         ],
       },
     });
     const planParams = {
       organizationId: org.id,
-      provider: "anthropic" as const,
-      modelId: "claude-haiku-4-5",
-      providerApiKeyId: first.id,
+      name: "claude-haiku-4-5",
+      inbound: "anthropic" as const,
     };
     const plan = (await planModelPool(planParams)) as ModelPoolPlan;
 
     await openThroughModelPool({
       plan,
       attempt: {},
-      clientFor: async (id) => id,
-      open: async (client) => {
-        if (client === first.id) throw httpError(429, { "retry-after": "20" });
+      transportFor: async (m) => transport(m.providerApiKeyId),
+      open: async (t) => {
+        const answer = await t.execute({});
+        if (answer === first.id) throw httpError(429, { "retry-after": "20" });
         return "ok";
       },
       isRetryable: () => false,
@@ -175,10 +202,9 @@ describe("planModelPool", () => {
       recordFailedAttempt: async () => {},
     });
 
-    expect((await planModelPool(planParams))?.memberKeyIds).toEqual([
-      second.id,
-      first.id,
-    ]);
+    expect(
+      (await planModelPool(planParams))?.members.map((m) => m.providerApiKeyId),
+    ).toEqual([second.id, first.id]);
     const [health] = await withMemberHealth(await ModelPoolModel.list(org.id));
     expect(health.members).toEqual([
       expect.objectContaining({
@@ -196,15 +222,35 @@ describe("planModelPool", () => {
 });
 
 describe("openThroughModelPool", () => {
+  const keyA = "00000000-0000-4000-8000-00000000000a";
+  const keyB = "00000000-0000-4000-8000-00000000000b";
   const plan: ModelPoolPlan = {
     poolId: "00000000-0000-4000-8000-000000000001",
-    poolName: "haiku",
-    memberKeyIds: [
-      "00000000-0000-4000-8000-00000000000a",
-      "00000000-0000-4000-8000-00000000000b",
+    poolName: "glm-5",
+    members: [
+      {
+        memberId: "00000000-0000-4000-8000-0000000000a1",
+        providerApiKeyId: keyA,
+        provider: "zhipuai",
+        modelId: "glm-5",
+      },
+      {
+        memberId: "00000000-0000-4000-8000-0000000000b1",
+        providerApiKeyId: keyB,
+        provider: "bedrock",
+        modelId: "zai.glm-5",
+      },
     ],
   };
-  const [keyA, keyB] = plan.memberKeyIds;
+  const openKey = (fail: (key: string) => Error | null) => ({
+    transportFor: async (m: PlannedMember) => transport(m.providerApiKeyId),
+    open: async (t: MemberTransport) => {
+      const key = (await t.execute({})) as string;
+      const error = fail(key);
+      if (error) throw error;
+      return `answer from ${key}`;
+    },
+  });
 
   test("fails over before the first chunk and records the failed attempt", async () => {
     const attempt: UpstreamAttempt = {};
@@ -213,11 +259,7 @@ describe("openThroughModelPool", () => {
     const result = await openThroughModelPool({
       plan,
       attempt,
-      clientFor: async (id) => id,
-      open: async (client) => {
-        if (client === keyA) throw httpError(529);
-        return `answer from ${client}`;
-      },
+      ...openKey((key) => (key === keyA ? httpError(529) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
       recordFailedAttempt: async (failed) => {
@@ -230,6 +272,8 @@ describe("openThroughModelPool", () => {
       {
         modelPoolId: plan.poolId,
         providerApiKeyId: keyA,
+        provider: "zhipuai",
+        modelId: "glm-5",
         attempt: 1,
         attemptOutcome: "failed_over",
         failureReason: "server_error (529)",
@@ -238,6 +282,8 @@ describe("openThroughModelPool", () => {
     expect(attempt).toEqual({
       modelPoolId: plan.poolId,
       providerApiKeyId: keyB,
+      provider: "bedrock",
+      modelId: "zai.glm-5",
       attempt: 2,
       attemptOutcome: "answered",
       failureReason: undefined,
@@ -249,11 +295,7 @@ describe("openThroughModelPool", () => {
     await openThroughModelPool({
       plan,
       attempt,
-      clientFor: async (id) => id,
-      open: async (client) => {
-        if (client === keyA) throw httpError(401);
-        return "ok";
-      },
+      ...openKey((key) => (key === keyA ? httpError(401) : null)),
       isRetryable: () => false,
       shouldContinue: () => true,
       recordFailedAttempt: async () => {},
@@ -270,11 +312,10 @@ describe("openThroughModelPool", () => {
       openThroughModelPool({
         plan,
         attempt,
-        clientFor: async (id) => id,
-        open: async (client) => {
-          opened.push(client);
-          throw badRequest;
-        },
+        ...openKey((key) => {
+          opened.push(key);
+          return badRequest;
+        }),
         isRetryable: () => false,
         shouldContinue: () => true,
         recordFailedAttempt: async () => {},
@@ -296,10 +337,7 @@ describe("openThroughModelPool", () => {
       openThroughModelPool({
         plan,
         attempt,
-        clientFor: async (id) => id,
-        open: async (client) => {
-          throw client === keyB ? lastError : httpError(503);
-        },
+        ...openKey((key) => (key === keyB ? lastError : httpError(503))),
         isRetryable: () => false,
         shouldContinue: () => true,
         recordFailedAttempt: async () => {},
@@ -313,6 +351,18 @@ describe("openThroughModelPool", () => {
     });
   });
 });
+
+function member(providerApiKeyId: string, modelId: string, priority: number) {
+  return { providerApiKeyId, modelId, priority, weight: 1, enabled: true };
+}
+
+/** A transport that answers with its member's key, so tests can tell them apart. */
+function transport(key: string): MemberTransport {
+  return {
+    execute: async () => key,
+    executeStream: async () => [][Symbol.iterator]() as never,
+  };
+}
 
 function httpError(status: number, headers: Record<string, string> = {}) {
   return Object.assign(new Error(`HTTP ${status}`), {

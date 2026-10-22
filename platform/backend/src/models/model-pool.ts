@@ -1,9 +1,8 @@
-import type { SupportedProvider } from "@archestra/shared";
 import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ModelPool, ModelPoolInput, ModelPoolMember } from "@/types";
 
-/** Model pools and their members (provider keys that serve the pool's model). */
+/** Model pools and their members (provider keys, each with its own model id). */
 class ModelPoolModel {
   static async list(organizationId: string): Promise<ModelPool[]> {
     const pools = await db
@@ -41,47 +40,33 @@ class ModelPoolModel {
   }
 
   /**
-   * The pool that serves `modelId` on `provider` when `providerApiKeyId` is
-   * one of its enabled members, with its enabled members. Null when the key
-   * is in no such pool, which leaves the request on that key alone.
+   * The pool clients reach by asking for `name`, with its enabled members.
+   * Null when no pool has that name, which leaves the request as it is.
    */
-  static async findForMemberKey(params: {
+  static async findByName(params: {
     organizationId: string;
-    provider: SupportedProvider;
-    modelId: string;
-    providerApiKeyId: string;
+    name: string;
   }): Promise<ModelPool | null> {
     const [pool] = await db
-      .select({ pool: schema.modelPoolsTable })
+      .select()
       .from(schema.modelPoolsTable)
-      .innerJoin(
-        schema.modelPoolMembersTable,
-        eq(schema.modelPoolMembersTable.poolId, schema.modelPoolsTable.id),
-      )
       .where(
         and(
           eq(schema.modelPoolsTable.organizationId, params.organizationId),
-          eq(schema.modelPoolsTable.provider, params.provider),
-          eq(schema.modelPoolsTable.modelId, params.modelId),
-          eq(
-            schema.modelPoolMembersTable.providerApiKeyId,
-            params.providerApiKeyId,
-          ),
-          eq(schema.modelPoolMembersTable.enabled, true),
+          eq(schema.modelPoolsTable.name, params.name),
         ),
       );
     if (!pool) return null;
-    const [withMembers] = await ModelPoolModel.withMembers([pool.pool], {
+    const [withMembers] = await ModelPoolModel.withMembers([pool], {
       enabledOnly: true,
     });
     return withMembers;
   }
 
-  /** The id of the pool that already serves this model, if any. */
-  static async findIdByModel(params: {
+  /** The id of the pool that already has this name, if any. */
+  static async findIdByName(params: {
     organizationId: string;
-    provider: SupportedProvider;
-    modelId: string;
+    name: string;
   }): Promise<string | null> {
     const [pool] = await db
       .select({ id: schema.modelPoolsTable.id })
@@ -89,8 +74,7 @@ class ModelPoolModel {
       .where(
         and(
           eq(schema.modelPoolsTable.organizationId, params.organizationId),
-          eq(schema.modelPoolsTable.provider, params.provider),
-          eq(schema.modelPoolsTable.modelId, params.modelId),
+          eq(schema.modelPoolsTable.name, params.name),
         ),
       );
     return pool?.id ?? null;
@@ -172,6 +156,7 @@ class ModelPoolModel {
       .select({
         ...getTableColumns(schema.modelPoolMembersTable),
         providerApiKeyName: schema.llmProviderApiKeysTable.name,
+        provider: schema.llmProviderApiKeysTable.provider,
       })
       .from(schema.modelPoolMembersTable)
       .innerJoin(

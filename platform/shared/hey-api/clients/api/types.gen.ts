@@ -30142,6 +30142,206 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type AzureAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/audio/speech';
+};
+
+export type AzureAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AzureAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/audio/speech';
+};
+
+export type AzureAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AzureAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/audio/transcriptions';
+};
+
+export type AzureAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AzureAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/audio/transcriptions';
+};
+
+export type AzureAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AzureAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/audio/translations';
+};
+
+export type AzureAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AzureAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/audio/translations';
+};
+
+export type AzureAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type AzureRealtimeTurnWithDefaultAgentData = {
     /**
      * A bounded realtime audio turn. Translation requires WAV input and target_language; tools are not supported.
@@ -59788,6 +59988,238 @@ export type GetInteractionsResponses = {
             billingTeamId: string | null;
             request: {
                 model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                response_format?: string;
+                stream_format?: string;
+                input_characters?: number;
+                file?: {
+                    filename: string;
+                    mimetype: string;
+                    size: number;
+                };
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                response_format?: string;
+                stream_format?: string;
+                input_characters?: number;
+                file?: {
+                    filename: string;
+                    mimetype: string;
+                    size: number;
+                };
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                content_type: string;
+                bytes: number;
+                usage_available: boolean;
+                cost_available: false;
+                usage?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'azure:audio';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            request: {
+                model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                response_format?: string;
+                stream_format?: string;
+                input_characters?: number;
+                file?: {
+                    filename: string;
+                    mimetype: string;
+                    size: number;
+                };
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                response_format?: string;
+                stream_format?: string;
+                input_characters?: number;
+                file?: {
+                    filename: string;
+                    mimetype: string;
+                    size: number;
+                };
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                model: string;
+                operation: 'speech' | 'transcriptions' | 'translations';
+                content_type: string;
+                bytes: number;
+                usage_available: boolean;
+                cost_available: false;
+                usage?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:audio';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            request: {
+                model: string;
                 prompt: string;
                 n?: number;
                 size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
@@ -60664,7 +61096,7 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -67661,6 +68093,238 @@ export type GetInteractionResponses = {
             blockedToolCallCount: number;
         } | null;
         type: 'azure:realtime';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        request: {
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            response_format?: string;
+            stream_format?: string;
+            input_characters?: number;
+            file?: {
+                filename: string;
+                mimetype: string;
+                size: number;
+            };
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            response_format?: string;
+            stream_format?: string;
+            input_characters?: number;
+            file?: {
+                filename: string;
+                mimetype: string;
+                size: number;
+            };
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            content_type: string;
+            bytes: number;
+            usage_available: boolean;
+            cost_available: false;
+            usage?: {
+                [key: string]: unknown;
+            };
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'azure:audio';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        request: {
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            response_format?: string;
+            stream_format?: string;
+            input_characters?: number;
+            file?: {
+                filename: string;
+                mimetype: string;
+                size: number;
+            };
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            response_format?: string;
+            stream_format?: string;
+            input_characters?: number;
+            file?: {
+                filename: string;
+                mimetype: string;
+                size: number;
+            };
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            model: string;
+            operation: 'speech' | 'transcriptions' | 'translations';
+            content_type: string;
+            bytes: number;
+            usage_available: boolean;
+            cost_available: false;
+            usage?: {
+                [key: string]: unknown;
+            };
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:audio';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -93674,6 +94338,206 @@ export type SubmitOnboardingSurveyResponses = {
 };
 
 export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
+
+export type OpenAiAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/audio/speech';
+};
+
+export type OpenAiAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/audio/speech';
+};
+
+export type OpenAiAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/audio/transcriptions';
+};
+
+export type OpenAiAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/audio/transcriptions';
+};
+
+export type OpenAiAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/audio/translations';
+};
+
+export type OpenAiAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/audio/translations';
+};
+
+export type OpenAiAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {

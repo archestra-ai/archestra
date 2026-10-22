@@ -10,6 +10,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AgentTypeSchema } from "./agent";
+import { AudioAuditRequestSchema, AudioAuditResponseSchema } from "./audio";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -178,6 +179,7 @@ export const InteractionErrorResponseSchema = z.object({ error: z.string() });
  * These are used for the database schema definition
  */
 export const InteractionRequestSchema = z.union([
+  AudioAuditRequestSchema,
   OpenAi.API.ChatCompletionRequestSchema,
   OpenAi.API.EmbeddingRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
@@ -230,6 +232,7 @@ const EmbeddingInteractionResponseSchema =
   });
 
 export const InteractionResponseSchema = z.union([
+  AudioAuditResponseSchema,
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
@@ -746,6 +749,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:audio"]),
+    request: withReadFallback(AudioAuditRequestSchema),
+    processedRequest: withReadFallback(AudioAuditRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(AudioAuditResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:audio"]),
+    request: withReadFallback(AudioAuditRequestSchema),
+    processedRequest: withReadFallback(AudioAuditRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(AudioAuditResponseSchema),
     requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),

@@ -2071,8 +2071,8 @@ async function handleStreaming<
         processedRequest: request as InteractionRequest,
         response: response as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
         toolCallBlock,
       };
       await persistProxyInteraction({ record, encryptedChat, streamTiming });

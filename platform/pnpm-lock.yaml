@@ -274,6 +274,9 @@ importers:
       '@crawlee/cheerio':
         specifier: 3.18.2
         version: 3.18.2
+      '@fastify/busboy':
+        specifier: 3.2.3
+        version: 3.2.3
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.2.0
@@ -2093,6 +2096,9 @@ packages:
 
   '@fastify/ajv-compiler@4.0.5':
     resolution: {integrity: sha512-KoWKW+MhvfTRWL4qrhUwAAZoaChluo0m0vbiJlGMt2GXvL4LVPQEjt8kSpHI3IBq5Rez8fg+XeH3cneztq+C7A==}
+
+  '@fastify/busboy@3.2.3':
+    resolution: {integrity: sha512-fmo/IKgkenPzz3qTKG+sIUXdF/Kv83AkvvOXJHPTHJeKJbat8SsL1ihUaFaDotqoEl4UZ1Lf8Eb/3vK6eaWX2A==}
 
   '@fastify/cors@11.2.0':
     resolution: {integrity: sha512-LbLHBuSAdGdSFZYTLVA3+Ch2t+sA6nq3Ejc6XLAKiQ6ViS2qFnvicpj0htsx03FyYeLs04HfRNBsz/a8SvbcUw==}
@@ -12449,6 +12455,8 @@ snapshots:
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       fast-uri: 3.1.8
+
+  '@fastify/busboy@3.2.3': {}
 
   '@fastify/cors@11.2.0':
     dependencies:

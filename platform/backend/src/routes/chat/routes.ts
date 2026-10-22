@@ -8,7 +8,6 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   collapseWhitespace,
-  getAzureModelKind,
   getModelReadableMimeTypes,
   hasPersistableAssistantContent,
   isModelSelectionComplete,
@@ -125,6 +124,7 @@ import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -3596,9 +3596,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : null;
       // Media generation is an explicit user action. Never generate a second
       // image or speech clip merely to name the conversation.
+      const azureTitleCapabilities =
+        conversationModel?.provider === "azure"
+          ? await resolveAzureModelCapabilities({
+              providerApiKeyId: conversation.agent?.llmApiKeyId ?? undefined,
+              modelId: conversationModel.modelId,
+            })
+          : undefined;
       if (
-        conversationModel?.provider === "azure" &&
-        getAzureModelKind(conversationModel.modelId) !== "text"
+        azureTitleCapabilities &&
+        (azureTitleCapabilities.status !== "known" ||
+          azureTitleCapabilities.kind !== "text")
       ) {
         return reply.send(conversation);
       }

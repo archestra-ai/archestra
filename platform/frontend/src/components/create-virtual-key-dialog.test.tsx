@@ -392,6 +392,50 @@ describe("CreateVirtualKeyDialog", () => {
     expect(dialog).toHaveTextContent("Visible toOnly you");
   });
 
+  it("offers image-only mapped Azure deployments with generation and multipart edit examples", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useModelsWithApiKeys).mockReturnValue({
+      isPending: false,
+      data: [
+        {
+          modelId: "studio-images",
+          provider: "azure",
+          isBest: true,
+          apiKeys: [{ id: "azure-key" }],
+          ignored: false,
+          embeddingDimensions: null,
+          inputModalities: ["text", "image"],
+          outputModalities: ["image"],
+          supportedEndpoints: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useModelsWithApiKeys>);
+    mutateAsync.mockResolvedValue(
+      createdKey("standard", [
+        { provider: "azure", providerApiKeyId: "azure-key" },
+      ]),
+    );
+    renderDialog("standard");
+    await createFromAnyStep(user);
+    const dialog = await screen.findByTestId("virtual-key-create-dialog");
+    expect(dialog).not.toHaveTextContent("/model-router/images");
+    await user.click(within(dialog).getByText("Native provider API"));
+    expect(dialog).toHaveTextContent(
+      "https://proxy.example.com/azure/images/generations",
+    );
+    expect(dialog).toHaveTextContent('"model": "studio-images"');
+    expect(dialog).not.toHaveTextContent('"messages"');
+    await user.click(within(dialog).getByLabelText("Image operation"));
+    await user.click(screen.getByRole("option", { name: "Edit an image" }));
+    expect(dialog).toHaveTextContent(
+      "https://proxy.example.com/azure/images/edits",
+    );
+    expect(dialog).toHaveTextContent("image[]=@edit.png");
+    expect(dialog).toHaveTextContent("Authorization: Bearer arch_created");
+    expect(dialog).toHaveTextContent("Save your input image as edit.png");
+    expect(dialog).not.toHaveTextContent("Content-Type: application/json");
+  });
+
   it("uses a Copilot model's published Responses endpoint in the native example", async () => {
     const user = userEvent.setup();
     vi.mocked(useModelsWithApiKeys).mockReturnValue({

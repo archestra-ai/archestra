@@ -4,7 +4,7 @@
  * JSX runtime, model callback, or network credential is needed here.
  */
 export const OPENCODE_QUESTION_TUI = String.raw`
-export async function ArchestraQuestionsTui(api) {
+export async function QuestionCardsTui(api) {
   if (!api?.ui?.DialogSelect || !api.ui.DialogPrompt || !api.ui.dialog ||
       !api.state?.session?.question || !api.client?.question?.reply ||
       !api.client.question.reject || !api.lifecycle?.onDispose) return {};

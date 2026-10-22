@@ -184,7 +184,7 @@ describe("managed runtime trust boundary", () => {
     expect(result.stderr).toContain("native question fallback");
     expect(await readFile(commented, "utf8")).toBe(source);
     expect(await readFile(path.join(files.root, "tui.mjs"), "utf8")).toContain(
-      "ArchestraQuestionsTui",
+      "QuestionCardsTui",
     );
   });
 

@@ -71,7 +71,7 @@ async function fixture(
   const module = await import(
     `data:text/javascript;base64,${Buffer.from(OPENCODE_QUESTION_TUI).toString("base64")}`
   );
-  await module.ArchestraQuestionsTui(api);
+  await module.QuestionCardsTui(api);
   return {
     api,
     request,
@@ -236,7 +236,7 @@ test("unsupported host API is a no-op", async () => {
   const module = await import(
     `data:text/javascript;base64,${Buffer.from(OPENCODE_QUESTION_TUI).toString("base64")}`
   );
-  await expect(module.ArchestraQuestionsTui({})).resolves.toEqual({});
+  await expect(module.QuestionCardsTui({})).resolves.toEqual({});
 });
 
 test("review text cannot inject terminal controls or change displayed direction", async () => {

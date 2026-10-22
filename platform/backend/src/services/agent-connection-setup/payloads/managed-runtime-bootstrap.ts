@@ -186,7 +186,7 @@ export default {
         if (skip.split(/\\r?\\n/).includes("mcp")) return;
       } catch (error) { if (error.code !== "ENOENT") throw error; }
       const impl = await import(pathToFileURL(join(runtime.directory, "routing-v1.mjs")).href);
-      await impl.ArchestraQuestionsTui?.(api);
+      await impl.QuestionCardsTui?.(api);
     } catch {
       api.ui?.toast?.({ title: "Connection question cards unavailable", message: "Using the client's native questions.", variant: "warning" });
     }

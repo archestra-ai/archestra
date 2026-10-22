@@ -11,6 +11,7 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Activity, ActivityTypes } from "@microsoft/agents-activity";
 import type { TurnContext } from "@microsoft/agents-hosting";
 import { WebClient } from "@slack/web-api";
+import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -36,6 +37,7 @@ import {
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
+import { getMsTeamsSignInRedirectUri } from "@/agents/chatops/ms-teams-user-sign-in";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import SlackProvider from "@/agents/chatops/slack-provider";
 import TelegramProvider from "@/agents/chatops/telegram-provider";
@@ -60,6 +62,10 @@ import {
   UserModel,
 } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import {
+  MS_TEAMS_SIGN_IN_CALLBACK_PATH,
+  MS_TEAMS_SIGN_IN_PATH,
+} from "@/routes/route-paths";
 import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -557,6 +563,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                                 value: "Show this help message",
                               },
                               {
+                                title: "/sign-out",
+                                value:
+                                  "Stop letting me read the files you share in group chats",
+                              },
+                              {
                                 title: "mute",
                                 value:
                                   "Stop auto-replies in this thread (@mention me to resume)",
@@ -579,6 +590,16 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                   ],
                 }),
+              );
+              return;
+            }
+
+            if (trimmedText === CHATOPS_COMMANDS.SIGN_OUT) {
+              const signedOut = await provider.signOutUser(message);
+              await context.sendActivity(
+                signedOut
+                  ? "You're signed out. I can no longer read the files you share in group chats."
+                  : "You weren't signed in, so there was nothing to sign out of.",
               );
               return;
             }
@@ -801,8 +822,122 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
+/**
+ * Browser pages behind the MS Teams file sign-in card. A Teams user opens the
+ * card's link, signs in with Microsoft, and lands back on a page that says how
+ * it went; the message the card was posted for is then answered in Teams.
+ * Public: the pending sign-in key and the OAuth state are the proof, and the
+ * completion only counts for the Teams user the card was made for.
+ */
+const msTeamsSignInRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    MS_TEAMS_SIGN_IN_PATH,
+    {
+      schema: {
+        description: "Start a Teams user's sign-in from a file sign-in card",
+        tags: ["ChatOps Webhooks"],
+        querystring: z.object({ key: z.string().max(64).optional() }),
+      },
+    },
+    async (request, reply) => {
+      const provider = chatOpsManager.getMSTeamsProvider();
+      const authorizeUrl =
+        provider && request.query.key
+          ? await provider.beginUserSignIn(request.query.key)
+          : null;
+      if (!authorizeUrl) {
+        return sendSignInPage(reply, {
+          status: 410,
+          title: "This sign-in link has expired",
+          body: "Send your message with the file again in Teams, and use the new sign-in card.",
+        });
+      }
+      return reply.redirect(authorizeUrl);
+    },
+  );
+
+  fastify.get(
+    MS_TEAMS_SIGN_IN_CALLBACK_PATH,
+    {
+      schema: {
+        description:
+          "Finish a Teams user's sign-in for reading group-chat files",
+        tags: ["ChatOps Webhooks"],
+        querystring: z.object({
+          code: z.string().optional(),
+          state: z.string().optional(),
+          error: z.string().optional(),
+          error_description: z.string().optional(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { code, state, error, error_description } = request.query;
+      const provider = chatOpsManager.getMSTeamsProvider();
+      if (error || !code || !state || !provider) {
+        logger.info(
+          { error, description: error_description },
+          "[ChatOps] Teams file sign-in was not completed",
+        );
+        return sendSignInPage(reply, {
+          status: 400,
+          title: "Sign-in was not completed",
+          body:
+            error === "access_denied"
+              ? "You declined the permission, so I still can't read your files. Use the sign-in card in Teams to try again."
+              : "Microsoft did not finish the sign-in. Use the sign-in card in Teams to try again. If it keeps failing, ask your administrator to check the bot's sign-in setup.",
+        });
+      }
+
+      const outcome = await provider.completeUserSignIn({ code, state });
+      switch (outcome.status) {
+        case "connected": {
+          if (outcome.replay) {
+            // Answered in Teams; the page does not wait for the agent.
+            const replay = outcome.replay;
+            void chatOpsManager
+              .processMessage({ message: replay, provider, sendReply: true })
+              .catch((replayError) => {
+                logger.error(
+                  { error: errorMessage(replayError) },
+                  "[ChatOps] Could not answer the message held for sign-in",
+                );
+              });
+          }
+          return sendSignInPage(reply, {
+            status: 200,
+            title: "You're signed in",
+            body: outcome.replay
+              ? "Go back to Teams: I'm answering your message now. From now on I can read the files you share with me in group chats."
+              : "Go back to Teams. From now on I can read the files you share with me in group chats.",
+          });
+        }
+        case "wrong_account":
+          return sendSignInPage(reply, {
+            status: 403,
+            title: "That's a different account",
+            body: `This sign-in link is for ${outcome.expectedName ?? "the person who shared the file"}. Only they can sign in with it.`,
+          });
+        case "expired":
+          return sendSignInPage(reply, {
+            status: 410,
+            title: "This sign-in link has expired",
+            body: "Send your message with the file again in Teams, and use the new sign-in card.",
+          });
+        default:
+          return sendSignInPage(reply, {
+            status: 502,
+            title: "Sign-in failed",
+            body: "Microsoft did not accept the sign-in. Try the card in Teams again. If it keeps failing, ask your administrator to check the bot's sign-in setup.",
+          });
+      }
+    },
+  );
+};
+
 const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(msTeamsWebhookRoutes);
+  await fastify.register(msTeamsSignInRoutes);
 
   /**
    * Slack webhook endpoint
@@ -1802,6 +1937,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         enabled: stored?.enabled ?? false,
         appId: stored?.appId || null,
         tenantId: stored?.tenantId || null,
+        groupChatFileSignIn: stored?.groupChatFileSignIn ?? false,
+        signInRedirectUri: getMsTeamsSignInRedirectUri(),
       };
     },
   );
@@ -1822,12 +1959,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           appId: z.string().min(1).max(256).optional(),
           appSecret: z.string().min(1).max(512).optional(),
           tenantId: z.string().min(1).max(256).optional(),
+          groupChatFileSignIn: z.boolean().optional(),
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
-      const { enabled, appId, appSecret, tenantId } = request.body;
+      const { enabled, appId, appSecret, tenantId, groupChatFileSignIn } =
+        request.body;
       await assertMessagingChannelAllowed({
         organizationId: request.organizationId,
         channel: "ms-teams",
@@ -1843,6 +1982,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         graphTenantId: tenantId ?? existing?.graphTenantId ?? "",
         graphClientId: appId ?? existing?.graphClientId ?? "",
         graphClientSecret: appSecret ?? existing?.graphClientSecret ?? "",
+        groupChatFileSignIn:
+          groupChatFileSignIn ?? existing?.groupChatFileSignIn ?? false,
       };
 
       // Validate credentials by requesting an OAuth token from Azure AD
@@ -3545,6 +3686,51 @@ async function handleAgentSelection(
         "Send a message (with @mention) to start interacting!",
     );
   }
+}
+
+/**
+ * A small self-contained page for the browser tab a Teams user signs in from.
+ * Every dynamic string is escaped; there are no scripts.
+ */
+function sendSignInPage(
+  reply: FastifyReply,
+  page: { status: number; title: string; body: string },
+) {
+  const title = escapeHtml(page.title);
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f5f5f7; color: #1d1d1f; }
+  main { max-width: 28rem; margin: 1rem; padding: 2rem; background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  h1 { font-size: 1.25rem; margin: 0 0 .75rem; }
+  p { line-height: 1.5; margin: 0; color: #424245; }
+  @media (prefers-color-scheme: dark) { body { background: #1c1c1e; color: #f5f5f7; } main { background: #2c2c2e; } p { color: #d1d1d6; } }
+</style>
+</head>
+<body><main><h1>${title}</h1><p>${escapeHtml(page.body)}</p></main></body>
+</html>`;
+  return reply
+    .status(page.status as 200)
+    .header("Cache-Control", "no-store")
+    .header(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'",
+    )
+    .type("text/html; charset=utf-8")
+    .send(html as never);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 /**

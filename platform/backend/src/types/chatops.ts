@@ -74,6 +74,10 @@ export const MsTeamsChatOpsConfigViewSchema =
   ChatOpsStoredConfigBaseSchema.extend({
     appId: z.string().nullable(),
     tenantId: z.string().nullable(),
+    /** Whether people may sign in so the bot reads their group-chat files. */
+    groupChatFileSignIn: z.boolean(),
+    /** The Web redirect URI that sign-in needs on the bot's Entra app. */
+    signInRedirectUri: z.string(),
   });
 
 export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
@@ -91,12 +95,15 @@ export const ChatOpsStatusResponseSchema = z.object({
  *   non-file response such as an HTML login page).
  * - `total_limit_reached`: the combined attachment budget was already spent.
  * - `too_many`: more files than the per-message cap were attached.
+ * - `sign_in_required`: only the sender's own access can read the file (a
+ *   Teams group-chat file in their OneDrive) and they have not signed in.
  */
 export type SkippedAttachmentReason =
   | "too_large"
   | "download_failed"
   | "total_limit_reached"
-  | "too_many";
+  | "too_many"
+  | "sign_in_required";
 
 /**
  * A file that was attached to a message but not delivered to the model. Carried
@@ -702,6 +709,16 @@ export interface ChatOpsProvider {
   ): Promise<ThreadFileOutcome[]>;
 
   /**
+   * Ask the sender to sign in so their `sign_in_required` files become
+   * readable, holding the message to answer once they have (MS Teams group
+   * chats). Returns false when no sign-in could be offered.
+   */
+  requestFileSignIn?(params: {
+    message: IncomingChatMessage;
+    fileNames: string[];
+  }): Promise<boolean>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
@@ -763,6 +780,11 @@ export interface MsTeamsDbConfig {
   graphTenantId: string;
   graphClientId: string;
   graphClientSecret: string;
+  /**
+   * Whether people may sign in to the bot so it can read the files they send
+   * in group chats. Needs the sign-in redirect URI on the bot's Entra app.
+   */
+  groupChatFileSignIn?: boolean;
 }
 
 /** Slack config stored as a DB secret */

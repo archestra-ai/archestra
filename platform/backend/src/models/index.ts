@@ -44,6 +44,7 @@ export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsConfigModel } from "./chatops-config";
+export { default as ChatOpsMsTeamsUserConnectionModel } from "./chatops-ms-teams-user-connection";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadContextModel } from "./chatops-thread-context";
 export { default as ConnectedClientModel } from "./connected-client";

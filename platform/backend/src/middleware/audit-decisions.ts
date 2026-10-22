@@ -888,6 +888,11 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // ChatOps runtime
   // =========================================================================
+  chatopsMsTeamsUserConnectionsTable: {
+    audited: false,
+    reason:
+      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+  },
   chatopsUserAdmissionsTable: {
     audited: false,
     reason: "pending ChatOps execution admission; runtime state",

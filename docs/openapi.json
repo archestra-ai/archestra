@@ -149724,6 +149724,77 @@
         }
       }
     },
+    "/api/webhooks/chatops/ms-teams/sign-in": {
+      "get": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "Start a Teams user's sign-in from a file sign-in card",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/webhooks/chatops/ms-teams/sign-in/callback": {
+      "get": {
+        "tags": [
+          "ChatOps Webhooks"
+        ],
+        "description": "Finish a Teams user's sign-in for reading group-chat files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "code",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "state",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "error",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "error_description",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/webhooks/chatops/slack": {
       "post": {
         "tags": [
@@ -153154,6 +153225,12 @@
                     "tenantId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "groupChatFileSignIn": {
+                      "type": "boolean"
+                    },
+                    "signInRedirectUri": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -153161,7 +153238,9 @@
                     "updatedAt",
                     "enabled",
                     "appId",
-                    "tenantId"
+                    "tenantId",
+                    "groupChatFileSignIn",
+                    "signInRedirectUri"
                   ],
                   "additionalProperties": false
                 }
@@ -153438,6 +153517,9 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "groupChatFileSignIn": {
+                    "type": "boolean"
                   }
                 }
               }

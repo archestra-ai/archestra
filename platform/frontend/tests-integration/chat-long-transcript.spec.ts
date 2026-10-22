@@ -100,10 +100,15 @@ test("a long conversation opens on its end and mounts earlier messages on scroll
   expect(mounted).toBe(60);
 
   // The keyboard path loads the rest without scrolling.
+  // Focusing the off-screen edge with the browser's default scrolling also
+  // triggers scroll backfill. Keep this activation independent of that path.
   await page
     .getByRole("button", { name: /Show earlier messages/ })
     .first()
-    .press("Enter");
+    .evaluate((button) =>
+      (button as HTMLElement).focus({ preventScroll: true }),
+    );
+  await page.keyboard.press("Enter");
   await expect(page.locator(MESSAGE)).toHaveCount(90);
 
   await page.goto(`/chat/${conversation.id}#message-%`);

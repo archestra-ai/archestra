@@ -57,6 +57,13 @@ describe("Azure backing-model evidence", () => {
         capabilities: { image_generation: "true" },
       }),
     ).toMatchObject({ kind: "image", operations: ["image-generation"] });
+    expect(
+      azureModelEvidence({
+        source: "deployment",
+        underlyingModelName: "unclassified-future-model",
+        capabilities: { image_generation: true },
+      }),
+    ).toMatchObject({ kind: "image", operations: ["image-generation"] });
   });
   test("explicit negative operation evidence overrides a recognized backing family", () => {
     expect(

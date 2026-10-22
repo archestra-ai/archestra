@@ -54,12 +54,12 @@ export function azureModelEvidence(params: {
   const flags = params.capabilities;
   const enabled = (key: string) =>
     flags?.[key] === true || flags?.[key] === "true";
-  const kind = name
-    ? getAzureModelKind(name)
-    : enabled("image_generation")
-      ? "image"
-      : enabled("embeddings")
-        ? "embedding"
+  const kind = enabled("image_generation")
+    ? "image"
+    : enabled("embeddings")
+      ? "embedding"
+      : name
+        ? getAzureModelKind(name)
         : enabled("chat_completion")
           ? "text"
           : null;
@@ -76,11 +76,11 @@ export function azureModelEvidence(params: {
   switch (kind) {
     case "image":
       operations =
-        name?.toLowerCase() === "dall-e-3"
-          ? ["image-generation"]
-          : name
-            ? ["image-generation", "image-edit"]
-            : ["image-generation"];
+        name?.toLowerCase().startsWith("gpt-image-") ||
+        name?.toLowerCase() === "dall-e-2" ||
+        enabled("image_edit")
+          ? ["image-generation", "image-edit"]
+          : ["image-generation"];
       break;
     case "audio":
       operations = /^whisper-/i.test(name ?? "")

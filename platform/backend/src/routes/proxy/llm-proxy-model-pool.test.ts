@@ -167,6 +167,84 @@ describe("Model pools - LLM Proxy", () => {
     });
   }
 
+  test("logs the last member's failure at cost 0 with its reason", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const [first, second] = [
+      await makeLlmProviderApiKey(
+        proxy.organizationId,
+        (await makeSecret({ secret: { apiKey: "sk-limited" } })).id,
+        { provider: "openai" },
+      ),
+      await makeLlmProviderApiKey(
+        proxy.organizationId,
+        (await makeSecret({ secret: { apiKey: "sk-limited" } })).id,
+        { provider: "openai" },
+      ),
+    ];
+    const { value: virtualKey, virtualKey: virtualKeyRow } =
+      await VirtualApiKeyModel.create({
+        name: "all-limited",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: first.id }],
+      });
+    await ModelPoolModel.create({
+      organizationId: proxy.organizationId,
+      input: {
+        name: "gpt-4o-mini",
+        members: [first, second].map((key, index) => ({
+          providerApiKeyId: key.id,
+          modelId: "gpt-4o-mini",
+          priority: index + 1,
+          weight: 1,
+          enabled: true,
+        })),
+        virtualApiKeyIds: [virtualKeyRow.id],
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${proxy.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${virtualKey}`,
+      },
+      payload: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(429);
+    const rows = await db
+      .select()
+      .from(schema.interactionsTable)
+      .orderBy(schema.interactionsTable.attempt);
+    expect(
+      rows.map((row) => ({
+        providerApiKeyId: row.providerApiKeyId,
+        attemptOutcome: row.attemptOutcome,
+        failureReason: row.failureReason,
+        cost: row.cost === null ? null : Number(row.cost),
+      })),
+    ).toEqual([
+      {
+        providerApiKeyId: first.id,
+        attemptOutcome: "failed_over",
+        failureReason: "rate_limited (429)",
+        cost: 0,
+      },
+      {
+        providerApiKeyId: second.id,
+        attemptOutcome: "failed",
+        failureReason: "rate_limited (429)",
+        cost: 0,
+      },
+    ]);
+  });
+
   test("records the provider key on a call no pool handles", async ({
     makeSecret,
     makeLlmProviderApiKey,

@@ -561,12 +561,13 @@ const RELIABILITY_RULES = [
     value: "429, 5xx, timeouts, connection errors, without retrying it",
   },
   {
-    label: "Move on from a silent stream",
-    value: "No first chunk in 30 s, unless it is the last member",
+    label: "Move on from a silent member",
+    value:
+      "No first chunk in 30 s, or no answer in 3 min, unless it is the last member",
   },
   {
     label: "Also move on when a key is refused",
-    value: "401, 403, or 404 from that key",
+    value: "401, 403, or 404 from that key, or a key that can't be loaded",
   },
   {
     label: "Stay and return the error on",

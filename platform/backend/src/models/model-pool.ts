@@ -1,5 +1,8 @@
+import { TimeInMs } from "@archestra/shared";
 import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction } from "@/database";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { ModelPool, ModelPoolInput, ModelPoolMember } from "@/types";
 
 /** Model pools and their members (provider keys, each with its own model id). */
@@ -42,8 +45,24 @@ class ModelPoolModel {
   /**
    * The pool clients reach by asking for `name`, with its enabled members.
    * Null when no pool has that name, which leaves the request as it is.
+   *
+   * The proxy asks this on every request, so answers (misses included) are
+   * kept in a process-local cache. Writes in this process clear it at once;
+   * other pods converge within the TTL.
    */
   static async findByName(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<ModelPool | null> {
+    const key = `${params.organizationId}:${params.name}`;
+    const cached = byNameCache.get(key);
+    if (cached) return cached.pool;
+    const pool = await ModelPoolModel.loadByName(params);
+    byNameCache.set(key, { pool });
+    return pool;
+  }
+
+  private static async loadByName(params: {
     organizationId: string;
     name: string;
   }): Promise<ModelPool | null> {
@@ -96,6 +115,7 @@ class ModelPoolModel {
       await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return pool.id;
     });
+    forgetOrganization(params.organizationId);
     return (await ModelPoolModel.findById({
       organizationId: params.organizationId,
       id,
@@ -133,6 +153,7 @@ class ModelPoolModel {
       await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return true;
     });
+    forgetOrganization(params.organizationId);
     return updated ? ModelPoolModel.findById(params) : null;
   }
 
@@ -149,6 +170,7 @@ class ModelPoolModel {
         ),
       )
       .returning({ id: schema.modelPoolsTable.id });
+    forgetOrganization(params.organizationId);
     return deleted.length > 0;
   }
 
@@ -213,6 +235,17 @@ class ModelPoolModel {
       virtualApiKeyIds: keysByPool.get(pool.id) ?? [],
     }));
   }
+}
+
+const byNameCache = registerProcessLocalCache(
+  new LRUCacheManager<{ pool: ModelPool | null }>({
+    maxSize: 5_000,
+    defaultTtl: 30 * TimeInMs.Second,
+  }),
+);
+
+function forgetOrganization(organizationId: string): void {
+  byNameCache.deleteByPrefix(`${organizationId}:`);
 }
 
 async function insertVirtualApiKeys(

@@ -172,6 +172,7 @@ import {
 } from "./llm-proxy-helpers";
 import {
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+  MODEL_POOL_RESPONSE_TIMEOUT_MS,
   type ModelPoolPlan,
   openThroughModelPool,
   type PlannedMember,
@@ -740,6 +741,7 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  let virtualKeyServesOnlyPool = false;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -904,6 +906,7 @@ export async function handleLLMProxy<
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
         requestedModel: requestAdapter.getModel(),
+        allowModelPool: true,
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
@@ -913,6 +916,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
+      virtualKeyServesOnlyPool = virtualResult.modelPoolOnly === true;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1291,6 +1295,14 @@ export async function handleLLMProxy<
           sessionId,
         })
       : null;
+    // A virtual key let in only for its pool has no key for this provider, so
+    // the request can't go anywhere but the pool.
+    if (virtualKeyServesOnlyPool && !modelPoolPlan) {
+      throw new ApiError(
+        400,
+        `Virtual API key is not mapped to provider "${providerName}".`,
+      );
+    }
 
     // Ensure a model entry exists for cost tracking. A pool's name is not a
     // provider model; each member's own model is priced instead.
@@ -1742,6 +1754,7 @@ export async function handleLLMProxy<
                 },
                 encryptedChat,
                 streamTiming,
+                attributionLabels,
                 upstreamAttempt: attempt,
               }),
             setResponseHeaders: (attempt) => {
@@ -2002,6 +2015,9 @@ export async function handleLLMProxy<
         ),
         inputTokens: 0,
         outputTokens: 0,
+        // A pool member that failed before answering is free, like the
+        // attempts before it.
+        ...(upstreamAttempt.attemptOutcome === "failed" ? { cost: "0" } : {}),
       };
       await persistProxyInteraction({
         record,
@@ -2489,7 +2505,7 @@ async function handleStreaming<
             withFirstChunk(
               (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
-          firstChunkTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+          memberTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -3214,6 +3230,7 @@ async function handleNonStreaming<
           transport: ownTransport(provider, client),
           open: async (transport) =>
             (await transport.execute(request)) as TResponse,
+          memberTimeoutMs: MODEL_POOL_RESPONSE_TIMEOUT_MS,
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -4105,7 +4122,7 @@ async function openUpstream<TRequest, T>(params: {
   transport: MemberTransport;
   open: (transport: MemberTransport) => Promise<T>;
   /** Moves past a silent pool member; see openThroughModelPool. */
-  firstChunkTimeoutMs?: number;
+  memberTimeoutMs?: number;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -4114,7 +4131,7 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, open, firstChunkTimeoutMs, ...retry } = params;
+  const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
   const pool = ctx.modelPool;
   if (!pool) {
     return openUpstreamWithRetry({ open: () => open(transport), ...retry });
@@ -4125,7 +4142,7 @@ async function openUpstream<TRequest, T>(params: {
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
       open,
-      firstChunkTimeoutMs,
+      memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });

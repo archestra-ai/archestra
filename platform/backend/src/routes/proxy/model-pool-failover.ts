@@ -7,8 +7,8 @@
  * reached through its own transport (see `model-pool-transport.ts`). A member
  * that fails before the provider answered (see `poolFailoverReason`) is
  * benched for a while, and the request moves on to the next member. So is a
- * member whose stream sends nothing within `MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS`
- * while another member is left to try. Once
+ * member that is silent too long while another member is left to try (see
+ * `MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS`), and one whose key can't be loaded. Once
  * output has reached the client, a failure goes to the client as before,
  * because it cannot accept a second answer in its place.
  */
@@ -31,6 +31,12 @@ import { openUpstreamWithRetry } from "./upstream-connection-retry";
  * the next member. The last member is waited on: it has nowhere to move to.
  */
 export const MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS = 30_000;
+
+/**
+ * The same for a non-streaming call, which only answers once the whole
+ * response is ready, so it gets longer.
+ */
+export const MODEL_POOL_RESPONSE_TIMEOUT_MS = 180_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
@@ -235,8 +241,11 @@ export async function openThroughModelPool<T>(params: {
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
   open: (transport: MemberTransport) => Promise<T>;
-  /** Set when `open` resolves on the first chunk of a stream. */
-  firstChunkTimeoutMs?: number;
+  /**
+   * How long a member that isn't the last may take for `open` to resolve: the
+   * first chunk of a stream, or the whole answer.
+   */
+  memberTimeoutMs?: number;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -257,8 +266,12 @@ export async function openThroughModelPool<T>(params: {
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
     try {
-      const transport = await params.transportFor(member, abort.signal);
-      const timeoutMs = isLast ? undefined : params.firstChunkTimeoutMs;
+      const transport = await params
+        .transportFor(member, abort.signal)
+        .catch((error: unknown) => {
+          throw new MemberUnavailableError(error);
+        });
+      const timeoutMs = isLast ? undefined : params.memberTimeoutMs;
       const result = await openUpstreamWithRetry({
         open: () => withTimeout(params.open(transport), timeoutMs, abort),
         // With a sibling left, a dropped connection moves on at once rather
@@ -270,9 +283,14 @@ export async function openThroughModelPool<T>(params: {
       attempt.attemptOutcome = "answered";
       return result;
     } catch (error) {
-      const failover = poolFailoverReason(error);
+      const failover =
+        error instanceof MemberUnavailableError
+          ? { reason: "key_unavailable", retryAfterMs: undefined }
+          : poolFailoverReason(error);
       attempt.attemptOutcome = "failed";
-      attempt.failureReason = failover?.reason;
+      // An error that doesn't fail over still gets a reason; its message is in
+      // the row's response.
+      attempt.failureReason = failover?.reason ?? "error";
       if (!failover) throw error;
       await benchMember({
         poolId: plan.poolId,
@@ -280,7 +298,9 @@ export async function openThroughModelPool<T>(params: {
         reason: failover.reason,
         retryAfterMs: failover.retryAfterMs,
       });
-      if (isLast || !params.shouldContinue()) throw error;
+      if (isLast || !params.shouldContinue()) {
+        throw error instanceof MemberUnavailableError ? error.cause : error;
+      }
       logger.warn(
         {
           poolId: plan.poolId,
@@ -310,11 +330,21 @@ export async function openThroughModelPool<T>(params: {
 
 // === Internal helpers ===
 
-/** A member that sent nothing in time. Its 408 makes it fail over. */
+/** A member that didn't answer in time. Its 408 makes it fail over. */
 class MemberTimeoutError extends Error {
   readonly status = 408;
   constructor(ms: number) {
-    super(`The model pool member sent nothing within ${ms / 1000} s`);
+    super(`The model pool member didn't answer within ${ms / 1000} s`);
+  }
+}
+
+/**
+ * A member whose client couldn't be built: its key was deleted, or its secret
+ * can't be read. Another member's key may still work.
+ */
+class MemberUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super("The model pool member's provider key can't be used", { cause });
   }
 }
 

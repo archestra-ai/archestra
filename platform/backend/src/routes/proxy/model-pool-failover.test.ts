@@ -405,6 +405,7 @@ describe("openThroughModelPool", () => {
       providerApiKeyId: keyA,
       attempt: 1,
       attemptOutcome: "failed",
+      failureReason: "error",
     });
   });
 
@@ -425,7 +426,7 @@ describe("openThroughModelPool", () => {
         if (key === keyA) await new Promise(() => {});
         return `answer from ${key}`;
       },
-      firstChunkTimeoutMs: 20,
+      memberTimeoutMs: 20,
       isRetryable: () => false,
       shouldContinue: () => true,
       recordFailedAttempt: async (failed) => {
@@ -439,6 +440,46 @@ describe("openThroughModelPool", () => {
     ]);
     expect(signals.get(keyA)?.aborted).toBe(true);
     expect(signals.get(keyB)?.aborted).toBe(false);
+  });
+
+  test("moves past a member whose key can't be loaded", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    const vaultDown = new Error("secret store unreachable");
+
+    const result = await openThroughModelPool({
+      plan,
+      attempt,
+      transportFor: async (m) => {
+        if (m.providerApiKeyId === keyA) throw vaultDown;
+        return transport(m.providerApiKeyId);
+      },
+      open: async (t) => `answer from ${await t.execute({})}`,
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      recordFailedAttempt: async (failed) => {
+        recorded.push(failed);
+      },
+    });
+
+    expect(result).toBe(`answer from ${keyB}`);
+    expect(recorded).toMatchObject([
+      { providerApiKeyId: keyA, failureReason: "key_unavailable" },
+    ]);
+    // On the last member there is nowhere to go: its own error is returned.
+    await expect(
+      openThroughModelPool({
+        plan: { ...plan, members: [plan.members[0]] },
+        attempt: {},
+        transportFor: async () => {
+          throw vaultDown;
+        },
+        open: async () => "unreachable",
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        recordFailedAttempt: async () => {},
+      }),
+    ).rejects.toBe(vaultDown);
   });
 
   test("waits on the last member however slow, and retries only that one", async () => {
@@ -460,7 +501,7 @@ describe("openThroughModelPool", () => {
         await new Promise((resolve) => setTimeout(resolve, 40));
         return `answer from ${key}`;
       },
-      firstChunkTimeoutMs: 20,
+      memberTimeoutMs: 20,
       isRetryable: (error) => error === dropped,
       shouldContinue: () => true,
       recordFailedAttempt: async () => {},

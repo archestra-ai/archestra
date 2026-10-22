@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -12,7 +13,8 @@ import { useMswServer } from "@/test/msw";
 import anthropicProxyRoutes from "./anthropic";
 
 // Claude Code asks for a pool's name on Anthropic's wire; the pool's only
-// member is Z.ai on the OpenAI wire. Only the HTTP upstream is mocked.
+// member is Z.ai on the OpenAI wire. The virtual key maps no Anthropic key:
+// the pool grant alone lets it in. Only the HTTP upstream is mocked.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 setupTestCacheManager();
@@ -27,11 +29,6 @@ for (const stream of [false, true]) {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const anthropic = await makeLlmProviderApiKey(
-      org.id,
-      (await makeSecret({ secret: { apiKey: "sk-ant-unused" } })).id,
-      { provider: "anthropic" },
-    );
     const zai = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "zai-key" } })).id,
@@ -40,9 +37,7 @@ for (const stream of [false, true]) {
     const { value, virtualKey } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "Claude Code",
-      providerApiKeys: [
-        { provider: "anthropic", providerApiKeyId: anthropic.id },
-      ],
+      providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
     });
     await ModelPoolModel.create({
       organizationId: org.id,
@@ -157,3 +152,70 @@ for (const stream of [false, true]) {
     }
   });
 }
+
+test("keeps out a virtual key with no Anthropic key and no grant to the pool", async ({
+  makeOrganization,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const zai = await makeLlmProviderApiKey(
+    org.id,
+    (await makeSecret({ secret: { apiKey: "zai-key" } })).id,
+    { provider: "zhipuai", baseUrl: zaiOrigin },
+  );
+  const { value } = await VirtualApiKeyModel.create({
+    organizationId: org.id,
+    name: "Not granted",
+    providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+  });
+  await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "glm-5",
+      members: [
+        {
+          providerApiKeyId: zai.id,
+          modelId: "glm-5",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+      virtualApiKeyIds: [],
+    },
+  });
+  let calls = 0;
+  server.use(
+    http.post(`${zaiOrigin}/chat/completions`, () => {
+      calls += 1;
+      return HttpResponse.json({});
+    }),
+  );
+
+  // The real instance, so the central error handler shapes the 400.
+  const app = createFastifyInstance();
+  await app.register(anthropicProxyRoutes);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        authorization: `Bearer ${value}`,
+        "anthropic-version": "2023-06-01",
+      },
+      payload: {
+        model: "glm-5",
+        max_tokens: 16,
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.body).toContain("not mapped to provider");
+    expect(calls).toBe(0);
+  } finally {
+    await app.close();
+  }
+});

@@ -13,6 +13,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   perUserCredentialLabel,
   type SupportedProvider,
+  stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -27,6 +28,7 @@ import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   OrganizationModel,
@@ -118,6 +120,11 @@ export interface VirtualKeyValidationResult {
   virtualKeyAuthorId?: string | null;
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
+  /**
+   * The key maps no key of this provider and passed only because the requested
+   * model is a pool granted to it. No provider key is resolved.
+   */
+  modelPoolOnly?: boolean;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -174,6 +181,12 @@ export async function validateVirtualApiKey(params: {
    * serves the model. Without it the key's preferred endpoint answers.
    */
   requestedModel?: string | null;
+  /**
+   * Set by callers that can serve a model pool. A key that maps no key of
+   * this provider then still passes when the requested model is a pool
+   * granted to it.
+   */
+  allowModelPool?: boolean;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -206,6 +219,20 @@ export async function validateVirtualApiKey(params: {
         modelId: params.requestedModel,
       })
     : undefined;
+  if (
+    !mappedProviderKey &&
+    params.allowModelPool &&
+    (await isGrantedModelPool({
+      organizationId: resolved.virtualKey.organizationId,
+      virtualKeyId: resolved.virtualKey.id,
+      requestedModel: params.requestedModel,
+    }))
+  ) {
+    return {
+      ...(await virtualKeyIdentity(resolved.virtualKey)),
+      modelPoolOnly: true,
+    };
+  }
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -279,14 +306,34 @@ export async function validateVirtualApiKey(params: {
     apiKey,
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
-    virtualKeyId: resolved.virtualKey.id,
-    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
-      resolved.virtualKey,
-    ),
-    virtualKeyAuthorId: resolved.virtualKey.authorId,
-    serviceAccountId:
-      resolved.virtualKey.createdByServiceAccountId ?? undefined,
-    billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
+    ...(await virtualKeyIdentity(resolved.virtualKey)),
+  };
+}
+
+async function isGrantedModelPool(params: {
+  organizationId: string;
+  virtualKeyId: string;
+  requestedModel?: string | null;
+}): Promise<boolean> {
+  if (!params.requestedModel) return false;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.organizationId,
+    name: stripClaudeContextVariantSuffix(params.requestedModel),
+  });
+  return pool?.virtualApiKeyIds.includes(params.virtualKeyId) ?? false;
+}
+
+async function virtualKeyIdentity(
+  virtualKey: Awaited<
+    ReturnType<typeof validateVirtualApiKeyToken>
+  >["virtualKey"],
+) {
+  return {
+    virtualKeyId: virtualKey.id,
+    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(virtualKey),
+    virtualKeyAuthorId: virtualKey.authorId,
+    serviceAccountId: virtualKey.createdByServiceAccountId ?? undefined,
+    billingTeamId: virtualKey.billingTeamId ?? undefined,
   };
 }
 

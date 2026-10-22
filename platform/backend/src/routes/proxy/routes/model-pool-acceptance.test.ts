@@ -19,6 +19,7 @@ vi.mock("../model-pool-failover", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../model-pool-failover")>()),
   // The lab's black-hole deployment timeout, shortened to keep the test fast.
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS: 300,
+  MODEL_POOL_RESPONSE_TIMEOUT_MS: 300,
 }));
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -216,6 +217,22 @@ labTest(
       attemptOutcome: "failed_over",
       failureReason: "timeout (408)",
     });
+  },
+);
+
+labTest(
+  "AC-O2 a black-holed member also times out a non-streaming call",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy([
+      { priority: 1 },
+      { priority: 2 },
+    ]);
+    first.mode = { kind: "black-hole" };
+    const answer = await lab.ask();
+    expect(answer.status, answer.body).toBe(200);
+    expect(answer.providerKey).toBe(second.keyId);
+    expect(answer.attempts).toBe("2");
+    expect(answer.ms).toBeGreaterThanOrEqual(300);
   },
 );
 

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CLAUDE_CODE_MODEL,
   getAgentRuntimeModelCompatibility,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -44,7 +45,8 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
       ? {
           modelId: null,
           chatApiKeyId: null,
-          selectedModel: params.runtime.claudeCode.model ?? "default",
+          selectedModel:
+            params.runtime.claudeCode.model ?? DEFAULT_CLAUDE_CODE_MODEL,
           selectedProvider: "anthropic" as const,
         }
       : await resolveConversationLlmSelectionForAgent({
@@ -64,7 +66,8 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
       modelId: null,
       chatApiKeyId: null,
       selectedProvider: "anthropic",
-      selectedModel: params.runtime.claudeCode?.model ?? "default",
+      selectedModel:
+        params.runtime.claudeCode?.model ?? DEFAULT_CLAUDE_CODE_MODEL,
     };
   }
   const selectedModel = llm.modelId

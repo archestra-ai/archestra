@@ -4,18 +4,16 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
   CalendarClock,
-  Download,
   FileText,
-  FolderPlus,
   Globe,
   MoreHorizontal,
   MoreVertical,
-  PlayCircle,
-  Share2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
+import { type ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
+import { MOBILE_HEADER_TITLE_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useProject } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { formatRunLabel } from "@/lib/utils/format-run-timestamp";
@@ -46,10 +45,6 @@ interface PanelControls {
   isArtifactOpen: boolean;
   isBrowserVisible: boolean;
   isAppsVisible: boolean;
-  /** Set for submission-review chats — enables (and highlights) the Replay tab. */
-  isReviewVisible: boolean;
-  /** Whether this chat has a submission under review (Replay tab is available). */
-  hasReview: boolean;
   showBrowserButton: boolean;
   onClose: () => void;
   onOpenTab: (tab: RightPanelTab) => void;
@@ -61,10 +56,6 @@ interface ConversationHeaderProps {
   messageCount: number;
   /** Whether the title is mid-animation — skips the resize-measuring tooltip. */
   isTitleAnimating: boolean;
-  canManageShare: boolean;
-  isShared: boolean;
-  /** Whether this chat is eligible to be turned into a project. */
-  canCreateProject: boolean;
   /**
    * When this chat was opened from a scheduled task, its trigger id — renders a
    * non-clickable "scheduled task" breadcrumb segment for orientation.
@@ -78,9 +69,8 @@ interface ConversationHeaderProps {
   isAppOversight?: boolean;
   /** The app owner's display name, appended to the oversight badge. */
   oversightOwnerName?: string | null;
-  onShare: () => void;
-  onExportMarkdown: () => void;
-  onCreateProject: () => void;
+  /** The shared chat actions (`useConversationActions().items`). */
+  actionItems?: ReactNode;
   panel: PanelControls;
 }
 
@@ -89,26 +79,11 @@ export function ConversationHeader({
   conversation,
   messageCount,
   isTitleAnimating,
-  canManageShare,
-  isShared,
-  canCreateProject,
   isAppOversight,
   oversightOwnerName,
-  onShare,
-  onExportMarkdown,
-  onCreateProject,
+  actionItems,
   panel,
 }: ConversationHeaderProps) {
-  const actionsProps = {
-    canManageShare,
-    isShared,
-    canCreateProject,
-    messageCount,
-    onShare,
-    onExportMarkdown,
-    onCreateProject,
-  };
-
   // Which tab the panel would show — mirror the panel's fallbacks so the strip
   // never highlights a tab the panel can't actually show. Only highlighted
   // while the panel is open; collapsing clears the highlight.
@@ -116,7 +91,6 @@ export function ConversationHeader({
   let resolvedTab: RightPanelTab = panel.activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
   if (resolvedTab === "runs" && !panel.scheduledRun) resolvedTab = "files";
-  if (resolvedTab === "review" && !panel.hasReview) resolvedTab = "files";
 
   // Radix won't fire onValueChange when the clicked tab already equals the
   // controlled value, so collapsing on an active-tab click has to happen here,
@@ -141,9 +115,222 @@ export function ConversationHeader({
     "truncate max-w-[360px] cursor-default",
     isAppConversation
       ? // Replicate the Projects detail title: text-2xl / semibold / tight.
-        "text-2xl font-semibold tracking-tight text-foreground"
-      : "text-base font-normal text-muted-foreground",
+        "text-lg md:text-2xl font-semibold tracking-tight text-foreground"
+      : "text-sm md:text-base font-normal text-muted-foreground",
   );
+
+  // On phones the app shell already has a bar for the sidebar toggle, so the
+  // title and its menu move into it instead of stacking a second bar below.
+  const isMobile = useIsMobile();
+  const [mobileTitleSlot, setMobileTitleSlot] = useState<HTMLElement | null>(
+    null,
+  );
+  useEffect(() => {
+    setMobileTitleSlot(
+      document.getElementById(MOBILE_HEADER_TITLE_CONTAINER_ID),
+    );
+  }, []);
+
+  const row = (
+    <div className="relative flex min-h-8 min-w-0 flex-1 items-center justify-between gap-2">
+      {/* Left side - conversation title + actions */}
+      <div className="flex items-center gap-2 min-w-0">
+        {conversationId && conversation && (
+          <div className="flex items-center flex-shrink min-w-0 gap-2">
+            {/* Project chats read as "{ProjectName}/{Chat title}" — the
+                  project segment (emoji + name, like the sidebar) links to the
+                  project. Hidden for viewers without project access. */}
+            {conversation.projectId && (
+              <ProjectTitlePrefix projectId={conversation.projectId} />
+            )}
+            {/* App-opened chats: an app glyph anchors the title, mirroring the
+                  Projects detail header's icon + name. */}
+            {isAppConversation && (
+              <AppWindow
+                className="h-[22px] w-[22px] shrink-0 text-foreground"
+                aria-hidden
+              />
+            )}
+            {/* Skip TruncatedTooltip while the title animates: its resize
+                  measurement re-renders on every TypingText tick, which loops
+                  past React's nested-update cap. */}
+            {panel.scheduledRun?.runId ? (
+              <ScheduledRunTitle
+                triggerId={panel.scheduledRun.triggerId}
+                runId={panel.scheduledRun.runId}
+                className={titleClassName}
+              />
+            ) : isTitleAnimating ? (
+              <h1 className={titleClassName}>
+                <TypingText
+                  text={getConversationDisplayTitle(
+                    conversation.title,
+                    conversation.messages,
+                  )}
+                  typingSpeed={35}
+                  showCursor
+                  cursorClassName="bg-muted-foreground"
+                />
+              </h1>
+            ) : (
+              <TruncatedTooltip
+                content={getConversationDisplayTitle(
+                  conversation.title,
+                  conversation.messages,
+                )}
+              >
+                <h1 className={titleClassName}>
+                  {getConversationDisplayTitle(
+                    conversation.title,
+                    conversation.messages,
+                  )}
+                </h1>
+              </TruncatedTooltip>
+            )}
+          </div>
+        )}
+        {isAppOversight && (
+          <Badge variant="secondary" className="shrink-0">
+            Viewing as administrator
+            {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
+          </Badge>
+        )}
+        {/* Desktop: chat actions next to the title */}
+        {conversationId && messageCount > 0 && actionItems && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="hidden md:inline-flex flex-shrink-0"
+                title="Chat actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Chat actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {actionItems}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      {/* Right side - desktop: the Files / Browser / Apps tab strip is always
+            visible (open or collapsed) so it never moves. Clicking a different
+            tab switches; clicking the already-open tab collapses the panel —
+            there is no separate collapse button. */}
+      <div className="hidden md:flex items-center flex-shrink-0">
+        <Tabs
+          value={panel.isOpen ? resolvedTab : ""}
+          activationMode="manual"
+          onValueChange={(value) => {
+            // Fires on any tab click while collapsed (value is "") and on a
+            // different-tab click while open. It never fires for the
+            // active-tab-while-open click (value unchanged), so it can't
+            // reopen right after handleTabMouseDown collapses the panel.
+            // Keyboard activation flows through here too.
+            panel.onOpenTab(value as RightPanelTab);
+          }}
+        >
+          <TabsList className="h-8">
+            {panel.scheduledRun && (
+              <TabsTrigger
+                value="runs"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("runs")}
+              >
+                <CalendarClock className="h-3 w-3" />
+                Runs
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="files"
+              className="text-xs px-3"
+              onMouseDown={handleTabMouseDown("files")}
+            >
+              <FileText className="h-3 w-3" />
+              Files
+            </TabsTrigger>
+            {panel.showBrowserButton && (
+              <TabsTrigger
+                value="browser"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("browser")}
+              >
+                <Globe className="h-3 w-3" />
+                Browser
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="apps"
+              className="text-xs px-3"
+              onMouseDown={handleTabMouseDown("apps")}
+            >
+              <AppWindow className="h-3 w-3" />
+              Apps
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {/* Right side - mobile: 3-dot dropdown */}
+      <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" title="More options">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">More options</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {actionItems}
+
+            <DropdownMenuItem
+              onSelect={() => {
+                if (panel.isArtifactOpen) {
+                  panel.onClose();
+                } else {
+                  panel.onOpenTab("files");
+                }
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              {panel.isArtifactOpen ? "Hide Files" : "Show Files"}
+            </DropdownMenuItem>
+            {panel.showBrowserButton && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (panel.isBrowserVisible) {
+                    panel.onClose();
+                  } else {
+                    panel.onOpenTab("browser");
+                  }
+                }}
+              >
+                <Globe className="h-4 w-4" />
+                {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() => {
+                if (panel.isAppsVisible) {
+                  panel.onClose();
+                } else {
+                  panel.onOpenTab("apps");
+                }
+              }}
+            >
+              <AppWindow className="h-4 w-4" />
+              {panel.isAppsVisible ? "Hide Apps" : "Show Apps"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
+
+  if (isMobile && conversationId && mobileTitleSlot) {
+    return createPortal(row, mobileTitleSlot);
+  }
 
   return (
     <div
@@ -152,223 +339,7 @@ export function ConversationHeader({
         !conversationId && "hidden",
       )}
     >
-      <div className="relative flex min-h-8 items-center justify-between gap-2">
-        {/* Left side - conversation title + actions */}
-        <div className="flex items-center gap-2 min-w-0">
-          {conversationId && conversation && (
-            <div className="flex items-center flex-shrink min-w-0 gap-2">
-              {/* Project chats read as "{ProjectName}/{Chat title}" — the
-                  project segment (emoji + name, like the sidebar) links to the
-                  project. Hidden for viewers without project access. */}
-              {conversation.projectId && (
-                <ProjectTitlePrefix projectId={conversation.projectId} />
-              )}
-              {/* App-opened chats: an app glyph anchors the title, mirroring the
-                  Projects detail header's icon + name. */}
-              {isAppConversation && (
-                <AppWindow
-                  className="h-[22px] w-[22px] shrink-0 text-foreground"
-                  aria-hidden
-                />
-              )}
-              {/* Skip TruncatedTooltip while the title animates: its resize
-                  measurement re-renders on every TypingText tick, which loops
-                  past React's nested-update cap. */}
-              {panel.scheduledRun?.runId ? (
-                <ScheduledRunTitle
-                  triggerId={panel.scheduledRun.triggerId}
-                  runId={panel.scheduledRun.runId}
-                  className={titleClassName}
-                />
-              ) : isTitleAnimating ? (
-                <h1 className={titleClassName}>
-                  <TypingText
-                    text={getConversationDisplayTitle(
-                      conversation.title,
-                      conversation.messages,
-                    )}
-                    typingSpeed={35}
-                    showCursor
-                    cursorClassName="bg-muted-foreground"
-                  />
-                </h1>
-              ) : (
-                <TruncatedTooltip
-                  content={getConversationDisplayTitle(
-                    conversation.title,
-                    conversation.messages,
-                  )}
-                >
-                  <h1 className={titleClassName}>
-                    {getConversationDisplayTitle(
-                      conversation.title,
-                      conversation.messages,
-                    )}
-                  </h1>
-                </TruncatedTooltip>
-              )}
-            </div>
-          )}
-          {isAppOversight && (
-            <Badge variant="secondary" className="shrink-0">
-              Viewing as administrator
-              {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
-            </Badge>
-          )}
-          {/* Desktop: chat actions (Share / Export) next to the title */}
-          {conversationId && messageCount > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="hidden md:inline-flex flex-shrink-0"
-                  title="Chat actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Chat actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <ChatActionItems {...actionsProps} />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-        {/* Right side - desktop: the Files / Browser / Apps tab strip is always
-            visible (open or collapsed) so it never moves. Clicking a different
-            tab switches; clicking the already-open tab collapses the panel —
-            there is no separate collapse button. */}
-        <div className="hidden md:flex items-center flex-shrink-0">
-          <Tabs
-            value={panel.isOpen ? resolvedTab : ""}
-            activationMode="manual"
-            onValueChange={(value) => {
-              // Fires on any tab click while collapsed (value is "") and on a
-              // different-tab click while open. It never fires for the
-              // active-tab-while-open click (value unchanged), so it can't
-              // reopen right after handleTabMouseDown collapses the panel.
-              // Keyboard activation flows through here too.
-              panel.onOpenTab(value as RightPanelTab);
-            }}
-          >
-            <TabsList className="h-8">
-              {panel.hasReview && (
-                <TabsTrigger
-                  value="review"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("review")}
-                >
-                  <PlayCircle className="h-3 w-3" />
-                  Replay
-                </TabsTrigger>
-              )}
-              {panel.scheduledRun && (
-                <TabsTrigger
-                  value="runs"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("runs")}
-                >
-                  <CalendarClock className="h-3 w-3" />
-                  Runs
-                </TabsTrigger>
-              )}
-              <TabsTrigger
-                value="files"
-                className="text-xs px-3"
-                onMouseDown={handleTabMouseDown("files")}
-              >
-                <FileText className="h-3 w-3" />
-                Files
-              </TabsTrigger>
-              {panel.showBrowserButton && (
-                <TabsTrigger
-                  value="browser"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("browser")}
-                >
-                  <Globe className="h-3 w-3" />
-                  Browser
-                </TabsTrigger>
-              )}
-              <TabsTrigger
-                value="apps"
-                className="text-xs px-3"
-                onMouseDown={handleTabMouseDown("apps")}
-              >
-                <AppWindow className="h-3 w-3" />
-                Apps
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        {/* Right side - mobile: 3-dot dropdown */}
-        <div className="flex md:hidden items-center gap-2 flex-shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" title="More options">
-                <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">More options</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <ChatActionItems {...actionsProps} />
-              {panel.hasReview && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    if (panel.isReviewVisible) {
-                      panel.onClose();
-                    } else {
-                      panel.onOpenTab("review");
-                    }
-                  }}
-                >
-                  <PlayCircle className="h-4 w-4" />
-                  {panel.isReviewVisible ? "Hide Replay" : "Show Replay"}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (panel.isArtifactOpen) {
-                    panel.onClose();
-                  } else {
-                    panel.onOpenTab("files");
-                  }
-                }}
-              >
-                <FileText className="h-4 w-4" />
-                {panel.isArtifactOpen ? "Hide Files" : "Show Files"}
-              </DropdownMenuItem>
-              {panel.showBrowserButton && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    if (panel.isBrowserVisible) {
-                      panel.onClose();
-                    } else {
-                      panel.onOpenTab("browser");
-                    }
-                  }}
-                >
-                  <Globe className="h-4 w-4" />
-                  {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (panel.isAppsVisible) {
-                    panel.onClose();
-                  } else {
-                    panel.onOpenTab("apps");
-                  }
-                }}
-              >
-                <AppWindow className="h-4 w-4" />
-                {panel.isAppsVisible ? "Hide Apps" : "Show Apps"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+      {row}
     </div>
   );
 }
@@ -417,57 +388,6 @@ function ProjectTitlePrefix({ projectId }: { projectId: string }) {
       <span className="text-muted-foreground/50 select-none" aria-hidden="true">
         /
       </span>
-    </>
-  );
-}
-
-/** Share / Export / Create project menu items, shared by desktop + mobile menus. */
-function ChatActionItems({
-  canManageShare,
-  isShared,
-  canCreateProject,
-  messageCount,
-  onShare,
-  onExportMarkdown,
-  onCreateProject,
-}: {
-  canManageShare: boolean;
-  isShared: boolean;
-  canCreateProject: boolean;
-  messageCount: number;
-  onShare: () => void;
-  onExportMarkdown: () => void;
-  onCreateProject: () => void;
-}) {
-  return (
-    <>
-      {canManageShare && (
-        <DropdownMenuItem onSelect={onShare}>
-          {isShared ? (
-            <>
-              <Users className="h-4 w-4 text-primary" />
-              <span className="text-primary">Shared</span>
-            </>
-          ) : (
-            <>
-              <Share2 className="h-4 w-4" />
-              Share
-            </>
-          )}
-        </DropdownMenuItem>
-      )}
-      {canCreateProject && (
-        <DropdownMenuItem onSelect={onCreateProject}>
-          <FolderPlus className="h-4 w-4" />
-          Create project
-        </DropdownMenuItem>
-      )}
-      {messageCount > 0 && (
-        <DropdownMenuItem onSelect={onExportMarkdown}>
-          <Download className="h-4 w-4" />
-          Export Markdown
-        </DropdownMenuItem>
-      )}
     </>
   );
 }

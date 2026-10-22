@@ -2,6 +2,22 @@ suite: test archestra platform -- Deployment/Service
 templates:
   - archestra-platform.yaml
 tests:
+  - it: leaves time for proxy draining and supervised shutdown
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: accepts a longer deployment shutdown budget
+    documentIndex: 1
+    set:
+      archestra.terminationGracePeriodSeconds: 180
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 180
+
   - it: preserves existing bulk environment imports on upgrade
     documentIndex: 1
     set:
@@ -494,6 +510,21 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].image
           value: docker.io/library/busybox:1.36
+
+  - it: gives wait-for-postgres the envFrom sources that supply the database URL
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.envFrom:
+        - secretRef:
+            name: external-db-env
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].envFrom
+          value:
+            - secretRef:
+                name: external-db-env
 
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
@@ -2550,6 +2581,78 @@ tests:
             key: "dedicated"
             operator: "Exists"
             effect: "NoSchedule"
+
+  # Affinity and topology spread tests
+  - it: should not have affinity or topologySpreadConstraints by default
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+      - isNull:
+          path: spec.template.spec.topologySpreadConstraints
+
+  - it: should render affinity and topologySpreadConstraints in the pod spec
+    documentIndex: 1
+    set:
+      archestra.affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: web
+      archestra.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: RELEASE-NAME
+              app.kubernetes.io/component: web
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: kubernetes.io/hostname
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints
+          value:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: RELEASE-NAME
+                  app.kubernetes.io/component: web
+
+  # archestra.topologySpreadConstraints is shared with the worker Deployment, so
+  # a constraint without a labelSelector must select web pods here.
+  - it: should fill in the web selector for topologySpreadConstraints without one
+    documentIndex: 1
+    release:
+      name: my-release
+    set:
+      archestra.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].labelSelector
+          value:
+            matchLabels:
+              app.kubernetes.io/name: archestra-platform
+              app.kubernetes.io/instance: my-release
+
+  # Topology spread selectors tell web pods apart from worker pods by this
+  # label, so it must stay on the web pod template.
+  - it: should label web pods with the web component
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: web
 
   # Kubernetes environment variable expansion tests
   # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion

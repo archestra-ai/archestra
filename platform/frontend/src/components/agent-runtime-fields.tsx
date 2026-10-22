@@ -15,6 +15,7 @@ import type {
   EnvVarDraft,
 } from "@/components/environment-variable-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
+import { useCredentialsPageHref } from "@/components/settings-link";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -47,6 +48,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type RuntimeCredentialDefinition,
+  useCanAttachCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -97,6 +99,7 @@ export function AgentRuntimeFields({
   onChange: (value: AgentRuntimeConfig | null) => void;
 }) {
   const enabledId = useId();
+  const credentialsHref = useCredentialsPageHref();
   const runtimeEnabled = useFeature("agentRuntime");
   const config = value ?? defaultAgentRuntime();
 
@@ -123,8 +126,10 @@ export function AgentRuntimeFields({
                 {value ? "Enabled" : "Disabled"}
               </Label>
               <FieldDescription>
-                {runtimeEnabled === false && value === null
-                  ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
+                {runtimeEnabled === false
+                  ? value === null
+                    ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
+                    : "Agent Runtime is off on this deployment, so runs fail. Turn this off to answer in regular conversations instead."
                   : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
               </FieldDescription>
             </div>
@@ -158,7 +163,7 @@ export function AgentRuntimeFields({
                   Configuration and secrets passed to the container. Manage
                   reusable credentials on the{" "}
                   <Link
-                    href="/settings/credentials"
+                    href={credentialsHref}
                     className="underline underline-offset-4"
                   >
                     Credentials
@@ -248,11 +253,13 @@ export function AgentRuntimeEnvironmentFields({
   hideDescription = false,
 }: RuntimeSectionProps & { hideLabel?: boolean; hideDescription?: boolean }) {
   const appName = useAppName();
+  const credentialsHref = useCredentialsPageHref();
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
   const runtimeEnabled = useFeature("agentRuntime");
   const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
+  const canAttach = useCanAttachCredential();
   const { data: canCreateCredential } = useHasPermissions({
     credential: ["create"],
   });
@@ -306,7 +313,7 @@ export function AgentRuntimeEnvironmentFields({
               it reads. Without a token it can use your tools through {appName}{" "}
               but can&apos;t push to a repo. Reusable credentials live on the{" "}
               <Link
-                href="/settings/credentials"
+                href={credentialsHref}
                 className="font-medium text-foreground underline underline-offset-4"
               >
                 Credentials
@@ -320,7 +327,6 @@ export function AgentRuntimeEnvironmentFields({
         staticLabel="Shared"
         installationDescription="Each user provides their own value."
         staticDescription="The same value is used for every run."
-        installationCalloutTitle="Each user provides their own value"
         requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
         promptedValueLabel="per-user"
         deferStaticSecretValue
@@ -328,7 +334,10 @@ export function AgentRuntimeEnvironmentFields({
         allowRequiredStaticSecret
         normalizeKey={uppercase}
         credentialBindingOptions={(runtimeCredentials.data ?? []).map(
-          toCredentialBindingOption,
+          (definition) => ({
+            ...toCredentialBindingOption(definition),
+            canAttach: canAttach(definition.id),
+          }),
         )}
       />
 

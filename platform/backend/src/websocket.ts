@@ -5,15 +5,18 @@ import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
   type ClientWebSocketMessageType,
+  LOCAL_MCP_INSTALLATION_STATES,
   type LocalMcpInstallationState,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
+  type OpenAppaValidationProgressMessage,
   type ServerWebSocketMessage,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import { betterAuth } from "@/auth";
+import { z } from "zod";
+import { betterAuth, userHasPermission } from "@/auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
@@ -21,6 +24,7 @@ import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   AgentRunModel,
+  AgentRunTranscriptModel,
   McpServerModel,
   ProjectAccessModel,
   ProjectModel,
@@ -35,6 +39,13 @@ import {
 } from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import { projectMcpDeploymentStatuses } from "@/services/mcp-deployment-statuses";
+import {
+  createPollingNotifyHub,
+  createPostgresNotifyHub,
+  type FanoutChannel,
+  type PgNotifyHub,
+} from "@/services/pg-notify-hub";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AgentRunRecord } from "@/types";
 
@@ -101,8 +112,19 @@ type MessageHandler = (
   clientContext: WebSocketClientContext,
 ) => Promise<void> | void;
 
-class WebSocketService {
+/** @public — exported for testability (one instance per simulated replica) */
+export class WebSocketService {
   private wss: WebSocketServer | null = null;
+  /**
+   * Relays MCP status events to every replica. A browser holds its socket on
+   * whichever pod the load balancer picked, which is rarely the pod doing the
+   * install, so a local-only broadcast leaves it waiting for a refetch.
+   */
+  private crossReplica: {
+    hub: PgNotifyHub;
+    channel: FanoutChannel;
+    unsubscribe: () => void;
+  } | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
   private agentRunAttachSubscriptions: Map<
@@ -259,6 +281,7 @@ class WebSocketService {
         message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
         clientContext,
         message.payload.includeSessionHistory ?? false,
+        message.payload.tailBytes,
       );
     },
     unsubscribe_agent_run_logs: (ws) => {
@@ -290,6 +313,8 @@ class WebSocketService {
     }
 
     logger.debug(`WebSocket server started on path ${path}`);
+
+    this.enableCrossReplicaDelivery(createCrossReplicaNotifyHub());
 
     this.startDeploymentMetricsPolling();
 
@@ -690,6 +715,7 @@ class WebSocketService {
     lines: number,
     clientContext: WebSocketClientContext,
     includeSessionHistory = false,
+    tailBytes?: number,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
     const abortController = new AbortController();
@@ -730,6 +756,24 @@ class WebSocketService {
       return;
     }
 
+    // An ended run's recording can open on its end: the start of its last
+    // turn and any earlier turns are left out and counted, for the viewer to
+    // load on request. Without a complete stored recording, the full path
+    // below sends what was retained.
+    if (session.endedAt && tailBytes) {
+      await this.refreshRetainedTranscript({ session, runId });
+      if (abortController.signal.aborted) return;
+      const sent = await this.streamAgentRunTail({
+        ws,
+        runId,
+        session,
+        tailBytes,
+        includeSessionHistory,
+        signal: abortController.signal,
+      });
+      if (sent || abortController.signal.aborted) return;
+    }
+
     let history = { complete: true, bytes: 0 };
     try {
       if (includeSessionHistory) {
@@ -756,26 +800,7 @@ class WebSocketService {
     if (abortController.signal.aborted) return;
 
     if (session.endedAt) {
-      if (session.virtualApiKeyId) {
-        const backend = resolveAgentRuntimeBackendDriver(session.backend);
-        const output = new AgentRuntimeOutputCapture({ backend, session });
-        try {
-          await output.recoverSnapshot(AbortSignal.timeout(30_000));
-          if (output.observedTranscriptBytes > 0) {
-            await agentRunTranscriptStore.persist({
-              runId: session.id,
-              transcript: output.completeTranscript,
-              observedBytes: output.observedTranscriptBytes,
-              readableTranscript: output.readableTranscript,
-            });
-          }
-        } catch (error) {
-          logger.warn(
-            { error, runId },
-            "Could not refresh retained terminal output",
-          );
-        }
-      }
+      if (!tailBytes) await this.refreshRetainedTranscript({ session, runId });
       const decoder = new StringDecoder("utf8");
       const transcript = await agentRunTranscriptStore
         .stream({
@@ -895,21 +920,167 @@ class WebSocketService {
     }
   }
 
+  /**
+   * Re-read a run's output from its workspace and store it, for a run whose
+   * terminal stays attachable (it keeps its key) and may have written more
+   * since it ended.
+   */
+  private async refreshRetainedTranscript(params: {
+    session: AgentRunRecord;
+    runId: string;
+  }): Promise<void> {
+    const { session, runId } = params;
+    if (!session.virtualApiKeyId) return;
+    const backend = resolveAgentRuntimeBackendDriver(session.backend);
+    const output = new AgentRuntimeOutputCapture({ backend, session });
+    try {
+      await output.recoverSnapshot(AbortSignal.timeout(30_000));
+      if (output.observedTranscriptBytes > 0) {
+        await agentRunTranscriptStore.persist({
+          runId: session.id,
+          transcript: output.completeTranscript,
+          observedBytes: output.observedTranscriptBytes,
+          readableTranscript: output.readableTranscript,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error, runId },
+        "Could not refresh retained terminal output",
+      );
+    }
+  }
+
+  /**
+   * Send the end of an ended run's complete recording and close the stream.
+   * False, having sent nothing, when no complete recording is stored.
+   */
+  private async streamAgentRunTail(params: {
+    ws: WebSocket;
+    runId: string;
+    session: AgentRunRecord;
+    tailBytes: number;
+    includeSessionHistory: boolean;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { ws, runId, session, signal } = params;
+    const decoder = new StringDecoder("utf8");
+    let sentOutput = false;
+    const send = (logs: string) => {
+      if (!logs || signal.aborted) return;
+      sentOutput = true;
+      this.sendToClient(ws, {
+        type: "agent_run_logs",
+        payload: { runId, logs },
+      });
+    };
+    const fail = (error: unknown, message: string) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: session.taskId },
+        message,
+      );
+      if (signal.aborted) return;
+      this.sendToClient(ws, {
+        type: "agent_run_logs_error",
+        payload: { runId, error: message },
+      });
+      this.unsubscribeAgentRunLogs(ws);
+    };
+    let tail: Awaited<ReturnType<typeof agentRunTranscriptStore.streamTail>>;
+    try {
+      tail = await agentRunTranscriptStore.streamTail({
+        runId: session.id,
+        maxBytes: params.tailBytes,
+        onChunk: (chunk) => send(decoder.write(chunk)),
+      });
+    } catch (error) {
+      // Once part of the tail is out, the full recording cannot follow it:
+      // the viewer would see the end of the run spliced in front of the run.
+      if (!sentOutput) {
+        logger.warn(
+          { error, sessionId: session.id, taskId: session.taskId },
+          "Could not read the end of the Agent run transcript",
+        );
+        return false;
+      }
+      fail(error, "Could not read the end of the recording");
+      return true;
+    }
+    if (!tail || signal.aborted) return Boolean(tail);
+    send(decoder.end());
+    let historyBytes = 0;
+    if (params.includeSessionHistory) {
+      try {
+        historyBytes = await this.sessionHistoryBytes(session);
+      } catch (error) {
+        fail(error, "Could not read session history");
+        return true;
+      }
+    }
+    if (signal.aborted) return true;
+    // A session's earlier turns are left out of a tail entirely, so they
+    // count as omitted: a full subscription with the session's history
+    // streams them along with the rest of this turn's recording.
+    this.sendToClient(ws, {
+      type: "agent_run_logs_ended",
+      payload: {
+        runId,
+        source: "full",
+        truncated: false,
+        totalBytes: tail.uncompressedBytes + historyBytes,
+        omittedBytes: tail.omittedBytes + historyBytes,
+      },
+    });
+    this.unsubscribeAgentRunLogs(ws);
+    return true;
+  }
+
+  /** A session's earlier turns, a page at a time, oldest first. */
+  private async *previousTurnPages(
+    session: AgentRunRecord,
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentRunRecord[]> {
+    let afterId: string | undefined;
+    while (!signal?.aborted) {
+      const turns = await AgentRunModel.listPreviousTurns({
+        run: session,
+        afterId,
+      });
+      if (!turns.length) return;
+      yield turns;
+      afterId = turns.at(-1)?.id;
+    }
+  }
+
+  /**
+   * The stored size of a session's earlier turns: what
+   * `streamAgentSessionHistory` counts, without sending them.
+   */
+  private async sessionHistoryBytes(session: AgentRunRecord): Promise<number> {
+    let bytes = 0;
+    for await (const turns of this.previousTurnPages(session)) {
+      const sizes = await AgentRunTranscriptModel.findSizesByRunIds(
+        turns.map((turn) => turn.id),
+      );
+      for (const turn of turns) {
+        bytes += turnOutputBytes(turn, sizes.get(turn.id));
+      }
+    }
+    return bytes;
+  }
+
   private async streamAgentSessionHistory(params: {
     ws: WebSocket;
     runId: string;
     session: AgentRunRecord;
     signal: AbortSignal;
   }): Promise<{ complete: boolean; bytes: number }> {
-    let afterId: string | undefined;
     let complete = true;
     let bytes = 0;
-    while (!params.signal.aborted) {
-      const turns = await AgentRunModel.listPreviousTurns({
-        run: params.session,
-        afterId,
-      });
-      if (!turns.length) break;
+    for await (const turns of this.previousTurnPages(
+      params.session,
+      params.signal,
+    )) {
       for (const turn of turns) {
         if (params.signal.aborted) return { complete, bytes };
         const decoder = new StringDecoder("utf8");
@@ -929,12 +1100,9 @@ class WebSocketService {
           complete = false;
           send(turn.logs ?? "");
         }
-        bytes +=
-          transcript?.uncompressedBytes ??
-          Buffer.byteLength(turn.logs ?? "", "utf8");
+        bytes += turnOutputBytes(turn, transcript?.uncompressedBytes);
         send("\r\n\u001b[0m");
       }
-      afterId = turns.at(-1)?.id;
     }
     return { complete, bytes };
   }
@@ -1089,6 +1257,28 @@ class WebSocketService {
       this.sendToClient(ws, {
         type: "mcp_exec_error",
         payload: { serverId, error: "MCP server not found" },
+      });
+      return;
+    }
+
+    // A shell runs commands inside the server's container in the cluster, so
+    // it takes the right to manage installations, not just to see one: a
+    // member's own installation does not open a shell.
+    const mayOpenShell =
+      clientContext.userIsMcpServerAdmin ||
+      (await userHasPermission(
+        clientContext.userId,
+        clientContext.organizationId,
+        "mcpServerInstallation",
+        "update",
+      ));
+    if (!mayOpenShell) {
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: {
+          serverId,
+          error: "Opening a shell needs permission to manage MCP servers.",
+        },
       });
       return;
     }
@@ -1326,55 +1516,49 @@ class WebSocketService {
     // Build statuses from the runtime manager for this client
     const buildStatuses = (
       summary: typeof McpServerRuntimeManager.statusSummary,
-    ): Record<string, McpDeploymentStatusEntry> => {
-      const result: Record<string, McpDeploymentStatusEntry> = {};
+    ): Record<string, McpDeploymentStatusEntry> =>
+      projectMcpDeploymentStatuses(summary, localServerIds);
 
-      for (const serverId of localServerIds) {
-        const deploymentStatus = summary.mcpServers[serverId];
-        if (deploymentStatus) {
-          result[serverId] = {
-            state: deploymentStatus.state,
-            message: deploymentStatus.message,
-            error: deploymentStatus.error,
-            restartCount: deploymentStatus.restartCount,
-            podAge: deploymentStatus.podAge,
-            podName: deploymentStatus.podName,
-            deploymentName: deploymentStatus.deploymentName ?? undefined,
-          };
-        } else {
-          result[serverId] = {
-            state: "not_created",
-            message: "Deployment not created",
-            error: null,
-          };
-        }
-      }
-
-      return result;
-    };
-
-    // Refresh (through the shared in-flight guard) and build initial statuses
-    await this.refreshMcpDeploymentStates();
-
-    // The awaits above (DB + refresh) may outlive the socket: revalidate
-    // before registering, or we would start polling for a dead client
+    // Clients subscribe on every full page load and navigation, at the same
+    // moment as the page's own API requests, and a full refresh is heavy work
+    // on this event loop. Answer from the summary an earlier refresh filled,
+    // and refresh only when it may be out of date — after this handler, never
+    // inside it. Before any refresh there is nothing true to answer with, so
+    // the first statuses follow that refresh.
+    // The awaits above may outlive the socket: revalidate before registering,
+    // or we would start polling for a dead client.
     if (ws.readyState !== WS.OPEN) {
       return;
     }
-
-    const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
-
-    // Send initial statuses
-    this.sendToClient(ws, {
-      type: "mcp_deployment_statuses",
-      payload: { statuses },
-    });
+    let sentStatusesJson: string | null = null;
+    if (this.lastMcpDeploymentRefreshAt > 0) {
+      const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
+      sentStatusesJson = JSON.stringify(statuses);
+      this.sendToClient(ws, {
+        type: "mcp_deployment_statuses",
+        payload: { statuses },
+      });
+    }
 
     this.mcpDeploymentStatusSubscriptions.set(ws, {
       buildStatuses,
-      lastStatusesJson: JSON.stringify(statuses),
+      // Unsent: the push after the refresh below sends whatever it finds.
+      lastStatusesJson: sentStatusesJson ?? "",
     });
     this.startMcpDeploymentStatusPollingIfNeeded();
+
+    if (!this.mcpDeploymentSummaryIsCurrent()) {
+      setImmediate(() => {
+        void this.refreshMcpDeploymentStates()
+          .then(() => this.pushMcpDeploymentStatusesToSubscribers())
+          .catch((error) => {
+            logger.error(
+              { error },
+              "Failed to refresh MCP deployment statuses for a new subscriber",
+            );
+          });
+      });
+    }
 
     logger.info("MCP deployment status client subscribed");
   }
@@ -1427,11 +1611,7 @@ class WebSocketService {
     // cluster events and notifies us to push — the poll is only a slow
     // resync safety net against missed events. Without watchers (missing
     // `watch` RBAC, streams down) it stays the primary refresh path.
-    if (
-      McpServerRuntimeManager.deploymentStateWatchersActive &&
-      Date.now() - this.lastMcpDeploymentRefreshAt <
-        MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS
-    ) {
+    if (this.mcpDeploymentSummaryIsCurrent()) {
       return;
     }
 
@@ -1517,6 +1697,20 @@ class WebSocketService {
     }
   }
 
+  /**
+   * Whether the runtime summary can be trusted without a refresh: the K8s
+   * watch streams keep it current on cluster events, and the last full
+   * refresh is inside the resync window that guards against missed events.
+   */
+  private mcpDeploymentSummaryIsCurrent(): boolean {
+    return (
+      McpServerRuntimeManager.deploymentStateWatchersActive &&
+      this.lastMcpDeploymentRefreshAt > 0 &&
+      Date.now() - this.lastMcpDeploymentRefreshAt <
+        MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS
+    );
+  }
+
   private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {
     if (ws.readyState === WS.OPEN) {
       ws.send(JSON.stringify(message));
@@ -1577,7 +1771,22 @@ class WebSocketService {
     );
   }
 
+  /**
+   * Route MCP status broadcasts through `hub` so clients on every replica
+   * receive them. Without it (tests, a process that never started the server)
+   * broadcasts reach this process's clients only.
+   */
+  enableCrossReplicaDelivery(hub: PgNotifyHub): void {
+    this.disableCrossReplicaDelivery();
+    const channel = hub.fanout(CROSS_REPLICA_CHANNEL);
+    const unsubscribe = channel.subscribe((message) =>
+      this.deliverCrossReplicaEvent(message),
+    );
+    this.crossReplica = { hub, channel, unsubscribe };
+  }
+
   stop() {
+    this.disableCrossReplicaDelivery();
     this.mcpDeploymentStatusRefreshUnsubscribe?.();
     this.mcpDeploymentStatusRefreshUnsubscribe = null;
     // SPDX-SnippetBegin
@@ -1697,10 +1906,12 @@ class WebSocketService {
     status: LocalMcpInstallationState,
     error: string | null,
   ): void {
-    if (!this.wss) return;
-    this.broadcast({
-      type: "mcp_installation_status",
-      payload: { serverId, status, error },
+    this.relayToAllReplicas({
+      kind: "mcp_installation_status",
+      serverId,
+      status,
+      // Bounded so the event always fits a NOTIFY payload.
+      error: error === null ? null : error.slice(0, MAX_RELAYED_ERROR_LENGTH),
     });
   }
 
@@ -1709,25 +1920,29 @@ class WebSocketService {
     serverIds?: string[];
     catalogIds?: string[];
   }): void {
-    if (!this.wss) return;
     const serverIds = [...new Set(params.serverIds ?? [])];
     const catalogIds = [...new Set(params.catalogIds ?? [])];
     if (serverIds.length === 0 && catalogIds.length === 0) return;
 
-    this.sendToClients(
-      {
-        type: "mcp_servers_changed",
-        payload: { change: "uninstalled", serverIds, catalogIds },
-      },
-      (client) => {
-        const context = this.clientContexts.get(client);
-        return (
-          context !== undefined &&
-          (params.organizationId === null ||
-            context.organizationId === params.organizationId)
-        );
-      },
-    );
+    // A bulk uninstall can name more ids than one NOTIFY payload holds; split
+    // it, since clients evict each id independently.
+    for (let start = 0; ; start += MAX_RELAYED_IDS_PER_EVENT) {
+      const serverChunk = serverIds.slice(
+        start,
+        start + MAX_RELAYED_IDS_PER_EVENT,
+      );
+      const catalogChunk = catalogIds.slice(
+        start,
+        start + MAX_RELAYED_IDS_PER_EVENT,
+      );
+      if (serverChunk.length === 0 && catalogChunk.length === 0) break;
+      this.relayToAllReplicas({
+        kind: "mcp_servers_changed",
+        organizationId: params.organizationId,
+        serverIds: serverChunk,
+        catalogIds: catalogChunk,
+      });
+    }
   }
 
   broadcastConversationUpdated(
@@ -1748,12 +1963,108 @@ class WebSocketService {
       },
     );
   }
+
+  /**
+   * Push one validation run's progress to the user who started it, on every
+   * replica: the run's request and that user's socket rarely share a pod.
+   * Fire-and-forget; a file's steps are trimmed to fit one relay message.
+   */
+  sendOpenAppaValidationProgress(params: {
+    userId: string;
+    organizationId: string;
+    payload: OpenAppaValidationProgressMessage["payload"];
+  }): void {
+    this.relayToAllReplicas(fitValidationProgressEvent(params));
+  }
+
+  private relayToAllReplicas(event: CrossReplicaEvent): void {
+    if (!this.crossReplica) {
+      this.deliverToLocalClients(event);
+      return;
+    }
+    // Publishing delivers to this replica's subscriber synchronously, then
+    // fans out to the others; the hub drops its own echo.
+    void this.crossReplica.channel.publish(JSON.stringify(event));
+  }
+
+  private deliverCrossReplicaEvent(message: string): void {
+    let event: CrossReplicaEvent;
+    try {
+      event = CrossReplicaEventSchema.parse(JSON.parse(message));
+    } catch (error) {
+      logger.warn({ error }, "Ignoring a malformed cross-replica MCP event");
+      return;
+    }
+    this.deliverToLocalClients(event);
+  }
+
+  private deliverToLocalClients(event: CrossReplicaEvent): void {
+    if (!this.wss) return;
+
+    if (event.kind === "mcp_installation_status") {
+      // Clients classify runtime alerts from both feeds together. A reinstall
+      // reports "success" only after the installing replica has seen the new
+      // pod ready, but the deployment feed is pushed on watch events and can
+      // still carry the restart gap ("not_created"), which reads as "Not
+      // running" until the next push. Send this replica's current deployment
+      // states first so a client never pairs a fresh installation status with
+      // a stale runtime state.
+      this.pushMcpDeploymentStatusesToSubscribers();
+      this.broadcast({
+        type: "mcp_installation_status",
+        payload: {
+          serverId: event.serverId,
+          status: event.status,
+          error: event.error,
+        },
+      });
+      return;
+    }
+
+    if (event.kind === "openappa_validation_progress") {
+      const { userId, organizationId, payload } = event;
+      this.sendToClients(
+        { type: "openappa_validation_progress", payload },
+        (client) => {
+          const context = this.clientContexts.get(client);
+          return (
+            context?.userId === userId &&
+            context.organizationId === organizationId
+          );
+        },
+      );
+      return;
+    }
+
+    const { organizationId, serverIds, catalogIds } = event;
+    this.sendToClients(
+      {
+        type: "mcp_servers_changed",
+        payload: { change: "uninstalled", serverIds, catalogIds },
+      },
+      (client) => {
+        const context = this.clientContexts.get(client);
+        return (
+          context !== undefined &&
+          (organizationId === null || context.organizationId === organizationId)
+        );
+      },
+    );
+  }
+
+  private disableCrossReplicaDelivery(): void {
+    if (!this.crossReplica) return;
+    const { hub, unsubscribe } = this.crossReplica;
+    this.crossReplica = null;
+    unsubscribe();
+    void hub.close();
+  }
 }
 
 const websocketService = new WebSocketService();
 
 /**
- * Push an install-status update to all connected clients. Call this from
+ * Push an install-status update to connected clients on every replica. Call this from
  * any code path that writes mcp_server.local_installation_status so the UI
  * doesn't depend on the 2s React Query poll catching the change.
  */
@@ -1765,7 +2076,10 @@ export function broadcastMcpInstallationStatus(
   websocketService.broadcastMcpInstallationStatus(serverId, status, error);
 }
 
-/** Push MCP removals to every open client in the affected organization. */
+/**
+ * Push MCP removals to every open client in the affected organization, on
+ * every replica.
+ */
 export function broadcastMcpServersChanged(params: {
   organizationId: string | null;
   serverIds?: string[];
@@ -1841,4 +2155,182 @@ function describeExecFailure(
   }
 
   return undefined;
+}
+
+// =============================================================================
+// Internal
+// =============================================================================
+
+const CROSS_REPLICA_CHANNEL = "websocket_mcp_events";
+const MAX_RELAYED_ERROR_LENGTH = 4_000;
+const MAX_RELAYED_IDS_PER_EVENT = 50;
+/** Room left for a relayed event under the hub's 7,900-byte NOTIFY envelope. */
+const MAX_RELAYED_EVENT_BYTES = 7_600;
+const MAX_PROGRESS_ERROR_LENGTH = 2_000;
+const MAX_PROGRESS_STEP_ERROR_LENGTH = 500;
+
+const ValidationStatusSchema = z.enum(["passed", "failed", "cannot_run"]);
+const ValidationProgressPayloadSchema = z.discriminatedUnion("phase", [
+  z.object({
+    token: z.string(),
+    phase: z.literal("started"),
+    paths: z.array(z.string()),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_started"),
+    path: z.string(),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_finished"),
+    path: z.string(),
+    status: ValidationStatusSchema,
+    assertionCount: z.number(),
+    durationMs: z.number(),
+    error: z.string().nullable().optional(),
+    steps: z.array(
+      z.object({
+        line: z.number(),
+        tool: z.string(),
+        expected: z.string(),
+        actual: z.string().nullable(),
+        status: ValidationStatusSchema,
+        error: z.string().nullable().optional(),
+      }),
+    ),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("finished"),
+    runId: z.string().nullable(),
+    error: z.string().optional(),
+  }),
+]);
+
+const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("mcp_installation_status"),
+    serverId: z.string(),
+    status: z.enum(LOCAL_MCP_INSTALLATION_STATES),
+    error: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal("mcp_servers_changed"),
+    organizationId: z.string().nullable(),
+    serverIds: z.array(z.string()),
+    catalogIds: z.array(z.string()),
+  }),
+  z.object({
+    kind: z.literal("openappa_validation_progress"),
+    userId: z.string(),
+    organizationId: z.string(),
+    payload: ValidationProgressPayloadSchema,
+  }),
+]);
+
+type CrossReplicaEvent = z.infer<typeof CrossReplicaEventSchema>;
+type ValidationProgressEvent = Extract<
+  CrossReplicaEvent,
+  { kind: "openappa_validation_progress" }
+>;
+
+/**
+ * Bounds a progress event so it always fits one NOTIFY payload, measured as
+ * the hub sends it: JSON-encoded again inside its envelope. Error text is cut
+ * first; then a file's steps are dropped, passed ones before the failing or
+ * unrunnable ones the reader needs. The recorded run keeps every step.
+ */
+function fitValidationProgressEvent(params: {
+  userId: string;
+  organizationId: string;
+  payload: OpenAppaValidationProgressMessage["payload"];
+}): ValidationProgressEvent {
+  const event = { kind: "openappa_validation_progress" as const, ...params };
+  const { payload } = params;
+  switch (payload.phase) {
+    // Paths are short in practice. An event over the NOTIFY limit still
+    // reaches this replica's clients; the hub logs the miss.
+    case "started":
+    case "file_started":
+      return event;
+    case "finished":
+      return payload.error === undefined
+        ? event
+        : {
+            ...event,
+            payload: {
+              ...payload,
+              error: truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+            },
+          };
+  }
+  const fitted = {
+    ...payload,
+    error:
+      payload.error == null
+        ? payload.error
+        : truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+    steps: [] as typeof payload.steps,
+  };
+  let size = relayedSize({ ...event, payload: fitted });
+  const ranked = payload.steps
+    .map((step, index) => ({
+      index,
+      step: {
+        ...step,
+        error:
+          step.error == null
+            ? step.error
+            : truncate(step.error, MAX_PROGRESS_STEP_ERROR_LENGTH),
+      },
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.step.status === "passed") -
+          Number(b.step.status === "passed") || a.index - b.index,
+    );
+  const kept: typeof ranked = [];
+  for (const entry of ranked) {
+    // Inside the envelope a step adds its escaped encoding and a comma.
+    const added = relayedSize(entry.step) - 1;
+    if (size + added > MAX_RELAYED_EVENT_BYTES) continue;
+    size += added;
+    kept.push(entry);
+  }
+  fitted.steps = kept.sort((a, b) => a.index - b.index).map(({ step }) => step);
+  return { ...event, payload: fitted };
+}
+
+/** Bytes `value` takes once encoded as a string inside a fan-out envelope. */
+function relayedSize(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(JSON.stringify(value)));
+}
+
+function truncate(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+}
+
+/**
+ * Same endpoint choice as the chat and A2A notifiers: polling compatibility
+ * describes the database endpoint (a transaction pooler cannot hold a
+ * LISTEN), so it applies here too and degrades to same-replica delivery.
+ */
+function createCrossReplicaNotifyHub(): PgNotifyHub {
+  return config.chat.activeRun.pollingCompatibilityEnabled
+    ? createPollingNotifyHub()
+    : createPostgresNotifyHub(
+        config.chat.activeRun.notifyDatabaseUrl || config.database.url,
+      );
+}
+
+/**
+ * What a turn's output counts for: its stored recording's size, or its
+ * retained log's when nothing is stored.
+ */
+function turnOutputBytes(
+  turn: Pick<AgentRunRecord, "logs">,
+  storedBytes: number | undefined,
+): number {
+  return storedBytes ?? Buffer.byteLength(turn.logs ?? "", "utf8");
 }

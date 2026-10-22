@@ -21,6 +21,9 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+
+setupTestCacheManager();
 
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;
@@ -236,7 +239,7 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       error: "invalid_scope",
-      error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+      error_description: "Request only scopes granted to this OAuth client",
     });
   });
 
@@ -282,7 +285,7 @@ describe("auth routes", () => {
     expect(storedToken?.clientId).toBe(oauthClient.clientId);
     expect(storedToken?.userId).toBeNull();
     expect(storedToken?.scopes).toEqual([MCP_GATEWAY_OAUTH_SCOPE]);
-    expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
+    expect(storedToken?.referenceId).toBe(`oauth-client:${oauthClient.id}`);
   });
 
   test("forwards client_secret_basic credentials to better-auth as client_secret_post on the authorization_code grant", async ({
@@ -408,7 +411,7 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       error: "invalid_scope",
-      error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
+      error_description: "Request only scopes granted to this OAuth client",
     });
   });
 
@@ -900,6 +903,35 @@ describe("auth routes", () => {
         configurable: true,
       });
     }
+  });
+
+  test("explains that an expired OAuth consent request must be restarted", async () => {
+    // Real better-auth: its signed-query check is the behavior under test.
+    vi.mocked(betterAuth.handler).mockRestore();
+    const expiredAtSeconds = Math.floor(Date.now() / 1000) - 60;
+    const oauthQuery = new URLSearchParams({
+      response_type: "code",
+      client_id: "test-client",
+      redirect_uri: "http://127.0.0.1:53280/callback",
+      scope: "mcp",
+      code_challenge: "z3m9itT_If5IIoYttJt26gisBUMM2ywTcv9eqqIZvFE",
+      code_challenge_method: "S256",
+      exp: String(expiredAtSeconds),
+      ba_iat: String((expiredAtSeconds - 600) * 1000),
+      sig: "Xh2WFq2Gyw6f7+noAqYrOse947K9QDXU20UwL8w8VNs=",
+    }).toString();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/consent",
+      headers: { origin: config.frontendBaseUrl },
+      payload: { accept: true, scope: "mcp", oauth_query: oauthQuery },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "This authorization request has expired. Go back to the application and connect again to start a new request.",
+    );
   });
 
   describe("x-archestra-client-ip is never forwarded from client input", () => {

@@ -1,6 +1,6 @@
 packages:
   - "backend"
-  - "drizzle-migration-linter"
+  - "tools/drizzle-migration-linter"
   - "frontend"
   - "shared"
   - "archestra-rs/napi-loader"
@@ -9,7 +9,7 @@ packages:
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
   - "e2e-tests"
-  - "docs-screenshots"
+  - "tools/docs-screenshots"
 
 catalog:
   ai: ^6.0.193
@@ -27,6 +27,9 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.3.4
 overrides:
+  # iconv-lite 0.6.x publishes a .idea/ folder, which sandboxed agents can't
+  # write, so installs fail there. 0.7 keeps the same API and ships without it.
+  iconv-lite@<0.7: ^0.7.2
   # CVE-2026-49356 (GHSA-4x5r-pxfx-6jf8, LOW, arbitrary source-map read via
   # sourceMappingURL handling) fixed in 7.29.6. Transitive-only (build tooling),
   # so an override is the only way to lift every resolution past the vulnerable
@@ -41,14 +44,20 @@ overrides:
   browserslist: '>=4.28.7'
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
-  protobufjs: '>=8.6.0'
+  # GHSA-jfj6-75fj-8934 (map prototype mutation) fixed in 8.6.5,
+  # GHSA-j3f2-48v5-ccww (infinite loop in .proto option parsing) in 8.6.6.
+  protobufjs: '>=8.6.6'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.5
-  # CVE / GHSA-395f-4hp3-45gv (HIGH, CVSS 8.7): quadratic-complexity DoS in
-  # shell-quote's parse() on plain space-separated input. Vulnerable range is
-  # <= 1.8.4, fixed in 1.9.0 — the floor must be >=1.9.0, since a >=1.8.4 floor
-  # still resolves the vulnerable 1.8.4.
-  shell-quote: '>=1.9.0'
+  # CVE-2026-112942 (HIGH, command injection) affects >=7.0.0 <=7.3.6 and is
+  # fixed in 7.3.7. Transitive-only (vitest, @vitest/mocker and
+  # vite-tsconfig-paths resolve it), so the override is the only way to lift
+  # every resolution past the vulnerable range.
+  vite: 7.3.7
+  # GHSA-395f-4hp3-45gv (HIGH): quadratic-complexity DoS in shell-quote's
+  # parse(), fixed in 1.9.0. GHSA-pqg4-j6r4-53mv (CVE-2026-102422, CRITICAL):
+  # command injection in quote() via a line terminator after a { comment }
+  # token, vulnerable >=1.8.4 <1.11.0 — the floor must be >=1.11.0.
+  shell-quote: '>=1.11.0'
   ws@>=8: '>=8.21.0'
   # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
   # catch; force that edge to the CVE-2026-48779 fix too.
@@ -63,16 +72,24 @@ overrides:
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
   form-data@<4: '>=3.0.5 <4'
-  '@hono/node-server': 1.19.14
-  body-parser: 2.2.1
-  # GHSA-cmwh-pvxp-8882 (fixed 3.4.11) and GHSA-c2j3-45gr-mqc4 (fixed 3.4.12).
-  # Pinned exact so dompurify stays deduped to one version.
-  dompurify: 3.4.13
+  # GHSA-frvp-7c67-39w9 (serve-static path traversal) fixed in 1.19.15.
+  # Bounded to <2 to keep the MCP SDK on the 1.x line.
+  '@hono/node-server': '>=1.19.15 <2'
+  # GHSA-v422-hmwv-36x6 (invalid limit disables size enforcement) fixed in
+  # 2.3.0.
+  body-parser: '>=2.3.0 <3'
+  # GHSA-cmwh-pvxp-8882 (fixed 3.4.11), GHSA-c2j3-45gr-mqc4 (fixed 3.4.12),
+  # GHSA-p98j-92pf-mc4p and GHSA-6688-9rhm-gjv2 (IN_PLACE XSS, fixed 3.4.16).
+  # One range for every consumer keeps dompurify deduped to one version.
+  dompurify: '>=3.4.16 <4'
   glob: 11.1.0
   # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
   esbuild: '>=0.28.1'
   # CVE-2026-77301 (HIGH, excessive memory allocation) fixed in 0.6.1.
   adm-zip: 0.6.1
+  # CVE-2026-111755 and CVE-2026-111756 (both HIGH) fixed in 1.16.1.
+  # Transitive-only (via axios), so an override lifts every resolution.
+  follow-redirects: '>=1.16.1'
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1
@@ -84,10 +101,14 @@ overrides:
   # in 4.3.1.
   # CVE-2026-84375: resource consumption fixed in 4.3.2.
   js-yaml: '>=4.3.2 <5'
-  qs: 6.15.2
+  # GHSA-4mjr-xmp4-gh2g (DoS via isBuffer) and GHSA-x5fp-wj9c-mxmx (array
+  # limit bypass) fixed in 6.16.0.
+  qs: '>=6.16.0 <7'
   d3-path: 3.1.0
-  # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
-  hono: 4.12.25
+  # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25;
+  # later JSX XSS, cross-request disclosure, DoS and parser advisories
+  # (GHSA-hxh3-vqpv-xpqv and others) are all fixed by 4.13.7.
+  hono: '>=4.13.7 <5'
   kysely: 0.28.17
   lodash-es: 4.18.1
   fast-xml-parser: 5.7.2
@@ -128,9 +149,21 @@ overrides:
   # GHSA-r28c-9q8g-f849 (HIGH, path traversal) fixed in 8.5.18. The image
   # carried two postcss copies (8.5.11 and 8.5.17) under the old >=8.5.10
   # floor, so the floor has to clear the higher of the two fixes.
-  postcss: '>=8.5.18'
+  # GHSA-fxqj-rqcc-2cmp (incomplete fix of the .map read) fixed in 8.5.23.
+  postcss: '>=8.5.23'
   # CVE-2026-90711 (CRITICAL, authentication bypass by spoofing) fixed in 2.0.8.
   proxy-addr: '>=2.0.8 <3'
+  # GHSA-238p-pmpm-9mq7 (low, prototype pollution in settings) fixed in 0.18.2;
+  # no 0.16.x fix exists. mermaid 11 declares ^0.16.45 but only calls the public
+  # renderToString API, and mermaid 12 itself moved to ^0.18.0. Pinned to
+  # 0.18.10 because 0.18.11 is deprecated upstream (it shipped 0.19.0's
+  # breaking strict-mode change).
+  katex: 0.18.10
+  # sprintf-js <=1.1.3 has a medium advisory with no patched release. Its only
+  # path is mammoth -> argparse@1 -> sprintf-js. argparse 2.x drops that edge.
+  # The backend only imports mammoth's library API; mammoth's own CLI calls the
+  # argparse 1 API and does not work under this override.
+  mammoth>argparse: 2.0.1
   # CVE-2026-93749 (HIGH, improper validation of specified quantity) fixed in
   # 1.2.2.
   source-map-js: '>=1.2.2'
@@ -141,22 +174,49 @@ overrides:
   # fix) keeps its own resolution.
   nanoid@<4: '>=3.3.18 <4'
   uuid@^11: '>=11.1.1'
+  # GHSA-w5hq-g745-h8pq (missing buffer bounds check in v3/v5/v6) is fixed only
+  # on the 11 line. msal-node (^8), @sentry/webpack-plugin (^9) and botbuilder
+  # (^10) only call v4 through named imports, which 11 still exports for CJS.
+  # Bounded to <12 because 12 drops the CommonJS build.
+  uuid@<11: '>=11.1.1 <12'
   # CVE-2026-69192 (HIGH) affects <=10.3.0, fixed in 10.3.1 — the previous
   # >=10.1.1 floor resolved 10.2.0, inside the vulnerable range.
-  ip-address: '>=10.3.1'
+  # Then GHSA-rpw4-54j3-4h4q and GHSA-2vr4-cq9g-pvrc (SSRF classifier gaps,
+  # fixed 10.5.1), GHSA-j6r3-76f7-8jcv and GHSA-h3mg-xc3c-68pw (fixed 10.7.1).
+  ip-address: '>=10.7.1'
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
   # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8, then CVE-2026-69152 (HIGH,
   # same class again) fixed in 5.0.9.
   # CVE-2026-102276 and CVE-2026-102278 require the 5.0.11 fix.
   brace-expansion: '>=5.0.11'
-  smol-toml: '>=1.6.1'
-  '@opentelemetry/exporter-prometheus': 0.217.0
-  '@opentelemetry/sdk-node': 0.217.0
+  # GHSA-r4xh-jqrq-34v2 (quadratic-time parse) fixed in 1.9.0.
+  smol-toml: '>=1.9.0'
+  # GHSA-ch52-4w7c-c8xp (cross-user cached response via max-stale) affects
+  # <=4.2.0. Transitive via cacheable-request.
+  http-cache-semantics: '>=4.3.0 <5'
+  # GHSA-jggr-w7fw-pc2j (stack exhaustion) fixed in 4.1.0. Transitive via
+  # pino-pretty.
+  fast-copy: '>=4.1.0 <5'
+  # GHSA-px8p-9vwx-vf98 (ZIP64 infinite loop) fixed in 0.4.9. Scoped to the
+  # 0.4 line posthog-js uses; the 0.8 line is unaffected.
+  fflate@<0.5: '>=0.4.9 <0.5'
+  # GHSA-866g-f22w-33x8 (uncontrolled resource consumption) fixed in 4.0.33.
+  # The @ai-sdk/* providers pin exact 4.0.x patch releases.
+  '@ai-sdk/provider-utils@^4': '>=4.0.33 <5'
+  # GHSA-396q-4vc8-28x9 (bearer token and cookie leak on cross-origin
+  # redirect) fixed in 1.0.0-preview.102. Transitive via kiota-bundle. The
+  # abstractions floor keeps the Kiota packages on one shared abstractions copy.
+  '@microsoft/kiota-http-fetchlibrary': '>=1.0.0-preview.102'
+  '@microsoft/kiota-abstractions': '>=1.0.0-preview.102'
+  '@opentelemetry/exporter-prometheus': 0.223.0
+  '@opentelemetry/sdk-node': 0.223.0
   # CVE-2026-54285 (GHSA-8988-4f7v-96qf, unbounded memory allocation when
   # W3CBaggagePropagator.extract parses inbound baggage headers) fixed in 2.8.0.
-  '@opentelemetry/core': '>=2.8.0'
+  # sdk-node 0.223 is built against the 2.12 stable packages, so both floors
+  # sit at 2.12.0 to keep core and the propagators in step with it.
+  '@opentelemetry/core': '>=2.12.0'
   # CVE-2026-59892 (HIGH, uncaught exception) fixed in 2.9.0.
-  '@opentelemetry/propagator-jaeger': '>=2.9.0'
+  '@opentelemetry/propagator-jaeger': '>=2.12.0'
   # CVE-2026-101916 (HIGH, certificate validation) fixed in 1.14.5.
   '@grpc/grpc-js': '>=1.14.5 <2'
   # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
@@ -175,6 +235,14 @@ patchedDependencies:
   # OpenAPPA uses these IDs to match released calls to returned results.
   # Remove when the provider preserves both functionCall.id and functionResponse.id.
   '@ai-sdk/google@3.0.43': patches/@ai-sdk__google@3.0.43.patch
+  # Grok can think, start its answer, and think again in one response. The chat
+  # model named every reasoning run `reasoning-<completion id>` and sent the
+  # second run's deltas to the part it had already closed, so chat stopped with
+  # "Received reasoning-delta for missing reasoning part". The patch opens a new
+  # part for each run of reasoning or text. Pinned by
+  # backend/src/clients/xai-interleaved-reasoning.unit.test.ts; drop it after an
+  # upgrade passes that test unpatched.
+  '@ai-sdk/xai@3.0.67': patches/@ai-sdk__xai@3.0.67.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.
@@ -196,11 +264,6 @@ patchedDependencies:
   # before text in non-streaming results too. Upstream master (v4, needs ai@^7)
   # has the same bug; drop the patch when moving to ai v7 after verifying a fix.
   ollama-ai-provider-v2@3.6.0: patches/ollama-ai-provider-v2@3.6.0.patch
-  # The package root eagerly re-exports its optional worker implementation. That
-  # pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
-  # Turbopack cannot resolve the shim's intentionally dynamic import. We use only
-  # the main-thread decoder, so keep that worker branch out of the package entry.
-  opus-decoder@0.7.11: patches/opus-decoder@0.7.11.patch
 
 # Enforce Node.js version requirements from package.json engines field.
 engineStrict: true

@@ -9,6 +9,7 @@ import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectorEmbeddingModelNotice } from "./connector-embedding-model-notice";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/llm-models.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
@@ -56,6 +57,13 @@ describe("ConnectorEmbeddingModelNotice", () => {
     render(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
     expect(await screen.findByRole("note")).toBeInTheDocument();
+    // Only the embedding key's models are read, without their assignments.
+    expect(useModelsWithApiKeys).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKeyIds: [EMBEDDING_API_KEY_ID],
+        includeAssignments: false,
+      }),
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent("openai/text-embedding-model");

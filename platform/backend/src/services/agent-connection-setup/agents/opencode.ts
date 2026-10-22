@@ -1,23 +1,28 @@
 import {
   EXTERNAL_AGENT_ID_HEADER,
-  OPENCODE_CLIENT_ID,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
   PROVIDER_MODEL_TIERS,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
+import { KILO_GUARD_CLIENT, OPENCODE_GUARD_CLIENT } from "../guard/clients";
 import {
-  OPENCODE_PRIMARY_CONFIG_SCRIPT,
+  KILO_CLIENT,
+  OPENCODE_CLIENT,
+  type OpenCodeFamilyClient,
+} from "../opencode-family";
+import { managedRuntimeInstall } from "../payloads/managed-runtime-install";
+import { openCodeMcpMergeScript } from "../payloads/opencode-mcp-config";
+import {
   openCodePrimaryConfig,
+  openCodePrimaryConfigScript,
 } from "../payloads/opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
 } from "../payloads/opencode-routing-plugin";
 import { starterPrompt } from "../steps/ending";
-import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
 import {
   withStartupGuardBash,
@@ -30,9 +35,10 @@ import type {
   ShellAgentSetup,
 } from "../types";
 
-// OpenCode setup. Shared helpers and the config-merge payloads first, then the
-// bash and PowerShell steps side by side, then the agent module the dispatcher
-// in ../index.ts uses.
+// Setup for OpenCode and Kilo Code (an OpenCode fork; see ../opencode-family).
+// Shared helpers and the config-merge payloads first, then the bash and
+// PowerShell steps side by side, then the agent modules the dispatcher in
+// ../index.ts uses.
 
 interface OpencodeProviderTarget {
   id: string;
@@ -41,6 +47,7 @@ interface OpencodeProviderTarget {
 
 /** Resolve the native OpenCode provider id and matching Archestra wire URL. */
 function opencodeProviderTarget(
+  client: OpenCodeFamilyClient,
   ctx: SetupScriptContext,
 ): OpencodeProviderTarget {
   const proxy = ctx.proxy as SetupScriptProxySection;
@@ -49,7 +56,7 @@ function opencodeProviderTarget(
   );
   if (!route) {
     throw new Error(
-      `OpenCode does not support ${proxy.provider} through local credential passthrough`,
+      `${client.label} does not support ${proxy.provider} through local credential passthrough`,
     );
   }
   return {
@@ -63,8 +70,11 @@ function opencodeProviderTarget(
  * moved to runtime routing, so reconnecting can clear it. It must match what
  * those connections wrote, so it keeps the default models of that time.
  */
-function opencodeLegacyModelRef(ctx: SetupScriptContext): string {
-  const target = opencodeProviderTarget(ctx);
+function opencodeLegacyModelRef(
+  client: OpenCodeFamilyClient,
+  ctx: SetupScriptContext,
+): string {
+  const target = opencodeProviderTarget(client, ctx);
   const provider = (ctx.proxy as SetupScriptProxySection).provider;
   const model =
     ctx.proxy?.model ?? LEGACY_PINNED_DEFAULT_MODELS[provider] ?? target.model;
@@ -79,12 +89,24 @@ const LEGACY_PINNED_DEFAULT_MODELS: Partial<Record<SupportedProvider, string>> =
     openrouter: "openrouter/auto",
   };
 
-/** Headers OpenCode sends on every proxied request (attribution). */
+/**
+ * Primary-providers mode: the Archestra providers authenticate with the
+ * virtual key, so the passthrough key goes only on the user's own sign-ins
+ * (see `routeHeaders`); every route carries the client id.
+ */
+function opencodePrimaryHeaders(
+  client: OpenCodeFamilyClient,
+): Record<string, string> {
+  return { [EXTERNAL_AGENT_ID_HEADER]: client.clientId };
+}
+
+/** Headers the client sends on every proxied request (attribution). */
 function opencodeProxyHeaders(
+  client: OpenCodeFamilyClient,
   proxy: SetupScriptProxySection,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
+    [EXTERNAL_AGENT_ID_HEADER]: client.clientId,
   };
   if (proxy.passthroughVirtualKey) {
     headers[VIRTUAL_KEY_HEADER] = proxy.passthroughVirtualKey;
@@ -92,7 +114,10 @@ function opencodeProxyHeaders(
   return headers;
 }
 
-const OPENCODE_OWNED_MERGE_NODE = `const fs = require("fs");
+const opencodeOwnedMergeNode = (
+  client: OpenCodeFamilyClient,
+  includeSchema = true,
+) => `const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const configPath = process.env.ARCHESTRA_OC_CONFIG_PATH;
@@ -100,19 +125,13 @@ const raw = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : ""
 const cfg = raw.trim() ? JSON.parse(raw) : {};
 const backupPath = configPath + ".archestra-backup";
 if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) fs.copyFileSync(configPath, backupPath);
-cfg.$schema ??= "https://opencode.ai/config.json";
-if (process.env.ARCHESTRA_OC_MCP_NAME) {
-  cfg.mcp ??= {};
-  // Move, not add: an entry left by an earlier connect run points at this same
-  // gateway, so it is dropped rather than left beside the new one.
-  for (const legacy of JSON.parse(process.env.ARCHESTRA_OC_MCP_LEGACY_NAMES || "[]")) delete cfg.mcp[legacy];
-  cfg.mcp[process.env.ARCHESTRA_OC_MCP_NAME] = { type: "remote", url: process.env.ARCHESTRA_OC_MCP_URL };
-}
+${includeSchema ? `cfg.$schema ??= ${JSON.stringify(client.schemaUrl)};` : ""}
+${openCodeMcpMergeScript(client)}
 const managedHeaders = JSON.parse(process.env.ARCHESTRA_OC_HEADERS || "{}");
 const routes = JSON.parse(process.env.ARCHESTRA_OC_PROVIDER_ROUTES || "{}");
 const runtimeRouting = process.env.ARCHESTRA_OC_RUNTIME_ROUTING === "1";
 const providers = cfg.provider && typeof cfg.provider === "object" ? cfg.provider : {};
-const statePath = path.join(process.env.HOME || os.homedir(), ".archestra", "opencode-connection-state.json");
+const statePath = path.join(process.env.HOME || os.homedir(), ".archestra", ${JSON.stringify(`${client.stateName}-connection-state.json`)});
 if (runtimeRouting) {
   if (fs.existsSync(statePath)) {
     const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
@@ -147,32 +166,42 @@ if (runtimeRouting) {
 const legacyModel = process.env.ARCHESTRA_OC_LEGACY_MODEL;
 if (legacyModel && cfg.model === legacyModel) delete cfg.model;
 fs.mkdirSync(path.dirname(configPath), { recursive: true });
-fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\\n");
+// Migrated MCP options may include a static authorization header.
+if (fs.existsSync(configPath)) fs.chmodSync(configPath, 0o600);
+fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\\n", { mode: 0o600 });
+writeMcpSibling();
 console.log("Updated " + configPath);`;
 
 // Key-scoped merge into OpenCode's documented global config. Authentication is
 // stored separately by OpenCode, so existing local keys and subscriptions stay
 // on the machine; only provider routes change.
 // Values arrive via env.
-const OPENCODE_OWNED_MERGE_PY = `import json, os, pathlib, shutil
+const opencodeOwnedMergePy = (
+  client: OpenCodeFamilyClient,
+) => `import json, os, pathlib, shutil
 path = pathlib.Path(os.environ["ARCHESTRA_OC_CONFIG_PATH"])
 raw = path.read_text() if path.exists() else ""
 cfg = json.loads(raw) if raw.strip() else {}
 backup = path.with_name(path.name + ".archestra-backup")
 if path.exists() and not backup.exists():
     shutil.copy2(path, backup)
-cfg.setdefault("$schema", "https://opencode.ai/config.json")
+cfg.setdefault("$schema", ${JSON.stringify(client.schemaUrl)})
 if os.environ.get("ARCHESTRA_OC_MCP_NAME"):
+    if (path.parent / ${JSON.stringify(client.commentedConfigFile)}).exists():
+        raise SystemExit("Node.js is required to reconcile the sibling JSONC configuration. Install Node.js and rerun setup.")
     servers = cfg.setdefault("mcp", {})
-    # Move, not add: an entry left by an earlier connect run points at this
-    # same gateway, so it is dropped rather than left beside the new one.
-    for legacy in json.loads(os.environ.get("ARCHESTRA_OC_MCP_LEGACY_NAMES", "[]")): servers.pop(legacy, None)
-    servers[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
+    name, url = os.environ["ARCHESTRA_OC_MCP_NAME"], os.environ["ARCHESTRA_OC_MCP_URL"]
+    aliases = [alias for alias, entry in servers.items() if isinstance(entry, dict) and entry.get("type") == "remote" and entry.get("url") == url]
+    if any(alias != name for alias in aliases):
+        raise SystemExit("Node.js is required to consolidate existing gateway aliases. Install Node.js and rerun setup.")
+    previous = servers.get(name, {})
+    servers[name] = {**(previous if isinstance(previous, dict) and previous.get("url") == url else {}), "type": "remote", "url": url}
+    if servers[name].get("enabled") is False: servers[name]["enabled"] = True
 managed_headers = json.loads(os.environ.get("ARCHESTRA_OC_HEADERS", "{}"))
 routes = json.loads(os.environ.get("ARCHESTRA_OC_PROVIDER_ROUTES", "{}"))
 runtime_routing = os.environ.get("ARCHESTRA_OC_RUNTIME_ROUTING") == "1"
 providers = cfg.get("provider") if isinstance(cfg.get("provider"), dict) else {}
-state_path = pathlib.Path(os.path.expanduser("~/.archestra/opencode-connection-state.json"))
+state_path = pathlib.Path(os.path.expanduser(${JSON.stringify(`~/.archestra/${client.stateName}-connection-state.json`)}))
 if runtime_routing:
     if state_path.exists():
         state = json.loads(state_path.read_text())
@@ -222,6 +251,7 @@ except Exception as error:
     print(str(error))`;
 
 function opencodeOwnedMergeBash(
+  client: OpenCodeFamilyClient,
   env: Record<string, string>,
   manual: string,
 ): string {
@@ -231,12 +261,12 @@ function opencodeOwnedMergeBash(
   return `if command -v node >/dev/null 2>&1; then
   export ARCHESTRA_OC_CONFIG_PATH="$ARCHESTRA_OPENCODE_CONFIG"
 ${exports}
-  node -e ${sh(OPENCODE_OWNED_MERGE_NODE)}
+  node -e ${sh(opencodeOwnedMergeNode(client))}
 elif command -v python3 >/dev/null 2>&1; then
   export ARCHESTRA_OC_CONFIG_PATH="$ARCHESTRA_OPENCODE_CONFIG"
 ${exports}
   python3 - <<'ARCHESTRA_PY'
-${OPENCODE_OWNED_MERGE_PY}
+${opencodeOwnedMergePy(client)}
 ARCHESTRA_PY
 else
   warn "python3 not found — add this to $ARCHESTRA_OPENCODE_CONFIG yourself:"
@@ -247,15 +277,30 @@ fi`;
 }
 
 function opencodeRoutingPluginBash(params: {
+  context?: SetupScriptContext;
+  client: OpenCodeFamilyClient;
   routes: Record<string, string>;
   headers: Record<string, string>;
+  routeHeaders?: Record<string, Record<string, string>>;
+  providerTwins?: Record<string, string>;
 }): string {
+  const runtime = params.context
+    ? managedRuntimeInstall({ ...params, context: params.context })
+    : null;
   const encoded = Buffer.from(
-    renderOpenCodeRoutingPlugin(params),
+    runtime?.v1 ??
+      renderOpenCodeRoutingPlugin({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const encodedV2 = Buffer.from(
-    renderOpenCodeRoutingPluginV2(params),
+    runtime?.v2 ??
+      renderOpenCodeRoutingPluginV2({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const python = `import base64, json, pathlib, sys
@@ -269,9 +314,17 @@ if not state.exists():
 plugin.write_bytes(base64.b64decode(content))
 plugin.chmod(0o600)`;
   return `ARCHESTRA_OC_PLUGIN="$(dirname "$ARCHESTRA_OPENCODE_CONFIG")/plugins/archestra-llm-proxy.js"
-ARCHESTRA_OC_PLUGIN_STATE="$HOME/.archestra/opencode-routing-plugin-state.json"
+ARCHESTRA_OC_PLUGIN_STATE="$HOME/.archestra/${params.client.stateName}-routing-plugin-state.json"
 mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN")"
 mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN_STATE")"
+${
+  runtime
+    ? `command -v node >/dev/null 2>&1 || { err "Node.js is required for managed launcher updates"; exit 1; }
+ARCHESTRA_OC_RUNTIME_API_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" node - <<'ARCHESTRA_RUNTIME_INSTALL'
+${runtime.script}
+ARCHESTRA_RUNTIME_INSTALL`
+    : ""
+}
 # OpenCode 2 loads only its own plugin API, so install the variant that matches.
 if [ "$ARCHESTRA_OPENCODE_MAJOR" -ge 2 ]; then
   ARCHESTRA_OC_PLUGIN_CONTENT=${sh(encodedV2)}
@@ -283,28 +336,57 @@ if command -v node >/dev/null 2>&1; then
 elif command -v python3 >/dev/null 2>&1; then
   python3 -c ${sh(python)} "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" "$ARCHESTRA_OC_PLUGIN_CONTENT"
 else
-  err "Node.js or python3 is required to install the OpenCode routing guard"
+  err "Node.js or python3 is required to install the ${params.client.label} routing guard"
   exit 1
 fi
-ok "Installed the OpenCode LLM proxy routing guard"`;
+ok "Installed the ${params.client.label} LLM proxy routing guard"`;
 }
 
 function opencodeRoutingPluginPowerShell(params: {
+  context?: SetupScriptContext;
+  client: OpenCodeFamilyClient;
   routes: Record<string, string>;
   headers: Record<string, string>;
+  routeHeaders?: Record<string, Record<string, string>>;
+  providerTwins?: Record<string, string>;
 }): string {
+  const runtime = params.context
+    ? managedRuntimeInstall({ ...params, context: params.context })
+    : null;
   const encoded = Buffer.from(
-    renderOpenCodeRoutingPlugin(params),
+    runtime?.v1 ??
+      renderOpenCodeRoutingPlugin({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const encodedV2 = Buffer.from(
-    renderOpenCodeRoutingPluginV2(params),
+    runtime?.v2 ??
+      renderOpenCodeRoutingPluginV2({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   return `$archPluginDir = Join-Path $archOcDir 'plugins'
 $archPluginFile = Join-Path $archPluginDir 'archestra-llm-proxy.js'
-$archPluginState = Join-Path $env:USERPROFILE '.archestra/opencode-routing-plugin-state.json'
+$archPluginState = Join-Path $env:USERPROFILE ${psq(`.archestra/${params.client.stateName}-routing-plugin-state.json`)}
 $null = New-Item -ItemType Directory -Force -Path $archPluginDir
+${
+  runtime
+    ? `if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required for managed launcher updates' }
+$archRuntimeInstall = @'
+${runtime.script}
+'@
+$archPreviousRuntimeMajor = $env:ARCHESTRA_OC_RUNTIME_API_MAJOR
+try {
+  $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = [string]$archOcMajor
+  $archRuntimeInstall | & node -
+} finally { $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = $archPreviousRuntimeMajor }
+if ($LASTEXITCODE -ne 0) { throw 'Could not install managed launcher updates' }`
+    : ""
+}
 if (-not (Test-Path $archPluginState)) {
   $archExistingPlugin = Test-Path $archPluginFile
   $archPluginBackup = if ($archExistingPlugin) { [Convert]::ToBase64String([IO.File]::ReadAllBytes($archPluginFile)) } else { $null }
@@ -315,30 +397,38 @@ if (-not (Test-Path $archPluginState)) {
 # OpenCode 2 loads only its own plugin API, so install the variant that matches.
 $archPluginContent = if ($archOcMajor -ge 2) { ${psq(encodedV2)} } else { ${psq(encoded)} }
 [IO.File]::WriteAllBytes($archPluginFile, [Convert]::FromBase64String($archPluginContent))
-Ok 'Installed the OpenCode LLM proxy routing guard'`;
+Ok ${psq(`Installed the ${params.client.label} LLM proxy routing guard`)}`;
 }
 
-function opencodeBashSections(ctx: SetupScriptContext): string[] {
+function opencodeBashSections(
+  client: OpenCodeFamilyClient,
+  ctx: SetupScriptContext,
+): string[] {
+  const configPath = `"\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}"`;
   const sections: string[] = [
-    `ARCHESTRA_OPENCODE_CONFIG="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
+    client.versionedPluginApi
+      ? `ARCHESTRA_OPENCODE_CONFIG=${configPath}
 # OpenCode 2 changed its plugin API and \`debug config\` output; steps below branch on it.
-ARCHESTRA_OPENCODE_MAJOR="$( { opencode --version 2>/dev/null || true; } </dev/null | sed -n '1s/^[^0-9]*\\([0-9][0-9]*\\)\\..*$/\\1/p')"
-[ -n "$ARCHESTRA_OPENCODE_MAJOR" ] || ARCHESTRA_OPENCODE_MAJOR=1`,
+ARCHESTRA_OPENCODE_MAJOR="$( { ${client.binary} --version 2>/dev/null || true; } </dev/null | sed -n '1s/^[^0-9]*\\([0-9][0-9]*\\)\\..*$/\\1/p')"
+[ -n "$ARCHESTRA_OPENCODE_MAJOR" ] || ARCHESTRA_OPENCODE_MAJOR=1`
+      : `ARCHESTRA_OPENCODE_CONFIG=${configPath}
+# ${client.label} keeps OpenCode 1's plugin API and \`debug config\` output at every version.
+ARCHESTRA_OPENCODE_MAJOR=1`,
   ];
 
   if (ctx.proxy && !ctx.proxy.primaryProviders) {
-    sections.push(`if [ -f "$HOME/.archestra/opencode-primary-state.json" ]; then
-  ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)}
+    sections.push(`if [ -f "$HOME/.archestra/${client.stateName}-primary-state.json" ]; then
+  ARCHESTRA_OC_PRIMARY=null node -e ${sh(openCodePrimaryConfigScript(client))}
 fi`);
   }
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 ${opencodeOwnedMergeBash(
+  client,
   {
     ARCHESTRA_OC_MCP_NAME: ctx.mcp.serverName,
     ARCHESTRA_OC_MCP_URL: ctx.mcp.url,
-    ARCHESTRA_OC_MCP_LEGACY_NAMES: JSON.stringify(legacyServerNames(ctx.mcp)),
   },
   JSON.stringify(
     { mcp: { [ctx.mcp.serverName]: { type: "remote", url: ctx.mcp.url } } },
@@ -350,13 +440,27 @@ ${opencodeOwnedMergeBash(
 
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
-      sections.push(`say "Configuring model providers in OpenCode"
+      const {
+        routes,
+        routeHeaders,
+        providers,
+        nativeProviders,
+        nativeRoutes,
+        appName,
+      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      sections.push(`say "Configuring model providers in ${client.label}"
 command -v node >/dev/null 2>&1 || { err "Node.js is required to configure model providers"; exit 1; }
-ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} <<'ARCHESTRA_PRIMARY_CATALOG'
-${JSON.stringify({ providers })}
+ARCHESTRA_OC_NOTICES="$(ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(openCodePrimaryConfigScript(client))} <<'ARCHESTRA_PRIMARY_CATALOG'
+${JSON.stringify({ providers, nativeProviders, nativeRoutes, appName })}
 ARCHESTRA_PRIMARY_CATALOG
-${opencodeRoutingPluginBash({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
+)"
+[ -z "$ARCHESTRA_OC_NOTICES" ] || printf '%s\\n' "$ARCHESTRA_OC_NOTICES" | while IFS= read -r archNotice; do
+  case "$archNotice" in
+    info:*) ok "\${archNotice#info:}" ;;
+    warn:*) warn "\${archNotice#warn:}" ;;
+  esac
+done
+${opencodeRoutingPluginBash({ client, context: ctx, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
@@ -364,13 +468,14 @@ ${opencodeRoutingPluginBash({ routes, headers: opencodeProxyHeaders(ctx.proxy) }
           openCodePassthroughBaseUrl(ctx.proxy?.baseUrl ?? "", route),
         ]),
       );
-      const headers = opencodeProxyHeaders(ctx.proxy);
-      const legacyModel = opencodeLegacyModelRef(ctx);
+      const headers = opencodeProxyHeaders(client, ctx.proxy);
+      const legacyModel = opencodeLegacyModelRef(client, ctx);
       const manual =
         "The routing plugin is installed. Node.js or Python is required to remove provider settings left by an older connection.";
-      sections.push(`say "Routing supported OpenCode providers through the LLM proxy"
-${opencodeRoutingPluginBash({ routes, headers })}
+      sections.push(`say "Routing supported ${client.label} providers through the LLM proxy"
+${opencodeRoutingPluginBash({ client, context: ctx, routes, headers })}
 ${opencodeOwnedMergeBash(
+  client,
   {
     ARCHESTRA_OC_MCP_NAME: "",
     ARCHESTRA_OC_PROVIDER_ROUTES: JSON.stringify(routes),
@@ -381,12 +486,12 @@ ${opencodeOwnedMergeBash(
   manual,
 )}
 if [ "$ARCHESTRA_OPENCODE_MAJOR" -lt 2 ] && command -v python3 >/dev/null 2>&1; then
-  EFFECTIVE_CONFIG=$(cd "$HOME" && opencode debug config 2>/dev/null || true)
+  EFFECTIVE_CONFIG=$(cd "$HOME" && ${client.binary} debug config 2>/dev/null || true)
   ROUTE_MISMATCHES=$(printf '%s' "$EFFECTIVE_CONFIG" | ARCHESTRA_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} python3 -c ${sh(OPENCODE_EFFECTIVE_ROUTES_PY)} || true)
   if [ -z "$ROUTE_MISMATCHES" ]; then
-    ok "OpenCode's credentialed native providers resolve through the LLM proxy"
+    ok "${client.label}'s credentialed native providers resolve through the LLM proxy"
   else
-    warn "Another OpenCode config overrides these provider routes: $ROUTE_MISMATCHES"
+    warn "Another ${client.label} config overrides these provider routes: $ROUTE_MISMATCHES"
   fi
 fi`);
     }
@@ -394,7 +499,7 @@ fi`);
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills`)}
-SKILLS_DIR="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/${ctx.skills.marketplaceName}"
+SKILLS_DIR="\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/skills/${ctx.skills.marketplaceName}"
 if ! command -v git >/dev/null 2>&1; then
   warn "git not found — clone the marketplace into $SKILLS_DIR yourself."
 elif [ -d "$SKILLS_DIR/.git" ]; then
@@ -407,26 +512,45 @@ fi
 echo "Skills folder: $SKILLS_DIR"`);
   }
 
-  if (ctx.mcp) {
-    sections.push(`say "OpenCode MCP servers"
-cli opencode mcp list || true`);
+  if (ctx.mcp && !ctx.proxy && ctx.managedRuntimeSource) {
+    sections.push(
+      opencodeRoutingPluginBash({
+        client,
+        context: ctx,
+        routes: {},
+        headers: {},
+      }),
+    );
   }
-  return withStartupGuardBash(ctx, OPENCODE_GUARD_CLIENT, sections);
+
+  if (ctx.mcp) {
+    sections.push(`say "${client.label} MCP servers"
+cli ${client.binary} mcp list || true`);
+  }
+  return withStartupGuardBash(ctx, guardClientFor(client), sections);
 }
 
-function opencodePowerShellSections(ctx: SetupScriptContext): string[] {
+function opencodePowerShellSections(
+  client: OpenCodeFamilyClient,
+  ctx: SetupScriptContext,
+): string[] {
   const sections: string[] = [
-    `$archOcDir = if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'opencode' } else { Join-Path $env:USERPROFILE '.config/opencode' }
-$archOcFile = Join-Path $archOcDir 'opencode.json'
-# OpenCode 2 changed its plugin API and \`debug config\` output; steps below branch on it.
+    `$archOcDir = if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME ${psq(client.dir)} } else { Join-Path $env:USERPROFILE ${psq(`.config/${client.dir}`)} }
+$archOcFile = Join-Path $archOcDir ${psq(client.configFile)}
+${
+  client.versionedPluginApi
+    ? `# OpenCode 2 changed its plugin API and \`debug config\` output; steps below branch on it.
 $archOcMajor = 1
-try { if ((& opencode --version 2>$null | Out-String) -match '(\\d+)\\.\\d+') { $archOcMajor = [int]$Matches[1] } } catch { }
+try { if ((& ${client.binary} --version 2>$null | Out-String) -match '(\\d+)\\.\\d+') { $archOcMajor = [int]$Matches[1] } } catch { }`
+    : `# ${client.label} keeps OpenCode 1's plugin API and \`debug config\` output at every version.
+$archOcMajor = 1`
+}
 function Read-ArchOcOwned {
   if (Test-Path $archOcFile) {
     $raw = Get-Content -Raw -Path $archOcFile
     if ($raw -and $raw.Trim()) { return ($raw | ConvertFrom-Json) }
   }
-  return [pscustomobject]@{ '$schema' = 'https://opencode.ai/config.json' }
+  return [pscustomobject]@{ '$schema' = ${psq(client.schemaUrl)} }
 }
 function Write-ArchOcOwned($cfg) {
   $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archOcFile)
@@ -443,19 +567,42 @@ function Set-ArchProp($obj, $name, $value) {
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
+if (Get-Command node -ErrorAction SilentlyContinue) {
+  $env:ARCHESTRA_OC_CONFIG_PATH = $archOcFile
+  $env:ARCHESTRA_OC_MCP_NAME = ${psq(ctx.mcp.serverName)}
+  $env:ARCHESTRA_OC_MCP_URL = ${psq(ctx.mcp.url)}
+  $archMcpScript = @'
+${opencodeOwnedMergeNode(client, false)}
+'@
+  $archMcpFile = Join-Path ([IO.Path]::GetTempPath()) ('archestra-mcp-' + [guid]::NewGuid().ToString('N') + '.cjs')
+  try {
+    [IO.File]::WriteAllText($archMcpFile, $archMcpScript)
+    & node $archMcpFile
+    if ($LASTEXITCODE -ne 0) { throw 'Could not consolidate MCP gateway configuration' }
+  } finally {
+    Remove-Item -Force -ErrorAction SilentlyContinue $archMcpFile
+    Remove-Item Env:ARCHESTRA_OC_CONFIG_PATH, Env:ARCHESTRA_OC_MCP_NAME, Env:ARCHESTRA_OC_MCP_URL -ErrorAction SilentlyContinue
+  }
+} else {
+if (Test-Path (Join-Path $archOcDir ${psq(client.commentedConfigFile)})) { throw 'Node.js is required to reconcile the sibling JSONC configuration. Install Node.js and rerun setup.' }
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['mcp']) { Set-ArchProp $archCfg 'mcp' ([pscustomobject]@{}) }
-foreach ($archLegacy in @(${legacyServerNames(ctx.mcp).map(psq).join(", ") || "''"})) {
-  if ($archLegacy -and $archCfg.mcp.PSObject.Properties[$archLegacy]) { $archCfg.mcp.PSObject.Properties.Remove($archLegacy) }
+foreach ($archEntry in $archCfg.mcp.PSObject.Properties) {
+  if ($archEntry.Value.type -eq 'remote' -and $archEntry.Value.url -eq ${psq(ctx.mcp.url)} -and $archEntry.Name -ne ${psq(ctx.mcp.serverName)}) { throw 'Node.js is required to consolidate existing gateway aliases. Install Node.js and rerun setup.' }
 }
-Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 'remote'; url = ${psq(ctx.mcp.url)} })
-Write-ArchOcOwned $archCfg`);
+$archExisting = $archCfg.mcp.PSObject.Properties[${psq(ctx.mcp.serverName)}]
+if ($archExisting -and $archExisting.Value.url -eq ${psq(ctx.mcp.url)}) {
+  Set-ArchProp $archExisting.Value 'type' 'remote'
+  if ($archExisting.Value.enabled -eq $false) { Set-ArchProp $archExisting.Value 'enabled' $true }
+} else { Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 'remote'; url = ${psq(ctx.mcp.url)} }) }
+Write-ArchOcOwned $archCfg
+}`);
   }
 
   if (ctx.proxy && !ctx.proxy.primaryProviders) {
-    sections.push(`if (Test-Path (Join-Path $env:USERPROFILE '.archestra/opencode-primary-state.json')) {
+    sections.push(`if (Test-Path (Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-primary-state.json`)})) {
 $archPrimaryRestore = @'
-${OPENCODE_PRIMARY_CONFIG_SCRIPT}
+${openCodePrimaryConfigScript(client)}
 '@
 $env:ARCHESTRA_OC_PRIMARY = 'null'
 try { $archPrimaryRestore | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore previous provider configuration' } }
@@ -464,21 +611,41 @@ finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
   }
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
-      sections.push(`Say 'Configuring model providers in OpenCode'
+      const {
+        routes,
+        routeHeaders,
+        providers,
+        nativeProviders,
+        nativeRoutes,
+        appName,
+      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      sections.push(`Say ${psq(`Configuring model providers in ${client.label}`)}
 $env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
 $env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
 $env:ARCHESTRA_OC_PRIMARY = 'stdin'
-$archPrimaryCatalog = ${psq(JSON.stringify({ providers }))}
+$archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, nativeRoutes, appName }))}
 $archPrimaryScript = @'
-${OPENCODE_PRIMARY_CONFIG_SCRIPT}
+${openCodePrimaryConfigScript(client)}
 '@
-try { $archPrimaryCatalog | & node -e $archPrimaryScript; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' } }
-finally { Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue }
-${opencodeRoutingPluginPowerShell({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
+# Run the script from a file: Windows PowerShell 5.1 drops the double quotes
+# inside a native command argument, so node -e would get broken code.
+$archPrimaryFile = Join-Path ([IO.Path]::GetTempPath()) ('archestra-opencode-primary-' + [guid]::NewGuid().ToString('N') + '.cjs')
+try {
+  [IO.File]::WriteAllText($archPrimaryFile, $archPrimaryScript)
+  $archNotices = $archPrimaryCatalog | & node $archPrimaryFile; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' }
+  foreach ($archNotice in @($archNotices)) {
+    $archLine = [string]$archNotice
+    if ($archLine.StartsWith('info:')) { Ok $archLine.Substring(5) } elseif ($archLine.StartsWith('warn:')) { Warn $archLine.Substring(5) }
+  }
+}
+finally {
+  Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile
+  Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue
+}
+${opencodeRoutingPluginPowerShell({ client, context: ctx, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
-      const headers = opencodeProxyHeaders(ctx.proxy);
-      const legacyModel = opencodeLegacyModelRef(ctx);
+      const headers = opencodeProxyHeaders(client, ctx.proxy);
+      const legacyModel = opencodeLegacyModelRef(client, ctx);
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
           route.openCodeProviderId,
@@ -510,12 +677,12 @@ ${managedHeaders}
     if (@($archEntryProp.Value.PSObject.Properties).Count -eq 0) { $archCfg.provider.PSObject.Properties.Remove(${providerId}) }
   }`;
       }).join("\n");
-      sections.push(`Say 'Routing supported OpenCode providers through the LLM proxy'
-${opencodeRoutingPluginPowerShell({ routes, headers })}
+      sections.push(`Say ${psq(`Routing supported ${client.label} providers through the LLM proxy`)}
+${opencodeRoutingPluginPowerShell({ client, context: ctx, routes, headers })}
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['provider']) { Set-ArchProp $archCfg 'provider' ([pscustomobject]@{}) }
 if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(legacyModel)}) { $archCfg.PSObject.Properties.Remove('model') }
-$archStateFile = Join-Path $env:USERPROFILE '.archestra/opencode-connection-state.json'
+$archStateFile = Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-connection-state.json`)}
 if (Test-Path $archStateFile) {
   $archState = Get-Content -Raw -Path $archStateFile | ConvertFrom-Json
   if ($archState.PSObject.Properties['providerState']) {
@@ -534,7 +701,7 @@ ${cleanup}
 }
 if (@($archCfg.provider.PSObject.Properties).Count -eq 0) { $archCfg.PSObject.Properties.Remove('provider') }
 Write-ArchOcOwned $archCfg
-Ok "OpenCode's credentialed native providers will resolve through the LLM proxy"`);
+Ok "${client.label}'s credentialed native providers will resolve through the LLM proxy"`);
     }
   }
 
@@ -553,21 +720,35 @@ elseif (Test-Path (Join-Path $archSkillsDir '.git')) {
 Write-Host ('Skills folder: ' + $archSkillsDir)`);
   }
 
-  if (ctx.mcp) {
-    sections.push(`Say 'OpenCode MCP servers'
-try { & opencode mcp list 2>$null | Out-Host } catch { }`);
+  if (ctx.mcp && !ctx.proxy && ctx.managedRuntimeSource) {
+    sections.push(
+      opencodeRoutingPluginPowerShell({
+        client,
+        context: ctx,
+        routes: {},
+        headers: {},
+      }),
+    );
   }
-  return withStartupGuardPowerShell(ctx, OPENCODE_GUARD_CLIENT, sections);
+
+  if (ctx.mcp) {
+    sections.push(`Say ${psq(`${client.label} MCP servers`)}
+try { & ${client.binary} mcp list 2>$null | Out-Host } catch { }`);
+  }
+  return withStartupGuardPowerShell(ctx, guardClientFor(client), sections);
 }
 
-function opencodeEnding(ctx: SetupScriptContext): AgentEnding {
+function opencodeEnding(
+  client: OpenCodeFamilyClient,
+  ctx: SetupScriptContext,
+): AgentEnding {
   let proxyDetail: string | undefined;
   if (ctx.proxy?.authMode === "primary-providers") {
-    proxyDetail = `All usable primary providers are available in OpenCode’s model picker`;
+    proxyDetail = `All usable primary providers are available in ${client.label}’s model picker`;
   } else if (ctx.proxy?.primaryProviders) {
-    proxyDetail = `${ctx.proxy.providerLabel} models are available in OpenCode’s model picker`;
+    proxyDetail = `${ctx.proxy.providerLabel} models are available in ${client.label}’s model picker`;
   } else if (ctx.proxy?.authMode === "provider-key") {
-    proxyDetail = `Providers you have signed in to in OpenCode now go through the ${ctx.appName} LLM proxy`;
+    proxyDetail = `Providers you have signed in to in ${client.label} now go through the ${ctx.appName} LLM proxy`;
   }
   return {
     proxyDetail,
@@ -576,32 +757,41 @@ function opencodeEnding(ctx: SetupScriptContext): AgentEnding {
         ? [
             {
               name: "Launch check",
-              detail: "Runs each time you start opencode",
+              detail: `Runs each time you start ${client.binary}`,
             },
           ]
         : [],
     signIn: ctx.mcp
       ? {
-          command: ["opencode", "mcp", "auth", ctx.mcp.serverName],
-          howTo: `Run opencode mcp auth ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
+          command: [client.binary, "mcp", "auth", ctx.mcp.serverName],
+          howTo: `Run ${client.binary} mcp auth ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
         }
       : null,
-    launch: ["opencode", "--prompt", starterPrompt(ctx)],
+    launch: [client.binary, "--prompt", starterPrompt(ctx)],
     notes:
       ctx.mcp || ctx.proxy || ctx.skills
         ? [
-            "If OpenCode is already open, close it first so it picks up the new settings.",
+            `If ${client.label} is already open, close it first so it picks up the new settings.`,
           ]
         : [],
   };
 }
 
-export const opencodeSetup: ShellAgentSetup = {
-  label: "OpenCode",
-  binary: "opencode",
-  bash: { sections: opencodeBashSections },
-  powerShell: {
-    sections: opencodePowerShellSections,
-  },
-  ending: opencodeEnding,
-};
+function openCodeFamilySetup(client: OpenCodeFamilyClient): ShellAgentSetup {
+  return {
+    label: client.label,
+    binary: client.binary,
+    bash: { sections: (ctx) => opencodeBashSections(client, ctx) },
+    powerShell: {
+      sections: (ctx) => opencodePowerShellSections(client, ctx),
+    },
+    ending: (ctx) => opencodeEnding(client, ctx),
+  };
+}
+
+function guardClientFor(client: OpenCodeFamilyClient) {
+  return client.clientId === "kilo" ? KILO_GUARD_CLIENT : OPENCODE_GUARD_CLIENT;
+}
+
+export const opencodeSetup = openCodeFamilySetup(OPENCODE_CLIENT);
+export const kiloSetup = openCodeFamilySetup(KILO_CLIENT);

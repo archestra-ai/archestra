@@ -149,7 +149,7 @@ function findContainerStartupProgress(
     if (status.state?.running) {
       return {
         phase: "pulling",
-        message: "Preparing the workspace",
+        message: "Preparing the Agent",
         detail: null,
       };
     }
@@ -157,7 +157,7 @@ function findContainerStartupProgress(
     if (terminated && terminated.exitCode !== 0) {
       return {
         phase: "pulling",
-        message: "Workspace initialization failed",
+        message: "Agent initialization failed",
         detail: `${status.name} (exit code ${terminated.exitCode}): ${joinReason(terminated.reason, terminated.message) ?? "Init container exited"}`,
       };
     }
@@ -183,7 +183,7 @@ function describeWaitingContainer(
       phase: "pulling",
       message:
         waiting.reason === "PodInitializing"
-          ? "Preparing the workspace"
+          ? "Preparing the Agent"
           : "Preparing the agent container",
       detail: null,
     };
@@ -199,12 +199,24 @@ function describeWaitingContainer(
   return { phase: "pulling", message: "Starting the container", detail };
 }
 
+/**
+ * The scheduler's own wording ("0/17 nodes are available: 11 Insufficient
+ * memory, 5 node(s) didn't match Pod's node affinity/selector…") is written
+ * for whoever runs the cluster. The person waiting on a run only needs to know
+ * the cluster is full and that the wait is expected to end.
+ */
 function findUnschedulableCondition(pod: k8s.V1Pod): string | null {
   const scheduled = pod.status?.conditions?.find(
     (condition) => condition.type === "PodScheduled",
   );
   if (!scheduled || scheduled.status === "True") return null;
-  return joinReason(scheduled.reason, scheduled.message) ?? "Not yet scheduled";
+  const message = scheduled.message ?? "";
+  const nodes = message.match(/\b\d+\/(\d+) nodes are available/)?.[1];
+  const where = nodes ? `None of the ${nodes} nodes` : "No node";
+  if (/insufficient (cpu|memory)/i.test(message)) {
+    return `${where} has enough free CPU or memory right now. The run starts when other runs finish or the cluster adds a node.`;
+  }
+  return `${where} can take this run yet. The run starts when the cluster has room for it.`;
 }
 
 function isScheduled(pod: k8s.V1Pod): boolean {

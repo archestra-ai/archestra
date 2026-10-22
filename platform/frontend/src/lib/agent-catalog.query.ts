@@ -1,72 +1,37 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
-  isSameResourceAccess,
   MAX_BULK_IDS,
-  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  DEFAULT_SORT_BY,
-  DEFAULT_SORT_DIRECTION,
-  DEFAULT_TABLE_LIMIT,
-} from "@/consts";
+  agentCatalogListQuery,
+  agentCatalogQueryKeys,
+} from "@/lib/agent-catalog.keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import {
+  DEFAULT_STALE_TIME,
   PERSISTED_QUERY_META,
-  seedOnlyStaleTime,
 } from "@/lib/query-persistence";
+import { streamedQueries } from "@/lib/streamed-queries";
 import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
 
-export const agentCatalogQueryKeys = {
-  all: ["agents", "catalog"] as const,
-  list: (query: archestraApiTypes.GetAgentCatalogData["query"]) =>
-    [...agentCatalogQueryKeys.all, query] as const,
-};
+export {
+  agentCatalogListQuery,
+  agentCatalogQueryKeys,
+} from "@/lib/agent-catalog.keys";
 
 export function useAgentCatalog(
   params?: archestraApiTypes.GetAgentCatalogData["query"] & {
-    initialData?: archestraApiTypes.GetAgentCatalogResponses["200"];
-    initialDataExcludeOtherPersonalAgents?: boolean;
-    initialDataPinned?: boolean;
-    /** `access` filter of the server seed; never reuse it for another selection. */
-    initialDataAccess?: ResourceAccessRelation[];
-    initialDataLimit?: number;
     enabled?: boolean;
   },
 ) {
-  const {
-    initialData,
-    initialDataExcludeOtherPersonalAgents,
-    initialDataPinned,
-    initialDataAccess,
-    initialDataLimit,
-    enabled,
-    ...query
-  } = params ?? {};
-  const useInitialData =
-    query.offset === 0 &&
-    (query.sortBy === undefined || query.sortBy === DEFAULT_SORT_BY) &&
-    (query.sortDirection === undefined ||
-      query.sortDirection === DEFAULT_SORT_DIRECTION) &&
-    query.name === undefined &&
-    query.scope === undefined &&
-    query.teamIds === undefined &&
-    query.authorIds === undefined &&
-    query.excludeAuthorIds === undefined &&
-    query.excludeOtherPersonalAgents ===
-      initialDataExcludeOtherPersonalAgents &&
-    isSameResourceAccess(query.access, initialDataAccess) &&
-    query.sharedWith === undefined &&
-    query.owner === undefined &&
-    query.pinned === initialDataPinned &&
-    query.labels === undefined &&
-    query.status === undefined &&
-    query.providerApiKeyId === undefined &&
-    (query.limit === undefined ||
-      query.limit === (initialDataLimit ?? DEFAULT_TABLE_LIMIT));
+  const { enabled, ...rest } = params ?? {};
+  const query = agentCatalogListQuery(rest);
+  const [mountedAt] = useState(Date.now);
 
   return useQuery({
     queryKey: agentCatalogQueryKeys.list(query),
@@ -75,14 +40,14 @@ export function useAgentCatalog(
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
-    initialData: useInitialData ? initialData : undefined,
-    // A restored or prefetched catalog may predate a creation or deletion.
-    // Revalidate it on mount, but reuse a fresh server seed during hydration.
-    refetchOnMount: (catalog) =>
-      useInitialData && initialData && catalog.state.data === initialData
-        ? true
-        : "always",
-    staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
+    // A restored or earlier catalog may predate a creation or deletion: paint
+    // it at once, then revalidate it on mount. A catalog that the server
+    // streamed to this page, or that arrived after this mount, is as fresh as
+    // any query. One stamped in the mount's own millisecond counts as earlier.
+    staleTime: (catalog) =>
+      streamedQueries.has(catalog) || catalog.state.dataUpdatedAt > mountedAt
+        ? DEFAULT_STALE_TIME
+        : 0,
     enabled,
     meta: PERSISTED_QUERY_META,
   });
@@ -101,7 +66,13 @@ export function useAllMatchingAgentCatalog(
     max: MAX_BULK_IDS + 1,
     fetchPage: async ({ limit, offset }) => {
       const { data, error } = await getAgentCatalog({
-        query: { ...query, selectableOnly: true, limit, offset },
+        query: {
+          ...query,
+          includeTools: false,
+          selectableOnly: true,
+          limit,
+          offset,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];

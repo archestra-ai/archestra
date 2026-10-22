@@ -6,6 +6,7 @@ import config from "@/config";
 import {
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
+  McpServerModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -45,6 +46,9 @@ describe("external MCP Skill routes", () => {
     makeInternalMcpCatalog,
     makeMember,
     makeMcpServer,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
   }) => {
     await makeMember(ctx.user.id, ctx.organizationId);
     await makeMember(ctx.user.id, ctx.organizationId);
@@ -59,6 +63,20 @@ describe("external MCP Skill routes", () => {
       scope: "org",
       ownerId: ctx.user.id,
     });
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    const tool = await makeTool({ catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+    const fullServers = await McpServerModel.findAll(
+      ctx.user.id,
+      false,
+      ctx.organizationId,
+      undefined,
+      undefined,
+      { includeAssignedAgents: true },
+    );
+    expect(
+      fullServers.find((row) => row.id === server.id)?.assignedAgents,
+    ).toEqual([expect.objectContaining({ id: agent.id })]);
     await McpCatalogSkillModel.syncCatalog({
       catalogId: catalog.id,
       generation: (await McpCatalogSkillModel.beginRefresh(catalog.id)) ?? 0,
@@ -87,6 +105,8 @@ describe("external MCP Skill routes", () => {
         source: "external_mcp",
         mcpServerId: server.id,
         catalogId: catalog.id,
+        serverName: server.name,
+        scope: server.scope,
         name: "release",
         icon: "🛰️",
         usageCount: 2,
@@ -213,6 +233,18 @@ describe("external MCP Skill routes", () => {
         ),
     );
 
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: server.id,
+      uri: stored.uri,
+      userId: ctx.user.id,
+    });
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: server.id,
+      uri: stored.uri,
+      userId: null,
+    });
+    await drainBackgroundWork();
+
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/skills/external/${stored.id}?mcpServerId=${server.id}`,
@@ -222,6 +254,10 @@ describe("external MCP Skill routes", () => {
     expect(response.json()).toMatchObject({
       content: "# current source",
       description: "Current.",
+      // The detail keeps the matched skill's usage summary.
+      usageCount: 2,
+      usageUserCount: 1,
+      lastUsedAt: expect.any(String),
     });
   });
 });

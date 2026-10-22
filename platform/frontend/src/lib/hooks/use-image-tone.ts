@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  type ReactEventHandler,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * How a transparent logo reads against the page: `dark` marks (a black
@@ -9,31 +16,82 @@ import { useEffect, useState } from "react";
  */
 export type ImageTone = "dark" | "light" | null;
 
-const SAMPLE_SIZE = 32;
-const toneCache = new Map<string, Promise<ImageTone>>();
+/** Side of the square the image is drawn into before its pixels are read. */
+export const IMAGE_TONE_SAMPLE_SIZE = 32;
+// One entry per distinct icon source for the life of the page, oldest out
+// first once it is full, so a long session over many icons stays bounded.
+const TONE_CACHE_LIMIT = 500;
+const toneCache = new Map<string, ImageTone>();
 
-export function useImageTone(src: string | null | undefined): ImageTone {
+/** Forget every sampled tone. For tests that reuse an image source. */
+export function clearImageToneCache(): void {
+  toneCache.clear();
+}
+
+function rememberTone(src: string, tone: ImageTone): void {
+  if (toneCache.size >= TONE_CACHE_LIMIT) {
+    const oldest = toneCache.keys().next().value;
+    if (oldest !== undefined) toneCache.delete(oldest);
+  }
+  toneCache.set(src, tone);
+}
+
+export interface ImageToneHandle {
+  tone: ImageTone;
+  /** Attach to the rendered image so it can be sampled once it has loaded. */
+  ref: RefObject<HTMLImageElement | null>;
+  onLoad: ReactEventHandler<HTMLImageElement>;
+}
+
+/**
+ * Samples the tone from the image the component renders. An earlier version
+ * loaded the source a second time through `new Image()`, and because the
+ * rendered element carries a different URL (next/image adds the deployment
+ * id, or routes through the optimizer), every icon was fetched twice.
+ *
+ * `src` is the component's own key for the cache; the pixels come from the
+ * rendered element, whatever URL it ended up loading.
+ */
+export function useImageTone(src: string | null | undefined): ImageToneHandle {
   const [tone, setTone] = useState<{ src: string; tone: ImageTone } | null>(
     null,
+  );
+  const ref = useRef<HTMLImageElement | null>(null);
+
+  const sample = useCallback(
+    (image: HTMLImageElement) => {
+      if (!src) return;
+      let detected = toneCache.get(src);
+      if (detected === undefined) {
+        detected = sampleTone(image);
+        rememberTone(src, detected);
+      }
+      setTone({ src, tone: detected });
+    },
+    [src],
   );
 
   useEffect(() => {
     if (!src) return;
-    let active = true;
-    let pending = toneCache.get(src);
-    if (!pending) {
-      pending = detectImageTone(src);
-      toneCache.set(src, pending);
+    const cached = toneCache.get(src);
+    if (cached !== undefined) {
+      setTone({ src, tone: cached });
+      return;
     }
-    pending.then((detected) => {
-      if (active) setTone({ src, tone: detected });
-    });
-    return () => {
-      active = false;
-    };
-  }, [src]);
+    // A server-rendered image can finish loading before React attaches the
+    // load handler; it then never fires, so sample a complete image here.
+    const image = ref.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      sample(image);
+    }
+  }, [src, sample]);
 
-  return tone && tone.src === src ? tone.tone : null;
+  const onLoad = useCallback<ReactEventHandler<HTMLImageElement>>(
+    (event) => sample(event.currentTarget),
+    [sample],
+  );
+
+  return { tone: tone && tone.src === src ? tone.tone : null, ref, onLoad };
 }
 
 /** Tile classes that give a low-contrast logo a backdrop in the theme it would vanish in. */
@@ -48,24 +106,26 @@ export function imageToneClassName(tone: ImageTone): string | undefined {
   }
 }
 
-function detectImageTone(src: string): Promise<ImageTone> {
-  return new Promise((resolve) => {
-    const image = new window.Image();
-    image.onload = () => resolve(sampleTone(image));
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
-}
-
 function sampleTone(image: HTMLImageElement): ImageTone {
   try {
     const canvas = document.createElement("canvas");
-    canvas.width = SAMPLE_SIZE;
-    canvas.height = SAMPLE_SIZE;
+    canvas.width = IMAGE_TONE_SAMPLE_SIZE;
+    canvas.height = IMAGE_TONE_SAMPLE_SIZE;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
-    context.drawImage(image, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-    const { data } = context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+    context.drawImage(
+      image,
+      0,
+      0,
+      IMAGE_TONE_SAMPLE_SIZE,
+      IMAGE_TONE_SAMPLE_SIZE,
+    );
+    const { data } = context.getImageData(
+      0,
+      0,
+      IMAGE_TONE_SAMPLE_SIZE,
+      IMAGE_TONE_SAMPLE_SIZE,
+    );
 
     let weight = 0;
     let luminance = 0;
@@ -83,7 +143,10 @@ function sampleTone(image: HTMLImageElement): ImageTone {
     }
 
     // A logo that fills its own square already has a background.
-    if (weight === 0 || transparentPixels < (SAMPLE_SIZE * SAMPLE_SIZE) / 10) {
+    if (
+      weight === 0 ||
+      transparentPixels < (IMAGE_TONE_SAMPLE_SIZE * IMAGE_TONE_SAMPLE_SIZE) / 10
+    ) {
       return null;
     }
     const average = luminance / weight;

@@ -62,7 +62,7 @@ if build_agent_catalog_images_locally:
     docker_build(
       image_ref,
       '..',
-      dockerfile='../agent_images/Dockerfile',
+      dockerfile='../docker_images/agent/Dockerfile',
       target=image_name,
       # Sandboxes are created dynamically by the backend, outside
       # Tilt's image-reference injection. Keep their stable local tag current
@@ -129,7 +129,6 @@ def get_frontend_env():
     'ARCHESTRA_SENTRY_ENVIRONMENT',
     'ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED',
     'ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED',
-    'ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED',
     'ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING',
     'ARCHESTRA_AUTH_DISABLE_BASIC_AUTH',
     'ARCHESTRA_AUTH_DISABLE_INVITATIONS',
@@ -319,13 +318,6 @@ else:
       'NEXT_PUBLIC_SENTRY_DSN': '',
     }
   )
-
-# App-recording video rendering runs in-process in local dev — the single `all`
-# backend renders in its own memory (InProcessRenderJobClient), the same path the
-# OSS single container uses. The dedicated single-replica render service is a
-# multi-replica staging/prod concern wired via Helm (archestra-renderer.yaml), not
-# a Tilt resource here: nothing local has to rerun the backend's own dist bundle
-# out-of-band to stand one up.
 
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use

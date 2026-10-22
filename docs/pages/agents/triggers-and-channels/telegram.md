@@ -2,7 +2,7 @@
 title: Telegram
 description: Connect Archestra agents to Telegram chats and groups
 order: 5
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-12
 ---
 
 Message a Telegram bot, and an Archestra agent answers. It works in direct messages and in groups. It needs only a bot token: no public URL, webhook, or tunnel.
@@ -58,7 +58,7 @@ Then the agent joins the talk. It always answers mentions and replies to its own
 | `/help` | Lists the commands |
 
 - **Ask another agent once:** start the message with `Sales > `.
-- **Tool approvals:** the bot shows the tool and its arguments, with **Approve** and **Decline**. Only the person who asked can decide.
+- **Approvals:** when your [policy](/docs/agents/guardrails/policies) asks a person to approve an action, the bot shows the review with **Approve** and **Decline**. Only the person who asked can decide.
 - **Chat instructions:** tell the agent how to behave in one chat, from the chat's **Settings**. They come first, before the agent's own instructions.
 
 <span id="conversation-memory"></span><span id="attachments"></span><span id="limitations"></span>

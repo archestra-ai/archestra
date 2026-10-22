@@ -2,7 +2,7 @@
 
 <img src="logo.svg" alt="Archestra" width="520" />
 
-**The all-in-one open-source enterprise AI platform.**
+**Secure AI Platform**
 
 *Built on a strong security and observability foundation: SSO and RBAC,
 sandboxed code execution, Lethal-Trifecta guardrails,
@@ -32,8 +32,8 @@ https://github.com/user-attachments/assets/912b85e2-ef14-4e83-a807-5e2a81457a88
 Point your users — or your agents, or Claude / Codex / Cursor — at one URL. Archestra handles the rest:
 
 - 💬 **Chat for non-technical users.** Internal AI assistant with
-  [projects](https://archestra.ai/docs/workspace/projects),
-  [MCP apps](https://archestra.ai/docs/workspace/apps), and
+  [projects](https://archestra.ai/docs/chat/projects),
+  [MCP apps](https://archestra.ai/docs/chat/apps), and
   [Slack](https://archestra.ai/docs/agents/triggers-and-channels/slack),
   [MS Teams](https://archestra.ai/docs/agents/triggers-and-channels/ms-teams), and
   [email](https://archestra.ai/docs/agents/triggers-and-channels/email)
@@ -60,7 +60,7 @@ Point your users — or your agents, or Claude / Codex / Cursor — at one URL. 
 - 📚 **RAG knowledge base** plumbed via
   [connectors](https://archestra.ai/docs/knowledge/connectors) to
   your existing stack.
-- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/workspace/apps).
+- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/chat/apps).
 - 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/agents/guardrails) and
   [Lethal Trifecta](https://archestra.ai/docs/agents/guardrails#the-lethal-trifecta) protections.
 - 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/administration/identity/sso)

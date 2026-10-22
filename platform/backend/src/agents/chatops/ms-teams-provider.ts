@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { AzureIdentityAuthenticationProvider } from "@microsoft/kiota-authentication-azure";
 import {
@@ -9,24 +10,32 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
+import { resolveMSTeamsUserEmail } from "./ms-teams-user";
 // Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
 import "@microsoft/msgraph-sdk-teams";
 import "@microsoft/msgraph-sdk-users";
 import {
+  Activity,
   ActivityTypes,
-  CloudAdapter,
-  ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
-  TeamsInfo,
+} from "@microsoft/agents-activity";
+import {
+  type AuthConfiguration,
+  authorizeJWT,
+  CloudAdapter,
+  type Request,
   TurnContext,
-} from "botbuilder";
-import { PasswordServiceClientCredentialFactory } from "botframework-connector";
+  type WebResponse,
+} from "@microsoft/agents-hosting";
+import type { A2AAttachment } from "@/agents/a2a-executor";
+import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { LRUCacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
+import { mimeFromExtension } from "@/skills-sandbox/mime-sniff";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -55,15 +64,15 @@ import {
 } from "./constants";
 import {
   errorMessage,
-  formatApprovalToolArgs,
+  formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
 
 /**
- * MS Teams provider using Bot Framework SDK.
+ * MS Teams provider using Microsoft 365 Agents SDK.
  *
  * Security:
- * - JWT validation handled automatically by CloudAdapter
+ * - JWT validation runs before the adapter processes any activity
  * - Supports single-tenant and multi-tenant Azure Bot configurations
  */
 class MSTeamsProvider implements ChatOpsProvider {
@@ -71,7 +80,9 @@ class MSTeamsProvider implements ChatOpsProvider {
   readonly displayName = "Microsoft Teams";
 
   private adapter: CloudAdapter | null = null;
+  private authorize: ReturnType<typeof authorizeJWT> | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private graphCredential: ClientSecretCredential | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
@@ -113,35 +124,32 @@ class MSTeamsProvider implements ChatOpsProvider {
       clientSecret: this.config.graphClientSecret,
     };
 
-    // Initialize Bot Framework adapter
-    const credentialsFactory = tenantId
-      ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
-      : new PasswordServiceClientCredentialFactory(appId, appSecret);
-
-    // A tenant ID means this is a single-tenant Azure Bot. The adapter must be
-    // told so (MicrosoftAppType=SingleTenant) — otherwise it defaults to
-    // MultiTenant and validates tokens against the wrong (common) authority,
-    // rejecting every inbound activity with "Unauthorized. No valid identity."
-    const auth = new ConfigurationBotFrameworkAuthentication(
-      {
-        MicrosoftAppId: appId,
-        MicrosoftAppType: tenantId ? "SingleTenant" : "MultiTenant",
-        MicrosoftAppTenantId: tenantId || undefined,
-      },
-      credentialsFactory,
-    );
-
-    this.adapter = new CloudAdapter(auth);
+    const connection: AuthConfiguration = {
+      clientId: appId,
+      clientSecret: appSecret,
+      // Legacy multi-tenant bots acquire connector tokens from this tenant.
+      tenantId: tenantId || "botframework.com",
+      validateIssuer: true,
+    };
+    const auth: AuthConfiguration = {
+      ...connection,
+      connections: new Map([["teams", connection]]),
+      connectionsMap: [{ serviceUrl: "*", connection: "teams" }],
+    };
+    this.authorize = authorizeJWT(auth);
+    this.adapter = new CloudAdapter(auth, undefined, undefined, {
+      validateServiceUrl: true,
+    });
     this.adapter.onTurnError = async (_context, error) => {
       logger.error(
         { error: errorMessage(error) },
-        "[MSTeamsProvider] Bot Framework error",
+        "[MSTeamsProvider] Agents SDK turn error",
       );
     };
 
     logger.info(
       { tenantMode: tenantId ? "single-tenant" : "multi-tenant" },
-      "[MSTeamsProvider] Bot Framework adapter initialized",
+      "[MSTeamsProvider] Agents SDK adapter initialized",
     );
 
     // Initialize Graph client if configured
@@ -152,10 +160,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         graph.clientSecret,
       );
       const authProvider = new AzureIdentityAuthenticationProvider(credential, [
-        "https://graph.microsoft.com/.default",
+        GRAPH_DEFAULT_SCOPE,
       ]);
       const requestAdapter = new GraphRequestAdapter(authProvider);
       this.graphClient = createGraphServiceClient(requestAdapter);
+      this.graphCredential = credential;
       logger.info("[MSTeamsProvider] Graph client initialized");
     } else {
       logger.info(
@@ -166,7 +175,9 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   async cleanup(): Promise<void> {
     this.adapter = null;
+    this.authorize = null;
     this.graphClient = null;
+    this.graphCredential = null;
     this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
   }
@@ -278,7 +289,14 @@ class MSTeamsProvider implements ChatOpsProvider {
       activity.text ?? "",
       activity.recipient?.name,
     );
-    if (!cleanedText && !hasFileAttachment) {
+    // Files sent in a channel or group chat never ride on the activity; they
+    // are read from Graph once the bot decides to answer (see
+    // downloadMessageFiles), so a message that looks empty here may still
+    // carry one.
+    const mayCarryGraphFiles =
+      this.graphClient !== null &&
+      isGraphFileConversation(activity.conversation?.conversationType);
+    if (!cleanedText && !hasFileAttachment && !mayCarryGraphFiles) {
       return null;
     }
 
@@ -303,8 +321,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
     // Download file attachments (skip Adaptive Cards and other non-file
-    // attachments). Current-message drops are intentionally not surfaced for
-    // Teams (unlike Slack) — only the delivered attachments are used.
+    // attachments). Files that could not be delivered are passed on as
+    // skipped, so the agent explains the miss instead of saying it sees
+    // nothing.
     const fileOutcomes = await this.downloadTeamsFiles(
       filterTeamsFileAttachments(activity.attachments),
       activity.serviceUrl,
@@ -312,11 +331,18 @@ class MSTeamsProvider implements ChatOpsProvider {
     const attachments = fileOutcomes.flatMap((o) =>
       o.status === "delivered" ? [o.attachment] : [],
     );
+    const skippedAttachments = fileOutcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
 
-    // A file-only message (empty text) is kept only when a file actually
-    // survived download — oversized, expired, or failed downloads must not
-    // leave the bot answering an empty turn.
-    if (!cleanedText && attachments.length === 0) {
+    // A file-only message (empty text) is answered when a file was delivered
+    // or skipped: a skipped screenshot still deserves "I couldn't open it".
+    if (
+      !cleanedText &&
+      attachments.length === 0 &&
+      skippedAttachments.length === 0 &&
+      !mayCarryGraphFiles
+    ) {
       return null;
     }
 
@@ -335,11 +361,8 @@ class MSTeamsProvider implements ChatOpsProvider {
         tenantId:
           activity.channelData?.tenant?.id || activity.conversation?.tenantId,
         serviceUrl: activity.serviceUrl,
-        conversationReference: TurnContext.getConversationReference(
-          activity as Parameters<
-            typeof TurnContext.getConversationReference
-          >[0],
-        ),
+        conversationReference:
+          Activity.fromObject(activity).getConversationReference(),
         authHeader: headers.authorization || headers.Authorization,
         // Lets the manager frame group conversations for the agent ("personal",
         // "groupChat", or "channel") and tell it whether it was addressed.
@@ -351,6 +374,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
+      ...(skippedAttachments.length > 0 && { skippedAttachments }),
     };
   }
 
@@ -441,13 +465,19 @@ class MSTeamsProvider implements ChatOpsProvider {
     // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
     // line ABOVE the footer, so the agent footer stays the last line. Italics
     // keep it visually quieter than the footer.
-    if (options.hint) {
-      replyText += `\n\n---\n\n_${options.hint}_`;
+    const hints = [
+      options.hint,
+      options.conversationUrl &&
+        `[Open conversation](${options.conversationUrl})`,
+    ].filter(Boolean);
+    if (hints.length > 0) {
+      replyText += `\n\n---\n\n_${hints.join(" · ")}_`;
     }
     if (options.footer) {
-      replyText += options.hint
-        ? `\n\n${options.footer}`
-        : `\n\n---\n\n${options.footer}`;
+      replyText +=
+        hints.length > 0
+          ? `\n\n${options.footer}`
+          : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -457,11 +487,14 @@ class MSTeamsProvider implements ChatOpsProvider {
     const turnContext = options.originalMessage.metadata?.turnContext;
     if (placeholderActivityId && turnContext instanceof TurnContext) {
       try {
-        await turnContext.updateActivity({
-          id: placeholderActivityId,
-          type: ActivityTypes.Message,
-          text: replyText,
-        });
+        await turnContext.updateActivity(
+          Activity.fromObject({
+            id: placeholderActivityId,
+            type: ActivityTypes.Message,
+            text: replyText,
+          }),
+        );
+        delete options.originalMessage.metadata?.placeholderActivityId;
         return placeholderActivityId;
       } catch (error) {
         logger.debug(
@@ -484,10 +517,29 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let messageId = "";
     try {
-      await this.adapter.continueConversationAsync(
+      await this.adapter.continueConversation(
         this.config.appId,
         ref,
         async (context) => {
+          if (placeholderActivityId && !(turnContext instanceof TurnContext)) {
+            try {
+              await context.updateActivity(
+                Activity.fromObject({
+                  id: placeholderActivityId,
+                  type: ActivityTypes.Message,
+                  text: replyText,
+                }),
+              );
+              delete options.originalMessage.metadata?.placeholderActivityId;
+              messageId = placeholderActivityId;
+              return;
+            } catch (error) {
+              logger.debug(
+                { error: errorMessage(error) },
+                "[MSTeamsProvider] Failed to update detached placeholder, sending new message",
+              );
+            }
+          }
           const response = await context.sendActivity(replyText);
           messageId = response?.id || "";
         },
@@ -495,7 +547,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
-        "[MSTeamsProvider] continueConversationAsync failed",
+        "[MSTeamsProvider] continueConversation failed",
       );
       throw error;
     }
@@ -529,7 +581,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       // try to look up the actual team ID
       const looksLikeTeamChannel = params.channelId.includes("@thread.tacv2");
       if (!isValidTeamId && looksLikeTeamChannel) {
-        // workspaceId should already be resolved by the route handler via TeamsInfo.
+        // workspaceId should already be resolved by the route handler via msTeamsDirectory.
         // Falling back to lookupTeamIdFromChannel (requires Azure AD app permissions).
         logger.warn(
           { channelId: params.channelId, workspaceId },
@@ -585,54 +637,8 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    const buildAction = (approved: boolean) => ({
-      type: "Action.Submit",
-      title: approved ? "Approve" : "Decline",
-      data: {
-        action: "approvalDecision",
-        approvalId: options.approvalId,
-        approved,
-        taskId: options.taskId,
-        toolName: options.toolName,
-        channelId: options.channelId,
-        workspaceId: options.originalMessage.workspaceId,
-        threadId: options.threadId,
-        originalSenderEmail: options.originalMessage.senderEmail,
-        messageId: options.originalMessage.messageId,
-      },
-    });
-
-    const argsText = formatApprovalToolArgs(options.toolArgs);
-    const approvalCard = {
-      type: "AdaptiveCard",
-      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-      version: "1.4",
-      body: [
-        {
-          type: "TextBlock",
-          text: `\`${options.toolName}\``,
-          wrap: true,
-        },
-        ...(argsText
-          ? [
-              {
-                type: "TextBlock",
-                text: argsText,
-                wrap: true,
-                fontType: "Monospace",
-                spacing: "Small",
-              },
-            ]
-          : []),
-        {
-          type: "ActionSet",
-          spacing: "Small",
-          actions: [buildAction(true), buildAction(false)],
-        },
-      ],
-    };
-
-    const approvalMessage = {
+    const approvalCard = buildApprovalRequestCard(options);
+    const approvalMessage = Activity.fromObject({
       type: ActivityTypes.Message,
       text: "",
       attachments: [
@@ -641,7 +647,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           content: approvalCard,
         },
       ],
-    };
+    });
 
     const turnContext = options.originalMessage.metadata?.turnContext;
     if (turnContext instanceof TurnContext) {
@@ -657,7 +663,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       );
     }
 
-    await this.adapter.continueConversationAsync(
+    await this.adapter.continueConversation(
       this.config.appId,
       conversationReference,
       async (context) => {
@@ -790,7 +796,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Get user's email from their AAD Object ID using Microsoft Graph API.
-   * Fallback method when TeamsInfo.getMember() is unavailable.
+   * Fallback method when msTeamsDirectory.getMember() is unavailable.
    * Requires User.Read.All application permission.
    */
   async getUserEmail(aadObjectId: string): Promise<string | null> {
@@ -803,7 +809,12 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     try {
       const user = await this.graphClient.users.byUserId(aadObjectId).get();
-      return user?.mail || user?.userPrincipalName || null;
+      return user
+        ? await resolveMSTeamsUserEmail({
+            email: user.mail,
+            userPrincipalName: user.userPrincipalName,
+          })
+        : null;
     } catch (error) {
       logger.error(
         { error: errorMessage(error), aadObjectId },
@@ -839,15 +850,15 @@ class MSTeamsProvider implements ChatOpsProvider {
     if (!teamData?.id) return null;
 
     const [channels, teamDetails] = await Promise.all([
-      TeamsInfo.getTeamChannels(context),
-      TeamsInfo.getTeamDetails(context).catch(() => null),
+      msTeamsDirectory.getTeamChannels(context),
+      msTeamsDirectory.getTeamDetails(context).catch(() => null),
     ]);
 
     if (!channels?.length) return null;
 
     // Prefer aadGroupId (stable UUID) over thread-format team.id.
     // channelData.team.aadGroupId is often absent, so fall back to
-    // the value returned by TeamsInfo.getTeamDetails().
+    // the value returned by msTeamsDirectory.getTeamDetails().
     const workspaceId =
       teamData.aadGroupId || teamDetails?.aadGroupId || teamData.id;
 
@@ -898,12 +909,14 @@ class MSTeamsProvider implements ChatOpsProvider {
           }
         } else {
           // DMs and group chats support native typing indicators
-          await turnContext.sendActivity({ type: ActivityTypes.Typing });
+          await turnContext.sendActivity(
+            Activity.fromObject({ type: ActivityTypes.Typing }),
+          );
         }
         return;
       }
 
-      // Fallback: proactive messaging via continueConversationAsync.
+      // Fallback: proactive messaging via continueConversation.
       // Works for DMs/group chats but not for channel typing indicators.
       if (!this.adapter) return;
       const ref = metadata?.conversationReference as
@@ -911,11 +924,13 @@ class MSTeamsProvider implements ChatOpsProvider {
         | undefined;
       if (!ref) return;
 
-      await this.adapter.continueConversationAsync(
+      await this.adapter.continueConversation(
         this.config.appId,
         ref,
         async (context) => {
-          await context.sendActivity({ type: ActivityTypes.Typing });
+          await context.sendActivity(
+            Activity.fromObject({ type: ActivityTypes.Typing }),
+          );
         },
       );
     } catch (error) {
@@ -924,6 +939,32 @@ class MSTeamsProvider implements ChatOpsProvider {
         "[MSTeamsProvider] setTypingStatus failed (non-fatal)",
       );
     }
+  }
+
+  async clearTypingStatus(
+    _channelId: string,
+    _threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    const placeholderActivityId = metadata?.placeholderActivityId;
+    if (typeof placeholderActivityId !== "string") return;
+    const turnContext = metadata?.turnContext;
+    if (turnContext instanceof TurnContext) {
+      await turnContext.deleteActivity(placeholderActivityId);
+    } else {
+      const ref = metadata?.conversationReference as
+        | ConversationReference
+        | undefined;
+      if (!this.adapter || !ref) return;
+      await this.adapter.continueConversation(
+        this.config.appId,
+        ref,
+        async (context) => {
+          await context.deleteActivity(placeholderActivityId);
+        },
+      );
+    }
+    delete metadata?.placeholderActivityId;
   }
 
   async processActivity(
@@ -937,59 +978,69 @@ class MSTeamsProvider implements ChatOpsProvider {
     },
     handler: (context: TurnContext) => Promise<void>,
   ): Promise<void> {
-    if (!this.adapter) {
+    if (!this.adapter || !this.authorize) {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    // The Bot Framework SDK has a hardcoded `console.error(err)` in CloudAdapter.process()
-    // for auth failures. MS Teams sends duplicate webhooks per message — one always fails
-    // JWT validation with a different AppId. Suppress these expected 401s to avoid noisy logs.
-    const origConsoleError = console.error;
-    console.error = (...args: unknown[]) => {
-      const err = args[0];
+    // The Agents SDK adapter trusts request.user; it does not authenticate
+    // requests itself. Keep Microsoft's JWT middleware in front of it.
+    const request: Request = {
+      body: req.body as Record<string, unknown>,
+      headers: {
+        ...req.headers,
+        authorization: req.headers.authorization ?? req.headers.Authorization,
+      },
+      method: "POST",
+    };
+    let status = 200;
+    const response: WebResponse = {
+      headersSent: false,
+      writableEnded: false,
+      status(code) {
+        status = code;
+        return this;
+      },
+      setHeader() {
+        return this;
+      },
+      send(body) {
+        if (!this.writableEnded) {
+          this.headersSent = true;
+          this.writableEnded = true;
+          res.status(status).send(body);
+        }
+        return this;
+      },
+      end() {
+        return this.send();
+      },
+    };
+    let authenticated = false;
+    await this.authorize(request, response, () => {
+      authenticated = true;
+    });
+    if (!authenticated) return;
+
+    await this.adapter.process(request, response, async (context) => {
+      // Acknowledge ordinary activities before doing any network/agent work.
+      // Keep this callback alive until all work finishes: returning it early
+      // revokes the TurnContext used for cards, typing and threaded replies.
+      // Invoke and expectReplies activities require the SDK's response body.
       if (
-        err &&
-        typeof err === "object" &&
-        "statusCode" in err &&
-        (err as { statusCode: number }).statusCode === 401
+        context.activity.type !== ActivityTypes.Invoke &&
+        context.activity.deliveryMode !== "expectReplies"
       ) {
+        response.status(200).end();
+      }
+      const approvalPayload = this.parseApprovalDecisionPayload(
+        context.activity.value,
+      );
+      if (approvalPayload) {
+        await this.handleApprovalDecisionSubmission(context, approvalPayload);
         return;
       }
-      origConsoleError.apply(console, args);
-    };
-
-    try {
-      await this.adapter.process(
-        {
-          body: req.body as Record<string, unknown>,
-          headers: req.headers,
-          method: "POST",
-        },
-        {
-          socket: null,
-          end: () => {},
-          header: () => {},
-          send: res.send,
-          status: res.status,
-        },
-        async (context) => {
-          const approvalPayload = this.parseApprovalDecisionPayload(
-            context.activity.value,
-          );
-          if (approvalPayload) {
-            await this.handleApprovalDecisionSubmission(
-              context,
-              approvalPayload,
-            );
-            return;
-          }
-
-          await handler(context);
-        },
-      );
-    } finally {
-      console.error = origConsoleError;
-    }
+      await handler(context);
+    });
   }
 
   parseInteractivePayload(_payload: unknown): {
@@ -1010,6 +1061,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     approvalId: string;
     approved: boolean;
     toolName?: string;
+    toolLabel?: string;
     taskId: string;
     channelId?: string;
     workspaceId?: string | null;
@@ -1026,6 +1078,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId?: unknown;
       approved?: unknown;
       toolName?: unknown;
+      toolLabel?: unknown;
       taskId?: unknown;
       channelId?: unknown;
       workspaceId?: unknown;
@@ -1037,6 +1090,8 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId: value.approvalId as string,
       approved: value.approved as boolean,
       toolName: value.toolName as string | undefined,
+      toolLabel:
+        typeof value.toolLabel === "string" ? value.toolLabel : undefined,
       taskId: value.taskId as string,
       channelId: value.channelId as string | undefined,
       workspaceId: value.workspaceId as string | null | undefined,
@@ -1052,6 +1107,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId: string;
       approved: boolean;
       toolName?: string;
+      toolLabel?: string;
       taskId: string;
       channelId?: string;
       workspaceId?: string | null;
@@ -1066,17 +1122,17 @@ class MSTeamsProvider implements ChatOpsProvider {
       "unknown";
     let senderEmail: string | null = null;
     try {
-      const member = await TeamsInfo.getMember(
+      const member = await msTeamsDirectory.getMember(
         context,
         context.activity.from?.id || senderId,
       );
       if (member?.email || member?.userPrincipalName) {
-        senderEmail = member.email ?? member.userPrincipalName ?? null;
+        senderEmail = await resolveMSTeamsUserEmail(member);
       }
     } catch (error) {
       logger.debug(
         { error: error instanceof Error ? error.message : String(error) },
-        "[MSTeamsProvider] TeamsInfo.getMember failed for approval decision, will fall back to Graph API if configured",
+        "[MSTeamsProvider] msTeamsDirectory.getMember failed for approval decision, will fall back to Graph API if configured",
       );
     }
 
@@ -1132,11 +1188,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       metadata: {
         conversationType: context.activity.conversation?.conversationType,
         turnContext: context,
-        conversationReference: TurnContext.getConversationReference(
-          context.activity as Parameters<
-            typeof TurnContext.getConversationReference
-          >[0],
-        ),
+        conversationReference: context.activity.getConversationReference(),
       },
     };
 
@@ -1163,14 +1215,23 @@ class MSTeamsProvider implements ChatOpsProvider {
         return;
       }
 
-      await context.updateActivity({
-        id: approvalMessageId,
-        type: ActivityTypes.Message,
-        text: `${payload.toolName || "Approval"}: ${
-          payload.approved ? "Approved" : "Declined"
-        }`,
-        attachments: [],
-      });
+      await context.updateActivity(
+        Activity.fromObject({
+          id: approvalMessageId,
+          type: ActivityTypes.Message,
+          text: "",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: buildApprovalDecisionCard({
+                toolLabel: payload.toolLabel,
+                approved: payload.approved,
+                deciderName: context.activity.from?.name,
+              }),
+            },
+          ],
+        }),
+      );
     };
 
     if (!this.eventHandler) {
@@ -1298,19 +1359,25 @@ class MSTeamsProvider implements ChatOpsProvider {
             channelId: params.message.channelId,
             workspaceId: params.message.workspaceId,
             originalMessageText: params.message.text || undefined,
+            pendingAttachmentsKey: await this.stashAgentSelectionAttachments(
+              params.message,
+            ),
           },
         },
       ],
     };
 
-    await context.sendActivity({
-      attachments: [
-        {
-          contentType: "application/vnd.microsoft.card.adaptive",
-          content: card,
-        },
-      ],
-    });
+    await context.sendActivity(
+      Activity.fromObject({
+        type: ActivityTypes.Message,
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: card,
+          },
+        ],
+      }),
+    );
   }
 
   hasMissingScopes(): boolean {
@@ -1321,10 +1388,37 @@ class MSTeamsProvider implements ChatOpsProvider {
     // No-op: MS Teams permissions are managed in Azure AD and can't be detected at runtime
   }
 
+  /**
+   * Files of the message that triggered an agent-selection card, so the
+   * replay after **Confirm Selection** answers the whole message. Only the
+   * original sender, in the original conversation, receives them, once.
+   */
+  async takeAgentSelectionAttachments(params: {
+    key: string;
+    senderId: string;
+    channelId: string;
+  }): Promise<A2AAttachment[]> {
+    if (!isUuid(params.key)) return [];
+    const cacheKey =
+      `${CacheKey.TeamsAgentSelectionAttachments}-${params.key}` as const;
+    const pending =
+      await cacheManager.get<PendingAgentSelectionAttachments>(cacheKey);
+    if (
+      !pending ||
+      pending.senderId !== params.senderId ||
+      pending.channelId !== params.channelId
+    ) {
+      return [];
+    }
+    await cacheManager.delete(cacheKey);
+    return pending.attachments;
+  }
+
   async downloadFiles(
     files: ChatThreadMessageFile[],
   ): Promise<ThreadFileOutcome[]> {
-    // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
+    // No serviceUrl for history messages: Azure Blob URLs are pre-authenticated
+    // and Graph hosted-content images authenticate with the Graph app token.
     return this.downloadTeamsFiles(
       files.map((f) => ({
         contentType: f.mimetype,
@@ -1335,8 +1429,205 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
   }
 
+  /**
+   * Download the files of a channel or group-chat message. Teams does not put
+   * them on the bot's activity: each is a SharePoint `reference` attachment
+   * that only Graph returns. Reading the message uses the app's RSC message
+   * permission; reading the file needs the app's Graph `Sites.Selected`
+   * permission plus a read grant on the team's site, and without one the
+   * file comes back as skipped. Group-chat files sit in each sender's
+   * OneDrive, which a site grant does not cover.
+   */
+  async downloadMessageFiles(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]> {
+    const conversationType = message.metadata?.conversationType;
+    if (
+      !this.graphClient ||
+      typeof conversationType !== "string" ||
+      !isGraphFileConversation(conversationType)
+    ) {
+      return [];
+    }
+    try {
+      const graphMessage =
+        conversationType === "channel"
+          ? await this.getChannelMessage(message)
+          : await this.graphClient.chats
+              .byChatId(message.channelId)
+              .messages.byChatMessageId(message.messageId)
+              .get();
+      const files: ChatThreadMessageFile[] = (graphMessage?.attachments ?? [])
+        .filter(
+          (a) => a.contentType === GRAPH_REFERENCE_ATTACHMENT && a.contentUrl,
+        )
+        .map((a) => ({
+          url: a.contentUrl as string,
+          mimetype: GRAPH_REFERENCE_ATTACHMENT,
+          name: a.name ?? undefined,
+        }));
+      return files.length > 0 ? this.downloadFiles(files) : [];
+    } catch (error) {
+      logger.warn(
+        {
+          error: errorMessage(error),
+          channelId: message.channelId,
+          conversationType,
+        },
+        "[MSTeamsProvider] Could not read the message's files from Graph",
+      );
+      return [];
+    }
+  }
+
   // ===========================================================================
   // Private Methods
+
+  private async getChannelMessage(
+    message: IncomingChatMessage,
+  ): Promise<ChatMessage | undefined> {
+    const client = this.graphClient;
+    if (!client) return undefined;
+    const teamId =
+      message.workspaceId && isUuid(message.workspaceId)
+        ? message.workspaceId
+        : await this.lookupTeamIdFromChannel(
+            message.channelId,
+            message.workspaceId || undefined,
+          );
+    if (!teamId) return undefined;
+    const messages = client.teams
+      .byTeamId(teamId)
+      .channels.byChannelId(message.channelId).messages;
+    const rootId = message.threadId;
+    return rootId && rootId !== message.messageId
+      ? messages
+          .byChatMessageId(rootId)
+          .replies.byChatMessageId1(message.messageId)
+          .get()
+      : messages.byChatMessageId(message.messageId).get();
+  }
+
+  /**
+   * Fetch a SharePoint or OneDrive file by its page URL through Graph. The
+   * URL is resolved to its site and document library rather than through
+   * `/shares`, so a `Sites.Selected` grant on that one site is enough.
+   * Failures come back as an error response, for the caller's skip handling.
+   */
+  private async fetchSharePointFile(fileUrl: string): Promise<Response> {
+    const token = await this.getGraphToken();
+    if (!token) return new Response(null, { status: 401 });
+    const headers = { Authorization: `Bearer ${token}` };
+    const location = await this.locateSharePointFile({ fileUrl, headers });
+    if ("status" in location) {
+      if (location.status === 401 || location.status === 403) {
+        logger.warn(
+          { host: safeHostname(fileUrl), status: location.status },
+          "[MSTeamsProvider] Graph denied a Teams file. Grant the app Sites.Selected and read access to this site",
+        );
+      }
+      return new Response(null, { status: location.status });
+    }
+    // Graph answers with a redirect to a pre-signed download URL; fetch drops
+    // the Authorization header on that cross-origin hop.
+    return fetch(
+      `${GRAPH_V1}/drives/${encodeURIComponent(location.driveId)}/root:/${encodeGraphPath(location.itemPath)}:/content`,
+      { headers },
+    );
+  }
+
+  private async locateSharePointFile(params: {
+    fileUrl: string;
+    headers: Record<string, string>;
+  }): Promise<{ driveId: string; itemPath: string[] } | { status: number }> {
+    const url = new URL(params.fileUrl);
+    const segments = pathSegments(url.pathname);
+    // `/sites/<name>`, `/teams/<name>` or `/personal/<user>`, then the
+    // library, then the file.
+    if (segments.length < 4) return { status: 404 };
+    const sitePath = segments.slice(0, 2);
+    const cacheKey = `${url.hostname}/${sitePath.join("/")}`;
+    let drives = this.sharePointDriveCache.get(cacheKey);
+    if (!drives) {
+      const siteResponse = await fetch(
+        `${GRAPH_V1}/sites/${url.hostname}:/${encodeGraphPath(sitePath)}?$select=id`,
+        { headers: params.headers },
+      );
+      if (!siteResponse.ok) return { status: siteResponse.status };
+      const site = (await siteResponse.json()) as { id?: string };
+      if (!site.id) return { status: 404 };
+      const drivesResponse = await fetch(
+        `${GRAPH_V1}/sites/${encodeURIComponent(site.id)}/drives?$select=id,webUrl`,
+        { headers: params.headers },
+      );
+      if (!drivesResponse.ok) return { status: drivesResponse.status };
+      const body = (await drivesResponse.json()) as {
+        value?: Array<{ id?: string; webUrl?: string }>;
+      };
+      drives = (body.value ?? []).flatMap((drive) =>
+        drive.id && drive.webUrl
+          ? [
+              {
+                id: drive.id,
+                segments: pathSegments(new URL(drive.webUrl).pathname),
+              },
+            ]
+          : [],
+      );
+      this.sharePointDriveCache.set(cacheKey, drives);
+    }
+    // The library whose URL is the longest prefix of the file's URL.
+    const drive = drives
+      .filter((candidate) =>
+        candidate.segments.every((segment, i) => segments[i] === segment),
+      )
+      .sort((a, b) => b.segments.length - a.segments.length)[0];
+    if (!drive || drive.segments.length >= segments.length) {
+      return { status: 404 };
+    }
+    return {
+      driveId: drive.id,
+      itemPath: segments.slice(drive.segments.length),
+    };
+  }
+
+  private sharePointDriveCache = new LRUCacheManager<
+    Array<{ id: string; segments: string[] }>
+  >({
+    maxSize: CHATOPS_TEAM_CACHE.MAX_SIZE,
+    defaultTtl: CHATOPS_TEAM_CACHE.TTL_MS,
+  });
+
+  /**
+   * Hold the message's files until the agent is picked. The card carries only
+   * the returned key: Teams echoes card data back from the client, so file
+   * references placed in it could be swapped for another conversation's.
+   */
+  private async stashAgentSelectionAttachments(
+    message: IncomingChatMessage,
+  ): Promise<string | undefined> {
+    if (!message.attachments?.length) return undefined;
+    const key = randomUUID();
+    const pending: PendingAgentSelectionAttachments = {
+      senderId: message.senderId,
+      channelId: message.channelId,
+      attachments: message.attachments,
+    };
+    try {
+      await cacheManager.set(
+        `${CacheKey.TeamsAgentSelectionAttachments}-${key}`,
+        pending,
+        AGENT_SELECTION_ATTACHMENTS_TTL_MS,
+      );
+      return key;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not hold attachments for the agent-selection replay",
+      );
+      return undefined;
+    }
+  }
 
   /**
    * Download Teams file attachments and convert to A2AAttachment format.
@@ -1349,6 +1640,8 @@ class MSTeamsProvider implements ChatOpsProvider {
    * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
    * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
    * using client credentials (appId/appSecret) to obtain a Bot Connector token.
+   * Images pasted inline into a message reach thread history only as Graph
+   * hosted-content URLs, which take the Graph app token instead.
    */
   private async downloadTeamsFiles(
     files: TeamsFileAttachment[],
@@ -1408,9 +1701,21 @@ class MSTeamsProvider implements ChatOpsProvider {
       }
 
       try {
+        const isSharePointReference =
+          attachment.contentType === GRAPH_REFERENCE_ATTACHMENT;
         // Determine if the URL needs authentication (same host as serviceUrl)
         const headers: Record<string, string> = {};
-        if (serviceUrl && needsBotAuth(attachment.contentUrl, serviceUrl)) {
+        if (isSharePointReference) {
+          // Resolved below through Graph; the page URL itself is not fetchable.
+        } else if (isGraphUrl(attachment.contentUrl)) {
+          const graphToken = await this.getGraphToken();
+          if (graphToken) {
+            headers.Authorization = `Bearer ${graphToken}`;
+          }
+        } else if (
+          serviceUrl &&
+          needsBotAuth(attachment.contentUrl, serviceUrl)
+        ) {
           if (!botToken) {
             botToken = await this.getBotConnectorToken();
           }
@@ -1419,10 +1724,12 @@ class MSTeamsProvider implements ChatOpsProvider {
           }
         }
 
-        const response = await fetch(
-          attachment.contentUrl,
-          Object.keys(headers).length > 0 ? { headers } : undefined,
-        );
+        const response = isSharePointReference
+          ? await this.fetchSharePointFile(attachment.contentUrl)
+          : await fetch(
+              attachment.contentUrl,
+              Object.keys(headers).length > 0 ? { headers } : undefined,
+            );
 
         if (!response.ok) {
           logger.warn(
@@ -1514,10 +1821,14 @@ class MSTeamsProvider implements ChatOpsProvider {
           response.headers.get("content-type")?.split(";")[0]?.trim() || "";
         const isGenericContentType = (ct: string) =>
           !ct || ct === "application/octet-stream" || ct.includes("*");
+        // A SharePoint reference names no media type; its extension does.
+        const declaredContentType = isSharePointReference
+          ? mimeFromExtension(attachment.name ?? "")
+          : attachment.contentType;
         const resolvedContentType = !isGenericContentType(httpContentType)
           ? httpContentType
-          : !isGenericContentType(attachment.contentType)
-            ? attachment.contentType
+          : !isGenericContentType(declaredContentType)
+            ? declaredContentType
             : detectImageType(buffer);
         outcomes.push({
           status: "delivered",
@@ -1561,6 +1872,25 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     return outcomes;
+  }
+
+  /**
+   * Graph app token for hosted-content downloads. The credential caches and
+   * refreshes the token itself, so this does not hold one.
+   */
+  private async getGraphToken(): Promise<string | null> {
+    if (!this.graphCredential) return null;
+    try {
+      const accessToken =
+        await this.graphCredential.getToken(GRAPH_DEFAULT_SCOPE);
+      return accessToken?.token ?? null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Error obtaining Graph token for attachment download",
+      );
+      return null;
+    }
   }
 
   /**
@@ -1728,19 +2058,23 @@ class MSTeamsProvider implements ChatOpsProvider {
         .map((msg) => {
           const isUserMessage = Boolean(msg.from?.user);
 
-          // Extract file attachment metadata from Graph API ChatMessage.attachments
-          const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
-            .filter(
-              (a) =>
-                a.contentUrl &&
-                a.contentType &&
-                !a.contentType.startsWith("application/vnd.microsoft.card."),
-            )
-            .map((a) => ({
-              url: a.contentUrl as string,
-              mimetype: a.contentType as string,
-              name: a.name ?? undefined,
-            }));
+          // Extract file attachment metadata from Graph API ChatMessage.attachments,
+          // plus images pasted inline: Graph lists those only in the HTML body.
+          const files: ChatThreadMessageFile[] = [
+            ...(msg.attachments ?? [])
+              .filter(
+                (a) =>
+                  a.contentUrl &&
+                  a.contentType &&
+                  !a.contentType.startsWith("application/vnd.microsoft.card."),
+              )
+              .map((a) => ({
+                url: a.contentUrl as string,
+                mimetype: a.contentType as string,
+                name: a.name ?? undefined,
+              })),
+            ...extractHostedContentImages(msg.body?.content ?? undefined),
+          ];
 
           return {
             messageId: msg.id as string,
@@ -1784,6 +2118,15 @@ export default MSTeamsProvider;
 // Internal Helpers
 // =============================================================================
 
+interface PendingAgentSelectionAttachments {
+  senderId: string;
+  channelId: string;
+  attachments: A2AAttachment[];
+}
+
+/** How long an unanswered agent-selection card can still replay its files. */
+const AGENT_SELECTION_ATTACHMENTS_TTL_MS = 60 * 60 * 1000;
+
 /** A Teams attachment that points at a downloadable file (not a card). */
 interface TeamsFileAttachment {
   contentType: string;
@@ -1800,17 +2143,41 @@ function filterTeamsFileAttachments(
   attachments?: Array<{
     contentType?: string;
     contentUrl?: string;
-    content?: string;
+    content?: unknown;
     name?: string;
   }>,
 ): TeamsFileAttachment[] {
-  return (attachments ?? []).flatMap((a) =>
-    a.contentUrl &&
-    a.contentType &&
-    !a.contentType.startsWith("application/vnd.microsoft.card.")
+  return (attachments ?? []).flatMap((a): TeamsFileAttachment[] => {
+    // A file sent in a 1:1 chat is uploaded to the sender's OneDrive. Its
+    // `contentUrl` is the SharePoint page, which the bot cannot open; the
+    // pre-signed `downloadUrl` returns the bytes without any credential.
+    if (a.contentType === TEAMS_FILE_DOWNLOAD_INFO) {
+      const downloadUrl = readDownloadUrl(a.content);
+      return downloadUrl
+        ? [
+            {
+              contentType: mimeFromExtension(a.name ?? ""),
+              contentUrl: downloadUrl,
+              name: a.name,
+            },
+          ]
+        : [];
+    }
+    return a.contentUrl &&
+      a.contentType &&
+      !a.contentType.startsWith("application/vnd.microsoft.card.")
       ? [{ contentType: a.contentType, contentUrl: a.contentUrl, name: a.name }]
-      : [],
-  );
+      : [];
+  });
+}
+
+const TEAMS_FILE_DOWNLOAD_INFO =
+  "application/vnd.microsoft.teams.file.download.info";
+
+function readDownloadUrl(content: unknown): string | undefined {
+  if (typeof content !== "object" || content === null) return undefined;
+  const downloadUrl = (content as { downloadUrl?: unknown }).downloadUrl;
+  return typeof downloadUrl === "string" ? downloadUrl : undefined;
 }
 
 function cleanBotMention(text: string, botName?: string): string {
@@ -1988,7 +2355,8 @@ function isAllowedTeamsFileHost(
     const hostname = new URL(contentUrl).hostname;
     if (
       hostname.endsWith(".blob.core.windows.net") ||
-      hostname.endsWith(".sharepoint.com")
+      hostname.endsWith(".sharepoint.com") ||
+      isGraphUrl(contentUrl)
     ) {
       return true;
     }
@@ -2003,10 +2371,268 @@ function isAllowedTeamsFileHost(
   }
 }
 
+const GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default";
+
+const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
+
+/** How Graph lists a file shared in a Teams message: a link to SharePoint. */
+const GRAPH_REFERENCE_ATTACHMENT = "reference";
+
+/** Channels and group chats keep files in SharePoint, reachable via Graph. */
+function isGraphFileConversation(conversationType?: string): boolean {
+  return conversationType === "channel" || conversationType === "groupChat";
+}
+
+function pathSegments(pathname: string): string[] {
+  return pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => decodeURIComponent(segment));
+}
+
+function encodeGraphPath(segments: string[]): string {
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+/** An https URL on the Microsoft Graph host, the only one the Graph token may reach. */
+function isGraphUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" && parsed.hostname === "graph.microsoft.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Images pasted inline into a message, read from its Graph HTML body. Graph
+ * never lists them in `attachments`: each is an `<img>` pointing at the
+ * message's hosted content, so thread history would otherwise drop them.
+ */
+function extractHostedContentImages(html?: string): ChatThreadMessageFile[] {
+  if (!html) return [];
+  const files: ChatThreadMessageFile[] = [];
+  for (const match of html.matchAll(/<img\b[^>]*?\bsrc="([^"]+)"/gi)) {
+    const url = match[1].replaceAll("&amp;", "&");
+    if (isGraphUrl(url) && HOSTED_CONTENT_PATH.test(new URL(url).pathname)) {
+      files.push({ url, mimetype: "image/*" });
+    }
+  }
+  return files;
+}
+
+const HOSTED_CONTENT_PATH = /\/hostedContents\/[^/]+\/\$value$/;
+
 function safeHostname(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
     return "invalid-url";
   }
+}
+
+// === Approval cards (Adaptive Card 1.4) ===
+// Teams ignores Action `style` (positive/destructive), so the cards rely on
+// labels and text color only.
+
+const APPROVAL_ARGS_CONTAINER_ID = "args";
+const APPROVAL_ACTIONS_SHOW_ID = "approval-actions-show";
+const APPROVAL_ACTIONS_HIDE_ID = "approval-actions-hide";
+const APPROVAL_ARG_VALUE_MAX_LENGTH = 500;
+
+/**
+ * The approval prompt: the tool, a line saying it waits for review, and its
+ * arguments behind a "Show arguments" toggle. With only an OpenAPPA review
+ * text (no structured tool), the text is shown in place of tool and arguments.
+ */
+function buildApprovalRequestCard(
+  options: Pick<
+    AddApprovalRequestFormOptions,
+    | "approvalId"
+    | "taskId"
+    | "toolName"
+    | "toolArgs"
+    | "reviewText"
+    | "channelId"
+    | "threadId"
+    | "originalMessage"
+  >,
+): Record<string, unknown> {
+  const isReviewTextFallback = Boolean(options.reviewText);
+  const decisionAction = (approved: boolean) => ({
+    type: "Action.Submit",
+    title: approved ? "Approve" : "Deny",
+    data: {
+      action: "approvalDecision",
+      approvalId: options.approvalId,
+      approved,
+      taskId: options.taskId,
+      toolName: options.toolName,
+      // The name the decided card shows; absent when the prompt showed only
+      // review text, whose tool is the remedy rather than the reviewed call.
+      ...(isReviewTextFallback ? {} : { toolLabel: options.toolName }),
+      channelId: options.channelId,
+      workspaceId: options.originalMessage.workspaceId,
+      threadId: options.threadId,
+      originalSenderEmail: options.originalMessage.senderEmail,
+      messageId: options.originalMessage.messageId,
+    },
+  });
+  const decisionActions = [decisionAction(true), decisionAction(false)];
+
+  const body: Array<Record<string, unknown>> = [
+    {
+      type: "TextBlock",
+      text: "Approval required",
+      weight: "Bolder",
+      wrap: true,
+    },
+  ];
+
+  if (options.reviewText) {
+    body.push(
+      {
+        type: "TextBlock",
+        text: formatApprovalReviewText(options.reviewText),
+        wrap: true,
+        fontType: "Monospace",
+        spacing: "Small",
+      },
+      { type: "ActionSet", spacing: "Small", actions: decisionActions },
+    );
+    return approvalCardEnvelope(body, "Approval required");
+  }
+
+  body.push(
+    {
+      type: "TextBlock",
+      text: options.toolName,
+      fontType: "Monospace",
+      wrap: true,
+      spacing: "Small",
+    },
+    {
+      type: "TextBlock",
+      text: "Review this tool call before it can continue.",
+      isSubtle: true,
+      wrap: true,
+      spacing: "Small",
+    },
+  );
+
+  const facts = Object.entries(options.toolArgs ?? {}).map(([name, value]) => ({
+    title: name,
+    value: formatApprovalArgValue(value),
+  }));
+  if (facts.length === 0) {
+    body.push({
+      type: "ActionSet",
+      spacing: "Small",
+      actions: decisionActions,
+    });
+    return approvalCardEnvelope(body, `Approval required: ${options.toolName}`);
+  }
+
+  // Each toggle flips the arguments and swaps which ActionSet is visible, so
+  // the button reads "Show arguments" or "Hide arguments" as appropriate.
+  const toggleAction = (title: string) => ({
+    type: "Action.ToggleVisibility",
+    title,
+    targetElements: [
+      APPROVAL_ARGS_CONTAINER_ID,
+      APPROVAL_ACTIONS_SHOW_ID,
+      APPROVAL_ACTIONS_HIDE_ID,
+    ],
+  });
+  body.push(
+    {
+      type: "Container",
+      id: APPROVAL_ARGS_CONTAINER_ID,
+      isVisible: false,
+      spacing: "Small",
+      items: [{ type: "FactSet", facts }],
+    },
+    {
+      type: "ActionSet",
+      id: APPROVAL_ACTIONS_SHOW_ID,
+      spacing: "Small",
+      actions: [...decisionActions, toggleAction("Show arguments")],
+    },
+    {
+      type: "ActionSet",
+      id: APPROVAL_ACTIONS_HIDE_ID,
+      isVisible: false,
+      spacing: "Small",
+      actions: [...decisionActions, toggleAction("Hide arguments")],
+    },
+  );
+  return approvalCardEnvelope(body, `Approval required: ${options.toolName}`);
+}
+
+/**
+ * The card that replaces the prompt once someone approves or denies it.
+ *
+ * @internal exported for tests
+ */
+export function buildApprovalDecisionCard(params: {
+  toolLabel?: string;
+  approved: boolean;
+  deciderName?: string;
+}): Record<string, unknown> {
+  const verdict = params.approved ? "Approved" : "Denied";
+  const status = params.deciderName
+    ? `${verdict} by ${params.deciderName}`
+    : verdict;
+  const body: Array<Record<string, unknown>> = [];
+  if (params.toolLabel) {
+    body.push({
+      type: "TextBlock",
+      text: params.toolLabel,
+      fontType: "Monospace",
+      wrap: true,
+    });
+  }
+  body.push({
+    type: "TextBlock",
+    text: status,
+    wrap: true,
+    spacing: "Small",
+    color: params.approved ? "Good" : "Attention",
+    ...(params.approved ? { weight: "Bolder" } : {}),
+  });
+  return approvalCardEnvelope(
+    body,
+    params.toolLabel ? `${params.toolLabel}: ${status}` : status,
+  );
+}
+
+function approvalCardEnvelope(
+  body: Array<Record<string, unknown>>,
+  fallbackText: string,
+): Record<string, unknown> {
+  return {
+    type: "AdaptiveCard",
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    version: "1.4",
+    fallbackText,
+    body,
+  };
+}
+
+function formatApprovalArgValue(value: unknown): string {
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value) ?? String(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  return text.length > APPROVAL_ARG_VALUE_MAX_LENGTH
+    ? `${text.slice(0, APPROVAL_ARG_VALUE_MAX_LENGTH)}… (truncated)`
+    : text;
 }

@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";
@@ -16,7 +17,9 @@ export function useConfig() {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["config"],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.config;
       const { data, error } = await getConfig();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -30,7 +33,9 @@ export function useConfig() {
 export function usePublicConfig() {
   return useQuery({
     queryKey: ["public-config"],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.publicConfig) return seed.publicConfig;
       const { data, error } = await archestraApiSdk.getPublicConfig();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -82,19 +87,9 @@ export function useFeature<K extends keyof FeaturesResponse>(
   return data.features[flag];
 }
 
-/**
- * The dedicated MCP App sandbox origin (`<hash>.{domain}`), resolved from the
- * authenticated config when a session exists and otherwise from the public
- * config. The offline app-recording video renderer drives the replay page with
- * no session, so `useConfig` (gated on `isAuthenticated`) never runs there; the
- * public-config fallback is what keeps that render pointing the app iframe at
- * its real cross-origin instead of the frontend origin, which the backend
- * refuses with a 403 sandbox-host check.
- */
+/** The dedicated MCP App sandbox domain configured for this deployment. */
 export function useMcpSandboxDomain(): string | null | undefined {
-  const authed = useFeature("mcpSandboxDomain");
-  const { data: publicConfig } = usePublicConfig();
-  return authed ?? publicConfig?.mcpSandboxDomain;
+  return useFeature("mcpSandboxDomain");
 }
 
 type EnterpriseFeatures = ConfigResponse["enterpriseFeatures"];

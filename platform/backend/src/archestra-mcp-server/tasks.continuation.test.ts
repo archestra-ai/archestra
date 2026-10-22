@@ -153,7 +153,7 @@ test("a continuation reuses the account after an image change and reports a late
   const previous = await retainedRun();
   const notify = vi
     .spyOn(chatOpsManager, "notifyBindingThread")
-    .mockResolvedValue();
+    .mockResolvedValue(true);
   vi.spyOn(backend, "continueRun").mockRejectedValue(
     new Error("Runtime transport unavailable"),
   );

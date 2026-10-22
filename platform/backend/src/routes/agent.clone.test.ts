@@ -14,9 +14,9 @@ import {
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentToolModel, ToolModel } from "@/models";
+import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import AgentExcludedSubagentModel from "@/models/agent-excluded-subagent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { type Agent, ApiError, type User } from "@/types";
 
@@ -154,6 +154,35 @@ describe("clone agent route", () => {
         },
       ]),
     );
+  });
+
+  test("clones Auto subagent access with its exclusions", async ({
+    makeInternalAgent,
+  }) => {
+    const excludedTarget = await makeInternalAgent({
+      organizationId,
+      name: "Excluded Sub Agent",
+    });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "All Subagents Source",
+    });
+    await AgentModel.update(sourceAgent.id, { accessAllSubagents: true });
+    await AgentExcludedSubagentModel.replaceForAgent(sourceAgent.id, [
+      excludedTarget.id,
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.accessAllSubagents).toBe(true);
+    expect(
+      await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(cloned.id),
+    ).toEqual([excludedTarget.id]);
   });
 
   test("does not force-assign creation-default built-ins the source agent lacked", async ({
@@ -372,18 +401,18 @@ describe("clone agent route", () => {
 
   test("cloning uses explicit grants and does not copy the source audience", async ({
     makeInternalAgent,
+    makeMember,
     makeTeam,
+    makeTeamMember,
+    makeUser,
   }) => {
     const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId);
     const source = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-    });
-    const serviceAccount = await ServiceAccountModel.create({
-      organizationId,
-      name: "Clone automation",
-      role: "member",
-      createdBy: null,
     });
     const grants = [
       {
@@ -391,7 +420,7 @@ describe("clone agent route", () => {
         actions: ["read", "use", "update"],
       },
       {
-        subject: { type: "serviceAccount", id: serviceAccount.id },
+        subject: { type: "user", id: colleague.id },
         actions: ["read", "use"],
       },
     ];

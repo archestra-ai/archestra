@@ -1,4 +1,10 @@
-import { archestraApiClient } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -23,11 +29,8 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  useDefaultMcpGateway,
-  useProfile,
-  useProfiles,
-} from "@/lib/agent.query";
+import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
@@ -38,8 +41,9 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
+import { markShellSeeded } from "@/lib/shell-deferral";
 import { saveConnectChoices } from "./connect-choices";
 import ConnectionPage from "./page";
 
@@ -50,9 +54,36 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 ));
 const refetchOrganizationMock = vi.fn();
 
+const { catalogHookMock, rowsByIdsCache } = vi.hoisted(() => ({
+  catalogHookMock: vi.fn(),
+  rowsByIdsCache: new WeakMap<object, Map<string, unknown>>(),
+}));
+
 vi.mock("next/navigation");
+// The page loads each view as its own chunk. Resolve both before the tests
+// render, so a test sees the view on its first render, as a server-rendered
+// document does.
+const dynamicViews = vi.hoisted(() => [] as Promise<unknown>[]);
+vi.mock("next/dynamic", () => ({
+  default: (load: () => Promise<React.ComponentType<object>>) => {
+    let View: React.ComponentType<object> | null = null;
+    dynamicViews.push(
+      load().then((loaded) => {
+        View = loaded;
+      }),
+    );
+    return (props: object) => (View ? <View {...props} /> : null);
+  },
+}));
+beforeAll(async () => {
+  await Promise.all(dynamicViews);
+});
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: vi.fn(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/guardrails-deployment.query");
@@ -67,7 +98,30 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
     typeof import("@/lib/mcp/internal-mcp-catalog.query")
   >()),
   useAllCatalogTools: vi.fn(),
-  useInternalMcpCatalog: vi.fn(),
+  useInternalMcpCatalog: catalogHookMock,
+}));
+// A gateway's own catalogs are read by id; answer from the catalog mock.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  useMcpRegistryRowsByIds: (ids: string[]) => {
+    // Stable for the same rows and ids, as the real hook's result is.
+    const rows = (catalogHookMock().data ?? []) as Array<{ id: string }>;
+    const key = ids.join(",");
+    let byIds = rowsByIdsCache.get(rows);
+    if (!byIds) {
+      byIds = new Map();
+      rowsByIdsCache.set(rows, byIds);
+    }
+    let result = byIds.get(key);
+    if (!result) {
+      result = {
+        data: rows.filter((row) => ids.includes(row.id)),
+        isPending: false,
+        isError: false,
+      };
+      byIds.set(key, result);
+    }
+    return result;
+  },
 }));
 vi.mock("@/lib/organization.query");
 vi.mock("@archestra/shared", async (importOriginal) => {
@@ -123,6 +177,14 @@ function render(ui: ReactElement) {
   });
 }
 
+/** Tool definitions and token counting start only after opening server details. */
+async function requestToolCounts() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /^\d+ MCP servers?$/ }),
+  );
+  await userEvent.keyboard("{Escape}");
+}
+
 function mockOrganization(overrides: Record<string, unknown>) {
   vi.mocked(useOrganization).mockReturnValue({
     data: {},
@@ -164,9 +226,9 @@ beforeEach(() => {
   vi.mocked(useAllCatalogTools).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useAllCatalogTools>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
   vi.mocked(useConfig).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useConfig>);
@@ -250,18 +312,23 @@ describe("ConnectPage gateway footprint", () => {
   });
 
   it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    let requests = 0;
     api.use(
-      http.get(previewUrl, ({ request }) =>
-        HttpResponse.json(
+      http.get(previewUrl, ({ request }) => {
+        requests++;
+        return HttpResponse.json(
           listed(
             new URL(request.url).searchParams.get("client") === "claude-code"
               ? 1200
               : 550,
           ),
-        ),
-      ),
+        );
+      }),
     );
     show();
+    expect(screen.getByText("View tool counts and context cost")).toBeVisible();
+    expect(requests).toBe(0);
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -269,6 +336,7 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
     expect(within(summary).queryByText("3 tools")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await requestToolCounts();
     expect(await screen.findByText("~1.1K tokens")).toBeVisible();
   });
 
@@ -282,6 +350,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -309,6 +378,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -327,6 +397,26 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
   });
 
+  it("links each server name to its registry page and lists no tool names", async () => {
+    api.use(http.get(previewUrl, () => HttpResponse.json(listed(1200))));
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    await userEvent.click(
+      await within(summary).findByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const row = within(dialog).getByRole("listitem");
+    expect(
+      within(row).getByRole("link", { name: "Example server" }),
+    ).toHaveAttribute("href", "/mcp/registry/catalog-1");
+    expect(within(row).getByText("2 tools")).toBeVisible();
+    // The server page lists the tools; the dialog stays one line per server.
+    expect(within(dialog).queryByText("example__read")).toBeNull();
+  });
+
   it("shows an empty gateway instead of retaining catalog counts", async () => {
     api.use(
       http.get(previewUrl, () =>
@@ -334,6 +424,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("0 tools")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
     expect(screen.queryByText("Example server")).toBeNull();
@@ -349,6 +440,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
   });
@@ -427,6 +519,12 @@ describe("ConnectPage saved agent order", () => {
           .getAllByRole("option")
           .map((option) => option.getAttribute("data-value")),
       ).toEqual(["openclaw", "claude-code", "generic"]);
+      await user.click(screen.getByRole("option", { name: /Claude Code/ }));
+      expect(
+        within(
+          screen.getByRole("button", { name: "Claude Code, change agent" }),
+        ).getByRole("img", { name: "Supports LLM proxy guardrails" }),
+      ).toBeVisible();
     } finally {
       width.mockRestore();
     }
@@ -495,6 +593,73 @@ describe("ConnectPage guardrails chip", () => {
     expect(
       setup("claude-code", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Enforced");
+  });
+
+  it.each(
+    Object.entries(NATIVE_SESSION_CLIENT_LABELS),
+  )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
+    setup(clientId, { active: false, unsupportedClientAction: "block" });
+    const badge = within(
+      screen.getByRole("button", { name: new RegExp(`${label}$`) }),
+    ).getByRole("img", { name: "Supports LLM proxy guardrails" });
+    expect(badge).toBeVisible();
+    await userEvent.hover(badge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Enforcement depends on your organization's settings.",
+    );
+  });
+
+  it("does not mark an unsupported client as supporting guardrails", () => {
+    setup("cursor", { active: true, unsupportedClientAction: "block" });
+    expect(
+      screen.queryByRole("img", { name: "Supports LLM proxy guardrails" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the selected client button name concise when it has a support hint", () => {
+    setup("codex", { active: true, unsupportedClientAction: "block" });
+    const tile = screen.getByRole("button", { name: "Codex" });
+    expect(tile).toHaveAttribute("aria-pressed", "true");
+    expect(tile).toHaveAccessibleDescription("Supports LLM proxy guardrails");
+  });
+
+  it.each(
+    Object.keys(NATIVE_SESSION_CLIENT_LABELS),
+  )("omits the supported-client notice for %s", async (clientId) => {
+    setup(clientId, { active: true, unsupportedClientAction: "block" });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).not.toHaveTextContent(
+      "LLM proxy guardrails support only",
+    );
+  });
+
+  it.each([
+    "block",
+    "bypass",
+  ] as const)("lists the supported clients for an unrecognized agent (%s)", async (unsupportedClientAction) => {
+    setup("cursor", { active: true, unsupportedClientAction });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("LLM proxy guardrails support only");
+    for (const label of Object.values(NATIVE_SESSION_CLIENT_LABELS)) {
+      expect(tooltip).toHaveTextContent(label);
+    }
+    expect(within(tooltip).getAllByRole("link")[0]).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients),
+    );
+    expect(
+      within(tooltip).getByRole("link", {
+        name: "add APPA session headers",
+      }),
+    ).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients, "session-headers"),
+    );
   });
 
   it("says guardrails are not enforced for an allowed unrecognized agent", () => {
@@ -778,6 +943,25 @@ describe("ConnectPage (no connect request)", () => {
     expect(tile.closest("[inert]")).toBeNull();
   });
 
+  it("does not wait on the gateway reference lookup when there is no gateway to resolve", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    // A disabled query without IDs stays pending forever.
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: undefined,
+          isPending: params.ids.length === 0,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    render(<ConnectionPage />);
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [] }),
+    );
+    expect(screen.getByRole("button", { name: /Cursor/ })).toBeVisible();
+  });
+
   it("waits for the organization settings before offering agents", () => {
     mockOrganization({ data: undefined, isPending: true });
     render(<ConnectionPage />);
@@ -853,6 +1037,43 @@ describe("ConnectionPage (connect request approval)", () => {
     expect(
       screen.getByRole("status", { name: "Checking connection settings" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the flow at once from the settings the server read for this document", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "connectRequest=request&clientId=opencode",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    const settings = {
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+      connectionPluginsEnabled: true,
+    };
+    // No read has happened since mount: only the server seed holds the data.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: settings,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    const seeded = new QueryClient();
+    markShellSeeded(seeded);
+    seeded.setQueryData(organizationKeys.details(), settings);
+
+    rtlRender(<ConnectionPage />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={seeded}>{children}</QueryClientProvider>
+      ),
+    });
+
+    expect(
+      screen.queryByRole("status", { name: "Checking connection settings" }),
+    ).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ skillsEnabled: true, llmProxyEnabled: true }),
+    );
   });
 
   it("keeps the flow visible during revalidation without dropping selections", () => {
@@ -966,8 +1187,30 @@ describe("ConnectPage gateway pick", () => {
   afterEach(() => api.resetHandlers());
   afterAll(() => api.close());
 
-  it("connects through and counts the gateway picked over the default", async () => {
+  it("connects through a picked gateway outside the bounded preview and counts its tools", async () => {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    let previewRequests = 0;
     api.use(
+      http.get(
+        "http://localhost:9000/api/agents/options/page",
+        ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          expect(query.get("limit")).toBe("20");
+          expect(query.has("cursor")).toBe(false);
+          previewRequests++;
+          return HttpResponse.json({
+            data: [
+              {
+                id: "default-gateway",
+                name: "Default gateway",
+                slug: "default-gateway",
+                agentType: "mcp_gateway",
+              },
+            ],
+            pagination: { limit: 20, nextCursor: "later", hasNext: true },
+          });
+        },
+      ),
       http.get(
         "http://localhost:9000/api/agents/:id/mcp-tool-preview",
         ({ params, request }) => {
@@ -1010,10 +1253,13 @@ describe("ConnectPage gateway pick", () => {
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: gateways[0],
     } as unknown as ReturnType<typeof useDefaultMcpGateway>);
-    vi.mocked(useProfiles).mockReturnValue({
-      data: gateways,
-      isPending: false,
-    } as unknown as ReturnType<typeof useProfiles>);
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: gateways.filter((gateway) => params.ids.includes(gateway.id)),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
     vi.mocked(useProfile).mockImplementation(
       (id) =>
         ({
@@ -1031,7 +1277,12 @@ describe("ConnectPage gateway pick", () => {
     expect(
       await screen.findByText(/--client claude-code --gateway coding-gateway$/),
     ).toBeVisible();
+    await requestToolCounts();
     expect(await screen.findByText("~2.3K tokens")).toBeVisible();
+    expect(previewRequests).toBe(1);
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: ["coding-gateway", "default-gateway"] }),
+    );
   });
 });
 
@@ -1197,7 +1448,11 @@ describe("ConnectPage loading", () => {
 });
 
 describe("ConnectPage after copying the command", () => {
+  // Cursor's installer registers the gateway under its name; Generic client
+  // picks its own, so its prompt names no server.
   const welcome =
+    "Read http://localhost:3000/welcome.md?server=team_gateway and show me what I can do with Example Platform. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.";
+  const genericWelcome =
     "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
 
   beforeEach(() => {
@@ -1222,7 +1477,7 @@ describe("ConnectPage after copying the command", () => {
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
-    render(<ConnectionPage />);
+    return render(<ConnectionPage />);
   }
 
   const copyCommand = () =>
@@ -1303,6 +1558,30 @@ describe("ConnectPage after copying the command", () => {
     );
   });
 
+  it("stops waiting when the gateway server name changes, but keeps a connected prompt", async () => {
+    const view = show(["cursor"]);
+    await copyCommand();
+    expect(status()).toHaveTextContent("Waiting for approval");
+
+    const rename = (name: string) => {
+      vi.mocked(useProfile).mockReturnValue({
+        data: { id: "gw-1", name, slug: "team", tools: [] },
+        isPending: false,
+      } as unknown as ReturnType<typeof useProfile>);
+      view.rerender(<ConnectionPage />);
+    };
+    rename("Renamed gateway");
+    expect(status()).toBeNull();
+
+    await copyCommand();
+    await approveElsewhere();
+    const renamedWelcome = welcome.replace("team_gateway", "renamed_gateway");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
+
+    rename("Another gateway name");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
+  });
+
   it("shows the starter prompt from the link", async () => {
     show(["generic"]);
     await userEvent.click(
@@ -1312,7 +1591,7 @@ describe("ConnectPage after copying the command", () => {
     expect(card).toHaveTextContent(
       "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
     );
-    expect(within(card).getByText(welcome)).toBeVisible();
+    expect(within(card).getByText(genericWelcome)).toBeVisible();
     await userEvent.click(within(card).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
   });
@@ -1327,5 +1606,41 @@ describe("ConnectPage after copying the command", () => {
     expect(
       screen.queryByRole("button", { name: "Show the starter prompt" }),
     ).toBeNull();
+  });
+});
+
+describe("Connect skill catalogue preview", () => {
+  it("shows the full count while fetching only one preview page", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    mockOrganization({ data: { connectionSkillsEnabled: true } });
+    const skills = Array.from({ length: 10 }, (_, index) => ({
+      id: `preview-${index}`,
+      name: `Preview skill ${index}`,
+      description: "Useful instructions",
+      scope: "org",
+      usageCount: 10 - index,
+    }));
+    vi.mocked(archestraApiSdk.getSkills).mockResolvedValueOnce({
+      data: {
+        data: skills,
+        pagination: { total: 10000, limit: 10, offset: 0 },
+      },
+    } as never);
+    render(<ConnectionPage />);
+    expect(await screen.findByText("+10,000 skills")).toBeVisible();
+    expect(screen.getByText("Preview skill 0")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledTimes(1);
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledWith({
+      query: { limit: 10, offset: 0, includeContent: false },
+    });
   });
 });

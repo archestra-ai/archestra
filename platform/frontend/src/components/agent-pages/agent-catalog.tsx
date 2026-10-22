@@ -20,11 +20,14 @@ import {
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ClientMarkTile } from "@/components/client-mark-tile";
+import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
@@ -66,7 +69,7 @@ export function getAgentCatalogTemplates(
       name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
       summary:
         "Anthropic's coding agent. Runs on each person's Claude Pro or Max, or a company Anthropic key.",
-      icon: "/model-logos/anthropic.svg",
+      icon: CATALOG_AGENT_ICONS["claude-code"],
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
       image: images["claude-code"],
@@ -76,7 +79,7 @@ export function getAgentCatalogTemplates(
       name: AGENT_CATALOG_TEMPLATE_NAMES.codex,
       summary:
         "OpenAI's coding agent. Runs on each person's ChatGPT subscription.",
-      icon: "/model-logos/openai.svg",
+      icon: CATALOG_AGENT_ICONS.codex,
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.codex,
@@ -85,7 +88,7 @@ export function getAgentCatalogTemplates(
       id: "opencode",
       name: AGENT_CATALOG_TEMPLATE_NAMES.opencode,
       summary: `The open source coding agent. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/opencode.svg",
+      icon: CATALOG_AGENT_ICONS.opencode,
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.opencode,
@@ -94,7 +97,7 @@ export function getAgentCatalogTemplates(
       id: "hermes",
       name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
       summary: `The Hermes coding agent. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/hermes.png",
+      icon: CATALOG_AGENT_ICONS.hermes,
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
       image: images.hermes,
@@ -103,7 +106,7 @@ export function getAgentCatalogTemplates(
       id: "openclaw",
       name: AGENT_CATALOG_TEMPLATE_NAMES.openclaw,
       summary: `OpenClaw in an isolated task pod. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/openclaw.svg",
+      icon: CATALOG_AGENT_ICONS.openclaw,
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
       image: images.openclaw,
@@ -136,7 +139,6 @@ export function useAvailableAgentCatalogTemplates() {
 }
 
 export function AgentCatalog({
-  canAddExternalAgent,
   canCreateAgent,
   onStartFromScratch,
   onStartFromImage,
@@ -144,14 +146,14 @@ export function AgentCatalog({
   onSelect,
   runtimeAvailable,
 }: {
-  canAddExternalAgent: boolean;
+  /** Building an agent and connecting an external one both need Agent create. */
   canCreateAgent: boolean;
   onStartFromScratch: () => void;
   /** Starts a container agent from the reader's own image. */
   onStartFromImage: () => void;
   onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
-  /** Coding agents run in a dedicated runtime; undefined while loading. */
+  /** Agent Runtimes run in a dedicated container; undefined while loading. */
   runtimeAvailable: boolean | undefined;
 }) {
   const { templates, isError, isLoading, refetch } =
@@ -173,9 +175,19 @@ export function AgentCatalog({
 
       {/* Always laid out, so it does not pop in and push the rest down; only
           its cards wait for the fresh settings read that decides which
-          coding agents are offered. */}
+          Agent Runtimes are offered. */}
       <CatalogSection
-        title="Coding agents"
+        title={
+          <>
+            <span>Agent Runtimes</span>{" "}
+            <Badge
+              variant="outline"
+              className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
+            >
+              Beta
+            </Badge>
+          </>
+        }
         description={`Each one runs in its own container, with a live terminal and files that persist between messages. Its model and tool calls go through ${appName}, so logs, guardrails and cost limits apply.`}
       >
         {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}
@@ -183,7 +195,7 @@ export function AgentCatalog({
         {runtimeAvailable === undefined || isLoading ? (
           <output
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            aria-label="Loading coding agents"
+            aria-label="Loading Agent Runtimes"
           >
             {[0, 1, 2].map((index) => (
               <Skeleton key={index} className="h-[132px] rounded-xl" />
@@ -191,7 +203,7 @@ export function AgentCatalog({
           </output>
         ) : isError ? (
           <QueryLoadError
-            title="Could not load coding agents"
+            title="Could not load Agent Runtimes"
             onRetry={() => refetch()}
           />
         ) : (
@@ -237,8 +249,8 @@ export function AgentCatalog({
             title="Connect via A2A"
             description="Connect an A2A-compatible agent by its URL."
             onClick={onAddExternalAgent}
-            disabled={!canAddExternalAgent}
-            disabledReason="Requires permission to view agents and update agent settings."
+            disabled={!canCreateAgent}
+            disabledReason="Requires permission to create agents."
           />
         </div>
       </CatalogSection>
@@ -268,6 +280,7 @@ export function PlatformAgentIcon({
   );
 }
 
+/** A catalog template's logo, drawn as the Connect page draws it. */
 export function CatalogAgentIcon({
   id,
   size = 22,
@@ -275,51 +288,13 @@ export function CatalogAgentIcon({
   id: AgentCatalogId;
   size?: number;
 }) {
-  const box = { width: size, height: size };
-  switch (id) {
-    case "claude-code":
-      return <ProviderIcon provider="anthropic" size={size} />;
-    case "codex":
-      return <ProviderIcon provider="openai" size={size} />;
-    case "opencode":
-      return (
-        <Image
-          src="/agent-logos/opencode.svg"
-          alt=""
-          width={size}
-          height={size}
-          style={{ height: size }}
-          className="w-auto object-contain dark:invert"
-        />
-      );
-    case "hermes": {
-      // The artwork carries its own padding, so it draws larger than its peers.
-      const hermesSize = Math.round((size * 30) / 22);
-      return (
-        <Image
-          src="/agent-logos/hermes.png"
-          alt=""
-          width={hermesSize}
-          height={hermesSize}
-          style={{ width: hermesSize, height: hermesSize }}
-          className="rounded-md object-contain"
-        />
-      );
-    }
-    case "openclaw":
-      return (
-        <Image
-          src="/agent-logos/openclaw.svg"
-          alt=""
-          width={size}
-          height={size}
-          style={box}
-          className="object-contain"
-        />
-      );
-    default:
-      return <Bot className="size-5" />;
-  }
+  return (
+    <ClientMarkTile
+      mark={CATALOG_AGENT_MARKS[id]}
+      label={AGENT_CATALOG_NAMES[id]}
+      size={size}
+    />
+  );
 }
 
 function template(params: {
@@ -356,7 +331,7 @@ function CatalogSection({
   description,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   children: ReactNode;
 }) {
@@ -371,7 +346,7 @@ function CatalogSection({
   );
 }
 
-/** Where a coding agent's tasks can come from, so the reader knows before picking. */
+/** Where an Agent Runtime's tasks can come from, so the reader knows before picking. */
 function GiveItWorkFrom() {
   const appName = useAppName();
   const { visibleIds } = useMessagingChannelCatalog();

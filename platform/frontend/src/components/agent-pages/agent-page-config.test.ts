@@ -29,12 +29,12 @@ describe("getAgentSetupSteps", () => {
     }
   });
 
-  it("leaves a built-in agent with configuration only — it has no advanced step", () => {
+  it("leaves a built-in agent with configuration and tools — it has no advanced step", () => {
     expect(
       getAgentSetupSteps({ agentType: "agent", builtIn: true }).map(
         (s) => s.id,
       ),
-    ).toEqual(["configuration"]);
+    ).toEqual(["configuration", "tools"]);
   });
 });
 

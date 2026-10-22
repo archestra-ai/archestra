@@ -6,8 +6,16 @@ import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { WizardStep } from "@/components/wizard-step";
-import { useProfiles } from "@/lib/agent.query";
+import {
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  CONNECTION_GATEWAY_FILTERS,
+  CONNECTION_GATEWAY_PAGE_SIZE,
+  CONNECTION_GATEWAY_REFERENCE_FILTERS,
+} from "@/lib/connection-approval-seed";
 import { isInstallerClientId, visibleClients } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 import {
@@ -65,13 +73,6 @@ export function ConnectionFlow({
 
   const updateUrlParams = useUpdateUrlParams();
 
-  const { data: mcpGateways } = useProfiles({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
-  });
-
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
@@ -93,6 +94,33 @@ export function ConnectionFlow({
   const client = shownClients.find((c) => c.id === initialClientId) ?? null;
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
+
+  // The same filters the server seed reads for an approval document.
+  const gatewayFilters = CONNECTION_GATEWAY_FILTERS;
+  const gatewayPage = useAgentOptionsPage({
+    filters: gatewayFilters,
+    limit: CONNECTION_GATEWAY_PAGE_SIZE,
+    enabled: canReadMcpGateway === true,
+  });
+  const { data: gatewayReferences } = useAgentOptionsByIds({
+    ids: [
+      selectedMcpId,
+      urlGatewayId,
+      adminDefaultMcpGatewayId,
+      defaultMcpGatewayId,
+    ].filter((id): id is string => !!id),
+    // Built-ins stay hidden, matching the gateway list above.
+    filters: CONNECTION_GATEWAY_REFERENCE_FILTERS,
+    enabled: canReadMcpGateway === true,
+  });
+  const mcpGateways = [
+    ...new Map(
+      [
+        ...(gatewayPage.data?.pages[0]?.data ?? []),
+        ...(gatewayReferences ?? []),
+      ].map((gateway) => [gateway.id, gateway]),
+    ).values(),
+  ];
 
   // Connection base URL — chosen once for the whole page, threaded into each
   // instruction panel below.
@@ -143,7 +171,8 @@ export function ConnectionFlow({
               mode="single"
               flat
               className="w-64"
-              agents={mcpGateways ?? []}
+              agents={mcpGateways}
+              remote={{ filters: gatewayFilters }}
               value={effectiveMcpId ?? ""}
               onValueChange={handleMcpSelect}
               placeholder="Select gateway"
@@ -154,7 +183,6 @@ export function ConnectionFlow({
           selectedMcp && effectiveMcpId ? (
             <McpClientInstructions
               client={manualClient}
-              gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
               gatewayName={selectedMcp.name}
               isPersonalGateway={selectedMcp.isPersonalGateway}
@@ -196,6 +224,10 @@ export function ConnectionFlow({
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+            mcpGatewaysLoading={
+              canReadMcpGateway === undefined ||
+              (canReadMcpGateway === true && gatewayPage.isPending)
+            }
             mcpGatewayId={effectiveMcpId}
             onMcpGatewaySelect={handleMcpSelect}
             llmProxyId={

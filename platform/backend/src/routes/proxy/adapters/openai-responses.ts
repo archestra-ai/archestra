@@ -47,6 +47,8 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
+import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
@@ -369,6 +371,7 @@ class OpenAiResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           // Compatible clients may extend tool outputs with a boolean status;
           // native Responses has no is_error field. Do not infer it from output.
           isError: "is_error" in item && item.is_error === true,
@@ -438,24 +441,33 @@ class OpenAiResponsesRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      input: this.request.input.map((item) => {
-        if (!isFunctionCallOutputItem(item)) {
-          return item;
-        }
+      input: this.request.input
+        .map((item) => {
+          if (!isFunctionCallOutputItem(item)) {
+            return item;
+          }
 
-        // Presence, not truthiness: a sanitizer that reduces sensitive output
-        // to nothing has replaced it, and forwarding the original instead would
-        // hand the model exactly what was withheld.
-        const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (updatedOutput === undefined) {
-          return item;
-        }
+          // Presence, not truthiness: a sanitizer that reduces sensitive output
+          // to nothing has replaced it, and forwarding the original instead would
+          // hand the model exactly what was withheld.
+          const updatedOutput = this.toolResultUpdates[item.call_id];
+          if (updatedOutput === undefined) {
+            return item;
+          }
+          // Kept as sent: the output's parts (input_image, input_text) stay.
+          if (
+            isApprovedAsSent({ sent: item.output, approved: updatedOutput })
+          ) {
+            return item;
+          }
 
-        return {
-          ...item,
-          output: updatedOutput,
-        };
-      }) as unknown as ResponseInput,
+          return {
+            ...item,
+            output: updatedOutput,
+          };
+        })
+        // After the result updates above, which look up the client's call ids.
+        .map(withOpenAiResponsesToolCallIds) as unknown as ResponseInput,
     };
   }
 }
@@ -785,6 +797,46 @@ export function discardUnadmittedResponsesOutput(
       ? { output_text: responseOutputText(retained) }
       : {}),
   } as OpenAiResponsesResponse;
+}
+
+/**
+ * The client copy of a buffered generation that failed before admission.
+ * Every output item type (message, reasoning, tool call) can carry model text,
+ * so none is released; the failure status, details, ids and usage remain.
+ */
+export function withoutResponsesModelOutput(
+  response: OpenAiResponsesResponse,
+): OpenAiResponsesResponse {
+  return {
+    ...response,
+    output: [],
+    ...("output_text" in response ? { output_text: "" } : {}),
+  } as OpenAiResponsesResponse;
+}
+
+/** Applies `withoutResponsesModelOutput` to every response envelope in SSE frames. */
+export function withoutResponsesModelOutputSSE(
+  frames: readonly (string | Uint8Array)[],
+): string[] {
+  return frames.map((frame) =>
+    (typeof frame === "string" ? frame : Buffer.from(frame).toString("utf8"))
+      .split("\n")
+      .map((line) => {
+        if (!line.startsWith("data: ")) return line;
+        const payload = tryParseJsonObject(line.slice("data: ".length));
+        const response = payload.response;
+        if (!isRecord(response) || !Array.isArray(response.output)) {
+          return line;
+        }
+        return `data: ${JSON.stringify({
+          ...payload,
+          response: withoutResponsesModelOutput(
+            response as unknown as OpenAiResponsesResponse,
+          ),
+        })}`;
+      })
+      .join("\n"),
+  );
 }
 
 class OpenAiResponsesStreamAdapter

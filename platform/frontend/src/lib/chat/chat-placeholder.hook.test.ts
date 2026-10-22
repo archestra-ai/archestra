@@ -151,4 +151,18 @@ describe("useChatPlaceholder", () => {
     expect(result.current.isAnimating).toBe(true);
     expect(mockUseTypingAnimation).toHaveBeenCalledWith(["First", "Second"]);
   });
+
+  it("holds an empty placeholder until the animation types its first text", () => {
+    mockUseTypingAnimation.mockReturnValue({ text: "", isAnimating: false });
+
+    const { result } = renderHook(() =>
+      useChatPlaceholder({
+        animate: true,
+        placeholders: ["Ask support", "Plan a trip"],
+      }),
+    );
+
+    // Not null: null lets the composer show its default text first.
+    expect(result.current.placeholder).toBe("");
+  });
 });

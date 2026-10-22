@@ -1,21 +1,37 @@
-import { expect, test, vi } from "vitest";
+import { load as loadYaml } from "js-yaml";
+import { describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
+import { AppaClaudeCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/claude-code";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  HITL_QUESTION_TTL_MS,
+  hitlReviewAskedInForm,
+  peekHitlDecision,
   peekHitlRuling,
   recordHitlReviewResult,
   recordHitlRuling,
+  renewHitlReview,
+  reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
   stageHitlReview,
 } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
 
 vi.mock("@/logging");
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  generateText: vi
+    .fn()
+    .mockRejectedValue(new Error("summary service unavailable")),
+}));
 
 // The real cache, stored in this file's test database.
 setupTestCacheManager();
@@ -181,6 +197,7 @@ test("historical status survives review expiry but cannot create an approval", a
 });
 
 test.each([
+  "review_declined",
   "review_unanswered",
   "review_cancelled",
   "review_unavailable",
@@ -301,6 +318,482 @@ test("uses the staged review for fixed native approval choices", async () => {
   ).toBe(false);
 });
 
+/** Stages one review of `tool` with `args` and returns what Claude Code is asked. */
+async function askedAbout(
+  name: string,
+  tool: string,
+  args: Record<string, unknown>,
+) {
+  const active = session(name);
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool,
+      arguments: JSON.stringify(args),
+    },
+  });
+  return getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] });
+}
+
+test("asks Claude Code one line and previews the call in full", async () => {
+  expect(
+    await askedAbout("reply-review", "mcp/slack/send_message", {
+      channel: "#general",
+      text: "Hello",
+    }),
+  ).toEqual({
+    question: "Full review text.",
+    shortQuestion: "Approve the slack__send_message call?",
+    callPreview: [
+      "**slack\\_\\_send\\_message call**",
+      "```yaml\nchannel: '#general'\ntext: Hello\n```",
+    ].join("\n\n"),
+    header: "Approval",
+    options: [
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
+    ],
+    allowMultiple: false,
+    remedy_offer_ids: ["offer-1"],
+  });
+});
+
+test("shows a command in full under its description, wrapped to the pane", async () => {
+  const command = "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF";
+  const asked = await askedAbout("command-call", "Bash", {
+    command,
+    description: "Clean up,\n  then report",
+    timeout: 60000,
+  });
+  expect(asked?.shortQuestion).toBe("Approve the Bash command?");
+  expect(asked?.callPreview).toBe(
+    [
+      "**Bash command**\n*Clean up, then report*",
+      // A wrapped line continues four spaces further in.
+      "````sh\nrm -rf __pycache__ && echo\n    **done** `whoami`\n```\nEOF\n````",
+      "```yaml\ntimeout: 60000\n```",
+    ].join("\n\n"),
+  );
+});
+
+test("wraps every line of a long command to the narrowest pane", async () => {
+  const command = Array.from({ length: 15 }, (_, i) => `--flag${i}`).join(" ");
+  const asked = await askedAbout("long-command", "Bash", { command });
+  const lines = (asked?.callPreview ?? "")
+    .split("```sh\n")[1]
+    .split("\n```")[0]
+    .split("\n");
+  expect(lines.length).toBeGreaterThan(2);
+  expect(lines.every((line) => line.length <= 34)).toBe(true);
+  expect(lines.join("\n").replace(/\n {4}/g, " ")).toBe(command);
+});
+
+test("shows a file write as the file's content", async () => {
+  const content = "export const answer = 42;\n";
+  const asked = await askedAbout("write-call", "Write", {
+    file_path: "src/answer.ts",
+    content,
+  });
+  expect(asked?.callPreview).toBe(
+    `**Write call**\n*src/answer.ts*\n\n\`\`\`ts\n${content}\n\`\`\``,
+  );
+});
+
+test("shows an edit as a diff, one per edit", async () => {
+  const edit = await askedAbout("edit-call", "Edit", {
+    file_path: "src/answer.ts",
+    old_string: "const answer = 41;",
+    new_string: "const answer = 42;\nconst ready = true;",
+    replace_all: false,
+  });
+  expect(edit?.callPreview).toBe(
+    [
+      "**Edit call**\n*src/answer.ts*",
+      "```diff\n-const answer = 41;\n+const answer = 42;\n+const ready = true;\n```",
+      "```yaml\nreplace_all: false\n```",
+    ].join("\n\n"),
+  );
+
+  const multi = await askedAbout("multi-edit-call", "MultiEdit", {
+    file_path: "a.py",
+    edits: [
+      { old_string: "a = 1", new_string: "a = 2" },
+      { old_string: "b = 1", new_string: "b = 2" },
+    ],
+  });
+  expect(multi?.callPreview).toBe(
+    [
+      "**MultiEdit call**\n*a.py*",
+      "```diff\n-a = 1\n+a = 2\n```",
+      "```diff\n-b = 1\n+b = 2\n```",
+    ].join("\n\n"),
+  );
+});
+
+test("shows any other call's arguments in full as YAML", async () => {
+  const title = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+  const asked = await askedAbout("yaml-call", "mcp/github/create_issue", {
+    title,
+    body: "Line one with `code`\n\n  indented line\nlast line",
+    labels: ["bug", "ui"],
+    assignee: { login: "octocat" },
+  });
+  const block = (asked?.callPreview ?? "")
+    .split("```yaml\n")[1]
+    .split("\n```")[0];
+  expect(block.split("\n").every((line) => line.length <= 34)).toBe(true);
+  // A long value wraps and continues four spaces further in.
+  expect(block.replace(/\n {4}(?=word)/g, " ")).toContain(`title: ${title}\n`);
+  expect(block).toContain(
+    "body: |-\n  Line one with `code`\n\n    indented line\n  last line\n",
+  );
+  expect(block).toContain(
+    "labels:\n  - bug\n  - ui\nassignee:\n  login: octocat",
+  );
+});
+
+test.each([
+  ["no arguments", undefined],
+  ["empty arguments", "{}"],
+])("says the call has no arguments when the review has %s", async (_, reviewedArguments) => {
+  const active = session("bare-call");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "local_tool",
+      ...(reviewedArguments ? { arguments: reviewedArguments } : {}),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe("Full review text.");
+  expect(question?.shortQuestion).toBe("Approve the local_tool call?");
+  expect(question?.callPreview).toBe(
+    "**local\\_tool call**\n\nThis call has no arguments.",
+  );
+});
+
+test.each([
+  "[1,2]",
+  "{incomplete JSON",
+])("never treats unparsed arguments as an empty call: %s", async (raw) => {
+  const active = session("unparsed-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "raw",
+      text: "Full policy review.",
+      tool: "example_tool",
+      arguments: raw,
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["raw"],
+  });
+  expect(asked?.question).toContain(raw);
+  expect(asked?.question).toContain("Full policy review.");
+  expect(asked?.callPreview).toBeUndefined();
+});
+
+/** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
+function runtimeReview(coverage: string): string {
+  return [
+    "[OpenAPPA] Approve this call?",
+    'APPA asks you to rule as the authority "hitl".',
+    "Ask the person running this session to approve this exact call.",
+    "",
+    "Tool: host/archestra/send_report",
+    "Arguments:",
+    '{\n  "to": "finance@example.com"\n}',
+    "",
+    "What this ruling would cover:",
+    coverage,
+    "",
+    "Accept only if this exact call, with these exact arguments, may run. Decline refuses it.",
+  ].join("\n");
+}
+
+test.each([
+  {
+    case: "the person's attention only",
+    coverage: "  - attention: human-approval",
+    expected:
+      "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
+    expectedAccepted: "",
+  },
+  {
+    case: "more than the person's attention",
+    coverage:
+      "  - attention: human-approval\n  - the readers must be the public audience",
+    expected:
+      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
+    expectedAccepted:
+      "\n\nApproving also accepts:\n• the readers must be the public\n  audience",
+  },
+])("asks about the call itself when the ruling covers $case", async ({
+  coverage,
+  expected,
+  expectedAccepted,
+}) => {
+  const active = session("form-question");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview(coverage),
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(expected);
+  expect(question?.shortQuestion).toBe("Approve the send_report call?");
+  expect(question?.callPreview).toBe(
+    `**send\\_report call**\n\n\`\`\`yaml\nto: finance@example.com\n\`\`\`${expectedAccepted}`,
+  );
+});
+
+describe.each([
+  // `title` is the tool label as the preview's markdown writes it.
+  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash", title: "Bash" },
+  {
+    adapter: new AppaCodexAdapter(),
+    tool: "exec_command",
+    title: "exec\\_command",
+  },
+  { adapter: new AppaOpenCodeAdapter(), tool: "bash", title: "bash" },
+])("$tool approval questions", ({ adapter, tool, title }) => {
+  test.each([
+    { label: "Approve", ruling: "approve" },
+    { label: "Deny", ruling: "deny" },
+  ] as const)("shows the command once and reads $label for that exact question", async ({
+    label,
+    ruling,
+  }) => {
+    const active = session("command-review");
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId: "offer-1",
+        text: runtimeReview("  - the readers must be the public audience"),
+        tool,
+        // The runtime returns the arguments as the proxy evaluated them.
+        arguments: JSON.stringify({
+          cmd: 'git push -u origin "feature"',
+          command: 'git push -u origin "feature"',
+          description: "Push the branch",
+        }),
+      },
+    });
+
+    const question = await getHitlAskUserArguments({
+      session: active,
+      offerIds: ["offer-1"],
+    });
+    const argumentLines =
+      'command      git push -u origin "feature"\ndescription  Push the branch';
+    expect(question?.question).toBe(
+      `Approve ${tool}?\n\nApproving also accepts:\n  - the readers must be the public audience\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
+    );
+    expect(question?.callPreview).toBe(
+      `**${title} command**\n*Push the branch*\n\n\`\`\`sh\ngit push -u origin "feature"\n\`\`\`\n\nApproving also accepts:\n• the readers must be the public\n  audience`,
+    );
+    if (!question) throw new Error("Missing review question");
+    const nativeQuestion = adapter.nativeQuestion;
+    const asked = nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.header).toBe("Approval");
+    const options = [
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
+    ];
+    if (adapter.id === "claude-code") {
+      expect(asked.question).toBe(`Approve the ${tool} command?`);
+      expect(asked.options).toEqual(
+        options.map((option) => ({ ...option, preview: question.callPreview })),
+      );
+    } else {
+      expect(asked.question).toBe(question.question);
+      expect(asked.options).toEqual(options);
+    }
+    if (adapter.id === "codex")
+      expect(asked).toHaveProperty("id", "archestra_question");
+    if (adapter.id === "opencode")
+      expect(asked).toHaveProperty("multiple", false);
+    const content =
+      adapter.id === "codex"
+        ? JSON.stringify({
+            answers: { archestra_question: { answers: [label] } },
+          })
+        : adapter.id === "opencode"
+          ? `User has answered your questions: "${asked.question}"="${label}". You can now continue with the user's answers in mind.`
+          : `Your questions have been answered: "${asked.question}"="${label}". You can now continue with these answers in mind.`;
+    expect(nativeQuestion.rulingFromResult({ content }, question)).toBe(ruling);
+    if (adapter.id === "opencode") {
+      expect(
+        nativeQuestion.rulingFromResult(
+          {
+            content: `User has answered your questions: "Approve ${tool}?"="${label}". You can now continue with the user's answers in mind.`,
+          },
+          question,
+        ),
+      ).toBe("unrecognized");
+    }
+    expect(
+      await recordHitlRuling({ session: active, offerId: "offer-1", ruling }),
+    ).toBe(true);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBe(ruling);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBeUndefined();
+  });
+});
+
+test("asks the full question when Claude Code would withhold the preview", async () => {
+  const active = session("long-question");
+  const text = Array.from({ length: 500 }, (_, i) => `word${i}`).join(" ");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ text }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  if (!question) throw new Error("Missing review question");
+  // Longer than the 2,000 characters Claude Code shows of a preview.
+  expect(question.callPreview?.length).toBeGreaterThan(2000);
+  for (const adapter of [
+    new AppaClaudeCodeAdapter(),
+    new AppaCodexAdapter(),
+    new AppaOpenCodeAdapter(),
+  ]) {
+    const asked = adapter.nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.question).toBe(question.question);
+    const fullArgs = asked.question
+      .split("Full arguments (YAML, not summarized):\n")[1]
+      .split("\n\nApprove lets")[0];
+    expect(loadYaml(fullArgs)).toEqual({ text });
+    // Keep coverage in the prefix even for clients that truncate long questions.
+    expect(asked.question.length).toBeGreaterThan(2000);
+    expect(asked.question.slice(0, 2000)).toContain(
+      "the readers must be the public audience",
+    );
+    expect(asked.question.slice(0, 2000)).toContain("text: word0");
+    for (const option of asked.options)
+      expect(option).not.toHaveProperty("preview");
+  }
+});
+
+test("asks the full question when the preview has control characters", async () => {
+  const asked = await askedAbout("control-question", "Bash", {
+    command: "printf '\u001b[31mred\u001b[0m'",
+  });
+  if (!asked) throw new Error("Missing review question");
+  const [question] = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(
+    asked,
+  ).questions as Array<{ question: string; options: object[] }>;
+  expect(question.question).toBe(asked.question);
+  for (const option of question.options)
+    expect(option).not.toHaveProperty("preview");
+});
+
+test("pretty-printed long arguments round-trip without loss when summarization is unavailable", async () => {
+  const active = session("pretty-long-fallback");
+  const args = {
+    message: `# Work order\n\n${"Preserve this exact sentence. ".repeat(100)}\n\n  indentation\n\tand tabs\n`,
+    command: "printf 'a  b'\nexit 0",
+    nested: { enabled: true },
+  };
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "pretty",
+      tool: "start_run",
+      text: runtimeReview(
+        "  - attention: human-approval\n  - trust must reach trusted",
+      ),
+      arguments: JSON.stringify(args),
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["pretty"],
+  });
+  if (!asked) throw new Error("expected the full pending review");
+  const full = asked.question
+    .split("Full arguments (YAML, not summarized):\n")[1]
+    .split("\n\nApprove lets this exact call run.")[0];
+  expect(loadYaml(full ?? "")).toEqual(args);
+  expect(asked?.question).toContain("trust must reach trusted");
+  const native = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(asked);
+  expect(native.questions[0].question).toBe(asked?.question);
+  expect(
+    native.questions[0].options.every((option) => !("preview" in option)),
+  ).toBe(true);
+});
+
+test("keeps both arguments when a command tool's cmd and command differ", async () => {
+  const active = session("distinct-command-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - attention: human-approval"),
+      tool: "exec_command",
+      arguments: JSON.stringify({ cmd: "ls", command: "rm -rf build" }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.callPreview).toBe(
+    "**exec\\_command command**\n\n```sh\nrm -rf build\n```\n\n```yaml\ncmd: ls\n```",
+  );
+  expect(question?.question).toContain("cmd      ls\ncommand  rm -rf build");
+});
+
+test("keeps the full review text when its coverage is in an unknown shape", async () => {
+  const active = session("unknown-coverage");
+  const text = runtimeReview("  * the readers must be the public audience");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text,
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(text);
+});
+
 test("renders a terminal-safe heading without changing the reviewed payload", async () => {
   const active = session("terminal-review");
   const graphicHeading =
@@ -322,8 +815,6 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
   const review = {
     offerId: "offer-1",
     text: `${graphicHeading}${body}`,
-    tool: "mcp/example/write",
-    arguments: reviewedArguments,
     remedyArguments: { offer_id: "offer-1", plan: "Submit for approval" },
   };
   await stageHitlReview({ session: active, review });
@@ -402,6 +893,111 @@ test("native reviewers atomically claim one approval and a timeout cannot overwr
   expect(
     await consumeHitlRuling({ session: active, offerId: "native-claim" }),
   ).toBeUndefined();
+});
+
+test("a closure cannot erase an unspent approval, and a later denial still can", async () => {
+  const active = session("closure-cannot-revoke");
+  const lookup = { session: active, offerId: "kept" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "kept", text: "Review this exact call." },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+  expect(
+    await recordHitlRuling({ ...lookup, ruling: "none", closure: "cancelled" }),
+  ).toBe(false);
+  expect(await sealHitlClosure({ ...lookup, closure: "unavailable" })).toBe(
+    "approve",
+  );
+  expect(await peekHitlRuling(lookup)).toBe("approve");
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(true);
+  expect(await consumeHitlRuling(lookup)).toBe("deny");
+});
+
+test("an approval wins when it races a closure", async () => {
+  const active = session("closure-race");
+  const lookup = { session: active, offerId: "race" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "race", text: "Review this exact call." },
+  });
+  await Promise.all([
+    recordHitlRuling({ ...lookup, ruling: "approve" }),
+    sealHitlClosure({ ...lookup, closure: "cancelled" }),
+  ]);
+  expect(await consumeHitlRuling(lookup)).toBe("approve");
+  expect(await peekHitlDecision(lookup)).toBeUndefined();
+});
+
+test("a later stage does not reopen a sealed closure", async () => {
+  const lookup = { session: session("stage-after-seal"), offerId: "closed" };
+  const review = { offerId: "closed", text: "Review this exact call." };
+  await stageHitlReview({ ...lookup, review });
+  expect(await sealHitlClosure({ ...lookup, closure: "unavailable" })).toBe(
+    "sealed",
+  );
+  expect(await stageHitlReview({ ...lookup, review })).toEqual({
+    status: "none",
+    closure: "unavailable",
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(false);
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "unavailable",
+  });
+  expect(await getHitlReview(lookup)).toBeUndefined();
+});
+
+test("an existing denial is not replaced by a ghost review", async () => {
+  const lookup = { session: session("stage-after-deny"), offerId: "denied" };
+  const review = { offerId: "denied", text: "Review this exact call." };
+  await stageHitlReview({ ...lookup, review });
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(true);
+  expect(await stageHitlReview({ ...lookup, review })).toEqual({
+    status: "deny",
+  });
+  expect(
+    await getHitlAskUserArguments({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).toBeUndefined();
+  expect(await peekHitlRuling(lookup)).toBe("deny");
+  expect(await getHitlReview(lookup)).toBeUndefined();
+});
+
+test("a sealed closure stays closed and is not a denial", async () => {
+  const lookup = { session: session("sealed-closure"), offerId: "closed" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "closed", text: "Review this exact call." },
+  });
+  expect(await sealHitlClosure({ ...lookup, closure: "declined" })).toBe(
+    "sealed",
+  );
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "declined",
+  });
+  expect(reviewOutcomeFromClosure("declined")).toBe("review_declined");
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(false);
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
+  expect(await consumeHitlRuling(lookup)).toBe("none");
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "declined",
+  });
+});
+
+test("a stored none without a closure is not a denial", async () => {
+  const lookup = { session: session("legacy-none"), offerId: "legacy" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "legacy", text: "Review this exact call." },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
+  expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
+  expect(reviewOutcomeFromClosure(undefined)).toBe("review_invalid");
 });
 
 test("a later genuine denial revokes an approval that has not been spent", async () => {
@@ -573,7 +1169,7 @@ test("rulings cannot claim another organization, caller, parent, or expired stag
   }
 });
 
-test("a recorded ruling keeps its own ten-minute TTL without reviving the expired stage", async () => {
+test("an approval keeps its review context for as long as it can be spent", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
     const lookup = {
@@ -581,21 +1177,160 @@ test("a recorded ruling keeps its own ten-minute TTL without reviving the expire
       offerId: "race",
       callId: "control",
     };
+    const review = { offerId: "race", text: "Review" };
+    await stageHitlReview({ ...lookup, review });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    // The stage would have expired by now; the approval kept it with itself.
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+    expect(await consumeHitlRuling(lookup)).toBeUndefined();
+    expect(await getHitlReview(lookup)).toBeUndefined();
+    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an unspent approval and its review context expire together", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("ruling-expiry"), offerId: "race" };
     await stageHitlReview({
       ...lookup,
       review: { offerId: "race", text: "Review" },
     });
     vi.setSystemTime(Date.now() + 9 * 60 * 1000);
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
-    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    vi.setSystemTime(Date.now() + 10 * 60 * 1000 + 1);
     expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
-    expect(await consumeHitlRuling(lookup)).toBe("approve");
     expect(await consumeHitlRuling(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+    expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a question keeps its review a full window longer than its answer is accepted", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("question-window"), offerId: "asked" };
+    const review = {
+      offerId: "asked",
+      text: "Review",
+      tool: "mcp/example/write",
+    };
+    await stageHitlReview({ ...lookup, review });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await renewHitlReview(lookup)).toBe(true);
+    // Long past the staging window, on the question's last second, the
+    // answer still finds the review it is read against.
+    vi.setSystemTime(Date.now() + HITL_QUESTION_TTL_MS - 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(
+      await getHitlAskUserArguments({
+        session: lookup.session,
+        offerIds: [lookup.offerId],
+      }),
+    ).toMatchObject({ remedy_offer_ids: [lookup.offerId] });
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+    expect(await renewHitlReview(lookup)).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a repeated remedy call keeps a review whose question is open", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("restaged"), offerId: "asked" };
+    const review = { offerId: "asked", text: "Review" };
+    await stageHitlReview({ ...lookup, review });
+    expect(await renewHitlReview(lookup)).toBe(true);
+    vi.setSystemTime(Date.now() + 15 * 60 * 1000);
+    expect(
+      await stageHitlReview({
+        ...lookup,
+        review: { ...review, remedyArguments: { plan: "again" } },
+      }),
+    ).toEqual({ status: "staged" });
+    // 35 minutes after the question was asked: still within its review.
+    vi.setSystemTime(Date.now() + 20 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("nothing is renewed for a review that is missing, ruled, or closed", async () => {
+  const active = session("no-renewal");
+  expect(await renewHitlReview({ session: active, offerId: "unknown" })).toBe(
+    false,
+  );
+  for (const [offerId, close] of [
+    [
+      "denied",
+      () =>
+        recordHitlRuling({
+          session: active,
+          offerId: "denied",
+          ruling: "deny",
+        }),
+    ],
+    [
+      "approved",
+      () =>
+        recordHitlRuling({
+          session: active,
+          offerId: "approved",
+          ruling: "approve",
+        }),
+    ],
+    [
+      "sealed",
+      () =>
+        sealHitlClosure({
+          session: active,
+          offerId: "sealed",
+          closure: "declined",
+        }),
+    ],
+  ] as const) {
+    await stageHitlReview({
+      session: active,
+      review: { offerId, text: "Review" },
+    });
+    await close();
+    expect(await renewHitlReview({ session: active, offerId })).toBe(false);
+  }
+});
+
+test("a review that cannot be read fails the reader instead of reading as gone", async () => {
+  const lookup = { session: session("unreadable"), offerId: "asked" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "asked", text: "Review" },
+  });
+  cacheManager.shutdown();
+  await expect(getHitlReview(lookup)).rejects.toThrow("Not started");
+  await expect(
+    getHitlAskUserArguments({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).rejects.toThrow("Not started");
+  await expect(
+    hitlReviewAskedInForm({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).rejects.toThrow("Not started");
 });
 
 type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];

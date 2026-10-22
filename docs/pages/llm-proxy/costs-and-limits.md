@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,7 +13,6 @@ Archestra records the cost of every model request from chat, agents, and the [LL
 - Set budgets that block requests when spend reaches the limit.
 - See how much use your Claude and ChatGPT subscriptions cover.
 
-![Costs & Limits → Costs for the last 30 days: billed spend, subscription-covered use, requests, tokens, and daily cost and cache-savings charts](/docs/automated_screenshots/llm-proxy_costs.webp)
 
 <span id="statistics"></span>
 
@@ -23,16 +22,15 @@ Archestra records the cost of every model request from chat, agents, and the [LL
 
 ### Company Spend
 
-Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read`](/docs/reference/permissions#llmCost:read). The top shows billed spend, subscription use, requests, and tokens. Each section below answers one question:
+Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read`](/docs/reference/permissions#llmCost:read). The five summary boxes show metered API spend, subscription usage estimates, requests, tokens, and active people.
 
-| Section | Answers | Watch out |
-| --- | --- | --- |
-| **LLM Proxy** | Which key or app spent it? | A shared key names no person. Requests with no known sign-in show as unknown. |
-| **People** | Who uses AI the most? | Subscription use bills $0, so compare requests and tokens. To see other people, you also need access to the member list. |
-| **Apps** | What did an [app](/docs/chat/apps) cost to build and run? | When one chat built several apps, each app shows the chat's full cost. Savings are estimates. |
-| **Skills** | What do turns with a [skill](/docs/agents/skills) cost? | A turn's cost covers the whole conversation, so skills can overlap. |
+1. Pick a saved view, such as **Spend by model** or **Who is using it**, or choose a metric and grouping yourself.
+2. Click rows to compare their trends in the chart. **Summary** sorts totals; **Pivot** compares time buckets or a secondary breakdown.
+3. Use **Copy as CSV** to export the result. The API call below the table identifies the source endpoint.
 
-Team, agent, and model views are there too.
+- Subscription estimates value usage at equivalent API rates. They exclude subscription fees and are not a bill.
+- App opens and tool calls measure activity. The app spend view includes build and runtime costs, marks shared build sessions, and compares runtime usage with the chat-equivalent estimate. Opening an app does not itself imply inference.
+- Skills show activations, context tokens, distinct people, and attributed turn spend. Skill spend can overlap when several skills share a turn; partial context measurements are marked. Access to app and skill breakdowns follows their resource permissions. Other people's usage also requires access to the member list.
 
 <span id="proxy-cost-attribution"></span><span id="per-user-usage"></span><span id="per-app-cost"></span><span id="per-skill-cost"></span><span id="attributing-external-proxy-traffic"></span>
 
@@ -42,12 +40,15 @@ To tie proxy traffic to a person, use a credential that names one. See [Authenti
 
 ### Your Own Usage
 
-Click your name in the sidebar, then **My Usage**. It shows your billed spend, requests, tokens, and active days, by model and by client.
+Click your name in the sidebar, then **My Usage**, to compare your model and client activity without access to company-wide costs.
 
-![My Usage for the last 30 days: spend, requests, tokens, and active days, with the models and clients used](/docs/automated_screenshots/llm-proxy_my-usage.webp)
+1. Choose a saved view or use **Show** and **by** to select a metric and grouping. Click rows to compare their totals in the chart.
+2. Choose **Time → Pivot** to compare time buckets. For model or client tokens, choose **split by → Input / output**, then **Pivot**.
+3. Use **Token mix**, **Context size**, or **Costliest sessions** to inspect those breakdowns. **Copy as CSV** exports the selected table.
 
-- **Where your tokens went** splits fresh input, cache reads, cache writes, and output.
-- **Costliest sessions** lists your most expensive sessions.
+- The **Tokens** summary counts input and output; **Token mix** also includes cache reads and writes.
+- Subscription estimates and context list-price values are not additional bills. Sessions show only the costliest returned sessions; elapsed minutes are not active working time.
+- Model and client totals are independent breakdowns. A model-by-client pivot is unavailable.
 
 <span id="usage-limits"></span>
 
@@ -98,11 +99,11 @@ Archestra tells the two apart from the credential on each request. You configure
 
 ## Where Token Prices Come From
 
-Every cost uses the model's price. Archestra syncs input, output, and cache prices for known models. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
+A cost uses the model's price. Archestra syncs input, output, and cache prices for known models. OpenRouter is the exception: Archestra records the cost OpenRouter reports for each request, so the price of the provider it routed to is what counts. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
 
 Prompt caching lowers the cost of a prompt that starts the same way each time. Costs and logs show the cache reads and writes the provider reports. Archestra adds cache points to its own chat and agent requests. Proxy requests keep the caller's own cache markers.
 
 ## What to Know
 
-- **Need the raw numbers?** Get them per person from [`GET /api/statistics/users`](/docs/reference/api#/Statistics/getUserStatistics), or your own from [`GET /api/statistics/me`](/docs/reference/api#/Statistics/getMyStatistics).
+- **Need the raw numbers?** Get them per person from [`GET /api/statistics/users`](/docs/reference/api#/Statistics/getUserStatistics), or your own from [`GET /api/statistics/me`](/docs/reference/api#/Statistics/getMyStatistics). For daily counts of tool calls, app runs, and skill activations, group [`GET /api/statistics/mcp-tool-calls`](/docs/reference/api#/Statistics/getMcpToolCallUsage), [`app-usage`](/docs/reference/api#/Statistics/getAppUsage), or [`skill-usage`](/docs/reference/api#/Statistics/getSkillUsage) by `day`.
 - **Already use Prometheus or Grafana?** Archestra exports cost and token metrics, so you can chart spend next to your other dashboards. See [Metrics](/docs/admin/observability/metrics#llm-metrics).

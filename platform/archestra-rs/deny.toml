@@ -1,11 +1,14 @@
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
+# zip 8.6.0 comes only from OpenAPPA's appa crate, which writes archives and
+# reads one checked entry with ZipArchive::by_index. It never calls the
+# extract() APIs these advisories cover. The fixed zip 9 releases are younger
+# than the 7-day Cargo release-age rule; remove these entries once appa moves
+# to zip 9.
 ignore = [
-  { id = "RUSTSEC-2025-0134", reason = "Transitive through dagger-sdk 0.21.9 via reqwest 0.11; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0098", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0099", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0104", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0258", reason = "Transitive through dagger-sdk 0.21.9 via reqwest 0.11 and h2 0.3; remove once dagger-sdk upgrades its HTTP stack." },
+  { id = "RUSTSEC-2026-0367", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
+  { id = "RUSTSEC-2026-0368", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
+  { id = "RUSTSEC-2026-0369", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
 ]
 
 [bans]

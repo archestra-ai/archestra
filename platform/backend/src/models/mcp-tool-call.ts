@@ -13,9 +13,9 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
-  max,
   or,
   type SQL,
   sql,
@@ -43,7 +43,12 @@ import { resolveLogContentMode, withholdToolCallContent } from "@/log-content";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
-import { mcpToolCallBelongsToOrganization } from "./log-organization";
+import AgentUsageModel from "./agent-usage";
+import {
+  interactionBelongsToOrganization,
+  mcpToolCallBelongsToOrganization,
+} from "./log-organization";
+import { MCP_TOOL_CALL_TOOL_NAME } from "./mcp-tool-call-name";
 
 /**
  * Builds a search condition for MCP tool calls across server name, method,
@@ -69,6 +74,19 @@ function buildMcpToolCallSearchCondition(search: string) {
   );
 }
 
+/**
+ * MCP tool-call log rows.
+ *
+ * Session links: `session_id` / `llm_tool_call_id` are written only from an
+ * exact signal (see the schema). A `tools/call` row written without a session
+ * but with a `run_id` is linked at read time instead: when the organization's
+ * interactions for that run — the caller's own, for a caller limited to their
+ * own logs — carry exactly one session id, that is the row's `sessionId`. A
+ * run spread over several sessions links to none, since nothing says which of
+ * its turns issued the call. Reads resolve every row of a page in one query,
+ * and the `sessionId` list filter applies the same rule, so a row is listed
+ * under a session exactly when it reports that session.
+ */
 class McpToolCallModel {
   /**
    * @param auditContext when present, this tool call belongs to an encrypted-chat
@@ -90,15 +108,20 @@ class McpToolCallModel {
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
-      .values(
-        encryptMcpToolCallContent(
+      .values({
+        ...encryptMcpToolCallContent(
           withheld
             ? withholdToolCallContent(data)
             : redactToolCallArguments({ ...data }),
           audit,
         ),
-      )
+        ...toolCallOutcomeColumns(data, audit !== null),
+      })
       .returning();
+    AgentUsageModel.recordUseInBackground({
+      agentId: mcpToolCall.agentId,
+      usedAt: mcpToolCall.createdAt,
+    });
 
     // Decrypting on a write path is only safe because the key came from this
     // caller. A read path that might meet a row keyed to a conversation it
@@ -121,6 +144,8 @@ class McpToolCallModel {
       search?: string;
       /** Narrow to rows attributed to this user (the own-logs log:read view). */
       ownUserId?: string;
+      /** Narrow to rows linked to this LLM session (see the class doc). */
+      sessionId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -170,7 +195,10 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+      await McpToolCallModel.withRunSessions(
+        data.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+        filters,
+      ),
       Number(total),
       pagination,
     );
@@ -201,6 +229,8 @@ class McpToolCallModel {
       mcpServerName?: string;
       /** Narrow to rows attributed to this user (the own-logs log:read view). */
       ownUserId?: string;
+      /** Narrow to rows linked to this LLM session (see the class doc). */
+      sessionId?: string;
     },
   ): Promise<CursorPaginatedResult<McpToolCall>> {
     const { limit, cursor } = cursorQuery;
@@ -261,7 +291,10 @@ class McpToolCallModel {
       .limit(limit + 1);
 
     return createCursorPaginatedResult(
-      rows.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+      await McpToolCallModel.withRunSessions(
+        rows.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+        filters,
+      ),
       cursorQuery,
       (row) => ({ value: row.createdAt.toISOString(), id: row.id }),
     );
@@ -307,6 +340,7 @@ class McpToolCallModel {
       search?: string;
       mcpServerName?: string;
       ownUserId?: string;
+      sessionId?: string;
     },
   ): Promise<SQL[] | null> {
     const conditions: SQL[] = [];
@@ -324,6 +358,15 @@ class McpToolCallModel {
     if (filters?.mcpServerName) {
       conditions.push(
         eq(schema.mcpToolCallsTable.mcpServerName, filters.mcpServerName),
+      );
+    }
+    if (filters?.sessionId) {
+      conditions.push(
+        await McpToolCallModel.linkedToSessionCondition({
+          sessionId: filters.sessionId,
+          organizationId: filters.organizationId,
+          ownUserId: filters.ownUserId,
+        }),
       );
     }
 
@@ -362,14 +405,98 @@ class McpToolCallModel {
     return conditions;
   }
 
+  /**
+   * @param idOrScope with a scope, `ownUserId` limits run-based session
+   * resolution to that user's interactions, as their own-logs view requires.
+   */
+  /**
+   * The session's tool calls that carry the model's call id, as `{id,
+   * llmToolCallId, toolName}`: what guardrail records (keyed by that call id)
+   * are matched against.
+   */
+  static async findModelCallIdsBySession(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<
+    { id: string; llmToolCallId: string; toolName: string | null }[]
+  > {
+    const rows = await db
+      .select({
+        id: schema.mcpToolCallsTable.id,
+        llmToolCallId: schema.mcpToolCallsTable.llmToolCallId,
+        toolName: MCP_TOOL_CALL_TOOL_NAME,
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(
+        and(
+          eq(schema.mcpToolCallsTable.sessionId, params.sessionId),
+          isNotNull(schema.mcpToolCallsTable.llmToolCallId),
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.llmToolCallId
+        ? [
+            {
+              id: row.id,
+              llmToolCallId: row.llmToolCallId,
+              toolName: row.toolName,
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
+   * The logged `yell` calls of the given LLM sessions, oldest first: what a
+   * yell links to in the session trace.
+   */
+  static async findYellCallsBySessions(params: {
+    organizationId: string;
+    sessionIds: string[];
+  }): Promise<
+    {
+      id: string;
+      sessionId: string;
+      llmToolCallId: string | null;
+      createdAt: Date;
+    }[]
+  > {
+    if (params.sessionIds.length === 0) return [];
+    const table = schema.mcpToolCallsTable;
+    const rows = await db
+      .select({
+        id: table.id,
+        sessionId: table.sessionId,
+        llmToolCallId: table.llmToolCallId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          inArray(table.sessionId, params.sessionIds),
+          sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE '%\\_\\_yell'`,
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .orderBy(asc(table.createdAt));
+    return rows.flatMap((row) =>
+      row.sessionId ? [{ ...row, sessionId: row.sessionId }] : [],
+    );
+  }
+
   static async findById(
-    idOrScope: string | { id: string; organizationId: string },
+    idOrScope:
+      | string
+      | { id: string; organizationId: string; ownUserId?: string },
     userId?: string,
     isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
     const id = typeof idOrScope === "string" ? idOrScope : idOrScope.id;
     const organizationId =
       typeof idOrScope === "string" ? undefined : idOrScope.organizationId;
+    const ownUserId =
+      typeof idOrScope === "string" ? undefined : idOrScope.ownUserId;
     const [mcpToolCall] = await db
       .select({
         ...getTableColumns(schema.mcpToolCallsTable),
@@ -420,7 +547,11 @@ class McpToolCallModel {
       }
     }
 
-    return toVisibleMcpToolCall(readMcpToolCallRow(mcpToolCall));
+    const [visible] = await McpToolCallModel.withRunSessions(
+      [toVisibleMcpToolCall(readMcpToolCallRow(mcpToolCall))],
+      { organizationId, ownUserId },
+    );
+    return visible;
   }
 
   static async getAllMcpToolCallsForAgent(
@@ -573,125 +704,108 @@ class McpToolCallModel {
   // SPDX-SnippetEnd
 
   /**
-   * App-level variant of the first-success scan for encrypted deployments:
-   * keyset-walk tools/call rows oldest-first, decrypt each result, return
-   * the first without `isError: true`. Cursor uses the driver's raw
-   * `created_at` text so the timestamp-without-time-zone value round-trips
-   * exactly (same reasoning as the content backfill's interactions cursor).
+   * Fills in `sessionId` for rows linked only by run id (see the class doc),
+   * resolving every such row of the page in one grouped query.
    */
-  private static async findFirstSuccessfulToolCallAtDecrypting(): Promise<Date | null> {
-    const batchSize = 200;
-    let cursor: { createdAt: string; id: string } | null = null;
+  private static async withRunSessions(
+    rows: McpToolCall[],
+    scope?: { organizationId?: string; ownUserId?: string },
+  ): Promise<McpToolCall[]> {
+    const runIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          isRunLinkable(row) && row.runId ? [row.runId] : [],
+        ),
+      ),
+    ];
+    if (runIds.length === 0) return rows;
 
-    while (true) {
-      const cursorClause: SQL = cursor
-        ? sql`AND (created_at, id) > (${cursor.createdAt}::timestamp, ${cursor.id}::uuid)`
-        : sql``;
-      const page = await db.execute<{
-        id: string;
-        created_at_text: string;
-        tool_result: unknown;
-      }>(sql`
-        SELECT id, created_at::text AS created_at_text, tool_result
-        FROM ${schema.mcpToolCallsTable}
-        WHERE method = 'tools/call' AND tool_result IS NOT NULL
-          -- EncryptedChat rows are keyed to a browser this process cannot reach,
-          -- so their result is unreadable here. Excluded in SQL rather than
-          -- skipped in JS: the locked sentinel has no top-level isError, so
-          -- an encrypted FAILURE would otherwise be counted as the first
-          -- success and mis-fire onboarding.
-          AND encrypted_chat_conversation_id IS NULL
-        ${cursorClause}
-        ORDER BY created_at ASC, id ASC
-        LIMIT ${batchSize}
-      `);
-
-      for (const row of page.rows) {
-        const result = readMcpToolCallRow(row).tool_result;
-        const isError =
-          typeof result === "object" &&
-          result !== null &&
-          (result as { isError?: unknown }).isError === true;
-        if (!isError) {
-          // Re-read through drizzle so the Date carries the same
-          // timestamp-without-time-zone interpretation as every other model
-          // read (the raw driver would parse the bare text as local time).
-          const [hit] = await db
-            .select({ createdAt: schema.mcpToolCallsTable.createdAt })
-            .from(schema.mcpToolCallsTable)
-            .where(eq(schema.mcpToolCallsTable.id, row.id));
-          return hit?.createdAt ?? null;
-        }
-      }
-
-      const last = page.rows.at(-1);
-      if (!last || page.rows.length < batchSize) return null;
-      cursor = { createdAt: last.created_at_text, id: last.id };
-    }
+    const sessionByRun = await McpToolCallModel.singleSessionByRun({
+      runCondition: inArray(schema.interactionsTable.runId, runIds),
+      ...scope,
+    });
+    return rows.map((row) => {
+      const sessionId =
+        isRunLinkable(row) && row.runId
+          ? sessionByRun.get(row.runId)
+          : undefined;
+      return sessionId ? { ...row, sessionId } : row;
+    });
   }
 
   /**
-   * Batch-load the timestamp of the most recent MCP call (any method) per
-   * agent. Agents with no recorded calls are absent from the returned map.
+   * Rows linked to `sessionId`: stored on the row, or resolved through the
+   * row's run. The session's runs are resolved first, so both branches of the
+   * predicate stay on their own index.
    */
-  static async getLastCallAtForAgents(
-    agentIds: string[],
-  ): Promise<Map<string, Date>> {
-    if (agentIds.length === 0) return new Map();
-
-    const rows = await db
-      .select({
-        agentId: schema.mcpToolCallsTable.agentId,
-        lastCallAt: max(schema.mcpToolCallsTable.createdAt),
-      })
-      .from(schema.mcpToolCallsTable)
-      .where(inArray(schema.mcpToolCallsTable.agentId, agentIds))
-      .groupBy(schema.mcpToolCallsTable.agentId);
-
-    const lastCallMap = new Map<string, Date>();
-    for (const row of rows) {
-      if (row.agentId && row.lastCallAt) {
-        lastCallMap.set(row.agentId, row.lastCallAt);
-      }
-    }
-    return lastCallMap;
-  }
-
-  /**
-   * When the first successful tools/call was routed (a recorded result
-   * without `isError`); null when none yet. An activation signal for the
-   * feedback pop-up.
-   *
-   * Under content encryption `tool_result` may be a ciphertext envelope the
-   * SQL `->> 'isError'` predicate cannot see into (it would read every
-   * encrypted error as a success), so when decryption is in play the rows
-   * are walked oldest-first and checked after decryption. Successful calls
-   * dominate real tables, so the walk exits on the first batch in practice.
-   */
-  static async getFirstSuccessfulToolCallAt(): Promise<Date | null> {
-    if (isContentDecryptionAvailable()) {
-      return McpToolCallModel.findFirstSuccessfulToolCallAtDecrypting();
-    }
-
-    const [row] = await db
-      .select({ createdAt: schema.mcpToolCallsTable.createdAt })
-      .from(schema.mcpToolCallsTable)
+  private static async linkedToSessionCondition(params: {
+    sessionId: string;
+    organizationId?: string;
+    ownUserId?: string;
+  }): Promise<SQL> {
+    const { sessionId, ...scope } = params;
+    const sessionRuns = db
+      .selectDistinct({ runId: schema.interactionsTable.runId })
+      .from(schema.interactionsTable)
       .where(
         and(
-          eq(schema.mcpToolCallsTable.method, "tools/call"),
-          sql`${schema.mcpToolCallsTable.toolResult} IS NOT NULL`,
-          // Same exclusion as the decrypting branch, and it matters MORE here:
-          // this path runs when at-rest encryption is off, where encrypted-chat
-          // rows still exist, and it reads `isError` straight out of JSON. A
-          // DEK envelope has no such key, so an encrypted failure would read
-          // as a success.
-          isNull(schema.mcpToolCallsTable.encryptedChatConversationId),
-          sql`(${schema.mcpToolCallsTable.toolResult} ->> 'isError') IS DISTINCT FROM 'true'`,
+          eq(schema.interactionsTable.sessionId, sessionId),
+          sql`${schema.interactionsTable.runId} IS NOT NULL`,
+          ...interactionScopeConditions(scope),
+        ),
+      );
+    const sessionByRun = await McpToolCallModel.singleSessionByRun({
+      runCondition: inArray(schema.interactionsTable.runId, sessionRuns),
+      ...scope,
+    });
+    // A run that also carries other sessions resolves to none of them.
+    const runIds = [...sessionByRun].flatMap(([runId, resolved]) =>
+      resolved === sessionId ? [runId] : [],
+    );
+
+    const stored = eq(schema.mcpToolCallsTable.sessionId, sessionId);
+    if (runIds.length === 0) return stored;
+    return or(
+      stored,
+      and(
+        isNull(schema.mcpToolCallsTable.sessionId),
+        eq(schema.mcpToolCallsTable.method, "tools/call"),
+        inArray(schema.mcpToolCallsTable.runId, runIds),
+      ),
+    ) as SQL;
+  }
+
+  /**
+   * The one session id the visible interactions of each matching run carry.
+   * Runs with no session, or with more than one, are absent.
+   */
+  private static async singleSessionByRun(params: {
+    runCondition: SQL;
+    organizationId?: string;
+    ownUserId?: string;
+  }): Promise<Map<string, string>> {
+    const { runCondition, ...scope } = params;
+    const rows = await db
+      .select({
+        runId: schema.interactionsTable.runId,
+        sessionId: sql<string>`min(${schema.interactionsTable.sessionId})`,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          runCondition,
+          sql`${schema.interactionsTable.sessionId} IS NOT NULL`,
+          ...interactionScopeConditions(scope),
         ),
       )
-      .orderBy(asc(schema.mcpToolCallsTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
+      .groupBy(schema.interactionsTable.runId)
+      .having(sql`count(DISTINCT ${schema.interactionsTable.sessionId}) = 1`);
+
+    const sessionByRun = new Map<string, string>();
+    for (const row of rows) {
+      if (row.runId) sessionByRun.set(row.runId, row.sessionId);
+    }
+    return sessionByRun;
   }
 }
 
@@ -719,6 +833,30 @@ function toVisibleMcpToolCall(
   };
 }
 
+/** Only a tool call is ever linked to a session through its run. */
+function isRunLinkable(row: McpToolCall): boolean {
+  return row.sessionId === null && row.method === "tools/call";
+}
+
+/**
+ * The interactions a session link may be read from: the organization's, and
+ * only the caller's own when their view is limited to their own logs, so a
+ * link never reveals a session the caller could not open.
+ */
+function interactionScopeConditions(scope: {
+  organizationId?: string;
+  ownUserId?: string;
+}): SQL[] {
+  return [
+    ...(scope.organizationId
+      ? [interactionBelongsToOrganization(scope.organizationId)]
+      : []),
+    ...(scope.ownUserId
+      ? [eq(schema.interactionsTable.userId, scope.ownUserId)]
+      : []),
+  ];
+}
+
 /**
  * Strips credential values out of the logged arguments. Reassigns `toolCall`
  * rather than editing it, so the caller's plaintext copy — which the gateway
@@ -734,4 +872,27 @@ function redactToolCallArguments(values: InsertMcpToolCall): InsertMcpToolCall {
 
   values.toolCall = { ...toolCall, arguments: redacted };
   return values;
+}
+
+/**
+ * The plaintext `tool_name`/`is_error` columns for a row, read from the
+ * caller's plaintext before any encryption or withholding. Only `tools/call`
+ * rows have an outcome. An encrypted-chat row keeps its outcome but not its
+ * tool name: what the conversation did is content the server must not read.
+ */
+function toolCallOutcomeColumns(
+  data: InsertMcpToolCall,
+  isEncryptedChat: boolean,
+): { toolName: string | null; isError: boolean | null } {
+  if (data.method !== "tools/call") return { toolName: null, isError: null };
+  const result = data.toolResult;
+  const isError =
+    typeof result === "object" &&
+    result !== null &&
+    "isError" in result &&
+    result.isError === true;
+  return {
+    toolName: isEncryptedChat ? null : (data.toolCall?.name ?? null),
+    isError,
+  };
 }

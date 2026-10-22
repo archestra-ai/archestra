@@ -15,6 +15,8 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: vi.fn(),
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "https://proxy.example.com",
@@ -161,6 +163,23 @@ describe("EditVirtualKeyDialog", () => {
     expect(payload.data).not.toHaveProperty("spendCap");
   });
 
+  it("preserves label drafts when Advanced is collapsed before saving", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.type(screen.getByLabelText("Label key"), "environment");
+    await user.type(screen.getByLabelText("Label value"), "development");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "vk-1",
+      data: expect.objectContaining({
+        labels: [{ key: "environment", value: "development" }],
+      }),
+    });
+  });
+
   it("shows a saved cap read-only to someone who cannot manage limits", async () => {
     const user = userEvent.setup();
     renderDialog({
@@ -173,11 +192,12 @@ describe("EditVirtualKeyDialog", () => {
       },
     } as EditableVirtualKey);
 
-    expect(screen.getByRole("button", { name: "Budget" })).toHaveAttribute(
-      "aria-description",
-      "No team · $500/month",
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
     );
-    await user.click(screen.getByRole("button", { name: "Budget" }));
+    expect(screen.getByLabelText("Spend cap in dollars")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("500");
     expect(screen.getByLabelText("Spend cap in dollars")).toBeDisabled();

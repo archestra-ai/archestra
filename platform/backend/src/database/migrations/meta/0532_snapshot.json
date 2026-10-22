@@ -1,5 +1,5 @@
 {
-  "id": "3383e9f7-6f76-468f-803f-174ed6232af9",
+  "id": "60720f54-f78f-4140-b40d-f5f9ffa1afac",
   "prevId": "f99505fb-75cb-4834-8def-8f32b75d37fb",
   "version": "7",
   "dialect": "postgresql",
@@ -4474,18 +4474,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fast_model_id": {
-          "name": "fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smart_model_id": {
-          "name": "smart_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "identity_provider_id": {
           "name": "identity_provider_id",
           "type": "text",
@@ -4816,32 +4804,6 @@
           "tableTo": "models",
           "columnsFrom": [
             "model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_fast_model_id_models_id_fk": {
-          "name": "agents_fast_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_smart_model_id_models_id_fk": {
-          "name": "agents_smart_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -18366,18 +18328,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_fast_model_id": {
-          "name": "default_fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "default_smart_model_id": {
-          "name": "default_smart_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "default_user_limit_value": {
           "name": "default_user_limit_value",
           "type": "integer",
@@ -18712,32 +18662,6 @@
           "tableTo": "models",
           "columnsFrom": [
             "default_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_default_fast_model_id_models_id_fk": {
-          "name": "organization_default_fast_model_id_models_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_default_smart_model_id_models_id_fk": {
-          "name": "organization_default_smart_model_id_models_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -27863,6 +27787,93 @@
           "columns": [
             "organization_id",
             "actor"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_thread_states": {
+      "name": "openappa_thread_states",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root_message_id": {
+          "name": "root_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tools": {
+          "name": "tools",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calls": {
+          "name": "calls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diverged": {
+          "name": "diverged",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_thread_states_created_at_idx": {
+          "name": "openappa_thread_states_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_thread_states_organization_id_message_id_pk": {
+          "name": "openappa_thread_states_organization_id_message_id_pk",
+          "columns": [
+            "organization_id",
+            "message_id"
           ]
         }
       },

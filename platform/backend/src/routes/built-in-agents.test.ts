@@ -207,14 +207,14 @@ describe("built-in agents routes", () => {
     });
   });
 
-  test("built-in agent excluded from /api/agents/all when excludeBuiltIn=true", async () => {
+  test("built-in agent excluded from /api/agents by default", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/agents/all?agentType=agent&excludeBuiltIn=true",
+      url: "/api/agents?agentType=agent",
     });
 
     expect(response.statusCode).toBe(200);
-    const agents = response.json();
+    const agents = response.json().data;
 
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
@@ -223,14 +223,14 @@ describe("built-in agents routes", () => {
     expect(builtIn).toBeUndefined();
   });
 
-  test("built-in agent included in /api/agents/all when excludeBuiltIn is not set", async () => {
+  test("built-in agent included in /api/agents when includeBuiltIn=true", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/agents/all?agentType=agent",
+      url: "/api/agents?agentType=agent&includeBuiltIn=true",
     });
 
     expect(response.statusCode).toBe(200);
-    const agents = response.json();
+    const agents = response.json().data;
 
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>

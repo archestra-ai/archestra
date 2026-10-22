@@ -50,12 +50,16 @@ import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
+import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  useCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+  type McpRegistryRow,
+  REGISTRY_PICKER_PAGE_SIZE,
+  useMcpRegistryPage,
+} from "@/lib/mcp/mcp-registry.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -75,10 +79,12 @@ import { McpCatalogIcon } from "./mcp-catalog-icon";
 import { McpServerPillShell } from "./mcp-server-pill-shell";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
-type InternalMcpCatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+/** A catalog item as the picker reads it: its registry row. */
+type InternalMcpCatalogItem = McpRegistryRow;
+type CatalogTool = Pick<
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
+  "id" | "name" | "description" | "createdAt" | "group"
+>;
 
 /**
  * Apps and built-in servers run in-process with no installed MCP server or stored
@@ -252,40 +258,11 @@ const AgentToolsEditorContent = forwardRef<
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const bulkUpdateTools = useBulkUpdateAgentTools();
 
-  // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
-  // in to assignable App backings via includeAppCatalogs).
-  const {
-    data: catalogItems = [],
-    isPending,
-    isLoadingError: catalogFailed,
-    refetch: refetchCatalog,
-  } = useInternalMcpCatalog({
-    includeApps: includeAppCatalogs,
-  });
-
-  // Fetch all credentials grouped by catalog (for default credential on toggle)
-  const allCredentials = useMcpServersGroupedByCatalog({
-    assignmentScope,
-    assignmentTeamIds,
-  });
-  // Tool counts come from the catalog list itself (`toolCount`, one grouped
-  // COUNT server-side over exactly the rows a picker lists). This used to be a
-  // per-catalog `useQueries` fan-out — one request per catalog item, each
-  // returning full tool rows with their assigned-agent lists, purely to read
-  // `.length` — which on a real registry queued behind itself in the browser's
-  // connection pool and held this component on "Loading tools...".
-  const toolCountByCatalog = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const catalog of catalogItems) {
-      map.set(catalog.id, catalog.toolCount ?? 0);
-    }
-    return map;
-  }, [catalogItems]);
-
   // Fetch assigned tools for this resource (only when editing an existing one).
   // Use the resource-scoped endpoint so MCP gateway members do not need the
   // broader tool-policy table permission just to edit their gateway tools.
-  const { data: assignedToolsData = [] } = useProfileToolsWithIds(agentId);
+  const { data: assignedToolsData = [], isLoading: isAssignedToolsLoading } =
+    useProfileToolsWithIds(agentId);
 
   // Group assigned tools by catalogId
   const assignedToolsByCatalog = useMemo(() => {
@@ -302,6 +279,107 @@ const AgentToolsEditorContent = forwardRef<
     }
     return map;
   }, [assignedToolsData]);
+
+  // The rows this picker shows, without loading the whole registry: the
+  // catalogs the record already uses, fetched by id (with the built-in one
+  // while creating, for its default tools), plus one page of the registry for
+  // the Add list, searched on the server as the reader types. A catalog picked
+  // from that page travels in its pending change, so it stays on screen when
+  // the search moves on. The built-in entry and (where offered) App backings
+  // are opted in, as the full list used to include them.
+  const catalogOptions = {
+    includeBuiltIn: true,
+    includeApps: includeAppCatalogs,
+  } as const;
+  const assignedCatalogIds = useMemo(() => {
+    const ids = [...assignedToolsByCatalog.keys()];
+    if (!agentId) ids.push(ARCHESTRA_MCP_CATALOG_ID);
+    return ids;
+  }, [assignedToolsByCatalog, agentId]);
+  const assignedCatalogs = useMcpRegistryRowsByIds(
+    assignedCatalogIds,
+    catalogOptions,
+  );
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim(), 250);
+  const catalogPage = useMcpRegistryPage(
+    {
+      ...catalogOptions,
+      ...(debouncedCatalogSearch
+        ? { search: debouncedCatalogSearch, searchDescriptions: true }
+        : {}),
+      sortBy: "name",
+      sortDirection: "asc",
+      limit: REGISTRY_PICKER_PAGE_SIZE,
+      offset: 0,
+    },
+    { placeholderScope: "agent-tools-editor" },
+  );
+  const isCatalogSearching =
+    catalogSearch.trim() !== debouncedCatalogSearch ||
+    (!!debouncedCatalogSearch && catalogPage.isFetching);
+
+  // State counter to force re-renders when pendingChangesRef updates
+  const [pendingVersion, setPendingVersion] = useState(0);
+
+  // Track pending changes for all catalogs
+  const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
+    new Map(),
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const catalogItems = useMemo(() => {
+    const byId = new Map<string, InternalMcpCatalogItem>();
+    for (const row of assignedCatalogs.data) byId.set(row.id, row);
+    for (const [id, pending] of pendingChangesRef.current) {
+      if (!byId.has(id)) byId.set(id, pending.catalogItem);
+    }
+    for (const row of catalogPage.data?.data ?? []) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  }, [assignedCatalogs.data, catalogPage.data, pendingVersion]);
+  // Only the first load: a later change of the assigned catalogs keeps the
+  // rows already known on screen while it loads.
+  const isPending =
+    (!!agentId && isAssignedToolsLoading) ||
+    (assignedCatalogIds.length > 0 && !assignedCatalogs.hasLoaded) ||
+    catalogPage.isPending;
+  const catalogFailed = assignedCatalogs.isError || catalogPage.isLoadingError;
+  const refetchCatalog = () => {
+    void assignedCatalogs.refetch();
+    void catalogPage.refetch();
+  };
+  // Nothing at all to offer: no search narrowing the page, and neither the
+  // registry nor the record has a single catalog.
+  const isRegistryEmpty =
+    !debouncedCatalogSearch &&
+    catalogPage.data?.pagination.total === 0 &&
+    catalogItems.length === 0;
+
+  // The installs this record could use, for the "Not connected" gate — only
+  // for the catalogs on screen, and only those that need an install at all.
+  const allCredentials = useMcpServersGroupedByCatalog({
+    assignmentScope,
+    assignmentTeamIds,
+    catalogIdsIn: catalogItems
+      .filter((catalog) => !isCredentialLessCatalogType(catalog.serverType))
+      .map((catalog) => catalog.id),
+  });
+
+  // Tool counts come from the registry rows themselves (`toolCount`, one
+  // grouped COUNT server-side). This used to be a per-catalog `useQueries`
+  // fan-out — one request per catalog item, each returning full tool rows with
+  // their assigned-agent lists, purely to read `.length` — which on a real
+  // registry queued behind itself in the browser's connection pool and held
+  // this component on "Loading tools...".
+  const toolCountByCatalog = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const catalog of catalogItems) {
+      map.set(catalog.id, catalog.toolCount ?? 0);
+    }
+    return map;
+  }, [catalogItems]);
 
   // Sort catalog items: assigned tools first (by count desc), then servers with tools, then 0 tools
   const sortedCatalogItems = useMemo(() => {
@@ -327,17 +405,9 @@ const AgentToolsEditorContent = forwardRef<
   // incompatible ones still render as pills so they can be removed.
   const visibleCatalogItems = sortedCatalogItems;
 
-  // State counter to force re-renders when pendingChangesRef updates
-  const [pendingVersion, setPendingVersion] = useState(0);
-
   // Track which catalog pill should auto-open its popover after being added
   const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
     null,
-  );
-
-  // Track pending changes for all catalogs
-  const pendingChangesRef = useRef<Map<string, PendingCatalogChanges>>(
-    new Map(),
   );
 
   // Track whether default tools have been pre-selected for new agent creation
@@ -630,6 +700,7 @@ const AgentToolsEditorContent = forwardRef<
             "mcp-catalog",
             catalogId,
             "tools",
+            "picker",
           ]) ?? [];
         const allToolIds = new Set(tools.map((t) => t.id));
 
@@ -703,7 +774,7 @@ const AgentToolsEditorContent = forwardRef<
         sortRank: catalog.id === ARCHESTRA_MCP_CATALOG_ID ? 1 : 0,
         icon: (
           <McpCatalogIcon
-            icon={catalog.icon}
+            icon={catalog.iconUrl ?? catalog.icon}
             catalogId={catalog.id}
             size={16}
           />
@@ -714,7 +785,7 @@ const AgentToolsEditorContent = forwardRef<
             ? "Not connected"
             : assignedCount > 0
               ? `${assignedCount}/${totalCount}`
-              : `${totalCount} tools`,
+              : `${totalCount} ${totalCount === 1 ? "tool" : "tools"}`,
         disabled:
           gate.disabled ||
           (catalog.id === ARCHESTRA_MCP_CATALOG_ID && assignedCount > 0),
@@ -774,7 +845,7 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
-  if (catalogItems.length === 0) {
+  if (isRegistryEmpty) {
     // Installing one is an organization-wide job, not this record's, so the
     // panel says whose it is and points there rather than stopping at the fact.
     return (
@@ -888,6 +959,8 @@ const AgentToolsEditorContent = forwardRef<
             selectedIds={selectedCatalogIds}
             onToggle={handleCatalogToggle}
             onItemAdded={setAutoOpenCatalogId}
+            onSearchChange={setCatalogSearch}
+            isSearching={isCatalogSearching}
             placeholder="Search MCP servers..."
             emptyMessage="No MCP servers found."
             // The scope belongs to this list, not to the pills a pick produces.
@@ -940,7 +1013,11 @@ function McpServerCard({
         !isSelected && !isDisabled && "hover:bg-accent",
       )}
     >
-      <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={24} />
+      <McpCatalogIcon
+        icon={catalog.iconUrl ?? catalog.icon}
+        catalogId={catalog.id}
+        size={24}
+      />
       <span className="text-xs font-medium truncate w-full">{displayName}</span>
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
@@ -948,8 +1025,8 @@ function McpServerCard({
           : unavailable
             ? "Not connected"
             : isSelected
-              ? `${assignedCount}/${totalCount} tools`
-              : `${totalCount} tools`}
+              ? `${assignedCount}/${totalCount} ${totalCount === 1 ? "tool" : "tools"}`
+              : `${totalCount} ${totalCount === 1 ? "tool" : "tools"}`}
       </span>
     </UnstyledButton>
   );
@@ -1001,7 +1078,11 @@ function McpServerPill({
 
   // Fetch tools for this catalog item
   const { data: allTools = [], isLoading: isLoadingTools } = useCatalogTools(
-    catalogItem.id,
+    open ||
+      initialPendingChanges?.selectAll ||
+      initialPendingChanges?.selectDefaults
+      ? catalogItem.id
+      : null,
   );
 
   // Org/deployment flags that compose the Archestra creation-default set. Read
@@ -1042,7 +1123,7 @@ function McpServerPill({
     assignmentTeamIds,
   });
   const mcpServers = credentials?.[catalogItem.id] ?? [];
-  const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
+  const prefersEnterpriseManaged = catalogItem.enterpriseManaged;
 
   // Static assignments show their pinned connection; everything else —
   // dynamic, enterprise-managed, or a brand-new assignment — defaults to
@@ -1190,7 +1271,7 @@ function McpServerPill({
     <McpServerPillShell
       icon={
         <McpCatalogIcon
-          icon={catalogItem.icon}
+          icon={catalogItem.iconUrl ?? catalogItem.icon}
           catalogId={catalogItem.id}
           size={14}
         />

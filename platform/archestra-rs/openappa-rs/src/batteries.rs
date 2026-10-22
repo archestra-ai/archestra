@@ -2,9 +2,9 @@
 //! OpenAPPA checkout, and the ones an organization uploads, both read through the
 //! same package validation the marketplace applies.
 use crate::policy::{policy_entries, routed_annotators};
-use appa_package::{Role, bundled_batteries, validate_package};
+use appa_package::{BatteryTarget, Role, bundled_batteries, validate_package};
 use appa_runtime_api::CanonicalTool;
-use std::{path::Component, sync::OnceLock};
+use std::{collections::BTreeSet, path::Component, sync::OnceLock};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BatteryFile {
@@ -30,13 +30,30 @@ pub(crate) struct BatteryInfo {
     pub annotators: Vec<String>,
     /// The annotators its own tool rules route calls to.
     pub routed_annotators: Vec<String>,
-    pub policy: String,
+    /// The base policy: all a deployment without a target composes.
+    pub base: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<HelperExternal>,
     pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFile>,
+    /// What a multi-user deployment composes, when the battery declares targets.
+    pub multi_user: Option<BatteryTargetInfo>,
+}
+
+/// A battery deployed for its multi-user target: the target policy, composed before
+/// the base, and what the two declare and read together.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BatteryTargetInfo {
+    pub policy: String,
+    pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
+    pub externals: Vec<HelperExternal>,
+    pub annotators: Vec<String>,
+    pub routed_annotators: Vec<String>,
+    pub setup: Option<String>,
 }
 
 /// Every bundled battery this host serves, inspected once per process.
@@ -54,10 +71,30 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
         .iter()
         .filter(|battery| match battery.manifest() {
             Ok(package) => match &package.role {
-                Role::Battery(declared) => battery
-                    .file(declared.policy.as_str())
-                    .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
-                    .is_none_or(|document| serves_this_host(&document)),
+                // A battery that needs each person's own token does not list the
+                // multi-user target, and this host runs one shared token.
+                Role::Battery(declared) if !declared.targets.supports(BatteryTarget::MultiUser) => {
+                    false
+                }
+                Role::Battery(declared) => {
+                    let document = |path: &str| {
+                        battery
+                            .file(path)
+                            .and_then(|policy| toml::from_str::<toml::Table>(policy).ok())
+                    };
+                    let target = declared
+                        .targets
+                        .policies()
+                        .and_then(|targets| document(targets.multi_user.policy.as_str()));
+                    document(declared.base.as_str()).is_none_or(|base| {
+                        serves_this_host(
+                            battery.name,
+                            PackageOrigin::Bundled,
+                            &base,
+                            target.as_ref(),
+                        )
+                    })
+                }
                 Role::Plugin(_) => false,
             },
             Err(_) => true,
@@ -71,7 +108,7 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                     text: file.text.to_owned(),
                 })
                 .collect::<Vec<_>>();
-            inspect(&files).map_err(|error| {
+            inspect(&files, PackageOrigin::Bundled).map_err(|error| {
                 format!(
                     "bundled battery {} does not validate: {error}",
                     battery.name
@@ -81,10 +118,24 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
         .collect()
 }
 
+/// Where a package comes from: bundled with the pinned OpenAPPA checkout, or uploaded
+/// by an organization. Only a bundled package can be one this host rebinds by name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PackageOrigin {
+    Bundled,
+    Uploaded,
+}
+
+/// Bundled batteries written for another host's own tools that this host serves
+/// anyway: `coding` names canonical tools that `claude-code`'s tool map binds to
+/// Claude Code's built-ins, and a root's `[aliases] host` table rebinds those onto
+/// the client built-ins Archestra derives as `host/archestra/<name>`.
+const HOST_ALIASED_BATTERIES: &[&str] = &["coding", "claude-code"];
+
 /// Validate a battery package from its files and read what the host needs from it.
 /// Runs the marketplace's own package validation on a scratch copy, so an uploaded
 /// package passes exactly the checks a bundled one passed.
-pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
+pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<BatteryInfo, String> {
     let dir = tempfile::tempdir().map_err(|error| error.to_string())?;
     for file in files {
         let relative = std::path::Path::new(&file.path);
@@ -111,58 +162,127 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
             package.name
         ));
     };
-    let policy_path = battery.policy.as_str();
-    let policy = files
-        .iter()
-        .find(|file| file.path == policy_path)
-        .map(|file| file.text.clone())
-        .ok_or_else(|| {
-            format!(
-                "battery {} names a policy file it does not carry",
-                package.name
-            )
-        })?;
-    let document: toml::Table = toml::from_str(&policy).map_err(|error| error.to_string())?;
-    if !serves_this_host(&document) {
+    let policy = |path: &str| -> Result<(String, toml::Table), String> {
+        let text = files
+            .iter()
+            .find(|file| file.path == path)
+            .map(|file| file.text.clone())
+            .ok_or_else(|| {
+                format!(
+                    "battery {} names a policy file {path} it does not carry",
+                    package.name
+                )
+            })?;
+        let document = toml::from_str(&text).map_err(|error| error.to_string())?;
+        Ok((text, document))
+    };
+    if !battery.targets.supports(BatteryTarget::MultiUser) {
+        return Err(format!(
+            "battery {} does not list the multi-user target, so it needs each person's own token, and this host runs one shared token",
+            package.name
+        ));
+    }
+    let (base, document) = policy(battery.base.as_str())?;
+    let target = battery
+        .targets
+        .policies()
+        .map(|targets| policy(targets.multi_user.policy.as_str()))
+        .transpose()?;
+    let target_document = target.as_ref().map(|(_, document)| document);
+    if !serves_this_host(package.name.as_str(), origin, &document, target_document) {
         return Err(format!(
             "battery {} governs no MCP tool and is not an annotator-only battery, so this host has nothing for it to govern",
             package.name
         ));
     }
+    // The manifest defaults a battery's namespace to its own name; one without an
+    // MCP tool rule in any policy it deploys governs no MCP server, so no server
+    // alias points it anywhere.
+    let governs_tools = governs_mcp_tools(std::iter::once(&document).chain(target_document));
+    let externals = helper_externals(&document)?;
+    let multi_user = match target {
+        None => None,
+        Some((policy, target)) => Some(BatteryTargetInfo {
+            target_credentials: battery
+                .targets
+                .policies()
+                .map(|targets| targets.multi_user.credentials.clone())
+                .unwrap_or_default(),
+            externals: [helper_externals(&target)?, externals.clone()].concat(),
+            annotators: [annotator_names(&target), annotator_names(&document)].concat(),
+            routed_annotators: [routed_annotators(&target), routed_annotators(&document)]
+                .concat()
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            credentials: battery
+                .credentials_for(BatteryTarget::MultiUser)
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            setup: setup_text(battery.setup_steps(BatteryTarget::MultiUser)),
+            policy,
+        }),
+    };
     Ok(BatteryInfo {
         name: package.name.to_string(),
         description: package.description.clone(),
-        // The manifest defaults a battery's namespace to its own name; one without a
-        // tool rule governs no namespace, so no server alias points it anywhere.
-        namespaces: if policy_entries(&document, "tool").is_empty() {
-            Vec::new()
-        } else {
+        namespaces: if governs_tools {
             battery.namespaces.iter().map(ToString::to_string).collect()
+        } else {
+            Vec::new()
         },
         annotators: annotator_names(&document),
         routed_annotators: routed_annotators(&document),
-        externals: helper_externals(&document)?,
-        policy,
+        externals,
+        base,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
         credentials: battery.credentials.clone(),
         benefit: battery.benefit.clone(),
-        setup: (!battery.setup.is_empty()).then(|| battery.setup.join("\n")),
+        setup: setup_text(&battery.setup),
         files: files.to_vec(),
+        multi_user,
     })
 }
 
+/// The host reads setup steps as one line each, joined; none is no setup.
+fn setup_text(steps: &[String]) -> Option<String> {
+    (!steps.is_empty()).then(|| steps.join("\n"))
+}
+
 /// Whether a battery has anything to say under this host: a rule names an MCP tool,
-/// the only kind of tool Archestra serves, or it declares no tool rule and only
-/// annotators, which a root rule routes a tool to by name. A battery written for
-/// another host's own tools composes but never matches here, so it is not offered.
-fn serves_this_host(document: &toml::Table) -> bool {
-    let rules = policy_entries(document, "tool");
-    let governs_mcp_tools = rules.iter().any(|rule| {
-        rule.get("name")
-            .and_then(toml::Value::as_str)
-            .is_some_and(governs_an_mcp_tool)
-    });
-    governs_mcp_tools || (rules.is_empty() && !annotator_names(document).is_empty())
+/// it declares no tool rule and only annotators, which a root rule routes a tool to
+/// by name, or it is a bundled battery this host rebinds onto its client built-ins.
+/// Any other battery written for another host's own tools composes but never matches
+/// here, so it is not offered. A multi-user target is read together with its base,
+/// as the two deploy.
+fn serves_this_host(
+    name: &str,
+    origin: PackageOrigin,
+    base: &toml::Table,
+    target: Option<&toml::Table>,
+) -> bool {
+    let documents = || std::iter::once(base).chain(target);
+    let rebound = match origin {
+        PackageOrigin::Bundled => HOST_ALIASED_BATTERIES.contains(&name),
+        PackageOrigin::Uploaded => false,
+    };
+    let has_rules = documents().any(|document| !policy_entries(document, "tool").is_empty());
+    rebound
+        || governs_mcp_tools(documents())
+        || (!has_rules && documents().any(|document| !annotator_names(document).is_empty()))
+}
+
+/// Whether any of `documents` has a tool rule naming an MCP tool.
+fn governs_mcp_tools<'a>(mut documents: impl Iterator<Item = &'a toml::Table>) -> bool {
+    documents.any(|document| {
+        policy_entries(document, "tool").iter().any(|rule| {
+            rule.get("name")
+                .and_then(toml::Value::as_str)
+                .is_some_and(governs_an_mcp_tool)
+        })
+    })
 }
 
 fn annotator_names(document: &toml::Table) -> Vec<String> {
@@ -223,52 +343,137 @@ mod tests {
     use appa_package::MANIFEST_FILE;
 
     #[test]
-    fn the_bundled_github_battery_is_served_with_its_helpers_and_credential() {
+    fn the_bundled_github_battery_serves_its_helpers_and_credential_through_its_multi_user_target()
+    {
         let github = bundled()
             .expect("bundled batteries validate")
             .iter()
             .find(|battery| battery.name == "github")
             .expect("the github battery governs MCP tools");
+        // The base alone reads no credential and runs no helper.
+        assert!(github.credentials.is_empty());
+        assert!(github.externals.is_empty());
+        assert!(github.routed_annotators.is_empty());
+        assert_eq!(github.namespaces, vec!["github".to_owned()]);
+        let target = github
+            .multi_user
+            .as_ref()
+            .expect("the github battery declares targets");
+        assert_ne!(target.policy, github.base);
         assert_eq!(
-            github.credentials,
+            target.credentials,
             vec!["APPA_PROVIDER_GITHUB_TOKEN".to_owned()]
         );
         assert!(
-            github
+            target
                 .routed_annotators
                 .iter()
                 .any(|annotator| annotator == "github.repository-visibility")
         );
         assert!(
-            github
-                .helpers
+            target
+                .annotators
                 .iter()
-                .any(|helper| helper == "repository-visibility.py")
+                .any(|annotator| annotator == "github.repository-visibility")
         );
-        assert!(github.externals.iter().any(|external| {
-            external.kind == "annotators"
-                && external.name == "github.repository-visibility"
-                && external.token_env.as_deref() == Some("APPA_PROVIDER_GITHUB_TOKEN")
-        }));
-        assert!(
-            github
-                .externals
-                .iter()
-                .any(|external| { external.kind == "context" && external.name == "github" })
-        );
-        assert!(
-            github
-                .externals
-                .iter()
-                .any(|external| { external.kind == "audience" && external.name == "github" })
-        );
+        for (kind, name, helper) in [
+            (
+                "annotators",
+                "github.repository-visibility",
+                "repository-visibility-multi-user.py",
+            ),
+            ("context", "github", "context-multi-user.py"),
+            ("audience", "github", "audience-source-multi-user.py"),
+        ] {
+            assert!(target.externals.iter().any(|external| {
+                external.kind == kind
+                    && external.name == name
+                    && external.command.last().map(String::as_str) == Some(helper)
+                    && external.token_env.as_deref() == Some("APPA_PROVIDER_GITHUB_TOKEN")
+            }));
+            assert!(github.helpers.iter().any(|packaged| packaged == helper));
+        }
+        assert_ne!(target.setup, github.setup);
+        assert!(target.setup.is_some());
         assert!(github.files.iter().any(|file| file.path == MANIFEST_FILE));
-        assert!(
-            bundled()
-                .expect("bundled batteries validate")
+    }
+
+    #[test]
+    fn the_bundled_coding_and_claude_code_batteries_are_served_and_no_other_host_battery_is() {
+        let served = bundled().expect("bundled batteries validate");
+        for name in ["coding", "claude-code"] {
+            let battery = served
                 .iter()
-                .all(|battery| battery.name != "claude-code")
+                .find(|battery| battery.name == name)
+                .unwrap_or_else(|| panic!("{name} is rebound onto this host's client built-ins"));
+            // Its rules name canonical or another host's tools, so no server alias
+            // points it anywhere.
+            assert!(battery.namespaces.is_empty(), "{name}");
+            assert!(!battery.routed_annotators.is_empty(), "{name}");
+        }
+        let foreign: Vec<&str> = bundled_batteries()
+            .iter()
+            .filter(|battery| !HOST_ALIASED_BATTERIES.contains(&battery.name))
+            .filter(|battery| {
+                battery.files.iter().any(|file| {
+                    toml::from_str::<toml::Table>(file.text).is_ok_and(|document| {
+                        policy_entries(&document, "tool").iter().any(|rule| {
+                            rule.get("name")
+                                .and_then(toml::Value::as_str)
+                                .is_some_and(|name| name.starts_with("host/"))
+                        })
+                    })
+                })
+            })
+            .map(|battery| battery.name)
+            .collect();
+        assert!(
+            !foreign.is_empty(),
+            "the bundle carries another host battery"
         );
+        for name in foreign {
+            assert!(
+                served.iter().all(|battery| battery.name != name),
+                "{name} names another host's tools and is not rebound here"
+            );
+        }
+    }
+
+    #[test]
+    fn an_uploaded_package_named_like_a_rebound_battery_is_still_refused() {
+        let bundled = bundled_batteries()
+            .iter()
+            .find(|battery| battery.name == "claude-code")
+            .expect("the claude-code battery is bundled");
+        let files: Vec<BatteryFile> = bundled
+            .files
+            .iter()
+            .map(|file| BatteryFile {
+                path: file.path.to_owned(),
+                text: file.text.to_owned(),
+            })
+            .collect();
+        assert!(inspect(&files, PackageOrigin::Bundled).is_ok());
+        assert!(uploaded(&files).is_err());
+    }
+
+    #[test]
+    fn batteries_that_need_each_persons_own_token_are_not_served() {
+        let served: Vec<&str> = bundled()
+            .expect("bundled batteries validate")
+            .iter()
+            .map(|battery| battery.name.as_str())
+            .collect();
+        for name in ["slack", "google-workspace"] {
+            assert!(!served.contains(&name), "{name} is served");
+        }
+        for name in ["github", "cloudflare", "grain", "archestra"] {
+            assert!(served.contains(&name), "{name} is not served");
+        }
+    }
+
+    fn uploaded(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
+        inspect(files, PackageOrigin::Uploaded)
     }
 
     #[test]
@@ -279,6 +484,7 @@ mod tests {
             .find(|battery| battery.name == "jev")
             .expect("an annotator-only battery is served");
         assert!(jev.namespaces.is_empty());
+        assert!(jev.multi_user.is_none());
         assert_eq!(jev.annotators, vec!["jev.tool-call".to_owned()]);
         // A battery with no tool rule routes nothing to its own annotator.
         assert!(jev.routed_annotators.is_empty());
@@ -311,22 +517,22 @@ mod tests {
                 },
             ]
         };
-        let info = inspect(&files(annotator.to_owned())).unwrap();
+        let info = uploaded(&files(annotator.to_owned())).unwrap();
         assert!(info.namespaces.is_empty());
         assert_eq!(info.annotators, vec!["tagger.call".to_owned()]);
         assert!(
-            inspect(&files(format!(
+            uploaded(&files(format!(
                 "{annotator}[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {{}}\n"
             )))
             .is_err()
         );
         assert!(
-            inspect(&files(format!(
+            uploaded(&files(format!(
                 "{annotator}token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n"
             )))
             .is_err()
         );
-        let shared = inspect(&files(format!(
+        let shared = uploaded(&files(format!(
             "{annotator}[externals.authorities.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n"
         )))
         .expect("two kinds may use the same packaged helper");
@@ -339,11 +545,43 @@ mod tests {
             }));
         }
         assert!(
-            inspect(&files(
+            uploaded(&files(
                 "[policy]\nversion = 2\n[externals.annotators.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n".to_owned()
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn an_uploaded_package_governs_the_tools_its_multi_user_target_names() {
+        let manifest = "schema = 1\nname = \"acme\"\ndescription = \"Acme rules\"\n[battery]\npolicy = \"appa.toml\"\nhosts = [\"kagent\"]\nnamespaces = [\"acme\"]\nhelpers = [\"tag.py\"]\n[battery.targets.single-user]\npolicy = \"single-user.toml\"\n[battery.targets.multi-user]\npolicy = \"multi-user.toml\"\nsetup = [\"Mint an app token.\"]\n";
+        let target = "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"acme.tag\"\nranks = [\"suspicious\", \"trusted\"]\naudiences = [\"self\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/acme/list\"\nannotator = \"acme.tag\"\n[externals.annotators.\"acme.tag\"]\ncommand = [\"python3\", \"tag.py\"]\ntoken_env = \"APPA_PROVIDER_ACME_TOKEN\"\n";
+        let files = [
+            (MANIFEST_FILE, manifest),
+            ("appa.toml", "[policy]\nversion = 2\n"),
+            ("single-user.toml", "[policy]\nversion = 2\n"),
+            ("multi-user.toml", target),
+            ("tag.py", "print('{}')\n"),
+        ]
+        .map(|(path, text)| BatteryFile {
+            path: path.to_owned(),
+            text: text.to_owned(),
+        });
+        let info = uploaded(&files).unwrap();
+        assert_eq!(info.namespaces, vec!["acme".to_owned()]);
+        assert!(info.credentials.is_empty());
+        assert!(info.externals.is_empty());
+        assert_eq!(info.setup, None);
+        let multi_user = info.multi_user.expect("the package declares targets");
+        assert_eq!(multi_user.policy, target);
+        assert_eq!(
+            multi_user.credentials,
+            vec!["APPA_PROVIDER_ACME_TOKEN".to_owned()]
+        );
+        assert_eq!(multi_user.annotators, vec!["acme.tag".to_owned()]);
+        assert_eq!(multi_user.routed_annotators, vec!["acme.tag".to_owned()]);
+        assert_eq!(multi_user.externals.len(), 1);
+        assert_eq!(multi_user.setup.as_deref(), Some("Mint an app token."));
     }
 
     #[test]
@@ -363,32 +601,32 @@ mod tests {
                 },
             ]
         };
-        let info = inspect(&files()).unwrap();
+        let info = uploaded(&files()).unwrap();
         assert_eq!(info.name, "acme");
         assert!(info.credentials.is_empty());
-        assert!(inspect(&files()[1..]).is_err());
+        assert!(uploaded(&files()[1..]).is_err());
         let mut escaping = files();
         escaping[1].path = "../appa.toml".to_owned();
-        assert!(inspect(&escaping).is_err());
+        assert!(uploaded(&escaping).is_err());
         let mut foreign = files();
         foreign[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/other/list\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&foreign).is_err());
+        assert!(uploaded(&foreign).is_err());
         let mut another_hosts_tools = files();
         another_hosts_tools[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&another_hosts_tools).is_err());
+        assert!(uploaded(&another_hosts_tools).is_err());
         let mut no_identity = files();
         no_identity[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme\"\ndelta = {}\n".to_owned();
-        assert!(inspect(&no_identity).is_err());
+        assert!(uploaded(&no_identity).is_err());
         let mut selected = files();
         selected[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list(path:private*)\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&selected).is_ok());
+        assert!(uploaded(&selected).is_ok());
         let mut same_name = files();
         same_name[0]
             .text
@@ -398,7 +636,7 @@ mod tests {
             text: "print('{}')\n".to_owned(),
         }));
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
-        let same = inspect(&same_name).expect("two kinds may share a helper name");
+        let same = uploaded(&same_name).expect("two kinds may share a helper name");
         assert_eq!(same.externals.len(), 2);
         for (kind, helper) in [("annotators", "a.py"), ("authorities", "b.py")] {
             assert!(same.externals.iter().any(|external| {
@@ -408,12 +646,12 @@ mod tests {
             }));
         }
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.annotators.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
-        assert!(inspect(&same_name).is_err());
+        assert!(uploaded(&same_name).is_err());
         let mut host_variable = files();
         host_variable[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
-        assert!(inspect(&host_variable).is_err());
+        assert!(uploaded(&host_variable).is_err());
         let mut remote = files();
         remote[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
-        assert!(inspect(&remote).is_err());
+        assert!(uploaded(&remote).is_err());
     }
 }

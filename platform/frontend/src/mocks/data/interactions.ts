@@ -54,6 +54,7 @@ export function makeSessionSummary(
     models: ["gpt-4o"],
     profileId: "test-profile-id",
     profileName: "Test Agent",
+    profileAgentType: "agent",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],
@@ -68,6 +69,7 @@ export function makeSessionSummary(
     contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
+    connectorName: null,
     ...overrides,
   };
 }
@@ -83,6 +85,7 @@ export function makeInteraction(
     externalAgentId: null,
     runId: null,
     userId: null,
+    serviceAccountId: null,
     virtualKeyId: null,
     passthroughVirtualKeyId: null,
     environmentId: null,
@@ -116,6 +119,7 @@ export function makeInteraction(
     type: "openai:chatCompletions",
     model: "gpt-4o",
     baselineModel: null,
+    durationMs: null,
     inputTokens: 100,
     inputTokensEstimated: false,
     outputTokens: 50,
@@ -175,8 +179,8 @@ export const llmLogsSessionsSeed = [
 
 /**
  * Requests inside the seeded Claude Code session, so the session detail page
- * has a conversation to show above its table rather than the empty state. The
- * ids differ so the table's rows link to distinct interaction detail pages.
+ * has a conversation to show rather than the empty state. The ids differ so
+ * each row of its request list selects a distinct request.
  */
 export const llmLogsInteractionsSeed = [
   makeInteraction({

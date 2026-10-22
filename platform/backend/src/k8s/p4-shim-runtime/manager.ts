@@ -81,7 +81,7 @@ interface P4ShimSpec {
  * Lifecycle manager for the p4 shims — the per-tenant auxiliary Deployments
  * that execute allowlisted Perforce commands for knowledge-base permission
  * sync (see `manifests.ts` for the tenancy and isolation model,
- * `p4_shim_docker_image/` for the pod contract).
+ * `docker_images/p4_shim/` for the pod contract).
  *
  * **A shim exists exactly while its connector wants one.** There is no idle
  * state, no parking and no scaling: the Deployment is either absent or running

@@ -9,7 +9,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasPermission, userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
@@ -62,10 +63,17 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
+import {
+  assertLifecycleRoutePermission,
+  assertScopedLifecycleAuthorization,
+  findMcpServerInOrganization,
+} from "@/services/mcp-installation-access";
 import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -103,8 +111,10 @@ import {
   broadcastMcpServersChanged,
 } from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(mcpServerAgentUsageRoutes);
   fastify.get(
     "/api/mcp_server/auto_mode_agents",
     {
@@ -118,11 +128,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(McpServerAgentUsageSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ user, organizationId }, reply) => {
       const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
         organizationId,
       ]);
-      return reply.send(byOrg.get(organizationId) ?? []);
+      const agents = byOrg.get(organizationId) ?? [];
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+        agentIds: agents.map((agent) => agent.id),
+      });
+      return reply.send(agents.filter((agent) => canSeeAgent(agent.id)));
     },
   );
 
@@ -135,6 +151,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          catalogIds: z
+            .preprocess(
+              (val) =>
+                typeof val === "string" ? val.split(",").filter(Boolean) : val,
+              z.array(z.string().uuid()).max(100),
+            )
+            .optional()
+            .describe(
+              "Only installs of these catalog items (comma-separated, at most 100).",
+            ),
+          catalogSlug: z
+            .string()
+            .min(1)
+            .max(256)
+            .optional()
+            .describe(
+              "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.",
+            ),
+          includeAssignedAgents: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.",
+            ),
           assignmentScope: AgentScopeSchema.optional(),
           assignmentTeamIds: z
             .preprocess(
@@ -153,7 +196,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+      const {
+        assignmentScope,
+        assignmentTeamIds,
+        catalogId,
+        catalogIds,
+        catalogSlug,
+        status,
+        includeAssignedAgents,
+      } = query;
 
       if (status === "deleted") {
         const { success: canDelete } = await hasPermission(
@@ -184,7 +235,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         for (const server of deleted) {
           if (
             server.serverType === "builtin" ||
-            (catalogId && server.catalogId !== catalogId)
+            (catalogId && server.catalogId !== catalogId) ||
+            (catalogIds && !catalogIds.includes(server.catalogId ?? ""))
           )
             continue;
           try {
@@ -231,6 +283,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
+          // The registry asks for the installs of the catalog rows on screen.
+          catalogIds,
+          // A tool's server prefix, for its logs.
+          catalogSlug,
+          // Agent usage is included only when the caller asks for it.
+          includeAssignedAgents: includeAssignedAgents === true,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).
@@ -252,26 +310,28 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
-        McpServerAlertMuteModel.findForViewer({
+      const [decorated, canSeeAgent] = await Promise.all([
+        decorateMcpServerListEntries({ servers: allServers, userId: user.id }),
+        getVisibleAgentFilter({
           userId: user.id,
-          catalogIds: [
-            ...new Set(allServers.map((server) => server.catalogId)),
+          organizationId,
+          agentIds: [
+            ...new Set(
+              allServers.flatMap(
+                (server) =>
+                  server.assignedAgents?.map((agent) => agent.id) ?? [],
+              ),
+            ),
           ],
         }),
-        McpServerModel.getCredentialUsableServerIds(
-          user.id,
-          allServers.map((server) => server.id),
-        ),
       ]);
 
       return reply.send(
-        allServers.map((server) => ({
+        decorated.map((server) => ({
           ...server,
-          alertMutes: (
-            alertMutesByCatalogId.get(server.catalogId) ?? []
-          ).filter((mute) => mute.mcpServerId === server.id),
-          canUseCredential: credentialUsableIds.has(server.id),
+          assignedAgents: server.assignedAgents?.filter((agent) =>
+            canSeeAgent(agent.id),
+          ),
         })),
       );
     },
@@ -305,7 +365,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      return reply.send(server);
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+        agentIds: server.assignedAgents?.map((agent) => agent.id) ?? [],
+      });
+      return reply.send({
+        ...server,
+        assignedAgents: server.assignedAgents?.filter((agent) =>
+          canSeeAgent(agent.id),
+        ),
+      });
     },
   );
 
@@ -1001,13 +1071,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
+                  meta: {
+                    _meta: tool._meta,
+                    annotations: tool.annotations,
+                    outputSchema: tool.outputSchema,
+                  },
                   catalogId: capturedCatalogId,
                 }));
 
                 // Bulk create tools to avoid N+1 queries
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+                await recordInstallToolDescriptions({
+                  mcpServerId: mcpServer.id,
+                  syncedTools: createdTools,
+                  reported: toolsToCreate,
+                });
 
                 // Clone reconciliation: if this catalog has provisional cloned
                 // tools (first install of a clone), confirm the ones the server
@@ -1174,13 +1253,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
-          meta: { _meta: tool._meta, annotations: tool.annotations },
+          meta: {
+            _meta: tool._meta,
+            annotations: tool.annotations,
+            outputSchema: tool.outputSchema,
+          },
           catalogId: catalogItem.id,
         }));
 
         // Bulk create tools to avoid N+1 queries
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+        await recordInstallToolDescriptions({
+          mcpServerId: mcpServer.id,
+          syncedTools: createdTools,
+          reported: toolsToCreate,
+        });
 
         // Clone reconciliation: if this catalog has provisional cloned
         // tools (first install of a clone), confirm the ones the server
@@ -2654,6 +2742,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputSchema: tool.inputSchema,
                       _meta: tool._meta,
                       annotations: tool.annotations,
+                      outputSchema: tool.outputSchema,
                     }))
                 : undefined,
           });
@@ -3074,19 +3163,6 @@ async function findAccessibleMcpServer(params: {
   );
 }
 
-async function findMcpServerInOrganization(
-  id: string,
-  organizationId: string,
-): Promise<McpServer | null> {
-  const server = await McpServerModel.findByIdInOrg(id, organizationId);
-  if (!server) return null;
-  const catalog = await InternalMcpCatalogModel.findById(server.catalogId);
-  if (catalog?.organizationId && catalog.organizationId !== organizationId) {
-    return null;
-  }
-  return server;
-}
-
 async function assertNotManagedPlaywrightRuntime(
   server: McpServer,
 ): Promise<void> {
@@ -3297,148 +3373,6 @@ async function failHardReset(
     "Hard reset of an MCP server deployment failed",
   );
   return message;
-}
-
-/**
- * Re-authentication repeats the route-level capability check because it
- * replaces credentials. Installation admin subsumes create permission.
- */
-async function assertLifecycleRoutePermission(params: {
-  headers: IncomingHttpHeaders;
-  userId: string;
-  organizationId: string;
-  ordinaryAction: "create";
-  verb: string;
-}): Promise<void> {
-  const [ordinary, admin] = await Promise.all([
-    hasPermission(
-      { mcpServerInstallation: [params.ordinaryAction] },
-      params.headers,
-    ),
-    isMcpInstallationAdmin(params),
-  ]);
-  if (ordinary.success || admin) return;
-  throw new ApiError(
-    403,
-    `You do not have permission to ${params.verb} this MCP server`,
-  );
-}
-
-/**
- * Gate connection lifecycle actions (revoke / restore / reauth / reinstall)
- * on an already-fetched MCP server by its scope. Rules:
- *   - personal:
- *       - revoke / restore: owner OR mcpServerInstallation:update
- *       - re-authenticate / reinstall: owner only (these replace the
- *         connection's secret, so they must not be available to editors)
- *   - team:     mcpServerInstallation:admin OR (mcpServerInstallation:update AND user-in-team)
- *   - org:      mcpServerInstallation:admin (no owner fallback)
- */
-async function assertScopedLifecycleAuthorization(params: {
-  mcpServer: {
-    id: string;
-    scope: "personal" | "team" | "org";
-    ownerId: string | null;
-    teamId: string | null;
-    deletedAt?: Date | null;
-  };
-  userId: string;
-  organizationId: string;
-  headers: IncomingHttpHeaders;
-  action:
-    | "revoke"
-    | "restore"
-    | "re-authenticate"
-    | "reinstall"
-    | "reload tools for";
-  authorization?: { isAdmin: boolean; canUpdate: boolean; teamIds: string[] };
-}): Promise<void> {
-  const { mcpServer, userId, organizationId, headers, action } = params;
-
-  switch (mcpServer.scope) {
-    case "personal": {
-      if (mcpServer.ownerId === userId) return;
-      if (action === "revoke" || action === "restore") {
-        const hasMcpServerUpdate =
-          params.authorization?.canUpdate ??
-          (await hasPermission({ mcpServerInstallation: ["update"] }, headers))
-            .success;
-        if (hasMcpServerUpdate) return;
-        throw new ApiError(
-          403,
-          `Only the connection owner or an editor/admin can ${action} personal connections`,
-        );
-      }
-      throw new ApiError(
-        403,
-        `Only the connection owner can ${action} personal connections`,
-      );
-    }
-    case "team": {
-      // A deleted team no longer supplies an organization link. Resolve the
-      // retained connection through its owner and catalog before granting access.
-      if (
-        !mcpServer.teamId &&
-        !(mcpServer.deletedAt
-          ? await McpServerModel.findDeletedByIdForOrganization(
-              mcpServer.id,
-              organizationId,
-            )
-          : await findMcpServerInOrganization(mcpServer.id, organizationId))
-      ) {
-        throw new ApiError(404, "MCP server not found");
-      }
-      if (
-        params.authorization?.isAdmin ??
-        (await isMcpInstallationAdmin({ userId, organizationId }))
-      )
-        return;
-
-      // Team deletion clears the FK but retains the connection. Installation
-      // admins can still manage it; former team membership grants no access.
-      if (!mcpServer.teamId) {
-        throw new ApiError(
-          403,
-          `Only installation admins can ${action} connections whose team was deleted`,
-        );
-      }
-
-      const hasMcpServerUpdate =
-        params.authorization?.canUpdate ??
-        (await hasPermission({ mcpServerInstallation: ["update"] }, headers))
-          .success;
-      if (!hasMcpServerUpdate) {
-        throw new ApiError(
-          403,
-          `You don't have permission to ${action} team connections`,
-        );
-      }
-      const isMember = params.authorization
-        ? params.authorization.teamIds.includes(mcpServer.teamId)
-        : await TeamModel.isUserInTeam(mcpServer.teamId, userId);
-      if (!isMember) {
-        throw new ApiError(
-          403,
-          `You can only ${action} connections for teams you are a member of`,
-        );
-      }
-      return;
-    }
-    case "org": {
-      if (
-        !(
-          params.authorization?.isAdmin ??
-          (await isMcpInstallationAdmin({ userId, organizationId }))
-        )
-      ) {
-        throw new ApiError(
-          403,
-          `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
-        );
-      }
-      return;
-    }
-  }
 }
 
 async function connectAndGetToolsForInstallation(params: {
@@ -3943,6 +3877,41 @@ function filterInstallUserConfigValues(params: {
   return Object.fromEntries(filteredEntries);
 }
 
+/**
+ * Which agents a server's usage may name to the caller. Anyone who manages
+ * shared installations, or is an agent admin, sees every agent. A member sees
+ * only the agents they can open themselves, so another person's personal
+ * agent never appears in their usage (the agent half matches the tools list,
+ * `ToolModel.findAll`).
+ */
+async function getVisibleAgentFilter(params: {
+  userId: string;
+  organizationId: string;
+  /** The agents the response would name; only these are checked. */
+  agentIds: string[];
+}): Promise<(agentId: string) => boolean> {
+  // Status-only lists (includeAssignedAgents=false) name no agents at all.
+  if (params.agentIds.length === 0) return () => false;
+  const [managesSharedInstalls, isAgentAdmin] = await Promise.all([
+    userHasPermission(
+      params.userId,
+      params.organizationId,
+      "mcpServerInstallation",
+      "update",
+    ),
+    hasAnyAgentTypeAdminPermission(params),
+  ]);
+  if (managesSharedInstalls || isAgentAdmin) {
+    return () => true;
+  }
+  const accessibleAgentIds = new Set(
+    await AgentModel.findAccessibleIdsForUser(params.userId, false, undefined, {
+      among: params.agentIds,
+    }),
+  );
+  return (agentId) => accessibleAgentIds.has(agentId);
+}
+
 async function validateScopeAndAuthorization(params: {
   scope: ResourceVisibilityScope;
   teamId: string | null | undefined;
@@ -3974,7 +3943,7 @@ async function validateScopeAndAuthorization(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       throw new ApiError(404, "Team not found");
     }

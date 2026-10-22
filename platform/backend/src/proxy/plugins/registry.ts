@@ -1,3 +1,4 @@
+import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -59,6 +60,8 @@ type LlmProxyToolCall = {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /** Server-generated review to emit as text immediately before this call. */
+  reviewDetails?: string;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
@@ -68,6 +71,8 @@ export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
    * If false, the client receives raw streamed calls and plugins must not alter approved calls.
    */
   canRewriteToolCalls?: boolean;
+  /** The transport emits server review details before the native form. */
+  canShowToolCallReview?: boolean;
 };
 
 /** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
@@ -105,6 +110,7 @@ export type LlmProxyRuntimeToolProof = {
 /**
  * Outcome of plugin tool call evaluation.
  * `blocked` lists calls replaced with notice calls.
+ * `rewritten` lists calls released in a form the policy authorized.
  * `annotated` lists approved calls with appended delegation markers.
  * `runtimeProofs` lists approved calls with signed execution proofs.
  */
@@ -113,6 +119,7 @@ export type LlmProxyToolCallsOutcome =
       decision: "allow";
       toolCalls: readonly LlmProxyToolCall[];
       blocked?: readonly { id: string; name: string; reason: string }[];
+      rewritten?: readonly { id: string; name: string }[];
       annotated?: readonly LlmProxyToolCallAnnotation[];
       runtimeProofs?: readonly LlmProxyRuntimeToolProof[];
     }
@@ -328,6 +335,7 @@ export class LlmProxyPluginRegistry {
             name: call.name,
             namespace: call.namespace,
             arguments: canonicalJson(call.arguments),
+            reviewDetails: call.reviewDetails,
           },
         ]),
       );
@@ -340,19 +348,22 @@ export class LlmProxyPluginRegistry {
       // Every returned call must match one of the input calls:
       // - Untouched
       // - Reported as blocked (replaced with a platform notice call)
+      // - Reported as rewritten (released in a form the policy authorized)
       // - Reported as annotated (with only an approved delegation marker appended)
       // - Reported with a valid runtime proof and otherwise unchanged arguments
-      for (const entry of result.blocked ?? []) {
-        // Validate that reported blocked calls were part of the input batch.
+      const blockedIds = new Set<string>();
+      for (const entry of [
+        ...(result.blocked ?? []),
+        ...(result.rewritten ?? []),
+      ]) {
+        // Validate that reported substitutions were part of the input batch.
         if (given.get(entry.id)?.name !== entry.name) {
           throw new Error(
             `Finalizer ${plugin.id} reported a block on a call the policies never saw: ${entry.id}`,
           );
         }
+        blockedIds.add(entry.id);
       }
-      const blockedIds = new Set(
-        (result.blocked ?? []).map((entry) => entry.id),
-      );
       const annotations = new Map<string, LlmProxyToolCallAnnotation>();
       for (const entry of result.annotated ?? []) {
         if (
@@ -389,6 +400,18 @@ export class LlmProxyPluginRegistry {
           );
         }
         returned.add(call.id);
+        if (
+          original.reviewDetails !== call.reviewDetails &&
+          !(
+            blockedIds.has(call.id) &&
+            (original.name !== call.name ||
+              original.namespace !== call.namespace)
+          )
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} changed protected review text: ${call.id}`,
+          );
+        }
         const untouched =
           original.name === call.name &&
           original.namespace === call.namespace &&
@@ -792,10 +815,10 @@ function addsOnlyRuntimeProof(params: {
   if (!before || !after) return false;
   const { attachment } = params;
   const originalArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(before.tool_args))
+    ? readRunToolArgs(before.tool_args)
     : before;
   const signedArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(after.tool_args))
+    ? readRunToolArgs(after.tool_args)
     : after;
   if (
     !originalArgs ||
@@ -808,8 +831,10 @@ function addsOnlyRuntimeProof(params: {
   if (attachment.wrapped) {
     const { tool_args: beforeArgs, ...beforeWrapper } = before;
     const { tool_args: afterArgs, ...afterWrapper } = after;
+    // Missing tool_args are an empty object; the proof adds that object.
+    const beforeForm = beforeArgs === undefined ? "object" : typeof beforeArgs;
     if (
-      typeof beforeArgs !== typeof afterArgs ||
+      beforeForm !== typeof afterArgs ||
       canonicalJson(beforeWrapper) !== canonicalJson(afterWrapper)
     )
       return false;

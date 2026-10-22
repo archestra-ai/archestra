@@ -3,20 +3,20 @@ import {
   findTierDefault,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { LlmProviderApiKey, Model } from "@/types";
+import type { LinkedApiKey, LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
-
-/**
- * Aggregate of an API key's linked-model count and when the key's own sync
- * last confirmed its links (a link never confirmed counts as the epoch).
- */
-export interface ModelSyncState {
-  apiKeyId: string;
-  linkedModelCount: number;
-  oldestLastSyncedAt: Date | null;
-}
 
 /**
  * Model class for the api_key_models join table.
@@ -216,96 +216,92 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   /**
-   * Get all models with their linked API keys.
-   * Only returns models that have at least one API key linked.
-   * Includes isBest marker (true if ANY linked API key has the marker).
+   * Models linked to at least one provider key, with the visible keys that
+   * serve each one (a model with only hidden keys is listed with none).
+   * `isBest` counts every linked key. One statement.
    */
-  static async getAllModelsWithApiKeys(): Promise<
-    Array<{
-      model: Model;
-      isBest: boolean;
-      apiKeys: Array<{
-        id: string;
-        name: string;
-        provider: string;
-        scope: string;
-        isSystem: boolean;
-      }>;
-    }>
+  static async findLinkedModels(params: {
+    visibleKeyIds: string[];
+    /** Only models linked to one of these keys; keys not visible are ignored. */
+    apiKeyIds?: string[];
+    /** Only embedding models (those with known dimensions). */
+    embeddingOnly?: boolean;
+  }): Promise<
+    Array<{ model: Model; isBest: boolean; apiKeys: LinkedApiKey[] }>
   > {
-    // Get all relationships with model and API key data in a single query
-    // This only returns models that have at least one API key linked
-    // Order by provider and modelId for consistent display
-    const relationships = await db
+    const visibleKeyIds = new Set(params.visibleKeyIds);
+    const keyFilter = params.apiKeyIds?.filter((id) => visibleKeyIds.has(id));
+    if (keyFilter?.length === 0) return [];
+    const links = schema.llmProviderApiKeyModelsTable;
+    const keys = schema.llmProviderApiKeysTable;
+
+    return await db
       .select({
         model: schema.modelsTable,
-        isBest: schema.llmProviderApiKeyModelsTable.isBest,
-        apiKeyId: schema.llmProviderApiKeysTable.id,
-        apiKeyName: schema.llmProviderApiKeysTable.name,
-        apiKeyProvider: schema.llmProviderApiKeysTable.provider,
-        apiKeyScope: schema.llmProviderApiKeysTable.scope,
-        apiKeyIsSystem: schema.llmProviderApiKeysTable.isSystem,
+        isBest: sql<boolean>`bool_or(${links.isBest})`,
+        apiKeys: sql<LinkedApiKey[]>`coalesce(
+          json_agg(
+            json_build_object(
+              'id', ${keys.id},
+              'name', ${keys.name},
+              'provider', ${keys.provider},
+              'scope', ${keys.scope},
+              'isSystem', ${keys.isSystem}
+            ) ORDER BY ${keys.createdAt}, ${keys.id}
+          ) FILTER (WHERE ${keys.id} IS NOT NULL),
+          '[]'::json
+        )`,
       })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .innerJoin(
-        schema.modelsTable,
-        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      .from(links)
+      .innerJoin(schema.modelsTable, eq(links.modelId, schema.modelsTable.id))
+      .leftJoin(
+        keys,
+        and(eq(links.apiKeyId, keys.id), inArray(keys.id, [...visibleKeyIds])),
       )
-      .innerJoin(
-        schema.llmProviderApiKeysTable,
-        eq(
-          schema.llmProviderApiKeyModelsTable.apiKeyId,
-          schema.llmProviderApiKeysTable.id,
+      .where(
+        and(
+          keyFilter
+            ? inArray(
+                schema.modelsTable.id,
+                db
+                  .select({ id: links.modelId })
+                  .from(links)
+                  .where(inArray(links.apiKeyId, keyFilter)),
+              )
+            : undefined,
+          params.embeddingOnly
+            ? isNotNull(schema.modelsTable.embeddingDimensions)
+            : undefined,
         ),
       )
+      .groupBy(schema.modelsTable.id)
       .orderBy(
         asc(schema.modelsTable.provider),
         asc(schema.modelsTable.modelId),
       );
+  }
 
-    // Group by model, collecting API keys for each
-    // isBest is true if ANY linked API key has the marker
-    const modelMap = new Map<
-      string,
-      {
-        model: Model;
-        isBest: boolean;
-        apiKeys: Array<{
-          id: string;
-          name: string;
-          provider: string;
-          scope: string;
-          isSystem: boolean;
-        }>;
-      }
-    >();
-
-    for (const rel of relationships) {
-      const modelId = rel.model.id;
-      let entry = modelMap.get(modelId);
-
-      if (!entry) {
-        entry = {
-          model: rel.model,
-          isBest: false,
-          apiKeys: [],
-        };
-        modelMap.set(modelId, entry);
-      }
-
-      // Set markers if any relationship has them
-      if (rel.isBest) entry.isBest = true;
-
-      entry.apiKeys.push({
-        id: rel.apiKeyId,
-        name: rel.apiKeyName,
-        provider: rel.apiKeyProvider,
-        scope: rel.apiKeyScope,
-        isSystem: rel.apiKeyIsSystem,
-      });
-    }
-
-    return Array.from(modelMap.values());
+  /** The non-ignored models each of the given keys serves. */
+  static async findModelsByKey(
+    apiKeyIds: string[],
+  ): Promise<Array<{ apiKeyId: string; id: string; modelId: string }>> {
+    if (apiKeyIds.length === 0) return [];
+    const links = schema.llmProviderApiKeyModelsTable;
+    return await db
+      .select({
+        apiKeyId: links.apiKeyId,
+        id: schema.modelsTable.id,
+        modelId: schema.modelsTable.modelId,
+      })
+      .from(links)
+      .innerJoin(schema.modelsTable, eq(links.modelId, schema.modelsTable.id))
+      .where(
+        and(
+          inArray(links.apiKeyId, apiKeyIds),
+          eq(schema.modelsTable.ignored, false),
+        ),
+      )
+      .orderBy(asc(schema.modelsTable.modelId));
   }
 
   /**
@@ -385,37 +381,6 @@ class LlmProviderApiKeyModelLinkModel {
       .where(eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId));
 
     return result?.count ?? 0;
-  }
-
-  static async getModelSyncStatesForApiKeys(
-    apiKeyIds: string[],
-  ): Promise<Map<string, ModelSyncState>> {
-    if (apiKeyIds.length === 0) {
-      return new Map();
-    }
-
-    const results = await db
-      .select({
-        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
-        linkedModelCount: sql<number>`count(*)::int`.as("linked_model_count"),
-        oldestLastSyncedAt:
-          sql<Date | null>`min(coalesce(${schema.llmProviderApiKeyModelsTable.syncedAt}, to_timestamp(0)))`.as(
-            "oldest_last_synced_at",
-          ),
-      })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
-      .groupBy(schema.llmProviderApiKeyModelsTable.apiKeyId);
-
-    return new Map(
-      results.map((result) => [
-        result.apiKeyId,
-        {
-          ...result,
-          oldestLastSyncedAt: toDateOrNull(result.oldestLastSyncedAt),
-        },
-      ]),
-    );
   }
 
   static async getLinkedModelSelectionKeys(
@@ -743,14 +708,4 @@ export default LlmProviderApiKeyModelLinkModel;
 
 export function selectionKey(selection: CompleteModelSelection): string {
   return `${selection.apiKeyId}:${selection.modelId}`;
-}
-
-function toDateOrNull(value: Date | string | null): Date | null {
-  if (value == null) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  return new Date(value);
 }

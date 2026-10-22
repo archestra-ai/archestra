@@ -39,10 +39,15 @@ export const TaskTypeSchema = z.enum([
   "check_due_plugin_github_syncs",
   "plugin_github_sync",
   "skill_publication_backfill",
+  "interaction_session_preview_backfill",
+  "mcp_tool_description_backfill",
+  "interaction_user_activity_rebuild",
   "p4_shim_reconcile",
   "kb_bm25_stats_refresh",
   "openappa_effective_policy_recompile",
   "openappa_unenforced_cleanup",
+  "llm_model_sync",
+  "agent_run_attention_notice",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -93,10 +98,15 @@ export const TASK_LANES = {
     "check_due_plugin_github_syncs",
     "plugin_github_sync",
     "skill_publication_backfill",
+    "interaction_session_preview_backfill",
+    "mcp_tool_description_backfill",
+    "interaction_user_activity_rebuild",
     "p4_shim_reconcile",
     "kb_bm25_stats_refresh",
     "openappa_effective_policy_recompile",
     "openappa_unenforced_cleanup",
+    "llm_model_sync",
+    "agent_run_attention_notice",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

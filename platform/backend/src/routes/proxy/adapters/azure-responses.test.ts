@@ -133,7 +133,9 @@ describe("azureResponsesAdapterFactory", () => {
       { role: "user", content: "hello from responses" },
       { role: "tool", content: '{"value":1}', toolCalls: [result] },
     ]);
-    expect(adapter.getToolResults()).toEqual([result]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...result, structured: false },
+    ]);
     expect(adapter.getTools()).toEqual([
       {
         name: "read_file",
@@ -165,6 +167,7 @@ describe("azureResponsesAdapterFactory", () => {
         id: "call_missing",
         name: "unknown",
         content: '{"value":1}',
+        structured: false,
         isError: false,
       },
     ]);
@@ -214,7 +217,9 @@ describe("azureResponsesAdapterFactory", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);
@@ -596,5 +601,30 @@ describe("azureResponsesAdapterFactory", () => {
 
     expect(JSON.stringify(completion.response.output)).toContain(prefix);
     expect(completion.response.output).toHaveLength(2);
+  });
+});
+
+describe("Azure Responses replayed tool-call ids", () => {
+  test("fits a Gemini call id on the upstream request", () => {
+    const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-5.2-chat",
+      input: [
+        {
+          type: "function_call",
+          call_id: geminiCallId,
+          name: "read",
+          arguments: "{}",
+        },
+        { type: "function_call_output", call_id: geminiCallId, output: "a" },
+      ],
+    } as never);
+
+    const [call, output] = adapter.toProviderRequest().input as Array<{
+      call_id: string;
+    }>;
+
+    expect(call.call_id).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(output.call_id).toBe(call.call_id);
   });
 });

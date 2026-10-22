@@ -1,14 +1,11 @@
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import {
-  publishOpenAppaPolicyChange,
-  refuseCredentialLines,
-} from "@/services/openappa-policy-change";
+import { publishOpenAppaPolicyChange } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
-  replayOpenAppaValidationProposal,
+  replayOpenAppaDraft,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import { PolicyTestFilesSchema } from "@/types/openappa-policy-tests";
@@ -73,53 +70,14 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
   const files = PolicyTestFilesSchema.parse(
     [...filesByPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
   );
-  const policyContent = request.policyContent ?? root.content;
-  const policyChanged =
-    request.policyContent != null &&
-    (root.revision === 0 || policyContent !== root.content);
-  if (policyChanged)
-    await refuseCredentialLines({
-      organizationId,
-      userId,
-      before: root.content,
-      after: policyContent,
-    });
-  const [replayed, inspection] = await Promise.all([
-    replayOpenAppaValidationProposal(
-      {
-        organizationId,
-        userId,
-        files,
-        sourceVersion: collection.version,
-        directory: collection.directory,
-        ...(policyChanged
-          ? {
-              proposedPolicy: {
-                content: policyContent,
-                expectedRevision: root.revision,
-              },
-            }
-          : {}),
-      },
-      collection,
-    ),
-    request.changes.upsert.length
-      ? inspectOpenAppaPolicyTests(request.changes.upsert)
-      : { files: [] },
-  ]);
-  const parseErrors = inspection.files.flatMap((file) =>
-    file.error === null ? [] : [file.error],
+  // Preview and update both check syntax; only preview replays.
+  const inspection = request.changes.upsert.length
+    ? await inspectOpenAppaPolicyTests(request.changes.upsert)
+    : { files: [] };
+  const errors = inspection.files.flatMap((file) =>
+    file.error === null ? [] : [`${file.path}: ${file.error}`],
   );
-  const tests = parseErrors.length
-    ? {
-        ...replayed,
-        validation: {
-          ...replayed.validation,
-          valid: false,
-          errors: [...replayed.validation.errors, ...parseErrors],
-        },
-      }
-    : replayed;
+  const validation = { valid: errors.length === 0, errors };
   const [currentRoot, currentSource, currentSuite] = await Promise.all([
     guardrailsPolicyService.get(organizationId),
     OpenAppaGithubSyncModel.find(organizationId),
@@ -135,21 +93,13 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
       409,
       "Policy or validation source changed during preview; read both again",
     );
-  const counts = {
-    passed: tests.files.filter((file) => file.status === "passed").length,
-    failed: tests.files.filter((file) => file.status === "failed").length,
-    cannotRun: tests.files.filter((file) => file.status === "cannot_run")
-      .length,
-  };
   return {
     request,
     root,
     collection,
     files,
-    tests,
-    counts,
-    policyContent,
-    policyChanged,
+    validation,
+    inspected: inspection.files,
   };
 }
 
@@ -157,25 +107,33 @@ export async function previewOpenAppaValidationChange(
   params: Caller & PreviewOpenAppaValidationChange,
 ) {
   const proposal = await prepare(params);
+  // Replay only the added or edited files against the saved policy; nothing
+  // is recorded. Null when a syntax check failed or no file was upserted.
+  const upserted = proposal.request.changes.upsert;
+  const tests =
+    proposal.validation.valid && upserted.length
+      ? await replayOpenAppaDraft(
+          {
+            organizationId: params.organizationId,
+            userId: params.userId,
+            files: upserted,
+            sourceVersion: proposal.collection.version,
+            directory: proposal.collection.directory,
+          },
+          proposal.collection,
+        )
+      : null;
   return {
     stage: "preview" as const,
     delivery:
       proposal.collection.source === "github"
         ? ("pull_request" as const)
         : ("revision" as const),
-    policy: {
-      revision: proposal.root.revision,
-      changed: proposal.policyChanged,
-      ...(proposal.policyChanged
-        ? {
-            before: proposal.root.content,
-            after: proposal.policyContent,
-          }
-        : {}),
-    },
+    policyRevision: proposal.root.revision,
     changes: proposal.request.changes,
-    tests: proposal.tests,
-    counts: proposal.counts,
+    validation: proposal.validation,
+    files: proposal.inspected,
+    tests,
     directory: proposal.collection.activeDirectory,
     sourceCommit: proposal.collection.sourceCommit,
   };
@@ -188,64 +146,42 @@ export async function publishOpenAppaValidationChange(
   const { title, summary, ...request } =
     PublishOpenAppaValidationChangeSchema.parse(input);
   const proposal = await prepare({ organizationId, userId, ...request });
-  if (!proposal.tests.validation.valid)
-    throw new ApiError(400, proposal.tests.validation.errors.join("\n"));
-  const testsChanged =
-    request.changes.upsert.length > 0 || request.changes.delete.length > 0;
-  if (!proposal.policyChanged && !testsChanged)
-    throw new ApiError(400, "The proposal has no policy or validation changes");
+  if (!proposal.validation.valid)
+    throw new ApiError(400, proposal.validation.errors.join("\n"));
+  if (!request.changes.upsert.length && !request.changes.delete.length)
+    throw new ApiError(400, "The proposal has no validation changes");
   if (proposal.collection.source === "github") {
     const published = await publishOpenAppaPolicyChange({
       organizationId,
       userId,
-      content: proposal.policyContent,
+      content: proposal.root.content,
       expectedRevision: proposal.root.revision,
       title,
       summary,
-      includePolicy: proposal.policyChanged,
+      includePolicy: false,
       validationChanges: {
         ...request.changes,
         directory: proposal.collection.activeDirectory,
         expectedVersion: proposal.collection.version,
       },
     });
-    return { ...published, tests: proposal.tests, counts: proposal.counts };
+    return { ...published, validation: proposal.validation };
   }
-  let revision = proposal.root.revision;
-  let version: string;
-  if (proposal.policyChanged) {
-    const saved = await guardrailsPolicyService.update({
-      organizationId,
-      userId,
-      content: proposal.policyContent,
-      expectedRevision: proposal.root.revision,
-      validation: {
-        expectedVersion: proposal.collection.version,
-        ...(testsChanged ? { files: proposal.files } : {}),
-      },
-    });
-    revision = saved.revision;
-    version = saved.validationVersion ?? proposal.collection.version;
-  } else {
-    const saved = await OpenAppaPolicyTestsModel.saveLocal({
-      organizationId,
-      files: proposal.files,
-      expectedVersion: proposal.collection.version,
-      expectedPolicyRevision: proposal.root.revision,
-    });
-    if (!saved)
-      throw new ApiError(
-        409,
-        "Policy or validations changed, or Git sync was enabled; read both again",
-      );
-    version = saved.version;
-  }
+  const saved = await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId,
+    files: proposal.files,
+    expectedVersion: proposal.collection.version,
+    expectedPolicyRevision: proposal.root.revision,
+  });
+  if (!saved)
+    throw new ApiError(
+      409,
+      "Policy or validations changed, or Git sync was enabled; read both again",
+    );
   return {
     delivery: "revision" as const,
-    revision,
-    version,
-    policyChanged: proposal.policyChanged,
-    tests: proposal.tests,
-    counts: proposal.counts,
+    revision: proposal.root.revision,
+    version: saved.version,
+    validation: proposal.validation,
   };
 }

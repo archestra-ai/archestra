@@ -14,7 +14,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
     });
   });
 
-  it("surfaces why a pending pod cannot be placed", () => {
+  it("explains a full cluster in plain words instead of the scheduler's message", () => {
     const progress = describeAgentRuntimeStartupProgress(
       pod({
         phase: "Pending",
@@ -23,7 +23,8 @@ describe("describeAgentRuntimeStartupProgress", () => {
             type: "PodScheduled",
             status: "False",
             reason: "Unschedulable",
-            message: "0/3 nodes are available: insufficient memory",
+            message:
+              "0/17 nodes are available: 11 Insufficient memory, 12 Insufficient cpu, 5 node(s) didn't match Pod's node affinity/selector. preemption: 0/17 nodes are available: 12 No preemption victims found for incoming pod.",
           },
         ],
       }),
@@ -31,7 +32,27 @@ describe("describeAgentRuntimeStartupProgress", () => {
 
     expect(progress.phase).toBe("scheduling");
     expect(progress.detail).toBe(
-      "Unschedulable: 0/3 nodes are available: insufficient memory",
+      "None of the 17 nodes has enough free CPU or memory right now. The run starts when other runs finish or the cluster adds a node.",
+    );
+  });
+
+  it("still explains an unschedulable pod whose reason it does not recognize", () => {
+    const progress = describeAgentRuntimeStartupProgress(
+      pod({
+        phase: "Pending",
+        conditions: [
+          {
+            type: "PodScheduled",
+            status: "False",
+            reason: "Unschedulable",
+            message: "0/3 nodes are available: 3 node(s) had untolerated taint",
+          },
+        ],
+      }),
+    );
+
+    expect(progress.detail).toBe(
+      "None of the 3 nodes can take this run yet. The run starts when the cluster has room for it.",
     );
   });
 
@@ -61,7 +82,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
 
   it.for([
     ["ContainerCreating", "Preparing the agent container"],
-    ["PodInitializing", "Preparing the workspace"],
+    ["PodInitializing", "Preparing the Agent"],
   ])("describes %s without claiming an image download", ([reason, message]) => {
     const progress = describeAgentRuntimeStartupProgress(
       pod({
@@ -97,7 +118,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
 
     expect(progress).toEqual({
       phase: "pulling",
-      message: "Preparing the workspace",
+      message: "Preparing the Agent",
       detail: null,
     });
   });
@@ -127,7 +148,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
       }),
     );
 
-    expect(progress.message).toBe("Workspace initialization failed");
+    expect(progress.message).toBe("Agent initialization failed");
     expect(progress.detail).toContain("initialize-workspace");
     expect(progress.detail).toContain("exit code 1");
     expect(progress.detail).toContain("Could not initialize workspace volume");

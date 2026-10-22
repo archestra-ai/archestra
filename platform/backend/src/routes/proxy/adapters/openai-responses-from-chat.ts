@@ -20,6 +20,19 @@ import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
+// The wrapped adapter keeps its own provider's stop reason, so a finished
+// answer reads "stop" from Chat Completions, "end_turn" or "stop_sequence"
+// from Claude (Anthropic, Bedrock), "STOP" from Gemini and "COMPLETE" or
+// "STOP_SEQUENCE" from Cohere.
+const COMPLETED_STOP_REASONS = new Set([
+  "stop",
+  "end_turn",
+  "stop_sequence",
+  "STOP",
+  "COMPLETE",
+  "STOP_SEQUENCE",
+]);
+
 class ResponsesFromChatAdapter<TResponse>
   implements LLMResponseAdapter<TResponse>
 {
@@ -220,11 +233,11 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.toolCalls.flatMap((toolCall, index) => {
+    return this.withWireIds(this.state.toolCalls).flatMap((toolCall, index) => {
       const itemId = `fc_${toolCall.id}`;
       const item = {
         id: itemId,
-        call_id: toolCall.id,
+        call_id: toolCall.wireId ?? toolCall.id,
         type: "function_call",
         name: toolCall.name,
         arguments: toolCall.arguments,
@@ -285,7 +298,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     this.inner.formatToolCallsSSE?.(toolCalls);
     const frames = formatResponsesFunctionCallFrames({
-      toolCalls,
+      toolCalls: this.withWireIds(toolCalls),
       firstOutputIndex: 1,
       nextSequenceNumber: () => this.nextSequenceNumber(),
     });
@@ -309,13 +322,16 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     if (this.outputCompleted) {
       return "data: [DONE]\n\n";
     }
-    const suffix =
+    const footer =
       this.replacedText === null &&
       this.state.toolCalls.length === 0 &&
-      this.state.stopReason === "stop" &&
+      COMPLETED_STOP_REASONS.has(this.state.stopReason ?? "") &&
       this.state.text
         ? (this.getTextSuffix?.(this.state.text) ?? "")
         : "";
+    // The footer's mark spans two lines, so it starts on its own after a blank
+    // line, as the providers that place it first keep it apart from the answer.
+    const suffix = footer ? `\n\n${footer}` : "";
     const text = `${this.state.text}${suffix}`;
     const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
     return `${suffixDelta}${this.completeOutput(text)}data: [DONE]\n\n`;
@@ -463,14 +479,16 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
     if (this.replacedText === null) {
       output.push(
-        ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
-          id: toolCall.id,
-          call_id: toolCall.wireId ?? toolCall.id,
-          type: "function_call",
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: "completed",
-        })),
+        ...this.withWireIds(toolCallsOverride ?? this.state.toolCalls).map(
+          (toolCall) => ({
+            id: toolCall.id,
+            call_id: toolCall.wireId ?? toolCall.id,
+            type: "function_call",
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            status: "completed",
+          }),
+        ),
       );
     }
 
@@ -501,6 +519,24 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   private nextSequenceNumber(): number {
     this.sequenceNumber += 1;
     return this.sequenceNumber;
+  }
+
+  // The client echoes `call_id` on its next request. When the wrapped adapter
+  // packs more into that id (Gemini's thought signature), it wraps the id the
+  // client would echo anyway, so an OpenAPPA stamp survives inside it.
+  private withWireIds<
+    TToolCall extends { id: string; name: string; wireId?: string },
+  >(toolCalls: TToolCall[]): TToolCall[] {
+    if (!this.inner.wireToolCallId) {
+      return toolCalls;
+    }
+    return toolCalls.map((toolCall, index) => ({
+      ...toolCall,
+      wireId: this.inner.wireToolCallId?.({
+        toolCall: { id: toolCall.wireId ?? toolCall.id, name: toolCall.name },
+        index,
+      }),
+    }));
   }
 
   private toSse(event: unknown): string {

@@ -31,7 +31,7 @@ on:
   pull_request:
     paths:
       # Dockerfile, native wrappers, in-image tests, and patches. Context is platform/.
-      - "platform/agent_images/**"
+      - "platform/docker_images/agent/**"
       # Shared helper copied into every catalog target.
       - "platform/backend/src/static/workspace-files.py"
       - "platform/.dockerignore"
@@ -68,7 +68,7 @@ jobs:
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform
-      dockerfile: ./platform/agent_images/Dockerfile
+      dockerfile: ./platform/docker_images/agent/Dockerfile
       target: ${{ matrix.image }}
       image_name: ${{ matrix.image }}
       image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
@@ -77,7 +77,7 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
-      reuse_paths: '["platform/agent_images", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
+      reuse_paths: '["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -113,7 +113,7 @@ jobs:
         uses: ./.github/actions/build-docker-image
         with:
           context: ./platform
-          dockerfile: ./platform/agent_images/Dockerfile
+          dockerfile: ./platform/docker_images/agent/Dockerfile
           target: ${{ matrix.image }}
           platforms: linux/${{ matrix.arch }}
           push: "false"

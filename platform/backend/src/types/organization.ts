@@ -26,6 +26,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import { ConnectionSetupClientIdSchema } from "./connection-setup";
 import {
   KubernetesNamespaceSchema,
   NetworkPolicyInputSchema,
@@ -264,13 +265,31 @@ export const ConnectionBaseUrlSchema = z.object({
   visible: z.boolean().default(true),
 });
 
-/** provider → llm_provider_api_keys.id for auto-provisioned connection virtual keys. */
-export const ConnectionDefaultProviderKeysSchema = z.partialRecord(
-  SupportedProvidersSchema,
-  z.string().uuid(),
+/**
+ * Setup client → the provider API keys mapped to the virtual key a setup
+ * command mints for that client, in the shape virtual keys map them: one key
+ * per provider, or several for providers whose keys are separate endpoints. A
+ * client with no keys falls back to the user's own key resolution.
+ */
+export const ConnectionClientFutureProvidersSchema = z.partialRecord(
+  ConnectionSetupClientIdSchema,
+  z.boolean(),
 );
-export type ConnectionDefaultProviderKeys = z.infer<
-  typeof ConnectionDefaultProviderKeysSchema
+export type ConnectionClientFutureProviders = z.infer<
+  typeof ConnectionClientFutureProvidersSchema
+>;
+
+export const ConnectionClientProviderKeysSchema = z.partialRecord(
+  ConnectionSetupClientIdSchema,
+  z.array(
+    z.object({
+      provider: SupportedProvidersSchema,
+      providerApiKeyId: z.string().uuid(),
+    }),
+  ),
+);
+export type ConnectionClientProviderKeys = z.infer<
+  typeof ConnectionClientProviderKeysSchema
 >;
 
 export const OnboardingWizardPageSchema = z.object({
@@ -345,7 +364,9 @@ const extendedFields = {
   sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
-  connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  connectionClientFutureProviders:
+    ConnectionClientFutureProvidersSchema.nullable(),
+  connectionClientProviderKeys: ConnectionClientProviderKeysSchema.nullable(),
   // The stored (lenient) shapes: a jsonb value written by an older build must
   // not 500 the organization read.
   popularAgentOverrides: StoredPopularAgentOverridesSchema.nullable(),
@@ -371,6 +392,9 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   presetEntityNamePlural: true,
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
+  // Superseded by connectionClientProviderKeys; retained in DB only.
+  connectionDefaultProviderKeys: true,
+  appsHackathonRecorderEnabled: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
@@ -382,6 +406,8 @@ export const InsertOrganizationSchema = createInsertSchema(
   presetEntityNamePlural: true,
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
+  connectionDefaultProviderKeys: true,
+  appsHackathonRecorderEnabled: true,
 });
 /**
  * The white-label app name is not only shown in the UI: it is substituted into
@@ -425,7 +451,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 
 export const UpdateSecuritySettingsSchema = z.object({
   allowChatFileUploads: z.boolean().optional(),
-  appsHackathonRecorderEnabled: z.boolean().optional(),
+  allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
@@ -434,6 +460,7 @@ export const UpdateSecuritySettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  defaultPersonalAgentAccessAllTools: z.boolean().optional(),
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -535,8 +562,10 @@ export const UpdateAuthSettingsSchema = z.object({
 
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
-  connectionDefaultProviderKeys:
-    ConnectionDefaultProviderKeysSchema.nullable().optional(),
+  connectionClientFutureProviders:
+    ConnectionClientFutureProvidersSchema.nullable().optional(),
+  connectionClientProviderKeys:
+    ConnectionClientProviderKeysSchema.nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionClientOrder: z
     .array(z.string().max(64))

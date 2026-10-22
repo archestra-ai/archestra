@@ -22,13 +22,32 @@ export interface BatteryPackage {
   annotators: Array<string>
   /** The annotators the battery's own `[[policy.tool]]` rules route calls to. */
   routedAnnotators: Array<string>
-  policy: string
+  /** The base policy text: all a deployment without a target composes. */
+  base: string
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
   benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
+  /** What a multi-user deployment composes, when the battery declares targets. */
+  multiUser?: BatteryTargetView
+}
+
+/**
+ * A battery deployed for one target: the target policy, composed before the base,
+ * and what the two declare and read together.
+ */
+export interface BatteryTargetView {
+  policy: string
+  /** Every variable the target and its base read. */
+  credentials: Array<string>
+  /** The variables the target policy itself reads, without the base's. */
+  targetCredentials: Array<string>
+  externals: Array<BatteryExternal>
+  annotators: Array<string>
+  routedAnnotators: Array<string>
+  setup?: string
 }
 
 export interface ChildAddressRecord {
@@ -65,7 +84,10 @@ export interface ComposeBatteryInput {
   /** The include entry this battery answers, as the root document spells it. */
   entry: string
   name: string
+  /** The base policy text. */
   policy: string
+  /** The target policy text deployed before the base; absent deploys the base alone. */
+  targetPolicy?: string
   helpers?: HelperBindingInput
 }
 
@@ -92,6 +114,22 @@ export declare function composeOpenappaPolicy(input: ComposePolicyInput): Promis
 export interface ComposePolicyInput {
   root: string
   batteries: Array<ComposeBatteryInput>
+  /**
+   * The readers of each member roster the host keeps, by roster name:
+   * principal → email. A roster absent here is declared empty.
+   */
+  memberRosters?: Record<string, Record<string, string>>
+}
+
+/**
+ * Transient key material supplied separately from the serializable hook input.
+ * The host validates conversation ownership, escrow and fingerprint first.
+ */
+export interface ContentEncryption {
+  key: Buffer
+  scope: string
+  /** Opaque capability for this dispatch's authenticated loopback annotator. */
+  annotatorContext?: string
 }
 
 export interface CredentialDeclaration {
@@ -100,7 +138,7 @@ export interface CredentialDeclaration {
   line: number
 }
 
-export declare function dispatchHook(input: string, policy: DispatchPolicy): Promise<string>
+export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
 /**
  * The effective policy of the dispatching organization, with the values the host
@@ -110,6 +148,12 @@ export interface DispatchPolicy {
   content: string
   /** Variable → value, for the document's `runtimeCredentials`. Secrets. */
   credentials: Record<string, string>
+  /**
+   * The content hash of the stored composition `content` was read from. A
+   * dispatch whose composition is no longer the stored one publishes nothing
+   * and is refused as retryable; absent, nothing is checked.
+   */
+  compositionHash?: string
 }
 
 export interface EditedPolicy {
@@ -130,13 +174,19 @@ export declare function editOpenappaPolicy(content: string, edits: Array<PolicyE
  * Executes a remedy for the proxy-stamped trajectory, resolving that session
  * from PostgreSQL. The caller, when present, is the receipt spender.
  */
-export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
+export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
 /** The upstream pin and host replay boundary version stored with each run. */
 export declare function getOpenappaReplayEngineVersion(): string
 
-/** Read the current label of a started session without mutating its trajectory. */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string): Promise<OpenappaStatus | null>
+/**
+ * Read the current label of a started session without mutating its trajectory.
+ * The read runs through a view pinned to the organization's deployment line, as
+ * a dispatch does: a family is read on the line it follows.
+ * None before the session started, and for a family opened under the earlier
+ * policy model, whose next event is refused instead.
+ */
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
 export interface HelperBindingInput {
   /**
@@ -195,7 +245,7 @@ export declare function loadChildReturns(organizationId: string, parentSessionId
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
-export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
 
 export interface OfferReviewOutput {
   offerId: string
@@ -211,9 +261,19 @@ export interface OfferReviewOutput {
   arguments?: string
 }
 
+/**
+ * The kind of family each root opened as, in the order given, for the operator's
+ * preflight count: `following` for one that follows a deployment line, `legacy`
+ * for one pinned to a policy snapshot, `encrypted` for an opening sealed with a
+ * conversation key this read does not hold, and none for a root with no log.
+ */
+export declare function openappaRootKinds(roots: Array<string>): Promise<Array<string | undefined | null>>
+
 export interface OpenappaStatus {
   trust: string
   audience: string
+  /** The organization's policy revision the session's next event is decided under. */
+  policyRevision: number
 }
 
 /**
@@ -263,11 +323,17 @@ export interface PolicyEditInput {
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 /**
- * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
- * replay core answers consults through an in-process stand-in, never a live party,
- * and keeps every trajectory in memory.
+ * Evaluate bounded `.appa` scenarios against the supplied effective policy with the
+ * credential values the host resolved for it. Every consult the policy declares is
+ * made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+ *
+ * `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+ * `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+ * file's result, before the next file starts. It only observes: calls are queued without
+ * waiting, and the listener must not throw. Events still queued when the replay settles
+ * may arrive after its promise resolves.
  */
-export declare function replayOpenappaPolicy(input: string): Promise<string>
+export declare function replayOpenappaPolicy(input: string, onProgress?: (((arg: string) => void)) | undefined | null): Promise<string>
 
 export interface ReportingOptions {
   endpoint: string
@@ -290,6 +356,14 @@ export interface TokenEnvReader {
   variable: string
   reader: string
 }
+
+/**
+ * Validates a document already composed by the host, including host-owned helper
+ * token bindings. Never use this for authored root or battery text: those must
+ * pass their existing input checks before the host adds its bindings.
+ * Validation defers secret lookup and opens no store or network connection.
+ */
+export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
 
 /**
  * Validates a root document that declares no battery: [`compose_openappa_policy`]

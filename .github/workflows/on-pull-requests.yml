@@ -142,7 +142,7 @@ jobs:
           python3 .github/scripts/check-supply-chain-policy.py
 
       - name: Check new Cargo dependency release ages
-        uses: archestra-ai/.github/actions/cargo-release-age@f9b82a1ae0c8d73088513454aa46cf5a4021df82
+        uses: archestra-ai/.github/actions/cargo-release-age@410c0edb0244ef042e04bfd972ccba90e12db2ed
         # The action fetches the base SHA, which needs authentication in private
         # mirrors. Keep checkout credentials unpersisted and scope the read-only
         # job token to this pinned action via Git's runtime configuration.
@@ -155,7 +155,9 @@ jobs:
           GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
         with:
           base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          lockfiles: ai-labs/Cargo.lock
+          lockfiles: |
+            ai-labs/Cargo.lock
+            platform/archestra-rs/Cargo.lock
 
   migration-kit-checks:
     name: Migration Kit Checks
@@ -210,13 +212,6 @@ jobs:
           head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
           # merge_group has no PR to comment on.
           comment-summary-in-pr: ${{ github.event_name == 'pull_request' && 'on-failure' || 'never' }}
-          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
-          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
-          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
-          # reachable. The Dagger client only does TLS against a trusted local
-          # engine session, so attacker-controlled CRL parsing is not reachable.
-          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
-          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   # Required checks retain their names on PRs, but expensive validation runs
   # against the merge queue's combined SHA. PR-only policy checks above still
@@ -230,12 +225,9 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    # On a 16-vcpu Blacksmith runner: turbo fans out six
-    # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
-    # concurrently — so it scales with cores: the same all-cache-miss
-    # check:ci measured 1m51s on 16 vcpu vs 10m16s on 4-vcpu ubuntu-latest
-    # (whole job 3 min avg vs 15.2 min avg).
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Turbo fans out six check tasks; @frontend:check:ci also runs
+    # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
+    runs-on: ubicloud-standard-16-ubuntu-2404
     # Backstop: on a turbo remote-cache hit every check here finishes well
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
@@ -301,22 +293,6 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
-      # Cold Rust NAPI builds invoke cargo. Sync the
-      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
-      # turbo's parallel crate builds each trigger a concurrent rustup
-      # download of the same components, which races and fails with
-      # "could not rename downloaded file".
-      # Reuse the warm release target restored by backend test shards. The
-      # native addons are intentionally uncached in Turbo because its remote
-      # cache is shared across architectures, but Cargo artifacts here are
-      # scoped to this CI runner and Rust toolchain.
-      - name: Restore Rust build cache
-        uses: ./.github/actions/setup-rust-build
-        with:
-          workspaces: platform/archestra-rs
-          shared-key: backend-unit-tests
-          save-if: "false"
-
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
       # persist-credentials: false, so that ref is absent AND git holds no
@@ -375,10 +351,29 @@ jobs:
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
       # vitest) so this job stops being serialized behind the largest suite.
-      - name: Type checking, linting, formatting, unit tests
+      - name: Fast static and copy checks
         run: |
-          pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
+          pnpm check:white-label
+
+      # Cold Rust NAPI builds invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      # Reuse the warm release target restored by backend test shards. The
+      # native addons are intentionally uncached in Turbo because its remote
+      # cache is shared across architectures, but Cargo artifacts here are
+      # scoped to this CI runner and Rust toolchain.
+      - name: Restore Rust build cache
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      - name: Type checking, linting, formatting, unit tests
+        run: pnpm exec turbo check:ci --filter=!@backend
 
       - name: Test migration upgrades across release tracks
         run: pnpm --dir backend test:migration-upgrades
@@ -388,12 +383,6 @@ jobs:
 
       - name: Test backport automation
         run: python3 ../.github/scripts/test_backport.py
-
-      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
-      # brand instead of resolving the deployment's app name. Occurrences that
-      # legitimately name the vendor carry an inline `white-label-ok:` reason.
-      - name: White-label copy check
-        run: pnpm check:white-label
 
       # Validates the production build (Next, backend, and Rust NAPI) on the
       # merge queue's combined SHA and on release-please PRs before codegen.
@@ -499,10 +488,18 @@ jobs:
   # tasks in Platform Lint and Unit Tests retain only NAPI build/load smokes;
   # sandbox-rs's workspace suite previously repeated app-runtime and image
   # core tests after this job had already covered them.
+  dagger-sdk-integration:
+    name: Dagger SDK Integration
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/on-pull-requests-dagger-sdk.yml
+
   platform-rust-checks:
     name: Platform Rust Checks
-    if: github.event_name == 'merge_group'
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    needs: dagger-sdk-integration
+    if: always() && github.event_name == 'merge_group'
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -510,6 +507,13 @@ jobs:
       run:
         working-directory: ./platform
     steps:
+      - name: Require Dagger SDK integration
+        if: needs.dagger-sdk-integration.result != 'success'
+        working-directory: .
+        run: |
+          echo "::error::Dagger SDK integration did not succeed."
+          exit 1
+
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -523,8 +527,22 @@ jobs:
         with:
           workspaces: platform/archestra-rs
           targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          shared-key: platform-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
+
+      # Prebuilt binary instead of `cargo install` — the source compile was
+      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
+      # download against its pinned manifest and picks the right platform
+      # (Linux runners and the mac mini).
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny --config deny.toml check advisories bans licenses sources
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
@@ -545,19 +563,6 @@ jobs:
           cargo test --workspace --locked
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
-      # Prebuilt binary instead of `cargo install` — the source compile was
-      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
-      # download against its pinned manifest and picks the right platform
-      # (Linux runners and the mac mini).
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
-        with:
-          tool: cargo-deny@0.20.2
-
-      - name: Rust dependency policy
-        working-directory: ./platform/archestra-rs
-        run: cargo deny --config deny.toml check advisories bans licenses sources
-
   # The only job that exercises the REAL OpenAPPA runtime: the NAPI bridge, its
   # decisions, and the PostgreSQL ledger they are recorded in. Every suite above
   # this one mocks `@archestra/openappa-rs`, so without this job nothing in CI
@@ -572,7 +577,7 @@ jobs:
     name: OpenAPPA Native Tests
     # Release bumps need the real runtime/ledger checks before human review.
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20
@@ -649,7 +654,7 @@ jobs:
     needs: supply-chain-policy
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -668,6 +673,7 @@ jobs:
         uses: ./.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
+          shared-key: ai-labs-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
 
@@ -756,15 +762,88 @@ jobs:
           fi
           echo "run=${run}" >> "${GITHUB_OUTPUT}"
 
+  # Restore/build native dependencies once before allocating test shards.
+  # Use the same Ubicloud image as the main-branch native cache publisher;
+  # a cold cache must not compile the same four addons on every shard.
+  # Keep this on Ubuntu 24.04 x64, matching the consumers' glibc/architecture.
+  backend-test-dependencies:
+    name: Prepare Backend Test Dependencies
+    needs: [backend-test-inputs]
+    if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
+    runs-on: ubicloud-standard-8-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      artifact-name: ${{ steps.bundle.outputs.artifact-name }}
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Restore backend NAPI binaries
+        id: native-cache
+        uses: ./.github/actions/cache-backend-napi
+
+      - name: Cache cargo registry and target on native cache miss
+        if: steps.native-cache.outputs.usable != 'true'
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+
+      - name: Build backend workspace dependencies
+        if: steps.native-cache.outputs.usable != 'true'
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+
+      - name: Verify native addons and pack shard dependencies
+        id: bundle
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          node ../.github/scripts/verify-backend-napi.cjs
+          tar -czf /tmp/backend-test-napi.tar.gz \
+            archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs}/index.linux-x64-gnu.node
+          echo "artifact-name=backend-test-napi-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      # A same-run artifact works even on a cold cache. Merge-group cache
+      # entries are scoped to their queue ref and cannot warm the next group.
+      - name: Share native addons with all shards
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: ${{ steps.bundle.outputs.artifact-name }}
+          path: /tmp/backend-test-napi.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
   # two jobs partition the suite exactly once. This trades about four minutes
   # of test-gate latency for much lower runner usage than the eight-job layout.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
-    needs: [backend-test-inputs]
+    needs: [backend-test-inputs, backend-test-dependencies]
     if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-16-ubuntu-2404
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
     timeout-minutes: 25
@@ -773,9 +852,6 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     strategy:
       # A failing shard must not cancel its siblings; we want the full
       # failure picture in one pass.
@@ -806,23 +882,18 @@ jobs:
           fi
           pwsh -NoProfile -Command 'Write-Output $PSVersionTable.PSVersion'
 
-      # The native addons are small compared with the Cargo target cache.
-      # Load-verify an exact-source binary cache first; fall back to the warm
-      # Cargo cache and build when it misses. The main-branch warmer publishes
-      # entries that fresh PR and merge-group runs can restore.
-      - name: Restore backend NAPI binaries
-        id: native-cache
-        uses: ./.github/actions/cache-backend-napi
+      - name: Download prepared native addons
+        uses: ./.github/actions/github-download-artifact
         with:
-          save: ${{ matrix.shard == 1 }}
+          # Use the producer's attempt, including a partial rerun that keeps
+          # successful preparation from the previous attempt.
+          name: ${{ needs.backend-test-dependencies.outputs.artifact-name }}
+          path: /tmp
 
-      - name: Cache cargo registry and target on native cache miss
-        if: steps.native-cache.outputs.usable != 'true'
-        uses: ./.github/actions/setup-rust-build
-        with:
-          workspaces: platform/archestra-rs
-          shared-key: backend-unit-tests
-          save-if: ${{ matrix.shard == 1 }}
+      - name: Load and verify prepared native addons
+        run: |
+          tar -xzf /tmp/backend-test-napi.tar.gz
+          node ../.github/scripts/verify-backend-napi.cjs
 
       # Vitest uses its results cache to schedule historically slow files
       # first. Persist one cache per shard so fresh runners keep that balancing
@@ -848,22 +919,6 @@ jobs:
           restore-keys: |
             backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
 
-      # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
-      # which `turbo check:ci` builds implicitly via the task graph. Running
-      # vitest directly skips that, so build backend's workspace deps here.
-      # turbo's parallel crate builds each trigger a concurrent rustup
-      # download of the same pinned toolchain on a cold runner, which races
-      # and fails with "could not rename downloaded file" — so on failure,
-      # sync the toolchain serially and retry once.
-      - name: Build backend workspace dependencies
-        if: steps.native-cache.outputs.usable != 'true'
-        run: |
-          pnpm exec turbo build --filter="@backend^..." || {
-            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
-            rustup show
-            pnpm exec turbo build --filter="@backend^..."
-          }
-
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
         working-directory: ./platform/backend
         env:
@@ -880,13 +935,14 @@ jobs:
     # failed, cancelled, or skipped shards turn the gate red — except shards
     # skipped because the input check found no backend changes.
     if: always() && github.event_name == 'merge_group'
-    needs: [backend-test-inputs, backend-unit-tests]
+    needs: [backend-test-inputs, backend-test-dependencies, backend-unit-tests]
     permissions: {}
     steps:
       - name: Check shard results
         env:
           INPUTS_RESULT: ${{ needs.backend-test-inputs.result }}
           RUN_SHARDS: ${{ needs.backend-test-inputs.outputs.run }}
+          DEPENDENCIES_RESULT: ${{ needs.backend-test-dependencies.result }}
           SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
         run: |
           # A failed or cancelled input check never licenses a skip.
@@ -894,12 +950,12 @@ jobs:
             echo "::error::Backend test input detection did not succeed (result: $INPUTS_RESULT)."
             exit 1
           fi
-          if [ "$RUN_SHARDS" = "false" ] && [ "$SHARDS_RESULT" = "skipped" ]; then
+          if [ "$RUN_SHARDS" = "false" ] && [ "$DEPENDENCIES_RESULT" = "skipped" ] && [ "$SHARDS_RESULT" = "skipped" ]; then
             echo "✅ No backend test inputs changed in this merge group; shards skipped."
             exit 0
           fi
-          if [ "$SHARDS_RESULT" != "success" ]; then
-            echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
+          if [ "$RUN_SHARDS" != "true" ] || [ "$DEPENDENCIES_RESULT" != "success" ] || [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::Backend test preparation or shards did not succeed (preparation: $DEPENDENCIES_RESULT, shards: $SHARDS_RESULT)."
             exit 1
           fi
           echo "✅ All backend unit test shards passed."
@@ -908,7 +964,7 @@ jobs:
     name: Frontend Integration Tests (MSW runner)
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-16-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -983,7 +1039,10 @@ jobs:
       # Reuse compiler caches, but regenerate route manifests and server output
       # on each run. Restoring whole dev dist directories can retain stale route
       # state and return 404 for routes that exist in the current source tree.
+      # Fresh Linux queue refs cannot reuse these multi-gigabyte archives.
+      # Keep persistent macOS runners on their existing cache policy.
       - name: Cache integration test compiler output
+        if: runner.os != 'Linux'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*/dev/cache
@@ -1075,9 +1134,9 @@ jobs:
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and
   # block the merge queue) for up to 24h. This watchdog polls this run's own
   # jobs; if no mac-mini job has made ANY progress within the grace window it
-  # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
-  # to Blacksmith) and cancels this run so the merge queue ejects the PR
-  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
+  # flips the MAC_MINI_CI kill switch off and cancels this run so the merge
+  # queue ejects the PR immediately. Re-queueing uses the hosted fallback
+  # runners (GitHub for Rust checks, Ubicloud for frontend). Re-enable with:
   # gh variable set MAC_MINI_CI --body on
   mac-mini-watchdog:
     name: Mac Mini Watchdog
@@ -1103,7 +1162,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
+      - name: Fail over to hosted runners if mac-mini-1 shows no progress
         env:
           GH_TOKEN: ${{ github.token }}
           VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -1140,7 +1199,7 @@ jobs:
             echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
             sleep 20
           done
-          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to use hosted fallback runners. Re-enable with: gh variable set MAC_MINI_CI --body on"
           GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
             || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
           gh run cancel "$RUN_ID" --repo "$REPO"

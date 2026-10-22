@@ -24,9 +24,14 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
-export function useSettingsTabs() {
+/** `enabled: false` skips the secrets-type lookup until the tabs are shown. */
+export function useSettingsTabs({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { data: secretsType } = useSecretsType();
+  const { data: secretsType } = useSecretsType({ enabled });
   const openappaEnabled = useFeature("openappaEnabled");
   return [
     ...(permissionMap?.["/settings/appearance"]
@@ -56,6 +61,15 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents", Icon: MessageSquare }]
       : []),
+    ...(openappaEnabled && permissionMap?.["/settings/guardrails"]
+      ? [
+          {
+            label: "Guardrails",
+            href: "/settings/guardrails",
+            Icon: OpenAppaIcon,
+          },
+        ]
+      : []),
     ...(permissionMap?.["/settings/messaging-channels"]
       ? [
           {
@@ -79,9 +93,6 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills", Icon: BookOpen }]
-      : []),
-    ...(openappaEnabled && permissionMap?.["/settings/openappa"]
-      ? [{ label: "OpenAPPA", href: "/settings/openappa", Icon: OpenAppaIcon }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge", Icon: Library }]

@@ -135,6 +135,8 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       ]).trim();
     }
     try {
+      // Only Agents with a recent run receive warm capacity.
+      await makeRun();
       await agentWarmPoolManager.reconcile();
       await until(
         () => objects("sandboxwarmpools")[0]?.status?.readyReplicas === 1,

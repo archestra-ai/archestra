@@ -26,6 +26,96 @@ function requestContext(): LlmProxyRequestContext {
 }
 
 describe("LlmProxyPluginRegistry", () => {
+  test.each([
+    false,
+    true,
+  ])("only a blocked replacement can remove review text (replacement=%s)", async (replacement) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "block-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            name: replacement ? "archestra__get_remedy_plans" : call.name,
+            reviewDetails: undefined,
+          })),
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "review denied",
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    try {
+      const response = registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      });
+      if (replacement)
+        await expect(response).resolves.toMatchObject({
+          decision: "allow",
+          toolCalls: [{ name: "archestra__get_remedy_plans" }],
+        });
+      else
+        await expect(response).rejects.toThrow("changed protected review text");
+    } finally {
+      await registry.complete(context);
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("finalizers cannot strip a native card's full review (in-place=%s)", async (inPlace) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "strip-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        if (inPlace) {
+          delete toolCalls[0].reviewDetails;
+          return { decision: "allow", toolCalls };
+        }
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            reviewDetails: undefined,
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      }),
+    ).rejects.toThrow("changed protected review text");
+    await registry.complete(context);
+  });
+
   test("does not allocate lifecycle state or invoke callbacks when empty", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();
@@ -164,6 +254,7 @@ describe("LlmProxyPluginRegistry", () => {
       answer: (toolCalls: Calls) => {
         toolCalls: Calls;
         blocked?: readonly { id: string; name: string; reason: string }[];
+        rewritten?: readonly { id: string; name: string }[];
       },
     ) => {
       const registry = new LlmProxyPluginRegistry();
@@ -193,6 +284,22 @@ describe("LlmProxyPluginRegistry", () => {
       decision: "allow",
       toolCalls: [{ id: "call-1", name: "notice" }],
     });
+
+    // An authorized rewrite is released, and is not reported as a block.
+    const rewrite = await finalize((toolCalls) => ({
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+      rewritten: [{ id: "call-1", name: toolCalls[0].name }],
+    }));
+    expect(rewrite).toEqual({
+      decision: "allow",
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+    });
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls,
+        rewritten: [{ id: "call-9", name: "read" }],
+      })),
+    ).rejects.toThrow("reported a block on a call the policies never saw");
 
     await expect(
       finalize(() => ({

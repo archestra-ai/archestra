@@ -1,4 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   ADMIN_ROLE_NAME,
   PROJECT_INSTRUCTIONS_FILENAME,
@@ -11,6 +14,7 @@ import {
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
@@ -230,6 +234,63 @@ describe("sandbox tools (runtime enabled)", () => {
         timeoutSeconds: undefined,
         environment: undefined,
       });
+    });
+
+    test("a service account runs in its own default sandbox, which nobody else can reach", async ({
+      makeServiceAccount,
+    }) => {
+      const account = await makeServiceAccount(organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const accountUserId = serviceAccountUserId(account.id);
+      const conversation = await ConversationModel.create({
+        userId: accountUserId,
+        organizationId,
+        agentId: agent.id,
+        title: "Test",
+      });
+      const accountCtx = {
+        ...context,
+        userId: accountUserId,
+        conversationId: conversation.id,
+      };
+      const runSpy = stubRunCommand("sbx-1");
+
+      const first = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        accountCtx,
+      );
+      const second = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo again" },
+        accountCtx,
+      );
+
+      expect(first.isError).toBe(false);
+      expect(second.isError).toBe(false);
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: conversation.id,
+        organizationId,
+      });
+      // one default, reused, owned by the account
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].userId).toBe(accountUserId);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sandboxId: sandboxes[0].id,
+          caller: { organizationId, userId: accountUserId, agentId: agent.id },
+        }),
+      );
+
+      // a person cannot reach the account's sandbox by id
+      const personResult = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxes[0].id } },
+        { ...context, conversationId: conversation.id },
+      );
+      expect(personResult.isError).toBe(true);
+      expect(textOf(personResult)).toContain("No accessible sandbox");
     });
 
     test("routes an unbound agent to its organization's default engine when no BYO host is set", async () => {
@@ -3233,9 +3294,270 @@ describe("edit_file / delete_file", () => {
     expect(result.isError).toBe(true);
     expect(await FileModel.findById(personal.id)).not.toBeNull();
   });
+
+  test("delete_file in a project chat removes a project file by filename", async () => {
+    const { project, ctx } = await makeProjectChatCtx("project-del");
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: project.id,
+      conversationId: ctx.conversationId,
+      filename: "stale.txt",
+      mimeType: "text/plain",
+      sizeBytes: 3,
+      data: Buffer.from("old"),
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { filename: "stale.txt" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(await FileModel.findById(file.id)).toBeNull();
+  });
+
+  // With an external object store, a project folder can hold objects placed
+  // there by hand (no `files` row). search_files lists them with an `obj_` ref
+  // and the Files panel deletes them, so delete_file must reach them too.
+  describe("hand-placed project files (filesystem provider)", () => {
+    let root: string;
+    let savedProvider: typeof config.fileStorage.provider;
+    let savedRoot: string;
+
+    beforeEach(async () => {
+      root = await fs.mkdtemp(path.join(os.tmpdir(), "delete-file-overlay-"));
+      savedProvider = config.fileStorage.provider;
+      savedRoot = config.fileStorage.filesystemRoot;
+      config.fileStorage.provider = "filesystem";
+      config.fileStorage.filesystemRoot = root;
+    });
+    afterEach(async () => {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    async function drop(folder: string, name: string, content: string) {
+      const dir = path.join(root, folder);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, name), content);
+      return path.join(dir, name);
+    }
+
+    async function exists(file: string) {
+      return fs.access(file).then(
+        () => true,
+        () => false,
+      );
+    }
+
+    async function refOf(ctx: ArchestraContext, filename: string) {
+      const listed = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        {},
+        ctx,
+      );
+      const files = structuredOf<{
+        files: { id: string | null; ref: string; filename: string }[];
+      }>(listed).files;
+      const match = files.find((f) => f.filename === filename);
+      expect(match?.id).toBeNull();
+      return match?.ref ?? "";
+    }
+
+    test("deletes one by the ref search_files returned", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-ref");
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+      const ref = await refOf(ctx, "dropped.txt");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { id: ref },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ filename: string }>(result).filename).toBe(
+        "dropped.txt",
+      );
+      expect(await exists(onDisk)).toBe(false);
+    });
+
+    test("deletes one by filename", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-name");
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+      const kept = await drop(project.slug, "keep.txt", "stays");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: "dropped.txt" },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(await exists(onDisk)).toBe(false);
+      expect(await exists(kept)).toBe(true);
+    });
+
+    test("deletes one outside a chat with project_id", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "hand-headless",
+        description: null,
+      });
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: "dropped.txt", project_id: project.id },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      expect(await exists(onDisk)).toBe(false);
+    });
+
+    test("a project chat cannot delete another project's object by its ref", async () => {
+      const { ctx: otherCtx, project: other } =
+        await makeProjectChatCtx("hand-other");
+      const onDisk = await drop(other.slug, "theirs.txt", "not yours");
+      const foreignRef = await refOf(otherCtx, "theirs.txt");
+      const { ctx } = await makeProjectChatCtx("hand-mine");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { id: foreignRef },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await exists(onDisk)).toBe(true);
+    });
+
+    test("edit_file rewrites one in place by filename and it stays rowless", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-edit");
+      const onDisk = await drop(project.slug, "plan.md", "ship on Monday\n");
+      const refBefore = await refOf(ctx, "plan.md");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { filename: "plan.md", old_string: "Monday", new_string: "Friday" },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ fileId: string }>(result).fileId).toBe(refBefore);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("ship on Friday\n");
+      // still the same hand-placed object: no row adopted, ref unchanged
+      expect(await refOf(ctx, "plan.md")).toBe(refBefore);
+      expect(
+        await FileModel.listByProject({
+          organizationId,
+          projectId: project.id,
+        }),
+      ).toEqual([]);
+    });
+
+    test("edit_file rewrites one by the ref search_files returned", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-edit-ref");
+      const onDisk = await drop(project.slug, "notes.txt", "a b a");
+      const ref = await refOf(ctx, "notes.txt");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { id: ref, old_string: "a", new_string: "z", replace_all: true },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ replacements: number }>(result).replacements).toBe(
+        2,
+      );
+      expect(await fs.readFile(onDisk, "utf8")).toBe("z b z");
+    });
+
+    test("edit_file outside a chat with project_id", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "hand-edit-headless",
+        description: null,
+      });
+      const onDisk = await drop(project.slug, "todo.txt", "draft");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        {
+          filename: "todo.txt",
+          old_string: "draft",
+          new_string: "final",
+          project_id: project.id,
+        },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("final");
+    });
+
+    test("a project chat cannot edit another project's object by its ref", async () => {
+      const { ctx: otherCtx, project: other } =
+        await makeProjectChatCtx("hand-edit-other");
+      const onDisk = await drop(other.slug, "theirs.txt", "original");
+      const foreignRef = await refOf(otherCtx, "theirs.txt");
+      const { ctx } = await makeProjectChatCtx("hand-edit-mine");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { id: foreignRef, old_string: "original", new_string: "hacked" },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("original");
+    });
+
+    test("save_file overwrite replaces one in place instead of failing on the name", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-save");
+      const onDisk = await drop(project.slug, "report.md", "v1");
+      const refBefore = await refOf(ctx, "report.md");
+
+      // without overwrite the name is taken, and the error says to overwrite
+      const refused = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "report.md", content: "v2" },
+        ctx,
+      );
+      expect(refused.isError).toBe(true);
+      expect(textOf(refused)).toContain("overwrite: true");
+
+      const result = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "report.md", content: "v2", overwrite: true },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(
+        structuredOf<{ overwritten: boolean; fileId: string }>(result),
+      ).toMatchObject({ overwritten: true, fileId: refBefore });
+      expect(await fs.readFile(onDisk, "utf8")).toBe("v2");
+      expect(await fs.readdir(path.dirname(onDisk))).toEqual(["report.md"]);
+    });
+
+    test("refuses a hand-placed instructions file", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-instructions");
+      const onDisk = await drop(
+        project.slug,
+        PROJECT_INSTRUCTIONS_FILENAME,
+        "guidance",
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await exists(onDisk)).toBe(true);
+    });
+  });
 });
 
-describe("persistent-files tools follow the sandbox runtime flag", () => {
+describe("persistent-files tools without the code runtime", () => {
   const originalSandbox = config.skillsSandbox.enabled;
   afterAll(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = originalSandbox;
@@ -3258,7 +3580,7 @@ describe("persistent-files tools follow the sandbox runtime flag", () => {
     }
   });
 
-  test("hides every sandbox tool when the runtime is off", () => {
+  test("with the runtime off, keeps the PFS tools and hides only the runtime tools", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = false;
     const names = getArchestraMcpTools().map((tool) => tool.name);
     for (const name of [
@@ -3267,11 +3589,134 @@ describe("persistent-files tools follow the sandbox runtime flag", () => {
       TOOL_SAVE_FILE_FULL_NAME,
       TOOL_EDIT_FILE_FULL_NAME,
       TOOL_DELETE_FILE_FULL_NAME,
+    ]) {
+      expect(names).toContain(name);
+    }
+    for (const name of [
       TOOL_RUN_COMMAND_FULL_NAME,
       TOOL_DOWNLOAD_FILE_FULL_NAME,
       TOOL_UPLOAD_FILE_FULL_NAME,
     ]) {
       expect(names).not.toContain(name);
     }
+  });
+
+  test("with the runtime off, an agent saves, finds, reads, edits and deletes a file", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const agent = await makeAgent({ name: "No Runtime Files Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    // The runtime-off catalog: the file tools are seeded and assignable.
+    await seedAndAssignArchestraTools(agent.id);
+    const project = await ProjectModel.create({
+      organizationId: agent.organizationId,
+      userId: user.id,
+      name: "no-runtime",
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: "no runtime",
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+
+    const saved = await executeArchestraTool(
+      TOOL_SAVE_FILE_FULL_NAME,
+      { filename: "notes.md", content: "draft one" },
+      ctx,
+    );
+    expect(saved.isError, textOf(saved)).toBeFalsy();
+
+    const found = await executeArchestraTool(
+      TOOL_SEARCH_FILES_FULL_NAME,
+      {},
+      ctx,
+    );
+    expect(textOf(found)).toContain("notes.md");
+
+    const edited = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { filename: "notes.md", old_string: "one", new_string: "two" },
+      ctx,
+    );
+    expect(edited.isError, textOf(edited)).toBeFalsy();
+
+    const read = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { filename: "notes.md" },
+      ctx,
+    );
+    expect(textOf(read)).toContain("draft two");
+
+    const deleted = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { filename: "notes.md" },
+      ctx,
+    );
+    expect(deleted.isError, textOf(deleted)).toBeFalsy();
+    expect(
+      await FileModel.listByProject({
+        organizationId: agent.organizationId,
+        projectId: project.id,
+      }),
+    ).toEqual([]);
+  });
+  test("with the runtime off, read_file on a binary file doesn't send the agent to sandbox tools", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const agent = await makeAgent({ name: "No Runtime Binary Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    await seedAndAssignArchestraTools(agent.id);
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      title: "binary",
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+    const saved = await executeArchestraTool(
+      TOOL_SAVE_FILE_FULL_NAME,
+      {
+        filename: "blob.bin",
+        contentBase64: Buffer.from([0, 1, 2, 0, 255]).toString("base64"),
+      },
+      ctx,
+    );
+    expect(saved.isError, textOf(saved)).toBeFalsy();
+
+    const read = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { filename: "blob.bin" },
+      ctx,
+    );
+    expect(read.isError).toBe(true);
+    expect(textOf(read)).toContain("no code sandbox");
+    expect(textOf(read)).not.toContain("upload_file");
+    expect(textOf(read)).not.toContain("run_command");
   });
 });

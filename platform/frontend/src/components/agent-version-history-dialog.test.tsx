@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfile } from "@/lib/agent.query";
@@ -23,7 +23,8 @@ vi.mock("@/lib/agent-version.query", () => ({
 }));
 
 // Monaco needs a real browser layout engine, so both editors stand in as plain
-// nodes that still expose the text each side of the diff was given.
+// nodes that still expose the text each side of the diff was given — and, like
+// Monaco, take keyboard input through a textarea.
 vi.mock("@/components/diff-editor", () => ({
   DiffEditor: ({
     original,
@@ -35,13 +36,17 @@ vi.mock("@/components/diff-editor", () => ({
     <div data-testid="diff">
       <span data-testid="diff-original">{original}</span>
       <span data-testid="diff-modified">{modified}</span>
+      <textarea aria-label="Diff editor input" />
     </div>
   ),
 }));
 
 vi.mock("@/components/editor", () => ({
   Editor: ({ value }: { value: string }) => (
-    <div data-testid="editor">{value}</div>
+    <div data-testid="editor">
+      {value}
+      <textarea aria-label="Editor input" />
+    </div>
   ),
 }));
 
@@ -191,6 +196,18 @@ function mockHeldOverDetails(
   }) as never);
 }
 
+/** A version's row in the commit-graph rail. */
+const railRow = (version: number) =>
+  screen.getByRole("button", { name: new RegExp(`^Version ${version}\\b`) });
+
+/** Whether a rail row wears the `HEAD -> current` ref. */
+const isMarkedHead = (row: HTMLElement) =>
+  within(row).queryByText("HEAD") !== null;
+
+/** The pane's restore button, whichever version it is offering. */
+const restoreButton = () =>
+  screen.getByRole("button", { name: /^Restore v\d+$/ });
+
 function renderDialog({ canModify = true }: { canModify?: boolean } = {}) {
   return render(
     <AgentVersionHistoryDialog
@@ -232,16 +249,15 @@ describe("AgentVersionHistoryDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Version 3" }),
     ).toBeInTheDocument();
-    const headRow = screen.getByRole("button", { name: /v3/ });
-    expect(within(headRow).getByText("Current")).toBeInTheDocument();
+    expect(isMarkedHead(railRow(3))).toBe(true);
+    expect(railRow(3)).toHaveAttribute("aria-current", "true");
+    expect(isMarkedHead(railRow(2))).toBe(false);
   });
 
   it("cannot restore the version the agent is already on", () => {
     renderDialog();
 
-    expect(
-      screen.getByRole("button", { name: "Restore this version" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("trusts the fresh timeline over a stale profile for where the head is", () => {
@@ -251,21 +267,16 @@ describe("AgentVersionHistoryDialog", () => {
     mockAgent({ latestVersion: 2 });
     renderDialog();
 
-    const headRow = screen.getByRole("button", { name: /v3/ });
-    expect(within(headRow).getByText("Current")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Restore this version" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    expect(isMarkedHead(railRow(3))).toBe(true);
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("passes the previewed head to the mutation so a concurrent edit is caught", async () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -285,10 +296,8 @@ describe("AgentVersionHistoryDialog", () => {
     mutateAsync.mockResolvedValue(null);
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
 
     expect(
@@ -305,13 +314,10 @@ describe("AgentVersionHistoryDialog", () => {
     // server refusal that reads as "not found".
     renderDialog({ canModify: false });
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(railRow(2));
 
-    const restoreButton = screen.getByRole("button", {
-      name: "Restore this version",
-    });
-    expect(restoreButton).toHaveAttribute("aria-disabled", "true");
-    await user.hover(restoreButton.parentElement as HTMLElement);
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
+    await user.hover(restoreButton());
     // radix renders the content and a screen-reader copy of it
     expect(
       await screen.findAllByText(
@@ -332,10 +338,8 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
 
     expect(
@@ -361,24 +365,18 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
 
     // The timeline mock is static — it still lists v3 as the newest row,
     // exactly the "before the refetch lands" window this guards.
-    const supersededRow = await screen.findByRole("button", { name: /v3/ });
-    expect(
-      within(supersededRow).queryByText("Current"),
-    ).not.toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Version 4" });
+    expect(isMarkedHead(railRow(3))).toBe(false);
     expect(
       screen.getByRole("heading", { name: "Version 4" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Restore this version" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
   });
 
   it("keeps the first restore's head after a second restore in the same session settles", async () => {
@@ -409,26 +407,26 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
     await screen.findByRole("heading", { name: "Version 4" });
 
     // A second restore, of a version the server refuses — a handled failure,
     // resolving to null rather than throwing.
-    await user.click(screen.getByRole("button", { name: /v1/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(1));
+    await user.click(restoreButton());
     await user.click(screen.getByRole("button", { name: "Restore version 1" }));
 
     // Still the "before the refetch lands" window for both restores: if the
     // head fell back to the stale timeline read once the mutation settled on
     // the second call's null, this row would wear the badge again.
-    const staleHeadRow = await screen.findByRole("button", { name: /v3/ });
-    expect(within(staleHeadRow).queryByText("Current")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Restore version 1" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(isMarkedHead(railRow(3))).toBe(false);
   });
 
   it("explains a pruned predecessor instead of claiming to load it", async () => {
@@ -443,7 +441,7 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(railRow(2));
 
     const changesButton = screen.getByRole("button", { name: "Changes" });
     expect(changesButton).toBeDisabled();
@@ -467,9 +465,8 @@ describe("AgentVersionHistoryDialog", () => {
     renderDialog();
 
     expect(screen.queryByText("Loading version...")).not.toBeInTheDocument();
-    expect(screen.getByText(/Nothing to preview yet/)).toBeInTheDocument();
     expect(
-      screen.getByText(/No versions yet\. The next configuration change/),
+      screen.getByText(/The next configuration change to this agent records/),
     ).toBeInTheDocument();
   });
 
@@ -477,10 +474,8 @@ describe("AgentVersionHistoryDialog", () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
 
     expect(
       screen.getByText(/Version 2's configuration becomes the agent's/),
@@ -504,10 +499,8 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
 
     expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
     expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
@@ -520,10 +513,8 @@ describe("AgentVersionHistoryDialog", () => {
     mockVersionDetails({ 2: versionDetail(2, "hash-two") });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(railRow(2));
+    await user.click(restoreButton());
 
     expect(
       screen.getByRole("button", { name: "Restore version 2" }),
@@ -535,13 +526,10 @@ describe("AgentVersionHistoryDialog", () => {
     mockVersionDetails({ 3: versionDetail(3, "hash-head"), 2: null });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(railRow(2));
 
-    const restoreButton = screen.getByRole("button", {
-      name: "Restore this version",
-    });
-    expect(restoreButton).toHaveAttribute("aria-disabled", "true");
-    await user.hover(restoreButton.parentElement as HTMLElement);
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
+    await user.hover(restoreButton());
     // radix renders the content and a screen-reader copy of it
     expect(
       await screen.findAllByText(
@@ -561,15 +549,13 @@ describe("AgentVersionHistoryDialog", () => {
     );
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(screen.getByRole("button", { name: /v1/ }));
+    await user.click(railRow(2));
+    await user.click(railRow(1));
 
     expect(
       screen.getByRole("heading", { name: "Version 2" }),
     ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
+    await user.click(restoreButton());
     expect(
       screen.getByRole("button", { name: "Restore version 2" }),
     ).toBeInTheDocument();
@@ -586,8 +572,8 @@ describe("AgentVersionHistoryDialog", () => {
     );
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(screen.getByRole("button", { name: /v1/ }));
+    await user.click(railRow(2));
+    await user.click(railRow(1));
 
     const changesButton = screen.getByRole("button", { name: "Changes" });
     expect(changesButton).toBeDisabled();
@@ -600,9 +586,7 @@ describe("AgentVersionHistoryDialog", () => {
   it("stamps each timeline row with the time it was recorded", () => {
     renderDialog();
 
-    expect(screen.getByRole("button", { name: /v3/ }).textContent).toMatch(
-      /\d{2}:\d{2}/,
-    );
+    expect(railRow(3).textContent).toMatch(/\d{2}:\d{2}/);
   });
 
   it("blocks restoring a built-in agent", async () => {
@@ -610,10 +594,112 @@ describe("AgentVersionHistoryDialog", () => {
     mockAgent({ builtIn: true });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(railRow(2));
 
-    expect(
-      screen.getByRole("button", { name: "Restore this version" }),
-    ).toHaveAttribute("aria-disabled", "true");
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
+  });
+
+  describe("keyboard", () => {
+    it("moves to older and newer versions with j and k, and back to HEAD with g", async () => {
+      const user = userEvent.setup();
+      mockVersionDetails({
+        3: versionDetail(3, "hash-head"),
+        2: versionDetail(2, "hash-two"),
+        1: versionDetail(1, "hash-one"),
+      });
+      renderDialog();
+      await user.click(railRow(3));
+
+      await user.keyboard("j");
+      expect(
+        screen.getByRole("heading", { name: "Version 2" }),
+      ).toBeInTheDocument();
+      // Focus travels with the selection, so the next key reads from there.
+      expect(railRow(2)).toHaveFocus();
+
+      await user.keyboard("j");
+      expect(
+        screen.getByRole("heading", { name: "Version 1" }),
+      ).toBeInTheDocument();
+
+      await user.keyboard("k");
+      expect(
+        screen.getByRole("heading", { name: "Version 2" }),
+      ).toBeInTheDocument();
+
+      await user.keyboard("g");
+      expect(
+        screen.getByRole("heading", { name: "Version 3" }),
+      ).toBeInTheDocument();
+    });
+
+    it("pulls the next page when j runs past the oldest loaded version", async () => {
+      const user = userEvent.setup();
+      const fetchNextPage = vi.fn();
+      vi.mocked(useAgentVersions).mockReturnValue({
+        data: { pages: [{ data: [versionRow(3, "hash-head")] }] },
+        isPending: false,
+        isSuccess: true,
+        isError: false,
+        refetch: vi.fn(),
+        hasNextPage: true,
+        isFetchingNextPage: false,
+        fetchNextPage,
+        // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+      } as any);
+      renderDialog();
+      await user.click(railRow(3));
+
+      await user.keyboard("j");
+
+      expect(fetchNextPage).toHaveBeenCalled();
+    });
+
+    it("ignores shortcuts typed into an editor", async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      // v3 rewrote the prompt, so the pane opens on its diff.
+      await user.click(
+        screen.getByRole("textbox", { name: "Diff editor input" }),
+      );
+      await user.keyboard("j");
+
+      expect(
+        screen.getByRole("heading", { name: "Version 3" }),
+      ).toBeInTheDocument();
+    });
+
+    it("asks to restore with r, and ignores shortcuts while the confirmation is open", async () => {
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(railRow(2));
+
+      await user.keyboard("r");
+      const confirmation = screen.getByRole("dialog", {
+        name: /Restore version 2/,
+      });
+
+      // `j` from inside the confirmation would otherwise bubble through the
+      // React tree and move the selection behind it.
+      await user.keyboard("j");
+
+      expect(confirmation).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Version 2", hidden: true }),
+      ).toBeInTheDocument();
+    });
+
+    it("does not offer r on the version the agent is already on", async () => {
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(railRow(3));
+
+      await user.keyboard("r");
+
+      expect(
+        screen.queryByRole("dialog", { name: /Restore version/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

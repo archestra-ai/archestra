@@ -3,9 +3,11 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
   ApiError,
+  type McpCredentialBlocker,
   type RuntimeCredentialConnectionScope,
   type RuntimeCredentialDefinition,
 } from "@/types";
@@ -54,6 +56,15 @@ export class CredentialResolutionBatch {
         keys: params.credentialIds,
       }),
     );
+  }
+
+  has(credentialId: string): boolean {
+    return this.definitions.has(credentialId);
+  }
+
+  /** The credential's display name, falling back to its key. */
+  name(credentialId: string): string {
+    return this.definitions.get(credentialId)?.name ?? credentialId;
   }
 
   resolve(params: Parameters<typeof resolveCredential>[0]) {
@@ -130,13 +141,135 @@ export async function resolveMcpCredentials(
     else if (binding.required)
       throw new ApiError(
         400,
-        `Connect the credential for ${binding.key} in Settings → Credentials before installing this server`,
+        describeMcpCredentialBlocker(
+          await blockerForMissingValue({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            batch,
+            binding: { ...binding, credentialId: binding.credentialId, scope },
+          }),
+        ),
       );
   }
   return { values, expiresAt };
 }
 
+/**
+ * What would stop {@link resolveMcpCredentials} for this caller, found before
+ * they press Install, so the dialog can say so instead of failing after.
+ */
+export async function preflightMcpCredentials(params: {
+  organizationId: string;
+  userId: string;
+  installationScope: string;
+  environment: Parameters<typeof resolveMcpCredentialValues>[0]["environment"];
+}): Promise<McpCredentialBlocker[]> {
+  const bindings = params.environment.flatMap((binding) =>
+    binding.credentialId && binding.credentialScope && binding.required
+      ? [
+          {
+            ...binding,
+            credentialId: binding.credentialId,
+            scope: binding.credentialScope,
+          },
+        ]
+      : [],
+  );
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: bindings.map((binding) => binding.credentialId),
+  });
+  const blockers: McpCredentialBlocker[] = [];
+  for (const binding of bindings) {
+    if (
+      binding.scope === "personal" &&
+      params.installationScope !== "personal"
+    ) {
+      blockers.push({
+        envKey: binding.key,
+        credentialId: binding.credentialId,
+        credentialName: batch.name(binding.credentialId),
+        reason: "personal_only",
+      });
+      continue;
+    }
+    const value = await batch
+      .resolve({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        scope: binding.scope,
+        credentialId: binding.credentialId,
+      })
+      .then(
+        (credential) => credential?.value ?? null,
+        () => null,
+      );
+    if (!value)
+      blockers.push(
+        await blockerForMissingValue({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          batch,
+          binding,
+        }),
+      );
+  }
+  return blockers;
+}
+
 // === internals ===
+/** The sentence an install refusal shows for one blocker. */
+function describeMcpCredentialBlocker(blocker: McpCredentialBlocker): string {
+  const name = `"${blocker.credentialName}"`;
+  switch (blocker.reason) {
+    case "no_access":
+      return `This server needs the ${name} credential, and you don't have access to it. Ask an admin to share it with you.`;
+    case "not_connected":
+      return `This server needs your value for the ${name} credential. Add it in Credentials, then install again.`;
+    case "not_set_up":
+      return `This server needs the ${name} credential, which isn't set up for the organization yet. Ask an admin to set it up.`;
+    case "personal_only":
+      return `This server needs each person's own ${name} credential, so you can only install it for yourself.`;
+  }
+}
+
+/**
+ * Why a binding resolved to nothing. A personal value is the caller's to add
+ * only when they may use the credential; an organization value is an admin's.
+ */
+async function blockerForMissingValue(params: {
+  organizationId: string;
+  userId: string | null;
+  batch: CredentialResolutionBatch;
+  binding: {
+    key: string;
+    credentialId: string;
+    scope: "personal" | "organization";
+  };
+}): Promise<McpCredentialBlocker> {
+  const { binding } = params;
+  const blocker = {
+    envKey: binding.key,
+    credentialId: binding.credentialId,
+    credentialName: params.batch.name(binding.credentialId),
+  };
+  if (
+    binding.scope === "organization" ||
+    !params.userId ||
+    !params.batch.has(binding.credentialId)
+  )
+    return { ...blocker, reason: "not_set_up" };
+  const usable = await CredentialAccess.usableKeys({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    keys: [binding.credentialId],
+  });
+  return {
+    ...blocker,
+    reason: usable.has(binding.credentialId) ? "not_connected" : "no_access",
+  };
+}
+
 async function resolveDefinedCredential(
   params: Parameters<typeof resolveCredential>[0],
   definition: RuntimeCredentialDefinition | null,

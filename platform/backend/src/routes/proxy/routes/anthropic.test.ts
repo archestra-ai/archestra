@@ -26,6 +26,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
@@ -38,6 +39,7 @@ import {
 import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
@@ -209,6 +211,7 @@ describe("Anthropic anthropic-beta forwarding", () => {
         url: `/v1/anthropic/${agentId}/v1/messages`,
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           "content-type": "application/json",
           authorization: "Bearer test-key",
           "anthropic-version": "2023-06-01",
@@ -257,7 +260,11 @@ describe("Anthropic cost tracking", () => {
     vi.restoreAllMocks();
   });
 
-  test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
+  test("stores cost and baselineCost in interaction", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -276,6 +283,12 @@ describe("Anthropic cost tracking", () => {
     });
 
     const agent = await makeAgent({ name: "Test Cost Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -283,6 +296,7 @@ describe("Anthropic cost tracking", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -329,6 +343,8 @@ describe("Anthropic streaming mode", () => {
 
   test("streaming mode completes normally and records interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -348,6 +364,12 @@ describe("Anthropic streaming mode", () => {
     });
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const { InteractionModel } = await import("@/models");
 
@@ -361,6 +383,7 @@ describe("Anthropic streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -401,7 +424,7 @@ describe("Anthropic streaming mode", () => {
 
   test("streaming mode interrupted still records interaction", {
     timeout: 10000,
-  }, async ({ makeAgent }) => {
+  }, async ({ makeAgent, makeMember, makeUser }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -425,6 +448,12 @@ describe("Anthropic streaming mode", () => {
     const agent = await makeAgent({
       name: "Test Interrupted Streaming Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const { InteractionModel } = await import("@/models");
 
@@ -438,6 +467,7 @@ describe("Anthropic streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -552,6 +582,8 @@ describe("Anthropic virtual key auth", () => {
 });
 
 describe("Anthropic Claude Code requests", () => {
+  let platformCredential: string;
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -599,6 +631,7 @@ describe("Anthropic Claude Code requests", () => {
         "anthropic-beta":
           "claude-code-20250219,mid-conversation-system-2026-04-07,interleaved-thinking-2025-05-14",
         "x-api-key": "test-anthropic-key",
+        "x-archestra-virtual-key": platformCredential,
       },
       payload: {
         model: "claude-opus-4-20250514",
@@ -613,12 +646,20 @@ describe("Anthropic Claude Code requests", () => {
   // accept them and forward them upstream unchanged.
   test("accepts and forwards mid-conversation system messages", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured = captureUpstreamParams();
     const app = await buildApp();
 
     try {
       const agent = await makeAgent({ name: "System Role Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
       const systemMessage = {
         role: "system",
         content: "SessionStart:startup hook success: OK",
@@ -654,12 +695,20 @@ describe("Anthropic Claude Code requests", () => {
   // thinking signature in particular is required on replay).
   test("accepts and forwards thinking, server-tool and unknown content blocks", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured = captureUpstreamParams();
     const app = await buildApp();
 
     try {
       const agent = await makeAgent({ name: "Thinking Blocks Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
       const assistantMessage = {
         role: "assistant",
         content: [
@@ -700,12 +749,20 @@ describe("Anthropic Claude Code requests", () => {
   // and stops sending it for the rest of the conversation.
   test("accepts and forwards Claude Code's thinking display mode", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured = captureUpstreamParams();
     const app = await buildApp();
 
     try {
       const agent = await makeAgent({ name: "Thinking Display Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
       const thinking = { type: "adaptive", display: "updates" };
 
       const response = await injectMessages(app, agent.id, {
@@ -740,6 +797,8 @@ describe("Anthropic tool call accumulation", () => {
 
   test("accumulates tool call input without [object Object] bug", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -761,6 +820,12 @@ describe("Anthropic tool call accumulation", () => {
     });
 
     const agent = await makeAgent({ name: "Test Tool Call Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -768,6 +833,7 @@ describe("Anthropic tool call accumulation", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -800,6 +866,8 @@ describe("Anthropic tool call accumulation", () => {
 
   test("accepts document content blocks in request payloads", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -808,6 +876,12 @@ describe("Anthropic tool call accumulation", () => {
     await app.register(anthropicProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Document Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -815,6 +889,7 @@ describe("Anthropic tool call accumulation", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "anthropic-beta": "pdfs-2024-09-25",
@@ -1003,8 +1078,19 @@ describe("Anthropic count_tokens passthrough", () => {
   const PROXY_ID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
   let upstream: FastifyInstance;
   let forwardedBodies: string[];
+  let agentId: string;
+  let passthroughToken: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    // The catch-all resolves the agent in the URL, so it must exist.
+    const agent = await makeAgent({ name: "count_tokens passthrough" });
+    agentId = agent.id;
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     forwardedBodies = [];
     upstream = Fastify();
     upstream.addContentTypeParser(
@@ -1035,11 +1121,12 @@ describe("Anthropic count_tokens passthrough", () => {
     try {
       return await app.inject({
         method: "POST",
-        url: `/v1/anthropic/${PROXY_ID}/v1/messages/count_tokens`,
+        url: `/v1/anthropic/${agentId}/v1/messages/count_tokens`,
         headers: {
           "content-type": "application/json",
           "anthropic-version": "2023-06-01",
           "x-api-key": "test-anthropic-key",
+          "x-archestra-virtual-key": passthroughToken,
         },
         payload,
       });
@@ -1384,6 +1471,8 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
 
   test("two sequential requests delta-encode on write and reconstruct on read", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -1402,11 +1491,18 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
     });
 
     const agent = await makeAgent({ name: "Test Delta Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const sessionUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
     const userId = `user_test_account_1_session_${sessionUuid}`;
     const headers = {
       "content-type": "application/json",
       authorization: "Bearer test-key",
+      "x-archestra-virtual-key": platformCredential,
       "user-agent": "test-client",
       "anthropic-version": "2023-06-01",
       "x-api-key": "test-anthropic-key",
@@ -1476,6 +1572,7 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
 });
 
 describe("Anthropic input-token fallback", () => {
+  let platformCredential: string;
   let stubOptions: {
     zeroInputTokens?: boolean;
     zeroOutputTokens?: boolean;
@@ -1518,6 +1615,7 @@ describe("Anthropic input-token fallback", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -1543,9 +1641,17 @@ describe("Anthropic input-token fallback", () => {
 
   test("non-streaming: zero provider input tokens are replaced by an estimate", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     const agent = await makeAgent({ name: "Zero Input NonStreaming" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1559,9 +1665,17 @@ describe("Anthropic input-token fallback", () => {
 
   test("streaming: zero provider input tokens are replaced by an estimate", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     const agent = await makeAgent({ name: "Zero Input Streaming" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id, { stream: true });
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1575,8 +1689,16 @@ describe("Anthropic input-token fallback", () => {
 
   test("provider-reported input tokens are recorded as measured, not estimated", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const agent = await makeAgent({ name: "Measured Input" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1587,10 +1709,18 @@ describe("Anthropic input-token fallback", () => {
 
   test("zero input with zero output is not estimated (no output to corroborate)", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     stubOptions.zeroOutputTokens = true;
     const agent = await makeAgent({ name: "Zero Input Zero Output" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1601,10 +1731,18 @@ describe("Anthropic input-token fallback", () => {
 
   test("zero input with cache-read tokens is not estimated (legitimately cached)", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     stubOptions.cacheReadInputTokens = 2000;
     const agent = await makeAgent({ name: "Zero Input Cached" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 

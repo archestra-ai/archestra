@@ -1,33 +1,26 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   BatteryCharging,
   ExternalLink,
-  Eye,
-  GitPullRequestArrow,
   KeyRound,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
-  Trash2,
   Unlink,
-  Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FileDropInput } from "@/components/files/file-drop-input";
 import {
   CollectionFilters,
   FilterBar,
@@ -41,16 +34,12 @@ import {
   runtimeCredentialIconOf,
 } from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -63,11 +52,17 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import {
   useMcpServers,
   useReloadMcpServerTools,
@@ -77,22 +72,18 @@ import {
   type BatterySummary,
   batteryMatchesQueryKey,
   type PolicyBattery,
-  type PolicyDeclarations,
-  useAcceptHeldPull,
   useBatteries,
   useBatteryMatches,
   useCreateBatteryInstall,
   useDeleteBatteryInstall,
-  useDeleteBatteryPackage,
   usePolicyDeclarations,
   useRemoveBatteryInclude,
   useSetCredentialBinding,
-  useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
-import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
+  useCanUseEveryCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -102,40 +93,23 @@ import {
 } from "./battery-credentials";
 import { BatteryIcon, type CatalogEntry } from "./battery-icon";
 import {
-  BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
-  type BatteryStatusGroup,
+  BATTERY_TABLE_STATUS,
+  type EnforcedStatus,
 } from "./battery-status";
+import { batteryStatusHint, batteryTableStatus } from "./battery-table-status";
+import { enforcedStatus } from "./composition-view";
+import { DialogSection } from "./dialog-section";
 import {
   GithubManagedPolicyNotice,
   githubPolicyFileUrl,
 } from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
-type BatteryStatus = PolicyBattery["status"];
-
-const SOURCE_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All sources" },
-  { value: "bundled", label: "Bundled" },
-  { value: "upload", label: "Uploaded" },
-];
-
 const STATUS_OPTIONS = [
   { value: DEFAULT_FILTER_ALL, label: "All statuses" },
   ...BATTERY_STATUS_GROUPS,
 ];
-
-/**
- * Which status group a row falls in: included and enforced cleanly, included
- * with a problem, not included and fitting a server, or not included.
- */
-function statusGroup(
-  status: BatteryStatus | null,
-  fits: boolean,
-): BatteryStatusGroup {
-  if (status === null) return fits ? "fits" : "other";
-  return BATTERY_STATUS[status].severity === "ok" ? "active" : "broken";
-}
 
 /** A URL value the select offers, else every row: a stale link shows the table. */
 const knownFilter = (
@@ -151,47 +125,31 @@ const knownFilter = (
  * battery list is a read of the document, not of a table: an entry is included
  * because a line spells it, and every control here edits that line.
  */
-export function BatteriesUploadAction() {
-  const pathname = usePathname();
-  const declarations = usePolicyDeclarations();
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
-  const [uploading, setUploading] = useState(false);
-  if (
-    pathname !== "/openappa/batteries" ||
-    !canBind ||
-    declarations.data?.managedInGithub
-  )
-    return null;
-  return (
-    <>
-      <Button size="sm" onClick={() => setUploading(true)}>
-        <Upload className="size-4" />
-        <span>Upload package</span>
-      </Button>
-      {uploading && <UploadPackageDialog onOpenChange={setUploading} />}
-    </>
-  );
-}
-
 export function BatteriesPanel() {
   const declarations = usePolicyDeclarations();
   const batteries = useBatteries();
+  // Battery matching reads each entry's server URL and image, which only the
+  // full catalog carries.
   const catalog = useInternalMcpCatalog();
-  const servers = useMcpServers();
-  // The batteries that fit a server, as the overview counts them.
-  const summary = useCoverageSummary();
+  // Which entries are installed: every visible install's catalog id is in the
+  // registry's issue index. Without the right to list installs the answer is
+  // unknown (undefined), as it was when the server list was not loaded.
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+  const { data: issueIndex } = useMcpRegistryIssueIndex({
+    enabled: !!canReadInstallations,
+  });
+  const servers = {
+    data: canReadInstallations ? issueIndex?.servers : undefined,
+  };
   const { data: canManage } = useHasPermissions({
-    openappaPolicy: ["update"],
+    guardrailsPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
-  // package may carry such code, so both take the credential permission too.
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
+  // package may carry such code, so both take Can use on every credential too.
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canManage === true && canUseEveryCredential === true;
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,
@@ -201,33 +159,22 @@ export function BatteriesPanel() {
     setPagination,
   } = useDataTableQueryParams();
   const search = searchParams.get("search") ?? "";
-  const sourceFilter = knownFilter(SOURCE_OPTIONS, searchParams.get("source"));
   const statusFilter = knownFilter(STATUS_OPTIONS, searchParams.get("status"));
   // `?battery=<name>` opens that battery, so other pages can link to it.
   const [editing, setEditing] = useState<string | null>(
     searchParams.get("battery"),
   );
   const [removing, setRemoving] = useState<string | null>(null);
-  const [deletingPackage, setDeletingPackage] = useState<BatterySummary | null>(
-    null,
-  );
-  const setFilter = (name: "source" | "status", value: string) =>
+  const setFilter = (name: "status", value: string) =>
     updateQueryParams({
       [name]: value === DEFAULT_FILTER_ALL ? null : value,
       page: "1",
     });
   const clearFilters = () =>
-    updateQueryParams({ search: null, source: null, status: null, page: "1" });
+    updateQueryParams({ search: null, status: null, page: "1" });
   const hasActiveFilters =
-    !!search.trim() ||
-    sourceFilter !== DEFAULT_FILTER_ALL ||
-    statusFilter !== DEFAULT_FILTER_ALL;
-  const needsFit = statusFilter === "fits" || statusFilter === "other";
-  if (
-    declarations.isPending ||
-    batteries.isPending ||
-    (needsFit && summary.isPending)
-  )
+    !!search.trim() || statusFilter !== DEFAULT_FILTER_ALL;
+  if (declarations.isPending || batteries.isPending)
     return <Skeleton className="h-32 w-full" />;
   if (!declarations.data || !batteries.data)
     return (
@@ -239,11 +186,10 @@ export function BatteriesPanel() {
         }}
       />
     );
-  const { lastError, managedInGithub, heldPull } = declarations.data;
-  const included = declarations.data.batteries;
-  // A composition that failed is not what the runtime enforces, whatever each
-  // entry resolved to, so no entry may claim to be active.
-  const enforced = lastError === null;
+  const policy = declarations.data;
+  const { managedInGithub } = policy;
+  const included = policy.batteries;
+  const statusOf = (entry: PolicyBattery) => enforcedStatus(policy, entry);
   // The repository owns the text while it syncs: an edit here would be undone
   // by the next pull, so the panel only reads it. Bindings live beside the
   // text, so they stay open.
@@ -258,32 +204,17 @@ export function BatteriesPanel() {
   const installedCatalogIds = servers.data
     ? new Set(servers.data.map((server) => server.catalogId))
     : null;
-  const includedHashes = new Set(
-    included
-      .map((battery) => battery.packageHash)
-      .filter((hash): hash is string => hash !== null),
-  );
+  // One row per battery that exists. An entry naming no battery is an error in
+  // the policy text, which the Policy page marks on its line.
   const rows: BatteryTableRow[] = batteries.data.map((summary) => ({
     name: summary.name,
     summary,
     included: included.find((entry) => entry.name === summary.name) ?? null,
   }));
-  for (const entry of included) {
-    if (!rows.some((row) => row.name === entry.name))
-      rows.push({ name: entry.name, summary: null, included: entry });
-  }
-  const fitting = new Set(
-    summary.data?.batteries.available.map((battery) => battery.name),
-  );
   // Read from the rows each render, so the open dialog follows every write.
   const editingRow = rows.find((row) => row.name === editing) ?? null;
   const query = search.trim().toLowerCase();
   const filteredRows = rows.filter((row) => {
-    const status = row.included
-      ? enforced
-        ? row.included.status
-        : "refused"
-      : null;
     return (
       (!query ||
         [
@@ -291,10 +222,9 @@ export function BatteriesPanel() {
           row.summary?.description ?? "",
           ...(row.summary?.namespaces ?? []),
         ].some((value) => value.toLowerCase().includes(query))) &&
-      (sourceFilter === DEFAULT_FILTER_ALL ||
-        (row.included?.source ?? row.summary?.source) === sourceFilter) &&
       (statusFilter === DEFAULT_FILTER_ALL ||
-        statusGroup(status, fitting.has(row.name)) === statusFilter)
+        BATTERY_TABLE_STATUS[batteryTableStatus(row.included)].group ===
+          statusFilter)
     );
   });
   const columns: ColumnDef<BatteryTableRow>[] = [
@@ -313,77 +243,37 @@ export function BatteriesPanel() {
       ),
     },
     {
-      id: "source",
-      header: "Source",
-      size: 130,
-      cell: ({ row }) => (
-        <Badge variant="outline">{sourceLabel(row.original)}</Badge>
-      ),
-    },
-    {
       id: "status",
       header: "Status",
-      size: 160,
-      cell: ({ row }) => {
-        const entry = row.original.included;
-        if (!entry)
-          return (
-            <span className="text-muted-foreground">
-              {fitting.has(row.original.name)
-                ? "Fits your servers"
-                : "Available"}
-            </span>
-          );
-        const status = enforced ? entry.status : "refused";
-        const badge = batteryStatusBadge(status);
-        return <Badge variant={badge.variant}>{badge.label}</Badge>;
-      },
-    },
-    {
-      id: "servers",
-      header: "Servers",
-      size: 110,
-      cell: ({ row }) => row.original.included?.servers.length ?? 0,
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      size: 96,
+      size: 220,
       cell: ({ row }) => (
-        <BatteryRowActions
-          row={row.original}
-          writable={writable}
-          onEdit={() => setEditing(row.original.name)}
-          onRemove={() => setRemoving(row.original.name)}
-          onDelete={() =>
-            row.original.summary && setDeletingPackage(row.original.summary)
-          }
-          packageIncluded={
-            row.original.summary?.contentHash !== null &&
-            row.original.summary?.contentHash !== undefined &&
-            includedHashes.has(row.original.summary.contentHash)
-          }
+        <BatteryStatusCell
+          battery={row.original.included}
+          catalogName={catalogName}
         />
       ),
     },
+    // A read-only reader opens a battery by clicking its row: no action is left.
+    ...(writable
+      ? [
+          {
+            id: "actions",
+            header: "Actions",
+            size: 96,
+            cell: ({ row }: { row: { original: BatteryTableRow } }) => (
+              <BatteryRowActions
+                row={row.original}
+                onEdit={() => setEditing(row.original.name)}
+                onRemove={() => setRemoving(row.original.name)}
+              />
+            ),
+          } satisfies ColumnDef<BatteryTableRow>,
+        ]
+      : []),
   ];
   return (
     <section aria-label="OpenAPPA batteries" className="space-y-4">
-      {lastError !== null && (
-        <InlineNotice variant="error">
-          <AlertTriangle />
-          <span className="font-medium">Batteries are not enforced</span>
-          <InlineNoticeText>{lastError}</InlineNoticeText>
-        </InlineNotice>
-      )}
       {managedInGithub && <GithubManagedPolicyNotice />}
-      {heldPull !== null && (
-        <HeldPullNotice
-          heldPull={heldPull}
-          canManage={canManage === true}
-          canBind={canBind === true}
-        />
-      )}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
@@ -405,13 +295,6 @@ export function BatteriesPanel() {
             />
           }
         >
-          <FilterSelect
-            value={sourceFilter}
-            showSearch={false}
-            onValueChange={(value) => setFilter("source", value)}
-            placeholder="Filter by source"
-            items={SOURCE_OPTIONS}
-          />
           <FilterSelect
             value={statusFilter}
             showSearch={false}
@@ -438,7 +321,7 @@ export function BatteriesPanel() {
           </Button>
         }
         filteredEmptyMessage="No batteries match your filters"
-        fixedWidthColumnIds={["source", "status", "servers", "actions"]}
+        fixedWidthColumnIds={["status", "actions"]}
         flexibleColumnIds={["name"]}
         onRowClick={(row, event) =>
           openRowOnPlainClick(event, () => setEditing(row.name))
@@ -455,7 +338,7 @@ export function BatteriesPanel() {
             variables: editingRow.summary?.credentials ?? [],
           })}
           catalogName={catalogName}
-          enforced={enforced}
+          status={editingRow.included ? statusOf(editingRow.included) : null}
           writable={writable}
           bindable={bindable}
           managedInGithub={managedInGithub}
@@ -470,12 +353,6 @@ export function BatteriesPanel() {
         <RemoveBatteryDialog
           name={removing}
           onClose={() => setRemoving(null)}
-        />
-      )}
-      {deletingPackage && (
-        <DeleteBatteryPackageDialog
-          battery={deletingPackage}
-          onClose={() => setDeletingPackage(null)}
         />
       )}
       {declarations.data.unusedAliases.length > 0 && (
@@ -508,46 +385,34 @@ type BatteryTableRow = {
   included: PolicyBattery | null;
 };
 
-const UNBOUND = "__unbound__";
-
-function HeldPullNotice({
-  heldPull,
-  canManage,
-  canBind,
+/** A row's status badge; a problem status says on hover what it means. */
+function BatteryStatusCell({
+  battery,
+  catalogName,
 }: {
-  heldPull: NonNullable<PolicyDeclarations["heldPull"]>;
-  canManage: boolean;
-  canBind: boolean;
+  battery: PolicyBattery | null;
+  catalogName: (catalogId: string) => string;
 }) {
-  const accept = useAcceptHeldPull();
-  // Publishing the held text performs what it was held for: dropping an entry
-  // is a policy edit, rebinding a variable hands a credential to other code.
-  const mayAccept = heldPull.reasons.includes("changes_credentials")
-    ? canBind
-    : canManage;
+  const status = batteryTableStatus(battery);
+  const { label, group } = BATTERY_TABLE_STATUS[status];
+  if (status === "not_configured")
+    return <span className="text-muted-foreground">{label}</span>;
+  const badge = (
+    <Badge variant={group === "attention" ? "destructive" : "secondary"}>
+      {label}
+    </Badge>
+  );
+  const hint = batteryStatusHint({ battery, catalogName });
+  if (!hint) return badge;
   return (
-    <InlineNotice variant="warning">
-      <GitPullRequestArrow />
-      <span className="font-medium">Repository text held</span>
-      <InlineNoticeText>
-        {heldPull.reasons.map((reason) => (
-          <div key={reason}>{HELD_PULL_REASONS[reason]}</div>
-        ))}
-      </InlineNoticeText>
-      {mayAccept && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          disabled={accept.isPending}
-          onClick={() => accept.mutate()}
-        >
-          <span>Accept repository text</span>
-        </Button>
-      )}
-    </InlineNotice>
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent className="max-w-72">{hint}</TooltipContent>
+    </Tooltip>
   );
 }
+
+const UNBOUND = "__unbound__";
 
 /** A row's mark, as the shared battery icon resolves it. */
 function RowBatteryIcon({
@@ -569,14 +434,6 @@ function RowBatteryIcon({
   );
 }
 
-function sourceLabel(row: BatteryTableRow) {
-  return row.included?.source === "upload"
-    ? `Upload ${row.included.packageHash?.slice(0, 12) ?? "unknown"}`
-    : row.summary?.source === "upload"
-      ? "Upload"
-      : "Bundled";
-}
-
 /**
  * Everything one battery lets you change, in one place: where it applies and
  * which keys its helpers read. Each action writes directly to the policy.
@@ -587,7 +444,7 @@ function BatteryDialog({
   installedCatalogIds,
   credentials,
   catalogName,
-  enforced,
+  status,
   writable,
   bindable,
   managedInGithub,
@@ -598,7 +455,8 @@ function BatteryDialog({
   installedCatalogIds: Set<string> | null;
   credentials: BatteryCredential[];
   catalogName: (catalogId: string) => string;
-  enforced: boolean;
+  /** How the enforced composition holds it; null when it is not included. */
+  status: EnforcedStatus | null;
   writable: boolean;
   bindable: boolean;
   managedInGithub: boolean;
@@ -613,7 +471,6 @@ function BatteryDialog({
     create.isPending || bind.isPending || detach.isPending || remove.isPending;
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
-  const status = included ? (enforced ? included.status : "refused") : null;
   const badge = status ? batteryStatusBadge(status) : null;
   const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
@@ -640,14 +497,10 @@ function BatteryDialog({
           )}
         </span>
       }
-      description={
-        <span
-          className="line-clamp-1"
-          title={summary?.description ?? undefined}
-        >
-          {[sourceLabel(row), summary?.description].filter(Boolean).join(" · ")}
-        </span>
-      }
+      description={summary?.description}
+      // The title row is left-aligned (icon, name, badge), so the copy under
+      // it is too, at every width.
+      headerClassName="text-left"
       bodyClassName="space-y-6"
       footer={<DialogCancelButton>Close</DialogCancelButton>}
     >
@@ -696,7 +549,11 @@ function BatteryDialog({
       ) : (
         <DialogSection
           title="Servers"
-          description="Its rules check tool calls on these servers."
+          description={
+            writable && servers.length === 1
+              ? "Its rules check tool calls on these servers. Detaching the last one also removes the battery from the policy."
+              : "Its rules check tool calls on these servers."
+          }
         >
           {servers.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
@@ -742,12 +599,6 @@ function BatteryDialog({
               })}
             </ul>
           )}
-          {writable && servers.length === 1 && (
-            <p className="text-xs text-muted-foreground">
-              Detaching the last server also removes the battery from the
-              policy.
-            </p>
-          )}
           {writable && summary && (
             <AttachServerPicker
               batteryName={summary.name}
@@ -781,33 +632,6 @@ function BatteryDialog({
   );
 }
 
-function DialogSection({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-label={title} className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="text-sm font-medium">{title}</h3>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 /** One server in the battery's list and the tools it governs. */
 function ServerRow({
   catalogEntry,
@@ -829,16 +653,20 @@ function ServerRow({
           size={16}
         />
       ) : null}
-      <span className="font-medium">{name}</span>
-      <span
-        className={cn(
-          "truncate text-xs text-muted-foreground",
-          detail.endsWith("__*") && "font-mono",
-        )}
-      >
-        {detail}
+      {/* Name over the tool pattern, so neither squeezes the other or the
+          action on a narrow dialog. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{name}</span>
+        <span
+          className={cn(
+            "block truncate text-xs text-muted-foreground",
+            detail.endsWith("__*") && "font-mono",
+          )}
+        >
+          {detail}
+        </span>
       </span>
-      {action && <div className="ml-auto shrink-0">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </li>
   );
 }
@@ -985,6 +813,7 @@ function CredentialsSection({
   pending: boolean;
 }) {
   const { data: canRead } = useHasPermissions({ credential: ["read"] });
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const listable = canRead === true;
   const available = useRuntimeCredentials(listable);
   const { refetch } = available;
@@ -1000,16 +829,20 @@ function CredentialsSection({
       title="Credentials"
       description={
         bindable
-          ? "Which saved credential fills each key this battery's helpers read."
+          ? credentials.length === 1
+            ? "This battery needs an API token. Choose a saved credential for it."
+            : "This battery needs API tokens. Choose a saved credential for each one."
           : "Changing a key takes permission to update guardrails and credentials."
       }
       action={
-        <Button asChild variant="link" size="sm" className="h-auto p-0">
-          <Link href="/settings/credentials" target="_blank" rel="noreferrer">
-            <span>Manage credentials</span>
-            <ExternalLink className="size-3.5" />
-          </Link>
-        </Button>
+        canSeeSettings ? (
+          <Button asChild variant="link" size="sm" className="h-auto p-0">
+            <Link href="/settings/credentials" target="_blank" rel="noreferrer">
+              <span>Manage credentials</span>
+              <ExternalLink className="size-3.5" />
+            </Link>
+          </Button>
+        ) : null
       }
     >
       {bindable && available.isSuccess && options.length === 0 && (
@@ -1095,7 +928,7 @@ function CredentialRow({
           position="popper"
           className="w-[var(--radix-select-trigger-width)]"
         >
-          <SelectItem value={UNBOUND}>Not bound</SelectItem>
+          <SelectItem value={UNBOUND}>Not set</SelectItem>
           {unlisted !== null && (
             <SelectItem
               value={unlisted}
@@ -1172,7 +1005,7 @@ function CredentialRow({
 /** The synced policy file on GitHub, when the sync names one. */
 function PolicyFileLink() {
   const { data } = useAppaGithubSync();
-  const href = githubPolicyFileUrl(data?.source, "blob");
+  const href = githubPolicyFileUrl(data, "blob");
   if (!href) return null;
   return (
     <a
@@ -1208,38 +1041,26 @@ function CredentialOptionLabel({
 
 function BatteryRowActions({
   row,
-  writable,
-  packageIncluded,
   onEdit,
   onRemove,
-  onDelete,
 }: {
   row: BatteryTableRow;
-  writable: boolean;
-  packageIncluded: boolean;
   onEdit: () => void;
   onRemove: () => void;
-  onDelete: () => void;
 }) {
   return (
     <RowClickShield>
       <TableRowActions
         itemName={row.name}
         actions={[
-          writable
-            ? {
-                icon: <Pencil className="size-4" />,
-                label: "Edit",
-                onClick: onEdit,
-              }
-            : {
-                icon: <Eye className="size-4" />,
-                label: "View",
-                onClick: onEdit,
-              },
+          {
+            icon: <Pencil className="size-4" />,
+            label: "Edit",
+            onClick: onEdit,
+          },
         ]}
-        dropdownActions={[
-          ...(writable && row.included
+        dropdownActions={
+          row.included
             ? [
                 {
                   icon: <Unlink className="size-4" />,
@@ -1248,20 +1069,8 @@ function BatteryRowActions({
                   variant: "destructive" as const,
                 },
               ]
-            : []),
-          ...(writable && row.summary?.source === "upload"
-            ? [
-                {
-                  icon: <Trash2 className="size-4" />,
-                  label: "Delete package",
-                  onClick: onDelete,
-                  disabled: packageIncluded,
-                  disabledTooltip: "Included by the policy",
-                  variant: "destructive" as const,
-                },
-              ]
-            : []),
-        ]}
+            : []
+        }
       />
     </RowClickShield>
   );
@@ -1299,31 +1108,6 @@ function RemoveBatteryDialog({
   );
 }
 
-function DeleteBatteryPackageDialog({
-  battery,
-  onClose,
-}: {
-  battery: BatterySummary;
-  onClose: () => void;
-}) {
-  const remove = useDeleteBatteryPackage();
-  return (
-    <DeleteConfirmDialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title={`Delete the ${battery.name} package?`}
-      description="The policy can no longer include this version of the battery."
-      isPending={remove.isPending}
-      onConfirm={async () => {
-        if (battery.contentHash) await remove.mutateAsync(battery.contentHash);
-        onClose();
-      }}
-    />
-  );
-}
-
 /**
  * Re-discover the tools of the picked server, which is what gives an alias a
  * target. The reload endpoint takes an install, not the catalog entry: the
@@ -1332,7 +1116,8 @@ function DeleteBatteryPackageDialog({
  */
 function SyncToolsButton({ catalogId }: { catalogId: string }) {
   const client = useQueryClient();
-  const servers = useMcpServers();
+  // Only this entry's installs, without agents.
+  const servers = useMcpServers({ includeAssignedAgents: false, catalogId });
   const reload = useReloadMcpServerTools();
   const target = (servers.data ?? [])
     .filter((server) => server.catalogId === catalogId)
@@ -1372,116 +1157,5 @@ function SyncToolsButton({ catalogId }: { catalogId: string }) {
       )}
       <span>Sync tools</span>
     </PermissionButton>
-  );
-}
-
-function UploadPackageDialog({
-  onOpenChange,
-}: {
-  onOpenChange: (open: boolean) => void;
-}) {
-  const upload = useUploadBatteryPackage();
-  const [name, setName] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  return (
-    <StandardFormDialog
-      open
-      onOpenChange={onOpenChange}
-      isDirty={name.trim().length > 0 || files.length > 0}
-      title="Upload a battery package"
-      description={
-        <span>
-          Pick the package folder: its manifest, policy and helper scripts.{" "}
-          <a
-            href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 underline underline-offset-4"
-          >
-            <span>About batteries</span>
-            <ExternalLink className="size-3.5" />
-          </a>
-        </span>
-      }
-      size="medium"
-      bodyClassName="space-y-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        upload.mutate(
-          { name: name.trim(), files: await readPackage(files) },
-          { onSuccess: () => onOpenChange(false) },
-        );
-      }}
-      footer={
-        <>
-          <DialogCancelButton disabled={upload.isPending} />
-          <Button
-            type="submit"
-            disabled={upload.isPending || files.length === 0}
-          >
-            <span>{upload.isPending ? "Uploading…" : "Upload"}</span>
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-2">
-        <Label htmlFor="battery-package-name">Name</Label>
-        <Input
-          id="battery-package-name"
-          value={name}
-          required
-          pattern="[a-z0-9][a-z0-9\-]*"
-          placeholder="my-battery"
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="battery-package-files">Package folder</Label>
-        <FileDropInput
-          directory
-          inputId="battery-package-files"
-          inputLabel="Package folder"
-          typesLabel="Select the whole package directory."
-          onFiles={setFiles}
-        />
-        {files.length > 0 && (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p>{files.length} files selected</p>
-            <ul className="max-h-24 overflow-auto font-mono">
-              {files.slice(0, 5).map((file) => (
-                <li key={file.webkitRelativePath || file.name}>
-                  {file.webkitRelativePath || file.name}
-                </li>
-              ))}
-            </ul>
-            {files.length > 5 && <p>And {files.length - 5} more files</p>}
-          </div>
-        )}
-      </div>
-    </StandardFormDialog>
-  );
-}
-
-const HELD_PULL_REASONS: Record<
-  NonNullable<PolicyDeclarations["heldPull"]>["reasons"][number],
-  string
-> = {
-  drops_batteries:
-    "The repository text drops batteries this deployment declared",
-  changes_credentials:
-    "The repository text changes which credentials batteries read",
-};
-
-/** Package files keyed by their path inside the picked folder. */
-async function readPackage(files: File[]) {
-  const paths = files.map((file) => file.webkitRelativePath || file.name);
-  const slash = paths[0]?.indexOf("/") ?? -1;
-  const root = slash === -1 ? "" : (paths[0]?.slice(0, slash + 1) ?? "");
-  const shared = root !== "" && paths.every((path) => path.startsWith(root));
-  return Promise.all(
-    files.map(async (file, index) => ({
-      path: shared ? paths[index].slice(root.length) : paths[index],
-      text: await file.text(),
-    })),
   );
 }

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { cookies } from "next/headers";
 import { PublicEnvScript } from "next-runtime-env";
+import { AppInteractiveMarker } from "./_parts/app-interactive-marker";
 import { AppShell } from "./_parts/app-shell";
 import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
@@ -13,10 +15,18 @@ import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
+import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
+import { prefetchShellSeed } from "@/lib/auth/shell-seed.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
-import { getDeploymentFavicon } from "@/lib/favicon.server";
+import {
+  getCachedDeploymentAppearance,
+  themeClassName,
+} from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT } from "@/lib/site-notification-dismissal";
+import { getThemeFontPreload } from "@/lib/theme-font.server";
+import { RESTORE_REMEMBERED_THEME_SCRIPT } from "@/lib/theme-storage";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -36,17 +46,39 @@ const latoFont = localFont({
   preload: false,
 });
 
-// The default theme's font, so most pages need it on first paint.
+// The default theme's font. Not preloaded here: the layout preloads the
+// active theme's font instead (see getThemeFontPreload).
 const geistFont = localFont({
   src: "../fonts/Geist-Variable.woff2",
   variable: "--font-geist",
   weight: "100 900",
   display: "swap",
+  preload: false,
+});
+
+// Inter in two faces: a small latin subset that latin text needs, and the
+// full file, which the browser fetches only for characters outside that
+// range. globals.css joins them into --font-inter.
+const interLatinFont = localFont({
+  src: "../fonts/Inter-Variable-latin.woff2",
+  variable: "--font-inter-latin",
+  weight: "100 900",
+  display: "swap",
+  preload: false,
+  adjustFontFallback: false,
+  // The ranges the subset file holds (fonts/Inter-Variable-latin.woff2).
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
 });
 
 const interFont = localFont({
   src: "../fonts/Inter-Variable.woff2",
-  variable: "--font-inter",
+  variable: "--font-inter-full",
   weight: "100 900",
   display: "swap",
   preload: false,
@@ -230,16 +262,38 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const favicon = await getDeploymentFavicon();
+  const [{ favicon, theme, themeFont }, cookieStore, shellSeed] =
+    await Promise.all([
+      getCachedDeploymentAppearance().then(async (appearance) => ({
+        ...appearance,
+        // Looked up as soon as the theme is known, beside the other reads.
+        themeFont: await getThemeFontPreload(appearance.theme),
+      })),
+      cookies(),
+      prefetchShellSeed(),
+    ]);
+  // Presence only; nothing is fetched for it. See WithAuthCheck.
+  const sessionCookie = hasSessionCookie(cookieStore);
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
+      className={`${latoFont.variable} ${geistFont.variable} ${interLatinFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable} ${themeClassName(theme)}`}
     >
       <head>
         <link rel="describedby" href="/llms.txt" type="text/plain" />
+        {/* The active theme's font: otherwise the browser finds it only
+            once the stylesheet applies, late in the first paint. */}
+        {themeFont && (
+          <link
+            rel="preload"
+            as="font"
+            type="font/woff2"
+            href={themeFont}
+            crossOrigin="anonymous"
+          />
+        )}
         <PublicEnvScript />
         {favicon.version && (
           <link
@@ -256,11 +310,15 @@ export default async function RootLayout({
           data-favicon-version={favicon.version ?? "default"}
         />
         {favicon.version && <script>{ACTIVATE_FAVICON_SCRIPT}</script>}
+        {!theme && <script>{RESTORE_REMEMBERED_THEME_SCRIPT}</script>}
+        {/* A server-rendered page has the active site notification in its
+            HTML; hide it before the first paint if this browser dismissed it. */}
+        <script>{HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT}</script>
       </head>
       <body className="font-sans antialiased">
         <VisualViewportHeight />
         <MswInit>
-          <ArchestraQueryClientProvider>
+          <ArchestraQueryClientProvider shellSeed={shellSeed}>
             <ChatProvider>
               <ThemeProvider
                 attribute="class"
@@ -272,7 +330,7 @@ export default async function RootLayout({
                   <PageTitleProvider>
                     <OrgThemeLoader />
                     <DynamicHead />
-                    <WithAuthCheck>
+                    <WithAuthCheck hasSessionCookie={sessionCookie}>
                       <WebsocketInitializer />
                       <RumTracker />
                       <ListReturnUrlTracker />
@@ -286,6 +344,7 @@ export default async function RootLayout({
             </ChatProvider>
           </ArchestraQueryClientProvider>
         </MswInit>
+        <AppInteractiveMarker />
       </body>
     </html>
   );

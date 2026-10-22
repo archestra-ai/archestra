@@ -4,10 +4,20 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  availableLlmProviderApiKeysQueryKey as availableKeysQueryKey,
+  llmProviderApiKeysQueryKey,
+} from "@/lib/llm-provider-api-keys-query-keys";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -40,6 +50,8 @@ type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
    */
   toastOnError?: boolean;
 };
+type AvailableLlmProviderApiKeys =
+  archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"];
 type AvailableLlmProviderApiKeysParams =
   Partial<AvailableLlmProviderApiKeysQuery> & {
     enabled?: boolean;
@@ -58,7 +70,7 @@ const {
 } = archestraApiSdk;
 
 export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
-  const search = params?.search;
+  const search = params?.search?.trim() || undefined;
   const provider = params?.provider;
   const labels = params?.labels;
   const access = params?.access;
@@ -73,12 +85,12 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
       : [];
 
   return useQuery({
-    queryKey: ["llm-provider-api-keys", search, provider, ...filters],
+    queryKey: llmProviderApiKeysQueryKey(search, provider, filters),
     queryFn: async () => {
       const { data, error } = await getLlmProviderApiKeys({
         query: {
           provider: provider || undefined,
-          search: search || undefined,
+          search,
           labels: labels || undefined,
           access,
           sharedWith,
@@ -113,11 +125,13 @@ export function useLlmProviderApiKey(id: string | undefined) {
 }
 
 /**
- * Whether the user has any usable LLM provider key — the same check the new
- * chat screen uses to choose between the composer and the "Add an LLM Provider
- * Key" prompt. System keys for keyless providers (Vertex AI Gemini, vLLM,
- * Ollama) count, since they surface as keys here. Gated on the read permissions
- * the underlying query needs, so a user lacking them doesn't trigger a 403.
+ * Whether the user can see any LLM provider key, which decides between the
+ * projects list and the "Add an LLM Provider Key" prompt. A key shared
+ * read-only counts: a project's agent may bring its own key, which works
+ * through that agent, and a project composer with no usable key says so
+ * itself. System keys for keyless providers (Vertex AI Gemini, vLLM, Ollama)
+ * count, since they surface as keys here. Gated on the read permissions the
+ * underlying query needs, so a user lacking them doesn't trigger a 403.
  */
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;
@@ -157,10 +171,32 @@ export function useAvailableLlmProviderApiKeys(
   const provider = params?.provider;
   const includeKeyId = params?.includeKeyId;
   const toastOnError = params?.toastOnError;
+  const client = useQueryClient();
+  // With `includeKeyId`, the server adds that key to the same list only when
+  // the list lacks it. When the plain list already holds it, both answers are
+  // the same list: reuse it rather than ask for it again.
+  const listedWithKey = () =>
+    includeKeyId
+      ? listingWithKey(
+          client.getQueryState<AvailableLlmProviderApiKeys>(
+            availableKeysQueryKey(provider, undefined),
+          ),
+          includeKeyId,
+        )
+      : undefined;
 
   return useQuery({
-    queryKey: ["available-llm-provider-api-keys", provider, includeKeyId],
-    queryFn: async () => {
+    queryKey: availableKeysQueryKey(provider, includeKeyId),
+    initialData: () => listedWithKey()?.data,
+    initialDataUpdatedAt: () => listedWithKey()?.dataUpdatedAt,
+    queryFn: async ({ client }) => {
+      if (includeKeyId) {
+        const listed = await inFlightQueryData<AvailableLlmProviderApiKeys>(
+          client,
+          availableKeysQueryKey(provider, undefined),
+        );
+        if (listed?.some((key) => key.id === includeKeyId)) return listed;
+      }
       const query: Partial<AvailableLlmProviderApiKeysQuery> = {};
       if (provider) {
         query.provider = provider;
@@ -177,6 +213,19 @@ export function useAvailableLlmProviderApiKeys(
     },
     enabled: params?.enabled,
   });
+}
+
+/**
+ * The viewer's only usable key, when the cached list of usable keys holds
+ * exactly one; otherwise undefined.
+ */
+export function soleAvailableLlmProviderApiKeyId(
+  client: QueryClient,
+): string | undefined {
+  const keys = client.getQueryData<AvailableLlmProviderApiKeys>(
+    availableKeysQueryKey(undefined, undefined),
+  );
+  return keys?.length === 1 ? keys[0].id : undefined;
 }
 
 export function useCreateLlmProviderApiKey() {
@@ -284,7 +333,9 @@ export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    // A subscription is disconnected rather than deleted, so the toast names
+    // what the user just did.
+    mutationFn: async ({ id }: { id: string; subscription: boolean }) => {
       const { data: responseData, error } = await deleteLlmProviderApiKey({
         path: { id },
       });
@@ -294,17 +345,26 @@ export function useDeleteLlmProviderApiKey() {
       }
       return responseData;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { subscription }) => {
       if (!data) {
         return;
       }
-      toast.success("API key deleted successfully");
+      toast.success(
+        subscription
+          ? "Subscription disconnected"
+          : "API key deleted successfully",
+      );
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
@@ -331,6 +391,22 @@ export function useBulkDeleteLlmProviderApiKeys() {
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
+}
+
+// ===
+
+function listingWithKey(
+  state:
+    | { data?: AvailableLlmProviderApiKeys; dataUpdatedAt: number }
+    | undefined,
+  keyId: string,
+) {
+  return state?.data?.some((key) => key.id === keyId) ? state : undefined;
 }

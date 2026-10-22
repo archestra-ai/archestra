@@ -34,6 +34,13 @@ describe("config routes", () => {
     await app.register(configRoutes);
   });
 
+  test("advertises plugins with beta disabled", async () => {
+    config.beta = false;
+    const response = await app.inject({ method: "GET", url: "/api/config" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().features.plugins).toBe(true);
+  });
+
   afterEach(async () => {
     await app.close();
   });
@@ -58,7 +65,6 @@ describe("config routes", () => {
       maintenanceMode: null,
       siteNotificationMessage: null,
       enterpriseCoreActive: expect.any(Boolean),
-      mcpSandboxDomain: null,
       analytics: {
         enabled: expect.any(Boolean),
         instanceId: expect.any(String),

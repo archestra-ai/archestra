@@ -34,6 +34,7 @@ import {
 } from "@/knowledge-base";
 import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
 import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
+import { getConnector } from "@/knowledge-base/connectors/registry";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
   deleteConnector,
@@ -43,6 +44,7 @@ import {
   mfilesAuthMethodGateViolation,
   mfilesConnectorGateViolation,
 } from "@/knowledge-base/mfiles-gates";
+import { salesforceAuthPolicyViolation } from "@/knowledge-base/salesforce-auth-policy";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -1087,6 +1089,22 @@ async function handleCreateKnowledgeConnector(params: {
       return errorResult(hiddenTypeViolation);
     }
 
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: args.connector_type,
+      nextConfig: { type: args.connector_type, ...args.config },
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (args.connector_type === "salesforce") {
+      const validation = await getConnector("salesforce").validateConfig({
+        type: args.connector_type,
+        ...args.config,
+      });
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
+    }
+
     // Environment isolation: a connector created through a gateway belongs to the
     // gateway's environment, so the creator can actually use it afterwards.
     const agentEnvironmentId = await AgentModel.findEnvironmentId(
@@ -1320,6 +1338,22 @@ async function handleUpdateKnowledgeConnector(params: {
     });
     if (mfilesAuthViolation) {
       return errorResult(mfilesAuthViolation);
+    }
+
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: existingConnector.connectorType,
+      nextConfig: updates.config,
+      existingConfig: existingConnector.config,
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (existingConnector.connectorType === "salesforce" && updates.config) {
+      const validation = await getConnector("salesforce").validateConfig(
+        updates.config,
+      );
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
     }
 
     const connector = await KnowledgeBaseConnectorModel.update(

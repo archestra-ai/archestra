@@ -16,7 +16,7 @@ import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-claude-code",
+  "../../../../docker_images/agent/bin/archestra-claude-code",
 );
 
 describe("Claude Code image entrypoint", () => {
@@ -420,6 +420,124 @@ fi
           ).toBe(finalText);
         }
       }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    ["subagent", "one_shot"],
+    ["workflow", "one_shot"],
+    ["subagent", "interactive"],
+  ] as const)("keeps the run open while a background %s runs in %s mode", async (type, mode) => {
+    const root = await mkdtemp(path.join(tmpdir(), "claude-background-"));
+    try {
+      const entrypoint = await makeFastImageEntrypoint(
+        root,
+        "archestra-claude-code",
+      );
+      const bin = path.join(root, "bin");
+      const runtime = path.join(root, "runtime");
+      await mkdir(bin);
+      await mkdir(runtime);
+      // A marker left by a killed run must not hold a later turn.
+      await writeFile(path.join(runtime, "turn-waiting-background"), "");
+      await writeExecutable(
+        path.join(bin, "archestra-agent-attention"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention"
+`,
+      );
+      await writeExecutable(
+        path.join(bin, "claude"),
+        `#!/bin/sh
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "--settings" ]; then settings="$argument"; fi
+  previous="$argument"
+done
+stop_hook="$(jq -r '.hooks.Stop[0].hooks[0].command' "$settings")"
+attention_hook="$(jq -r '.hooks.Notification[0].hooks[0].command' "$settings")"
+held="$ARCHESTRA_AGENT_RUNTIME_DIR/held"
+printf '%s' "$TEST_WAITING_PAYLOAD" | "$stop_hook" >/dev/null
+for marker in turn-complete final-answer.txt; do
+  if [ -e "$ARCHESTRA_AGENT_RUNTIME_DIR/$marker" ]; then echo "$marker" >> "$held"; fi
+done
+: > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention"
+printf '%s' '{"hook_event_name":"Notification","notification_type":"idle_prompt"}' | "$attention_hook"
+cp "$ARCHESTRA_AGENT_RUNTIME_DIR/attention" "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-while-waiting"
+printf '%s' "$TEST_DONE_PAYLOAD" | "$stop_hook" >/dev/null
+if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "interactive" ]; then exit 0; fi
+trap 'exit 0' TERM
+while :; do sleep 0.1; done
+`,
+      );
+      const shell = {
+        id: "shell-1",
+        type: "shell",
+        status: "running",
+        description: "Watch the logs",
+      };
+      const result = await execFileAsync("bash", [entrypoint], {
+        cwd: root,
+        timeout: 15000,
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: root,
+          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+          ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+          ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
+          ARCHESTRA_AGENT_RUNTIME_TASK: "Example task",
+          ARCHESTRA_AGENT_RUNTIME_TASK_ID: "test-task",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/example",
+          ARCHESTRA_MCP_GATEWAY_TOKEN: "example-gateway-token",
+          TEST_WAITING_PAYLOAD: JSON.stringify({
+            hook_event_name: "Stop",
+            last_assistant_message: "Waiting for the background agent.",
+            background_tasks: [
+              {
+                id: "agent-1",
+                type,
+                status: "running",
+                description: "Review the change",
+              },
+              shell,
+            ],
+          }),
+          TEST_DONE_PAYLOAD: JSON.stringify({
+            hook_event_name: "Stop",
+            last_assistant_message: "All agents reported.",
+            background_tasks: [shell],
+          }),
+        },
+      });
+      const attention = await readFile(
+        path.join(runtime, "attention-while-waiting"),
+        "utf8",
+      );
+      if (mode === "interactive") {
+        // Interactive turns never complete the run, and an idle session waits
+        // for a person.
+        expect(attention.trim()).toBe("set Waiting for input");
+        for (const file of ["turn-complete", "final-answer.txt", "held"]) {
+          await expect(
+            readFile(path.join(runtime, file)),
+          ).rejects.toMatchObject({ code: "ENOENT" });
+        }
+        return;
+      }
+      await expect(readFile(path.join(runtime, "held"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      expect(attention.trim()).toBe("clear");
+      const answer = result.stdout
+        .split("===ARCHESTRA-FINAL-ANSWER===\n")[1]
+        ?.split("\n===ARCHESTRA-FINAL-ANSWER-END===")[0];
+      expect(answer?.trim()).toBe("All agents reported.");
+      await expect(
+        readFile(path.join(runtime, "turn-waiting-background")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

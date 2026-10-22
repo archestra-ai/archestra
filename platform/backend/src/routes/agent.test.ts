@@ -145,6 +145,79 @@ describe("agent routes", () => {
     expect(emptyResponse.json().pagination.total).toBe(0);
   });
 
+  test("includeTools=false lists the agents without their tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, name: "Picker Agent" });
+    const tool = await makeTool({ name: "picker_tool", parameters: {} });
+    await makeAgentTool(agent.id, tool.id);
+    const toolsOf = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Picker%20Agent${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .data.map((listed: { tools: Array<{ id: string }> }) =>
+          listed.tools.map((ref) => ref.id),
+        );
+    };
+
+    expect(await toolsOf("")).toEqual([expect.arrayContaining([tool.id])]);
+    expect(await toolsOf("&includeTools=false")).toEqual([[]]);
+  });
+
+  test("lists tool and subagent counts with or without the tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Counted Gateway",
+      agentType: "mcp_gateway",
+    });
+    const subagent = await makeAgent({
+      organizationId,
+      name: "Counted Helper",
+    });
+    for (const name of ["counted_one", "counted_two"]) {
+      const tool = await makeTool({ name, parameters: {} });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+    await AgentToolModel.assignDelegation({
+      agentId: gateway.id,
+      targetAgentId: subagent.id,
+    });
+    const listed = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Counted%20Gateway&agentTypes=mcp_gateway${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = response.json().data;
+      return {
+        toolsCount: row.toolsCount,
+        subagentsCount: row.subagentsCount,
+        tools: row.tools.length,
+      };
+    };
+
+    expect(await listed("")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 3,
+    });
+    expect(await listed("&includeTools=false")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 0,
+    });
+  });
+
   async function expectAgentTypeSoftDelete(
     agentType: "mcp_gateway",
     makeAgent: (overrides: {
@@ -197,13 +270,13 @@ describe("agent routes", () => {
 
     const allResponse = await app.inject({
       method: "GET",
-      url: `/api/agents/all?agentType=${agentType}`,
+      url: `/api/agents?agentType=${agentType}`,
     });
     expect(allResponse.statusCode).toBe(200);
     expect(
       allResponse
         .json()
-        .some((agent: { id: string }) => agent.id === created.id),
+        .data.some((agent: { id: string }) => agent.id === created.id),
     ).toBe(false);
   }
 
@@ -834,6 +907,38 @@ describe("agent routes", () => {
       expect(agent.name).toBe(updatedName);
     });
 
+    test("keeps the last value when a label key repeats", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Labels ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          labels: [
+            { key: "env", value: "dev" },
+            { key: "env", value: "prod" },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .labels.map(({ key, value }: { key: string; value: string }) => ({
+            key,
+            value,
+          })),
+      ).toEqual([{ key: "env", value: "prod" }]);
+    });
+
     test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to a built-in", async ({
       makeAgent,
     }) => {
@@ -943,7 +1048,10 @@ describe("agent routes", () => {
         authorId: user.id,
         agentType: "agent",
       });
-      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+      await AgentToolModel.assignDelegation({
+        agentId: sourceAgent.id,
+        targetAgentId: targetAgent.id,
+      });
 
       const response = await app.inject({
         method: "PUT",
@@ -1159,13 +1267,13 @@ describe("agent routes", () => {
 
       const allResponse = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents",
       });
       expect(allResponse.statusCode).toBe(200);
       expect(
         allResponse
           .json()
-          .some((agent: { id: string }) => agent.id === created.id),
+          .data.some((agent: { id: string }) => agent.id === created.id),
       ).toBe(false);
     });
 
@@ -1492,6 +1600,28 @@ describe("agent routes", () => {
       expect(result.data[0].name).toContain(suffix);
     });
 
+    test("matches name search wildcards literally", async ({ makeAgent }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      for (const name of [`${suffix}_a`, `${suffix}Xa`, `${suffix}%b`]) {
+        await makeAgent({ name, organizationId, authorId: user.id });
+      }
+
+      const cases: Array<[query: string, expected: string[]]> = [
+        [`${suffix}_a`, [`${suffix}_a`]],
+        [`${suffix}%`, [`${suffix}%b`]],
+      ];
+      for (const [query, expected] of cases) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=10&offset=0&name=${encodeURIComponent(query)}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(
+          response.json().data.map((agent: { name: string }) => agent.name),
+        ).toEqual(expected);
+      }
+    });
+
     test("should return personal agent first in paginated list", async ({
       makeAgent,
     }) => {
@@ -1751,143 +1881,36 @@ describe("agent routes", () => {
     });
   });
 
-  describe("GET /api/agents/all", () => {
-    test("embeds tools as slim refs without parameter schemas", async ({
+  describe("GET /api/agents", () => {
+    test("returns the full agent row, icon and system prompt included", async ({
       makeAgent,
-      makeTool,
-      makeAgentTool,
     }) => {
+      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
+      const systemPrompt = "Follow the configured operating instructions.";
       const agent = await makeAgent({
-        name: `Tool Ref Agent ${crypto.randomUUID().slice(0, 8)}`,
+        name: `Full Row Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
         authorId: user.id,
+        icon: embeddedIcon,
+        systemPrompt,
       });
-      const tool = await makeTool({
-        parameters: {
-          type: "object",
-          properties: { q: { type: "string", description: "query" } },
-        },
-      });
-      await makeAgentTool(agent.id, tool.id);
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: `/api/agents?ids=${agent.id}`,
       });
 
       expect(response.statusCode).toBe(200);
       const returned = response
         .json()
-        .find((a: { id: string }) => a.id === agent.id);
-      expect(returned).toBeDefined();
-      expect(returned.tools).toHaveLength(1);
-      expect(returned.tools[0]).toMatchObject({
-        id: tool.id,
-        name: tool.name,
-        rawName: tool.rawName,
-        catalogId: tool.catalogId,
-        delegateToAgentId: null,
-        description: tool.description,
-      });
-      // The whole point of the slim ref: no parameter JSON schemas or policy
-      // bookkeeping duplicated into every agent list response.
-      expect(returned.tools[0]).not.toHaveProperty("parameters");
-      expect(returned.tools[0]).not.toHaveProperty(
-        "policiesAutoConfiguredReasoning",
-      );
-      expect(returned.tools[0]).not.toHaveProperty("meta");
-    });
-
-    test("leaves the tools off when the caller asks for the roster alone", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Even as slim refs the tools carry a name and a description each, which
-      // on a real organization is the great majority of this response — and the
-      // new-chat screen, whose first paint waits on this list, draws none of
-      // them. Callers opt out; every other caller keeps today's response.
-      const agent = await makeAgent({
-        name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
-      });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-
-      const findAgent = async (query: string) => {
-        const response = await app.inject({
-          method: "GET",
-          url: `/api/agents/all?excludeBuiltIn=true${query}`,
-        });
-        expect(response.statusCode).toBe(200);
-        return response.json().find((a: { id: string }) => a.id === agent.id);
-      };
-
-      const withoutTools = await findAgent("&includeTools=false");
-      expect(withoutTools).toBeDefined();
-      expect(withoutTools.name).toBe(agent.name);
-      expect(withoutTools.tools).toEqual([]);
-
-      // Opting out is the only thing that drops them.
-      expect((await findAgent("")).tools).toHaveLength(1);
-      expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
-    });
-
-    test("returns a compact roster for chat without changing the default response", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
-      const systemPrompt = "Follow the configured operating instructions.";
-      const agent = await makeAgent({
-        name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
+        .data.find((a: { id: string }) => a.id === agent.id);
+      expect(returned).toMatchObject({
         icon: embeddedIcon,
         systemPrompt,
       });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-
-      const chatResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true&view=chat",
-      });
-
-      expect(chatResponse.statusCode).toBe(200);
-      const chatAgent = chatResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(chatAgent).toMatchObject({
-        id: agent.id,
-        name: agent.name,
-        icon: null,
-        systemPrompt: null,
-        tools: [],
-        teams: [],
-        users: [],
-        labels: [],
-      });
-
-      const defaultResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
-      });
-
-      expect(defaultResponse.statusCode).toBe(200);
-      const fullAgent = defaultResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(fullAgent).toMatchObject({
-        icon: embeddedIcon,
-        systemPrompt,
-      });
-      expect(fullAgent.tools).toHaveLength(1);
     });
 
-    test("should exclude built-in agents when excludeBuiltIn=true", async ({
+    test("should exclude built-in agents by default", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1901,11 +1924,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: "/api/agents",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -1915,7 +1938,7 @@ describe("agent routes", () => {
       expect(builtInAgents).toHaveLength(0);
     });
 
-    test("should include built-in agents when excludeBuiltIn is not set", async ({
+    test("should include built-in agents when includeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1939,11 +1962,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents?includeBuiltIn=true",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -1951,6 +1974,44 @@ describe("agent routes", () => {
         (a: { builtInAgentConfig?: unknown }) => a.builtInAgentConfig != null,
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("GET /api/agents/chat-roster", () => {
+    test("lists and resolves another member's personal agent for an admin, never another organization's", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const personal = await makeAgent({
+        organizationId,
+        authorId: owner.id,
+        agentType: "agent",
+        access: "personal",
+      });
+      const otherOrganization = await makeOrganization();
+      const outside = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: owner.id,
+        agentType: "agent",
+      });
+      const roster = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      const retained = await app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster?ids=${personal.id},${outside.id}`,
+      });
+      expect(roster.statusCode).toBe(200);
+      expect(retained.statusCode).toBe(200);
+      const rosterIds = roster.json().map((row: { id: string }) => row.id);
+      expect(rosterIds).toContain(personal.id);
+      expect(rosterIds).not.toContain(outside.id);
+      expect(retained.json().map((row: { id: string }) => row.id)).toEqual([
+        personal.id,
+      ]);
     });
   });
 
@@ -2121,11 +2182,11 @@ describe("agent routes", () => {
         paginated.json().data.some((a: { id: string }) => a.id === proxy.id),
       ).toBe(false);
 
-      const all = await app.inject({ method: "GET", url: "/api/agents/all" });
+      const all = await app.inject({ method: "GET", url: "/api/agents" });
       expect(all.statusCode).toBe(200);
-      expect(all.json().some((a: { id: string }) => a.id === proxy.id)).toBe(
-        false,
-      );
+      expect(
+        all.json().data.some((a: { id: string }) => a.id === proxy.id),
+      ).toBe(false);
     });
   });
 

@@ -1,6 +1,8 @@
 import {
   CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { CODEX_GUARD_CLIENT } from "../guard/clients";
@@ -15,6 +17,7 @@ import {
 import type {
   AgentEnding,
   SetupScriptContext,
+  SetupScriptMcpSection,
   SetupScriptProxySection,
   ShellAgentSetup,
 } from "../types";
@@ -31,6 +34,18 @@ import type {
  */
 function tomlBasicString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Header Codex 0.162.1 writes for `codex mcp add`. A name of letters, digits,
+ * `_`, and `-` stays a bare key (`[mcp_servers.my-gateway]`). Anything else it
+ * accepts (`.`, `:`, `@`, `/`) is a basic string (`[mcp_servers."gw.with.dots"]`).
+ * `mcp add` inserts that table among existing `mcp_servers` entries, not at
+ * the end of the file.
+ */
+function codexMcpServerHeader(serverName: string): string {
+  const bare = /^[A-Za-z0-9_-]+$/.test(serverName);
+  return `[mcp_servers.${bare ? serverName : tomlBasicString(serverName)}]`;
 }
 
 /**
@@ -51,6 +66,34 @@ function codexAttributionHeaderLines(proxy: SetupScriptProxySection): string {
     );
   }
   return lines.join("\n");
+}
+
+const CODEX_HELPER_APPROVALS_NOTICE =
+  "Codex can call the guardrail helpers without asking each time. Required human reviews still apply.";
+
+/**
+ * Codex asks before each call of an MCP tool that config.toml does not
+ * approve, and one call that needs a person's approval runs the guardrail
+ * helpers several times. Connect approves these helpers, as it does for Claude
+ * Code; other gateway tools keep Codex's question. The tables sit under the
+ * gateway's own entry, the way Codex's "Always allow" writes them, so
+ * `codex mcp remove` drops them with it and a rerun writes them once.
+ *
+ * `required = true` is inserted into that same server table, immediately
+ * after the header `codex mcp add` wrote. Appending it would land in whatever
+ * table is still open at the end of the file. Codex 0.99 and newer then wait
+ * before `codex exec`'s first request, and that command stops if the gateway
+ * cannot connect. Older Codex ignores the key.
+ *
+ * @public — asserted by the setup script unit tests, which knip --production ignores.
+ */
+export function codexHelperApprovalTables(mcp: SetupScriptMcpSection): string {
+  return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME]
+    .map(
+      (name) =>
+        `[mcp_servers.${tomlBasicString(mcp.serverName)}.tools.${tomlBasicString(`${mcp.toolPrefix}${name}`)}]\napproval_mode = "approve"`,
+    )
+    .join("\n\n");
 }
 
 function codexBashSections(ctx: SetupScriptContext): string[] {
@@ -75,7 +118,26 @@ fi`);
       .join("\n");
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
-cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
+cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}
+umask 077
+arch_header=${sh(codexMcpServerHeader(ctx.mcp.serverName))}
+awk -v header="$arch_header" '
+  $0 == header { found++; print; if (found == 1) pending=1; next }
+  pending && $0 == "required = true" { pending=0 }
+  pending { print "required = true"; pending=0 }
+  { print }
+  END { if (pending) print "required = true"; if (found != 1) exit 1 }
+' "$CONFIG" > "$CONFIG.archestra-required" || {
+  rm -f "$CONFIG.archestra-required"
+  err "Could not mark the gateway required. Codex did not write the expected gateway entry."
+  exit 1
+}
+mv -f "$CONFIG.archestra-required" "$CONFIG"
+cat >> "$CONFIG" <<'ARCHESTRA_TOML'
+
+${codexHelperApprovalTables(ctx.mcp)}
+ARCHESTRA_TOML
+ok ${sh(CODEX_HELPER_APPROVALS_NOTICE)}`);
   }
 
   if (ctx.proxy) {
@@ -97,9 +159,11 @@ mkdir -p "$(dirname "$CONFIG")"
 umask 077
 if [ -f "$CONFIG" ]; then
   # Drop the previous managed block and any top-level provider selection.
-  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
+  # Keep a table that Codex itself added inside the block.
+  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v own=${sh(`[model_providers.${ctx.proxy.proxyName}]`)} -v own_headers=${sh(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
+    skip && /^\\[/ && $0 != own && $0 != own_headers {skip=0}
     !skip {
       if ($0 ~ /^\\[/) in_table=1
       if (!in_table && $0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
@@ -135,9 +199,13 @@ echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
   warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
 fi`;
     });
+    // Each setup gets a new clone URL, and Codex refuses to add a marketplace
+    // name again from a different source. Remove the earlier registration
+    // first; plugins installed from it stay installed.
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  err "Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
+cli codex plugin marketplace remove ${sh(ctx.skills.marketplaceName)} >/dev/null 2>&1 || true
+if ! cli_redacted codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+  err "Marketplace registration failed. Review the Git error above. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
   exit 1
 fi
 ${installs.join("\n")}`);
@@ -172,7 +240,31 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
     sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
-if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
+$arch_header = ${psq(codexMcpServerHeader(ctx.mcp.serverName))}
+$arch_lines = @(Get-Content -Path $arch_config)
+$arch_found = 0
+$arch_next = New-Object System.Collections.Generic.List[string]
+$arch_insert = $false
+foreach ($arch_line in $arch_lines) {
+  if ($arch_insert) {
+    if ($arch_line -ne 'required = true') { $arch_next.Add('required = true') }
+    $arch_insert = $false
+  }
+  $arch_next.Add($arch_line)
+  if ($arch_line -ceq $arch_header) {
+    $arch_found++
+    if ($arch_found -eq 1) { $arch_insert = $true }
+  }
+}
+if ($arch_insert) { $arch_next.Add('required = true') }
+if ($arch_found -ne 1) { throw 'Could not mark the gateway required. Codex did not write the expected gateway entry.' }
+Set-Content -Path $arch_config -Encoding utf8 -Value $arch_next
+Add-Content -Path $arch_config -Encoding utf8 -Value @'
+
+${codexHelperApprovalTables(ctx.mcp)}
+'@
+Ok ${psq(CODEX_HELPER_APPROVALS_NOTICE)}`);
   }
 
   if (ctx.proxy) {
@@ -196,11 +288,14 @@ if (Test-Path $arch_config) {
   # Drop any previous archestra-managed block for this provider (idempotent).
   $arch_start = ${psq(`# >>> ${marker} >>>`)}
   $arch_end = ${psq(`# <<< ${marker} <<<`)}
+  $arch_own = @(${psq(`[model_providers.${ctx.proxy.proxyName}]`)}, ${psq(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)})
   $arch_skip = $false
   $arch_in_table = $false
   foreach ($arch_line in (Get-Content -Path $arch_config)) {
     if ($arch_line -eq $arch_start) { $arch_skip = $true; continue }
     if ($arch_line -eq $arch_end) { $arch_skip = $false; continue }
+    # Keep a table that Codex itself added inside the block.
+    if ($arch_skip -and $arch_line -match '^\\[' -and $arch_own -notcontains $arch_line) { $arch_skip = $false }
     if ($arch_skip) { continue }
     if ($arch_line -match '^\\[') { $arch_in_table = $true }
     if (-not $arch_in_table -and $arch_line -match '^\\s*model_provider\\s*=') { continue }
@@ -234,9 +329,11 @@ Write-Host 'Codex uses your existing ChatGPT or OpenAI API-key login.'`
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)} }`;
       })
       .join("\n");
+    // Remove the earlier registration first, as in the bash script.
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
+try { codex plugin marketplace remove ${psq(ctx.skills.marketplaceName)} 2>$null | Out-Null } catch { }
+Invoke-ArchRedacted { codex plugin marketplace add ${psq(ctx.skills.cloneUrl)} }
+if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
 ${pluginInstalls}`);
   }
 

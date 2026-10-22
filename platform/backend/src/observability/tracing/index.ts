@@ -37,6 +37,7 @@ export {
   ATTR_MCP_BLOCKED,
   ATTR_MCP_BLOCKED_REASON,
   ATTR_MCP_IS_ERROR_RESULT,
+  ATTR_MCP_METHOD_NAME,
   ATTR_MCP_SERVER_NAME,
   // Attribute constants
   ATTR_ROUTE_CATEGORY,
@@ -60,4 +61,8 @@ export {
 } from "./attributes";
 export { startActiveChatSpan } from "./chat";
 export { startActiveLlmSpan } from "./llm";
-export { recordBlockedToolSpans, startActiveMcpSpan } from "./mcp";
+export {
+  recordBlockedToolSpans,
+  setMcpMethodOnRequestSpans,
+  startActiveMcpSpan,
+} from "./mcp";

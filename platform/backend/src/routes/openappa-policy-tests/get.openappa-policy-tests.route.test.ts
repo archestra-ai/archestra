@@ -101,6 +101,65 @@ describe("Git policy test loading", () => {
       files: [{ path: "traces/read.appa", content }],
     });
   });
+  // Every Guardrails overview load used to list the directory and fetch each
+  // file from GitHub, then take the policy lock to cache what it fetched.
+  test("serves the cached copy while the source commit stands and refetches when it moves", async () => {
+    const finishAt = async (sourceCommit: string) => {
+      const source = await OpenAppaGithubSyncModel.find(ctx.organizationId);
+      await OpenAppaGithubSyncModel.finish({
+        organizationId: ctx.organizationId,
+        revision: source?.revision ?? "missing",
+        outcome: {
+          content: "[policy]\nversion = 2\n",
+          contentHash: `policy-hash-${sourceCommit.slice(0, 4)}`,
+          sourceCommit,
+        },
+      });
+    };
+    let githubRequests = 0;
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policy/contents/traces",
+        () => {
+          githubRequests++;
+          return HttpResponse.json([
+            { type: "file", path: "traces/read.appa", size: content.length },
+          ]);
+        },
+      ),
+      http.get(
+        "https://api.github.com/repos/example/policy/contents/traces/read.appa",
+        () => {
+          githubRequests++;
+          return HttpResponse.text(content);
+        },
+      ),
+    );
+    const get = () =>
+      ctx.app.inject({ method: "GET", url: "/api/openappa/policy-tests" });
+
+    await finishAt(commit);
+    const first = await get();
+    expect(first.statusCode, first.body).toBe(200);
+    expect(githubRequests).toBe(2);
+
+    const second = await get();
+    expect(second.statusCode, second.body).toBe(200);
+    expect(githubRequests).toBe(2);
+    expect(second.json()).toEqual(first.json());
+    expect(second.json()).toMatchObject({
+      source: "github",
+      sourceCommit: commit,
+      files: [{ path: "traces/read.appa", content }],
+    });
+
+    const movedCommit = "b".repeat(40);
+    await finishAt(movedCommit);
+    const third = await get();
+    expect(third.statusCode, third.body).toBe(200);
+    expect(githubRequests).toBe(4);
+    expect(third.json()).toMatchObject({ sourceCommit: movedCommit });
+  });
   test("missing accepted commit is an explicit Git error without local fallback", async () => {
     const response = await ctx.app.inject({
       method: "GET",

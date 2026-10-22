@@ -28,6 +28,13 @@ export function useTeams(params?: {
    * membership determines which teams can be assigned.
    */
   mine?: boolean;
+  /** Omit members, labels and descendants when only team metadata is needed. */
+  includeRelations?: boolean;
+  /**
+   * Omit member arrays but keep labels and descendants. Every row still has
+   * `memberCount`.
+   */
+  includeMembers?: boolean;
   /** Server-side name filter (case-insensitive substring match). */
   name?: string;
   /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
@@ -40,20 +47,40 @@ export function useTeams(params?: {
     queryKey: [
       "teams",
       ...(mine ? ["mine"] : []),
+      ...(params?.includeRelations === false ? ["metadata"] : []),
+      ...(params?.includeMembers === false ? ["without-members"] : []),
       ...(name || labels ? [{ name, labels }] : []),
     ],
     queryFn: async () => {
-      const { data, error } = await getTeams({
-        query: {
-          limit: 100,
-          offset: 0,
-          ...(mine ? { mine: true } : {}),
-          ...(name ? { name } : {}),
-          ...(labels ? { labels } : {}),
-        },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data?.data ?? [];
+      const teams: Team[] = [];
+      // The viewer's own teams decide who may re-authenticate a team
+      // connection, the same rule the server ranks with over every direct
+      // membership, so that list is read to the end. Other lists keep their
+      // first page.
+      for (let offset = 0; ; offset += TEAMS_PAGE_SIZE) {
+        const { data, error } = await getTeams({
+          query: {
+            limit: TEAMS_PAGE_SIZE,
+            offset,
+            ...(params?.includeRelations === false
+              ? { includeRelations: false }
+              : {}),
+            ...(params?.includeMembers === false
+              ? { includeMembers: false }
+              : {}),
+            ...(mine ? { mine: true } : {}),
+            ...(name ? { name } : {}),
+            ...(labels ? { labels } : {}),
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        const page = data?.data ?? [];
+        teams.push(...page);
+        const total = data?.pagination?.total ?? teams.length;
+        if (!mine || page.length < TEAMS_PAGE_SIZE || teams.length >= total) {
+          return teams;
+        }
+      }
     },
     initialData: params?.initialData as Team[] | undefined,
     enabled: params?.enabled,
@@ -61,12 +88,19 @@ export function useTeams(params?: {
   });
 }
 
+/**
+ * One team with its labels and the caller's `myRole`, without the member
+ * array: a large team's members are paged with `getTeamMembersPage`.
+ */
 export function useTeam(id: string | undefined) {
   return useQuery({
-    queryKey: ["teams", id],
+    queryKey: ["teams", id, "without-members"],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await getTeam({ path: { id } });
+      const { data, error } = await getTeam({
+        path: { id },
+        query: { includeMembers: false },
+      });
       throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;
     },
@@ -100,9 +134,16 @@ export function useTeamLabelValues(params?: { key?: string }) {
   });
 }
 
-/** The teams the current user is a member of. */
+/**
+ * The teams the current user is a member of, with `myRole` and `memberCount`
+ * but without members, labels or descendants.
+ */
 export function useMyTeams(params?: { enabled?: boolean }) {
-  return useTeams({ mine: true, enabled: params?.enabled });
+  return useTeams({
+    mine: true,
+    includeRelations: false,
+    enabled: params?.enabled,
+  });
 }
 
 /**
@@ -116,8 +157,15 @@ export function useAssignableTeams(params: {
 }) {
   const enabled = params.enabled ?? true;
   const isAdmin = !!params.isResourceAdmin;
-  const allTeams = useTeams({ enabled: enabled && isAdmin });
-  const myTeams = useTeams({ mine: true, enabled: enabled && !isAdmin });
+  const allTeams = useTeams({
+    includeRelations: false,
+    enabled: enabled && isAdmin,
+  });
+  const myTeams = useTeams({
+    mine: true,
+    includeRelations: false,
+    enabled: enabled && !isAdmin,
+  });
   return isAdmin ? allTeams : myTeams;
 }
 
@@ -144,13 +192,20 @@ export function useTeamsPaginated(params: TeamsPaginatedParams) {
   });
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Hook to get teams with their vault folder paths
  * Fetches teams first, then fetches vault folders for each team in parallel
  */
-export function useTeamsWithVaultFolders() {
+export function useTeamsWithVaultFolders(params?: { enabled?: boolean }) {
   const byosEnabled = useFeature("byosEnabled");
-  const { data: teams, isLoading: isLoadingTeams } = useTeams();
+  const enabled = (params?.enabled ?? true) && byosEnabled === true;
+  const { data: teams, isLoading: isLoadingTeams } = useTeams({
+    includeRelations: false,
+    enabled,
+  });
 
   const vaultFolderQueries = useQueries({
     queries: (teams || []).map((team) => ({
@@ -161,7 +216,7 @@ export function useTeamsWithVaultFolders() {
         });
         return { teamId: team.id, vaultPath: data?.vaultPath ?? null };
       },
-      enabled: byosEnabled && !!teams,
+      enabled: enabled && !!teams,
     })),
   });
 
@@ -184,3 +239,8 @@ export function useTeamsWithVaultFolders() {
     isLoading,
   };
 }
+
+// SPDX-SnippetEnd
+
+/** The most teams one request returns (the API's page limit). */
+const TEAMS_PAGE_SIZE = 100;

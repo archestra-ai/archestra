@@ -1,8 +1,9 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.36",
+  "version": "1.5.0-rc.1",
   "description": "",
   "type": "module",
+  "sideEffects": false,
   "private": true,
   "exports": {
     ".": "./index.ts",
@@ -20,7 +21,11 @@
     "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",
     "./interactions/session-source": "./interactions/session-source.ts",
+    "./mcp-image-pull-policy": "./mcp-image-pull-policy.ts",
     "./model-constants": "./model-constants.ts",
+    "./model-price": "./model-price.ts",
+    "./opencode-family": "./opencode-family.ts",
+    "./oauth": "./oauth.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
     "./roles": "./roles.ts",

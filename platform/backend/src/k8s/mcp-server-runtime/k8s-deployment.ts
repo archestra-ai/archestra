@@ -1,6 +1,8 @@
 import { PassThrough } from "node:stream";
 import {
+  type ImagePullPolicy,
   type ImagePullSecretConfig,
+  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
@@ -252,6 +254,19 @@ export type HibernateResult =
     };
 
 // SPDX-SnippetEnd
+/**
+ * The image a deployment's pods are serving right now, as Kubernetes reports
+ * it: the reference from the pod spec, the digest the node resolved it to,
+ * and the pull settings the pods carry.
+ */
+export type RunningMcpImage = {
+  image: string;
+  /** `sha256:…` the container runtime resolved the reference to. */
+  digest: string;
+  pullPolicy: string | undefined;
+  pullSecretNames: string[];
+};
+
 type LifecycleMutationOptions = {
   assertOwned?: () => Promise<void>;
   runFencedMutation?: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -2226,6 +2241,7 @@ export default class K8sDeployment {
           name: "mcp-server",
           image: dockerImage,
           imagePullPolicy: getMcpImagePullPolicy(dockerImage, {
+            configured: localConfig.imagePullPolicy,
             forceFreshPull: this.consumeFreshImagePullRequest(),
           }),
           env: envVars,
@@ -2285,14 +2301,18 @@ export default class K8sDeployment {
           // prevents DiskPressure eviction cascades on over-packed nodes.
           resources: {
             requests: {
-              memory: config.orchestrator.mcpServerResources.requests.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_REQUEST
+                : config.orchestrator.mcpServerResources.requests.memory,
               cpu: config.orchestrator.mcpServerResources.requests.cpu,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.requests
                   .ephemeralStorage,
             },
             limits: {
-              memory: config.orchestrator.mcpServerResources.limits.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_LIMIT
+                : config.orchestrator.mcpServerResources.limits.memory,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.limits.ephemeralStorage,
             },
@@ -2673,27 +2693,27 @@ export default class K8sDeployment {
       }
     }
 
-    // 9. imagePullPolicy: an explicit YAML value wins, like every other field
-    // in this merge — advanced YAML exists so an operator can pin a pod spec we
-    // would not generate, and which registry round-trips a pod makes is theirs
-    // to decide. The system only fills the field in when the YAML leaves it
-    // unset, which is also what keeps the `Never` guard on bare local images.
-    // The one exception is a refresh-image request: that is an explicit admin
-    // action asking for the current image right now, and on a YAML frozen at
-    // `IfNotPresent` it is the only route to one. It applies to that single
-    // rollout, then the author's value governs again. On a bare local image
-    // that rollout writes `Never` rather than `Always`, because there is no
-    // registry to fetch a fresher image from; the request is still consumed so
-    // it cannot leak into a later rollout.
+    // 9. imagePullPolicy: the catalog's pull policy setting wins over the
+    // YAML. The YAML editor is seeded from a generated template that always
+    // spells out a policy, so a saved YAML carries one whether or not its
+    // author meant to pin it; the dedicated setting is the deliberate choice.
+    // Without that setting an explicit YAML value wins, like every other field
+    // in this merge, and the system fills the field in only when the YAML
+    // leaves it unset. A refresh-image request is an explicit admin action
+    // asking for the current image right now, so it pulls with `Always` for
+    // that single rollout (unless the policy is `Never`, which has no registry
+    // to fetch from); the request is still consumed so it cannot leak into a
+    // later rollout.
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
       const forceFreshPull = this.consumeFreshImagePullRequest();
-      if (forceFreshPull || !container.imagePullPolicy) {
-        container.imagePullPolicy = getMcpImagePullPolicy(
-          container.image || dockerImage,
-          { forceFreshPull },
-        );
-      }
+      const configured =
+        localConfig.imagePullPolicy ??
+        (container.imagePullPolicy as ImagePullPolicy | undefined);
+      container.imagePullPolicy = getMcpImagePullPolicy(
+        container.image || dockerImage,
+        { configured, forceFreshPull },
+      );
     }
 
     logger.info(
@@ -4019,6 +4039,109 @@ export default class K8sDeployment {
   async hasRunningPod(): Promise<boolean> {
     const pod = await this.findPodForDeployment();
     return !!pod;
+  }
+
+  /**
+   * The image every pod of this deployment is serving, or `null` when there
+   * is no single settled answer: the deployment is missing or scaled to zero,
+   * a rollout is in flight, a pod is not ready, the pods disagree, or the
+   * runtime reported no digest (an image loaded onto the node rather than
+   * pulled). Callers treat `null` as "nothing to compare", never as stale.
+   */
+  async readRunningImage(): Promise<RunningMcpImage | null> {
+    let deployment: k8s.V1Deployment;
+    try {
+      deployment = await this.k8sAppsApi.readNamespacedDeployment({
+        name: this.deploymentName,
+        namespace: this.namespace,
+      });
+    } catch (error) {
+      if (isK8sNotFoundError(error)) return null;
+      throw error;
+    }
+
+    const replicas = deployment.spec?.replicas ?? 0;
+    const status = deployment.status;
+    const settled =
+      replicas > 0 &&
+      (status?.observedGeneration ?? 0) >=
+        (deployment.metadata?.generation ?? 0) &&
+      status?.replicas === replicas &&
+      status?.updatedReplicas === replicas &&
+      status?.readyReplicas === replicas;
+    const matchLabels = deployment.spec?.selector?.matchLabels ?? {};
+    if (!settled || Object.keys(matchLabels).length === 0) return null;
+
+    const pods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: Object.entries(matchLabels)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(","),
+    });
+    const livePods = pods.items.filter(
+      (pod) => !pod.metadata?.deletionTimestamp,
+    );
+    if (livePods.length === 0) return null;
+
+    let running: RunningMcpImage | null = null;
+    for (const pod of livePods) {
+      if (pod.status?.phase !== "Running") return null;
+      const containers = pod.spec?.containers ?? [];
+      const container =
+        containers.find(({ name }) => name === "mcp-server") ?? containers[0];
+      const containerStatus = pod.status.containerStatuses?.find(
+        ({ name }) => name === container?.name,
+      );
+      const digest = containerStatus?.imageID?.match(
+        /@(sha256:[0-9a-f]{64})$/i,
+      )?.[1];
+      if (!container?.image || !containerStatus?.ready || !digest) return null;
+      const candidate: RunningMcpImage = {
+        image: container.image,
+        digest: digest.toLowerCase(),
+        pullPolicy: container.imagePullPolicy,
+        pullSecretNames: (pod.spec?.imagePullSecrets ?? [])
+          .map(({ name }) => name)
+          .filter((name): name is string => Boolean(name)),
+      };
+      if (
+        running &&
+        (running.image !== candidate.image ||
+          running.digest !== candidate.digest)
+      ) {
+        return null;
+      }
+      running ??= candidate;
+    }
+    return running;
+  }
+
+  /**
+   * The decoded registry auth documents (`.dockerconfigjson`, or legacy
+   * `.dockercfg`) of the named pull secrets in this deployment's namespace.
+   * A secret that is gone or holds neither key contributes nothing.
+   */
+  async readImagePullSecretConfigs(
+    names: readonly string[],
+  ): Promise<string[]> {
+    const configs: string[] = [];
+    for (const name of names) {
+      let secret: k8s.V1Secret;
+      try {
+        secret = await this.k8sApi.readNamespacedSecret({
+          name,
+          namespace: this.namespace,
+        });
+      } catch (error) {
+        if (isK8sNotFoundError(error)) continue;
+        throw error;
+      }
+      const encoded =
+        secret.data?.[".dockerconfigjson"] ?? secret.data?.[".dockercfg"];
+      if (encoded)
+        configs.push(Buffer.from(encoded, "base64").toString("utf8"));
+    }
+    return configs;
   }
 
   /**
@@ -5825,3 +5948,12 @@ const CREDENTIAL_EXPIRY_ANNOTATION = "archestra.ai/credential-expires-at";
 const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
 
 const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
+
+/**
+ * The built-in Playwright server runs one Chromium shared by every browser
+ * session in its Environment, with a context per conversation. The generic MCP
+ * server default (sized for small tool servers) starves it: pages slow to a
+ * crawl and screenshots time out long before the pod is OOM-killed.
+ */
+const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
+const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";

@@ -9,6 +9,7 @@ import {
   type resourcePermissionPresets,
   resourcePermissionPresetsFor,
   type ScopedResource,
+  scopedResourceNouns,
 } from "@archestra/shared";
 import { AlertCircle, AlertTriangle, Info, Loader2, X } from "lucide-react";
 import {
@@ -31,6 +32,7 @@ import {
   ResourceAccessAddField,
 } from "@/components/resource-access-add-field";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
+import { SettingsLink } from "@/components/settings-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,8 @@ import {
   useResourcePermissions,
   useUpdateResourcePermissions,
 } from "@/lib/resource-permissions.query";
+import { getListPermissionsHref } from "@/lib/resource-permissions-links";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The permissions block is a list of people and rules, not another field. It
@@ -86,6 +90,8 @@ export function ResourcePermissions({
   standalone = false,
   layout = "default",
   lockedReason,
+  memberView = false,
+  hideAudience = false,
 }: {
   resource: ScopedResource;
   scope: string;
@@ -108,6 +114,18 @@ export function ResourcePermissions({
    * with full access would not help.
    */
   lockedReason?: string;
+  /**
+   * The viewer manages only this one object (a member who owns it). They get
+   * the list and the add field, without what they can do nothing about: the
+   * access every admin holds, their own name restated beside "You", and a
+   * Save button before there is anything to save.
+   */
+  memberView?: boolean;
+  /**
+   * Leaves out the "Who can use it" line. On a tab already named Permissions
+   * the list itself says who can use the object.
+   */
+  hideAudience?: boolean;
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -134,6 +152,7 @@ export function ResourcePermissions({
       <QueryLoadError
         title="Could not load permissions"
         description="Your access may have changed. Retry to check your current permissions."
+        error={policy.error}
         onRetry={() => void policy.refetch()}
       />
     );
@@ -151,8 +170,21 @@ export function ResourcePermissions({
       standalone={standalone}
       layout={layout}
       lockedReason={lockedReason}
+      memberView={memberView}
+      hideAudience={hideAudience}
     />
   );
+}
+
+/**
+ * Whether an object's permissions show its audience chip (Personal,
+ * Team-wide, Org-wide). A credential already has an audience of its own, the
+ * person or organization that provides its value, and every credential
+ * reaches members through the grants on all credentials, so a chip read off
+ * its own grants alone would contradict both.
+ */
+export function showsAudience(resource: ScopedResource): boolean {
+  return resource !== "credential";
 }
 
 /** Shared by resource lists and the explanation of inherited access. */
@@ -194,7 +226,7 @@ export function ResourcePermissionsDialog({
         description ??
         (scope !== "*"
           ? `Choose who can access this ${noun} and what they can do.`
-          : `Applies to every ${noun}, including new ones.` +
+          : `Applies to every ${noun}, including other people’s and ones created later.` +
             (ORGANIZATION_WIDE_RESOURCES.has(resource)
               ? ""
               : " Individual permissions can add access, but can’t take away access granted here."))
@@ -251,6 +283,8 @@ function PermissionsEditor({
   standalone = false,
   layout = "default",
   lockedReason,
+  memberView = false,
+  hideAudience = false,
 }: {
   policy: Policy;
   refreshFailed: boolean;
@@ -263,6 +297,8 @@ function PermissionsEditor({
   standalone?: boolean;
   layout?: "default" | "settings";
   lockedReason?: string;
+  memberView?: boolean;
+  hideAudience?: boolean;
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -306,6 +342,27 @@ function PermissionsEditor({
     actions: preset.actions,
     disabled: !canGrant(preset.actions),
   }));
+  // A grant to everyone or a role makes the object org-wide. Without the
+  // authority to do that, such a grant can stay, go lower, or go, but not up.
+  const levelOptionsFor = (subject: PermissionSubject) => {
+    if (
+      policy.canShareOrganizationWide ||
+      (subject.type !== "organization" && subject.type !== "role")
+    )
+      return levelOptions;
+    const saved =
+      policy.grants.find(
+        (grant) =>
+          grant.subject.type === subject.type &&
+          grant.subject.id === subject.id,
+      )?.actions ?? [];
+    return levelOptions.map((option) => ({
+      ...option,
+      disabled:
+        option.disabled ||
+        !option.actions.every((action) => saved.includes(action)),
+    }));
+  };
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const safety = getPermissionSafetyPreview({
@@ -368,12 +425,21 @@ function PermissionsEditor({
   // An object's own grants decide its audience. The organization-wide policy
   // has no audience of its own, so it shows no chip.
   const audience =
-    policy.scope === "*" ? null : grantsAudience(draftGrants ?? []);
+    policy.scope === "*" || !showsAudience(policy.resource)
+      ? null
+      : grantsAudience(draftGrants ?? []);
+  const audienceHeader = hideAudience ? null : audience;
+  const lockReason = canManage
+    ? null
+    : (lockedReason ??
+      "Ask someone with full access to let you change permissions.");
   const Container = embedded ? "div" : "form";
   const noun = scopedResourceNouns[policy.resource];
   const explanation =
     description === undefined
-      ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+      ? policy.scope === "*"
+        ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+        : null
       : description;
   const presetOptions = Object.entries(presets).map(([value, preset]) => ({
     value,
@@ -446,25 +512,40 @@ function PermissionsEditor({
       {fields.map((grant, index) => {
         const isOwner =
           grant.subject.type === "user" && grant.subject.id === policy.ownerId;
+        const isViewer =
+          grant.subject.type === "user" &&
+          grant.subject.id === session?.user.id;
         return (
           <div
             key={grant.id}
             data-testid={isOwner ? "owner-grant" : undefined}
             className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
           >
-            <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
-              <p className="break-words font-medium">{grant.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {subjectLabels[grant.subject.type]}
-              </p>
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1",
+                !isOwner && "col-span-2 sm:col-auto",
+              )}
+            >
+              {memberView && isViewer ? (
+                <p className="w-full break-words font-medium sm:w-auto">You</p>
+              ) : (
+                <>
+                  <p className="w-full break-words font-medium sm:w-auto">
+                    {grant.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {subjectLabels[grant.subject.type]}
+                  </p>
+                </>
+              )}
               {isOwner && <OwnerPill />}
-              {grant.subject.type === "user" &&
-                grant.subject.id === session?.user.id && <YouPill />}
+              {isViewer && !memberView && <YouPill />}
             </div>
             {isOwner ? (
               // The owner always keeps their grant: handing the object on is
               // "Make owner" on another person's row, not an edit of this one.
-              <span className="px-2 pr-[3.25rem] text-muted-foreground sm:pr-11">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground sm:px-2 sm:pr-11">
                 {levelOptions.find(
                   (option) =>
                     option.value === presetFor(grant.actions, policy.resource),
@@ -482,7 +563,7 @@ function PermissionsEditor({
                     if (choice)
                       update(index, { ...grant, actions: [...choice.actions] });
                   }}
-                  options={levelOptions}
+                  options={levelOptionsFor(grant.subject)}
                   ariaLabel={`Permission for ${grant.name}`}
                   title={actionDetail(grant.actions, policy.resource)}
                   valueLabel={
@@ -539,10 +620,11 @@ function PermissionsEditor({
   const accessRows = (
     <>
       {grantList}
-      {policy.scope !== "*" && (
+      {policy.scope !== "*" && !memberView && (
         <InheritedAccessNote
           resource={policy.resource}
           grants={policy.inheritedGrants}
+          editable={!!canUpdateGlobal}
         />
       )}
     </>
@@ -557,7 +639,9 @@ function PermissionsEditor({
           embedded={embedded && !dialog}
           standalone={standalone || inShell}
         >
-          {!canManage && (
+          {/* With an audience header, the header carries this as a lock
+              icon; the notice is only for blocks that show no header. */}
+          {!canManage && !audienceHeader && (
             <InlineNotice variant="info">
               <Info />
               <span className="font-medium">You can’t change permissions.</span>
@@ -567,8 +651,11 @@ function PermissionsEditor({
               </InlineNoticeText>
             </InlineNotice>
           )}
-          {layout !== "settings" && audience && (
-            <AccessAudienceHeader audience={audience} />
+          {layout !== "settings" && audienceHeader && (
+            <AccessAudienceHeader
+              audience={audienceHeader}
+              lockedReason={lockReason}
+            />
           )}
           {layout !== "settings" && !audience && title !== null && (
             <div className="min-w-0 space-y-1">
@@ -623,7 +710,10 @@ function PermissionsEditor({
           )}
 
           {layout === "settings" ? (
-            <PermissionsSettingsSection audience={audience}>
+            <PermissionsSettingsSection
+              audience={audienceHeader}
+              lockedReason={lockReason}
+            >
               {accessRows}
             </PermissionsSettingsSection>
           ) : (
@@ -638,12 +728,11 @@ function PermissionsEditor({
                 <InlineNotice variant="error" className="w-full">
                   <AlertTriangle />
                   <span className="font-medium">
-                    At least one recipient needs Full access.
+                    Someone must keep Manage access.
                   </span>
                   <InlineNoticeText>
-                    Without it, nobody can edit, delete, or share{" "}
-                    {resourcePluralNames[policy.resource]} that other people
-                    created.
+                    Give at least one recipient Full access, or a custom level
+                    that includes Manage access.
                   </InlineNoticeText>
                 </InlineNotice>
               ) : (
@@ -693,7 +782,8 @@ function PermissionsEditor({
               </InlineNotice>
             ) : null)}
           {pageFooter
-            ? canManage && (
+            ? canManage &&
+              (dirty || !memberView) && (
                 <WizardFooter className="border-t-0 sm:justify-end">
                   <Button
                     type="submit"
@@ -830,10 +920,13 @@ function OwnerPill() {
 /**
  * Access every object of the type gives anyway, as plain muted text under the
  * grant list: "Admin and Platform Admin roles have Full access to every agent."
+ * When `editable`, it links to the list page's Permissions dialog, where that
+ * access is set.
  */
 export function InheritedAccessNote({
   resource,
   grants,
+  editable = false,
 }: {
   resource: ScopedResource;
   grants: ReadonlyArray<{
@@ -841,6 +934,7 @@ export function InheritedAccessNote({
     subject: PermissionSubject;
     actions: ResourcePermissionAction[];
   }>;
+  editable?: boolean;
 }) {
   if (grants.length === 0) return null;
   const byLevel = new Map<string, typeof grants>();
@@ -849,6 +943,7 @@ export function InheritedAccessNote({
     byLevel.set(level, [...(byLevel.get(level) ?? []), grant]);
   }
   const noun = scopedResourceNouns[resource];
+  const listHref = getListPermissionsHref(resource);
   const sentences = [...byLevel].map(([level, holders]) => {
     const names = joinNames(holders.map((holder) => holder.name));
     const allRoles = holders.every((holder) => holder.subject.type === "role");
@@ -863,6 +958,18 @@ export function InheritedAccessNote({
       data-testid="inherited-access-note"
     >
       {sentences.join(" ")}
+      {editable && listHref && (
+        <>
+          {" "}
+          <SettingsLink
+            href={listHref}
+            className="underline underline-offset-2 hover:text-foreground"
+            fallback={null}
+          >
+            Edit access to every {noun}
+          </SettingsLink>
+        </>
+      )}
     </p>
   );
 }
@@ -909,49 +1016,30 @@ export function actionDetail(
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     // Nothing is used "through" a registration, so the edit level has no use.
-    if (preset === "edit") return "View and edit the client, rotate its secret";
+    if (preset === "edit")
+      return "Read and update the client, including rotating its secret";
     if (preset === "manage")
-      return "Also delete the client and manage permissions";
+      return "Read, update, delete, and change who can access the client";
   }
+  if (preset === "use" && resource === "credential")
+    return "Read the credential and connect or bind its value";
   if (preset === "deploy" && resource === "mcpRegistry")
-    return "Also view and change how the server is deployed";
+    return "Also read and update how the server is deployed";
   if (
     preset === "manage" &&
     (resource === "conversation" || resource === "agentRun")
   )
-    return "View the session and manage who can access it";
+    return "Read the session and change who can access it";
   return preset === "manage" && (resource === "log" || resource === "auditLog")
-    ? "View logs and manage who can access them"
+    ? "Read logs and change who can access them"
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
-/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
-export const scopedResourceNouns: Record<ScopedResource, string> = {
-  conversation: "chat session",
-  agentRun: "runtime session",
-  agent: "agent",
-  skill: "skill",
-  app: "app",
-  llmModel: "model",
-  mcpGateway: "MCP gateway",
-  mcpRegistry: "MCP registry entry",
-  project: "project",
-  plugin: "plugin",
-  knowledgeBase: "knowledge base",
-  knowledgeConnector: "connector",
-  knowledgeFile: "file",
-  llmVirtualKey: "virtual key",
-  llmProviderApiKey: "provider key",
-  externalAgent: "external agent",
-  mcpOauthClient: "OAuth client",
-  llmOauthClient: "OAuth client",
-  environment: "environment",
-  scheduledTask: "scheduled task",
-  log: "log",
-  auditLog: "audit log entry",
-  serviceAccount: "service account",
-};
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",
@@ -964,17 +1052,17 @@ const presetDescriptions: Record<
   keyof typeof resourcePermissionPresets,
   string
 > = {
-  view: "View without making changes",
-  use: "View and use the resource",
-  edit: "View, use, and edit the resource",
-  manage: "Also delete the resource and manage permissions",
+  view: "Read without making changes",
+  use: "Read and use the resource",
+  edit: "Read, use, and update the resource",
+  manage: "Read, use, update, delete, and change who can access the resource",
 };
 const actionLabels: Record<ResourcePermissionAction, string> = {
-  read: "View",
+  read: "Read",
   use: "Use",
-  update: "Edit",
+  update: "Update",
   delete: "Delete",
-  "manage-permissions": "Manage permissions",
+  "manage-permissions": "Manage access",
   "configure-deployment-spec": "Configure deployment spec",
 };
 
@@ -995,13 +1083,14 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   llmVirtualKey: "virtual keys",
   llmProviderApiKey: "provider keys",
   externalAgent: "external agents",
-  mcpOauthClient: "MCP OAuth clients",
-  llmOauthClient: "LLM OAuth clients",
+  oauthClient: "OAuth clients",
+  mcpOauthClient: "OAuth clients",
+  llmOauthClient: "OAuth clients",
   environment: "environments",
-  scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",
+  credential: "credentials",
 };
 
 const ResourcePermissionsDialogContext = createContext<{

@@ -13,7 +13,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -24,7 +26,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LabelTags } from "@/components/label-tags";
+import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
@@ -48,6 +50,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useHasPermissions,
@@ -78,15 +85,20 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
 import { ServiceAccountDialog } from "./_parts/service-account-dialog";
+import { ServiceAccountTeamSelect } from "./_parts/service-account-team-select";
 
 type ServiceAccountFormValues = {
   name: string;
+  icon: string | null;
   role: string;
+  teamId: string | null;
 };
 
 const DEFAULT_FORM_VALUES: ServiceAccountFormValues = {
   name: "",
+  icon: null,
   role: "member",
+  teamId: null,
 };
 
 const ALL = "all";
@@ -296,26 +308,19 @@ export default function ServiceAccountsSettingsPage() {
         header: "Account",
         size: 128,
         cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <UnstyledButton
-              type="button"
-              className="truncate font-medium hover:underline"
-              onClick={() => setAccountToEdit(row.original)}
-              title={row.original.name}
-            >
-              {row.original.name}
-            </UnstyledButton>
-            <LabelTags labels={row.original.labels} />
-          </div>
+          <AgentNameCell
+            name={row.original.name}
+            icon={<AgentIcon icon={row.original.icon} size={20} />}
+            labels={row.original.labels}
+            onClick={() => setAccountToEdit(row.original)}
+          />
         ),
       },
       {
         accessorKey: "role",
-        header: "Role",
-        size: 88,
-        cell: ({ row }) => (
-          <Badge variant="secondary">{formatRoleName(row.original.role)}</Badge>
-        ),
+        header: "Roles",
+        size: 128,
+        cell: ({ row }) => <RolesCell role={row.original.role} />,
       },
       {
         accessorKey: "disabled",
@@ -372,7 +377,9 @@ export default function ServiceAccountsSettingsPage() {
     const account = await createMutation
       .mutateAsync({
         name: values.name.trim(),
+        icon: values.icon,
         role: values.role,
+        ...(values.teamId ? { teamId: values.teamId } : {}),
         labels: finalLabels,
       })
       // The dialog shows the failure: a notice for a refused role, a toast
@@ -622,24 +629,30 @@ export default function ServiceAccountsSettingsPage() {
           if (!open) closeDialog();
         }}
         title="Create service account"
-        size="medium"
+        size="small"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleSubmit}
         >
           <DialogBody className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="service-account-name">Display name</Label>
-              <FieldDescription>
-                The display name for this service account.
-              </FieldDescription>
+            <IdentityFields
+              icon={form.watch("icon")}
+              onIconChange={(icon) =>
+                form.setValue("icon", icon, { shouldDirty: true })
+              }
+              showLogos
+              label={<Label htmlFor="service-account-name">Display name</Label>}
+            >
               <Input
                 id="service-account-name"
                 {...form.register("name", { required: true })}
                 placeholder="Automation service account"
               />
-            </div>
+              <FieldDescription>
+                The display name for this service account.
+              </FieldDescription>
+            </IdentityFields>
             <div className="space-y-2">
               <Label htmlFor="service-account-role">Roles</Label>
               <RoleSelect
@@ -662,13 +675,19 @@ export default function ServiceAccountsSettingsPage() {
               error={createMutation.error}
               name={formatRoleName(form.watch("role"))}
             />
+            <ServiceAccountTeamSelect
+              id="service-account-team"
+              value={form.watch("teamId")}
+              onChange={(teamId) => form.setValue("teamId", teamId)}
+            />
             <AdvancedLabelsSection
+              collapsible
               ref={labelsRef}
               labels={newLabels}
               onLabelsChange={setNewLabels}
             />
           </DialogBody>
-          <DialogStickyFooter>
+          <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
@@ -704,6 +723,40 @@ export default function ServiceAccountsSettingsPage() {
 }
 
 // === Internal helpers
+
+function RolesCell({ role }: { role: string }) {
+  const roles = role.split(",").map((value) => formatRoleName(value.trim()));
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={`View assigned roles: ${roles.join(", ")}`}
+          className="flex min-w-0 max-w-full items-center gap-1"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Badge variant="secondary" className="min-w-0 shrink">
+            <span className="truncate">{roles[0]}</span>
+          </Badge>
+          {roles.length > 1 && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              +{roles.length - 1}
+            </span>
+          )}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent>
+        <div className="flex max-w-xs flex-wrap gap-1">
+          {roles.map((name) => (
+            <Badge key={name} variant="secondary">
+              {name}
+            </Badge>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * Keys as "usable of total", collapsing to one number when they agree. `2` and

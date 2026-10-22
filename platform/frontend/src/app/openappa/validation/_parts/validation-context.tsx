@@ -1,7 +1,6 @@
 "use client";
 
 import { Info } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   createContext,
   type ReactNode,
@@ -17,6 +16,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type PolicyTestCollection,
   type PolicyTestInspection,
+  type PolicyTestRun,
   useInspectOpenAppaPolicyTests,
   useOpenAppaPolicyTestRuns,
   useOpenAppaPolicyTests,
@@ -33,8 +33,10 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useSession();
   const session = sessionQuery?.data;
   const sessionKey = `${session?.session.id}:${session?.session.activeOrganizationId}`;
-  const { data: canRead } = useHasPermissions({ openappaPolicy: ["read"] });
-  const { data: canWrite } = useHasPermissions({ openappaPolicy: ["update"] });
+  const { data: canRead } = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const { data: canWrite } = useHasPermissions({
+    guardrailsPolicy: ["update"],
+  });
   const source = useOpenAppaPolicyTests(canRead === true);
   if (canRead === false)
     return (
@@ -53,6 +55,7 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
       <QueryLoadError
         title="Could not load policy validation"
         description={source.error?.message}
+        error={source.error}
         onRetry={() => source.refetch()}
       />
     );
@@ -108,7 +111,6 @@ function useSuite({
   loadError: Error | null;
   sessionKey: string;
 }) {
-  const router = useRouter();
   const [baseline, setBaseline] = useState(collection);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const history = useOpenAppaPolicyTestRuns(true);
@@ -162,18 +164,58 @@ function useSuite({
       },
     );
   }
-  function runAll() {
-    if (!runnable || !files.length) return;
-    runMutation.mutate({
-      files,
-      sourceVersion: collection.version,
-      directory: collection.directory,
-    });
+  /**
+   * Runs every saved file and records the run. With a `progressToken`, the
+   * server pushes per-file progress for it over the WebSocket.
+   */
+  function runAll(options?: {
+    progressToken?: string;
+    onSettled?: (run: PolicyTestRun | null, error: Error | null) => void;
+  }) {
+    if (!runnable || !files.length) return false;
+    runMutation.mutate(
+      {
+        files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        progressToken: options?.progressToken,
+      },
+      {
+        onSuccess: (run) => options?.onSettled?.(run ?? null, null),
+        onError: (error) => options?.onSettled?.(null, error),
+      },
+    );
+    return true;
   }
-  function add() {
-    if (github || !canWrite || busy || !available || files.length >= 32) return;
-    router.push("/openappa/validation/new");
+  /** Runs one saved file and records the result in run history. */
+  function runFile(
+    path: string,
+    options?: {
+      progressToken?: string;
+      onSettled?: (run: PolicyTestRun | null, error: Error | null) => void;
+    },
+  ) {
+    const file = files.find((item) => item.path === path);
+    if (!runnable || !file) return false;
+    runMutation.mutate(
+      {
+        files: [file],
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        partial: true,
+        progressToken: options?.progressToken,
+      },
+      {
+        onSuccess: (run) => options?.onSettled?.(run ?? null, null),
+        onError: (error) => options?.onSettled?.(null, error),
+      },
+    );
+    return true;
   }
+  const runningPath =
+    runMutation.isPending && runMutation.variables?.partial
+      ? (runMutation.variables.files[0]?.path ?? null)
+      : null;
   function createFile(
     file: PolicyTestCollection["files"][number],
     expectedVersion: string,
@@ -229,8 +271,10 @@ function useSuite({
     setSelected,
     history,
     runAll,
+    runFile,
+    runningPath,
+    runningAll: runMutation.isPending && !runMutation.variables?.partial,
     save,
-    add,
     createFile,
     deleteFiles,
     summaries: inspection.summaries,

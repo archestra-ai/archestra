@@ -30,6 +30,8 @@ export const AgentRunActorKindSchema = z.enum([
   "user",
   "team",
   "organization",
+  "oauthClient",
+  "serviceAccount",
   "system",
 ]);
 export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;
@@ -76,6 +78,11 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
      * (not the main Slack app) posts the result.
      */
     pinnedAgentId: z.string().uuid().optional(),
+    conversationReference: z.record(z.string(), z.unknown()).optional(),
+    /** Placeholder and mute state belong to this turn, not later UI continuations. */
+    originatingTaskId: z.string().uuid().optional(),
+    placeholderActivityId: z.string().optional(),
+    muteMarkerAtStart: z.string().nullable().optional(),
   }),
   z.object({
     type: z.literal("email"),
@@ -148,6 +155,17 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
   credentialId: z.string().optional(),
   label: z.string(),
   description: z.string().optional(),
+  /**
+   * False when the caller may not use the saved credential, so they cannot
+   * add their value and an admin has to share it with them first.
+   */
+  canConnect: z.boolean().optional(),
+  /**
+   * True when the credential is an organization one and only people who
+   * manage organization settings may run with it, so the caller cannot fix
+   * this by connecting anything; an admin has to run the Agent or change it.
+   */
+  adminOnly: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema
@@ -377,26 +395,6 @@ export const UpdateAgentRunSchema = createUpdateSchema(schema.agentRunsTable)
       title !== undefined || pinnedAt !== undefined || projectId !== undefined,
     "At least one field must be provided",
   );
-
-export const AgentRunOpenappaReviewSchema = z.object({
-  status: z.enum(["none", "pending", "no_reviewer"]),
-  canDecide: z.boolean(),
-  offerId: z.string().nullable(),
-  text: z.string().nullable(),
-  tool: z.string().nullable(),
-  arguments: z.string().nullable(),
-});
-
-export const DecideAgentRunOpenappaReviewSchema = z.object({
-  decision: z.enum(["approve", "deny"]),
-  offerId: z.string().min(1),
-});
-
-export const DecidedAgentRunOpenappaReviewSchema = z.object({
-  decision: z.enum(["approve", "deny"]),
-  offerId: z.string(),
-  steered: z.boolean(),
-});
 
 export const StartAgentRunResponseSchema = z.object({
   sessionId: z.string().uuid().optional(),

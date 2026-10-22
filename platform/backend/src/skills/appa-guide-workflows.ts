@@ -3,9 +3,9 @@
  * to them, so a policy chat loads only the workflow it needs.
  */
 
-/** `references/first-policy.md`: Starter policy, batteries and GitHub sync. */
+/** `references/first-policy.md`: Starter policy, batteries and Git sync. */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
-export const FIRST_POLICY_WORKFLOW = `# First policy, batteries, and GitHub sync
+export const FIRST_POLICY_WORKFLOW = `# First policy, batteries, and Git sync
 
 Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body.
 
@@ -14,12 +14,17 @@ Approval and publishing follow **Approval in Archestra** and **Publish** in the 
 Use this while the policy's revision is 0 and its delivery is local, also for an explicit \`init\`; otherwise follow \`references/init.md\`. Skip validations unless the operator asks for them.
 
 1. Read the policy, then briefly inspect deployed servers (\`archestra__list_mcp_server_deployments\`) and battery fits (\`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`). Do not enumerate every tool or ask the operator to classify servers.
-2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, GitHub sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
+2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, Git sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
 3. Do not ask about provider-hosted tools, and do not claim that tools the starter does not cover are safe.
 4. Preview the complete starter with \`content\` and the revision you read.
-5. Explain in at most three short sentences: the starter's declared controls for built-in platform tool calls will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. When setup follows a broader safety goal, explain that establishing that goal still requires examining the relevant calls and dependencies; saving the starter does not establish it. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
-6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). For **Show TOML**, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
-7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them), or GitHub sync.
+5. Always explain the starter in message text before you ask, even though the preview card shows it. Use at most four short sentences:
+   - Archestra's built-in tools follow fixed rules.
+   - An AI model checks every other tool call (name one or two servers) and asks the user to approve risky or public ones.
+   - This will be saved and turned on now (only saved, when the preview's \`turnsOnEnforcement\` is false).
+   - The AI check can be narrowed later: batteries give the connected servers fixed rules of their own.
+   If setup follows a broader safety goal, add that this starter alone does not reach it: the calls involved still need checking. Do not describe individual rules or server health unless asked. Avoid "annotator", "audience", "catch-all", "composition", "revision", "preview", "rule pack", "delta", and "TOML". These sentences are the whole proposal for a starter: write them instead of the longer change summary in **Approval in Archestra**, not instead of any text.
+6. Only after that explanation, ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). If the operator asks to see the TOML, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy in its own block under a heading such as "Effective policy (with included rules)".
+7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them). Do not offer Git sync; the saved-revision banner already links to its setup.
 
 ## Add batteries
 
@@ -30,18 +35,12 @@ Use this when the operator picks batteries to add: from a review, after the firs
 3. Call \`archestra__request_battery_credentials\` once with every battery that needs a token, and end the turn. The card shows what each battery does and how to get its token; do not repeat them.
    - On the operator's "Battery credentials: …" message, list the credentials again to confirm each named key is connected, then call \`archestra__bind_guardrails_credential\` once per pair with \`{ "variable": "<VARIABLE>", "key": "<key>" }\`. A skipped battery gets no call. The binding is stored beside the policy, not in its text; never add a \`[credentials]\` line.
    - Leave a skipped battery out of this change; its tools keep working as they do now.
-4. Preview one change that adds every battery with its \`include\` and \`[server_aliases]\` entries, and ask for approval. Describe each battery as **Propose a battery** says.
+4. Preview one change that adds every battery with its \`include\` and \`[aliases.mcp]\` entries, and ask for approval. Describe each battery as **Propose a battery** says.
 5. After a local save, below the result banner, finish in at most five lines: which tools are now protected and how, which batteries were skipped, and that the operator can ask later to add them.
 
-## GitHub sync
+## Git sync
 
-After the first policy is saved, offer GitHub sync in one sentence: the policy source can live in a GitHub repository, and later edits then open pull requests. Continue only if the operator accepts or asks for it.
-
-1. List the credentials the operator can read. Choose an organization GitHub App only when \`organizationConfigured\` is true. If none is ready and they may create credentials, call \`archestra__request_runtime_credential_setup\` with \`{ "kind": "github_app" }\`. The App must be installed on the GitHub account that will own the repository, with All repositories access and the repository permissions Administration, Contents, and Pull requests, each Read & write. Its App ID, Installation ID, and private key go into the dialog, never the chat. If the caller lacks permission, name the missing permission and direct them to an administrator. After connection, list the credentials again.
-2. Unless the operator already said, ask whether to create a new repository or connect an existing one.
-3. New repository: ask in one batch, with two \`archestra__ask_user\` calls with \`"allowText": true\`, for the login of the account where the App is installed and a repository name not already used there. The template is named \`openappa-config\`, so that name is unavailable under its owner. Create it with \`archestra__create_guardrails_repository\` and the chosen App. If GitHub rejects it, explain the owner or name problem; a new App is not needed by default.
-4. Existing repository: ask in one batch for \`owner/name\` and the policy file path (default \`appa.toml\` at the root); the App must be installed on that owner with access to the repository. Say in one sentence that the repository's file replaces the current policy, and connect with \`archestra__connect_guardrails_repository\` only after the operator agrees. If it fails, explain the error and say the current policy is unchanged. If the first pull is held, say what it changes and that an operator accepts it in the guardrails panel.
-5. State the repository URL and that later policy edits create pull requests. A template update does not change an existing repository.
+Git sync keeps the policy source in a GitHub or GitLab repository, so later edits open pull requests (merge requests on GitLab). It is set up in the guardrails settings, which walk through the host, its access (a GitHub App or a GitLab token), and the repository, and the saved-revision banner in chat links there; do not offer it unprompted. Do not create or connect a repository from chat. When the operator asks for it, read the policy with \`archestra__get_guardrails_policy\` and give \`delivery.githubSyncSetupUrl\` as a markdown link titled "Set up Git sync", in one sentence that says setup continues there. Setting it up needs \`organizationSettings:update\`; without it, direct them to an administrator. When \`delivery.mode\` is already \`pull_request\`, say which repository the policy syncs with instead.
 `;
 
 /** `references/init.md`: Initial tool sync for a policy that is not an unsaved starter. */
@@ -52,7 +51,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 ## Inspect
 
-1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[server_aliases]\`, and which rules come from batteries; \`effective.content\` shows each bound credential under \`[credentials]\`. \`effective.batteries\` gives each battery's status:
+1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.credentialBindings\` lists each bound credential, and \`composed: true\` adds the composed text as \`effective.content\`. \`effective.batteries\` gives each battery's status:
    - \`active\`: its rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: a required variable has no binding; bind it with \`archestra__bind_guardrails_credential\`.
@@ -61,7 +60,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: the runtime rejected the composition.
 
-   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced.
+   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` (with \`composed: true\`) keeps the last composition that opened, if one did; do not claim the new text is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
 4. Call \`archestra__search_tools\` for the tools visible to the calling agent.
@@ -71,7 +70,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 - Check which batteries \`include\` declares and which \`effective.batteries\` marks \`active\`.
 - Call \`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`. Propose only the batteries it returns, described from the rules it returns. Never guess a battery name or what its rules do. Fits are incomplete inventory: servers with a declared battery or no matching battery are absent.
-- Declare a battery with its \`include\` entry, point each namespace at the server's \`toolPrefixes\` in \`[server_aliases]\`, and bind each \`credentials\` variable with \`archestra__bind_guardrails_credential\`; collect missing tokens as **Add batteries** in \`references/first-policy.md\` says.
+- Declare a battery with its \`include\` entry, point each namespace at the server's \`toolPrefixes\` in \`[aliases.mcp]\`, and bind each \`credentials\` variable with \`archestra__bind_guardrails_credential\`; collect missing tokens as **Add batteries** in \`references/first-policy.md\` says.
 - An organization-wide annotator-only battery governs no server and stays \`unrouted\` until a tool rule names its annotator. If it needs a credential, calls routed to it are refused until the credential is bound.
 - If the root config changes a battery's default behavior, explain the result in plain English.
 
@@ -101,14 +100,13 @@ export const ADJUST_WORKFLOW = `# Adjust the current config (\`adjust\`)
 
 Start from the operator's requested outcome, not a full tool rescan. Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body. If the outcome is ambiguous, ask one focused question and wait.
 
-An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there, with the complete policy text rather than \`edits\`. Skip it when the operator asks, and for policy-only requests.
-
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
 2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
 6. Ask for approval in the same turn, then publish.
+7. For a targeted behavior change, offer a validation for it as **When to offer one** in \`references/validation.md\` says.
 
 When the operator asks why a call was blocked, follow **Explain a block** in the policy-writing rules first.
 `;
@@ -118,6 +116,28 @@ When the operator asks why a call was blocked, follow **Explain a block** in the
 export const REQUESTS_WORKFLOW = `# Explain, review, and investigate
 
 None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`. If the operator said they want no changes or only a report, leave out the closing change question, the numbered changes, and offers to draft a change for the rest of the conversation, until they ask for one.
+
+## Explain how OpenAPPA works
+
+When the operator asks what OpenAPPA or Guardrails is or how it works, without asking about their policy, answer from this section alone: read nothing, and do not mention this deployment's policy, batteries, enforcement, or that nothing changed. Write for a DevOps engineer who has never heard of OpenAPPA. Use the answer below almost word for word: short sentences and everyday words, keeping OpenAPPA's terms (label, trust, audience, rule, human approval, sanitizer, authority, subagent, battery) and explaining each where it first appears. Avoid "trajectory", "delta", "composition", "catch-all", "TOML", "rule pack", "fork", and rule field names.
+
+OpenAPPA checks every tool call your AI agent makes, like reading email, posting to Slack, or pushing code, before it runs.
+
+1. **Data gets a label.** Everything the agent reads gets two tags:
+   - **Trust**: is it trusted, or could an outsider have influenced it (a web page, a GitHub issue, a meeting transcript)?
+   - **Audience**: who may see it: only you, your organization, or the public?
+2. **Each tool has a rule.** The rule says what the label must be for the call to go through.
+   - Sending a Slack message might need trusted data that is safe for your organization.
+   - Publishing to a public GitHub repository must not include internal data.
+   - A risky admin change might need human approval.
+3. **OpenAPPA decides.** It allows the call, asks you to approve that exact call, or blocks it and explains what did not match.
+4. **Ways to continue safely.**
+   - A **sanitizer** cleans data, for example removing private details, so it can go to a wider audience.
+   - An **authority** is a person or team allowed to approve a call that would otherwise be blocked.
+   - A **subagent** can read sensitive data on its own; only its checked or cleaned answer comes back to the main agent.
+5. **Batteries are ready-made rules** for common services like GitHub, Slack, or Grain, so you don't write every rule yourself. Your own rules take priority over them.
+
+End with one sentence offering to help understand and improve the current policy, such as checking which tools it covers. Do not ask what to change.
 
 ## Explain
 
@@ -146,7 +166,7 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 
 1. Read the yell with \`archestra__get_openappa_yell\`, then the current policy. Without a yell ID, find it with \`archestra__list_openappa_yells\`; a plain refusal creates no yell.
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
-3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
+3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
 4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
 `;
 

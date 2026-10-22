@@ -26,11 +26,9 @@ export const resources = [
   "skill",
   "plugin",
   "app",
+  "guardrailsPolicy",
   "mcpGateway",
-  "mcpOauthClient",
   "llmProxy",
-  "openappaPolicy",
-  "openappaDiagnostics",
   "log",
   "identityProvider",
   "mcpRegistry",
@@ -44,10 +42,8 @@ export const resources = [
   "llmLimit",
   "llmProviderApiKey",
   "llmVirtualKey",
-  "llmOauthClient",
   "llmModel",
   "organizationSettings",
-  "scheduledTask",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -68,6 +64,7 @@ export const resources = [
   "invitation",
   "team",
   "apiKey",
+  "oauthClient",
   "serviceAccount",
   "auditLog",
   "accessPolicies",
@@ -78,12 +75,10 @@ export const resourceLabels: Record<Resource, string> = {
   skill: "Skills",
   plugin: "Plugins",
   app: "Apps",
+  guardrailsPolicy: "Guardrails Policy",
   mcpGateway: "MCP Gateways",
-  mcpOauthClient: "MCP OAuth Clients",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
-  openappaPolicy: "OpenAPPA Policy",
-  openappaDiagnostics: "OpenAPPA Diagnostics",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -101,14 +96,13 @@ export const resourceLabels: Record<Resource, string> = {
   llmLimit: "LLM Limits",
   llmProviderApiKey: "LLM Provider API Keys",
   llmVirtualKey: "LLM Virtual Keys",
-  llmOauthClient: "LLM OAuth Clients",
   llmModel: "LLM Models",
   apiKey: "API Keys",
+  oauthClient: "OAuth Clients",
   serviceAccount: "Service Accounts",
   auditLog: "Audit Log",
   accessPolicies: "Access Policies",
   organizationSettings: "Organization Settings",
-  scheduledTask: "Scheduled Tasks",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -117,19 +111,14 @@ export const resourceDescriptions: Record<Resource, string> = {
   plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
-  mcpOauthClient:
-    "OAuth clients (service accounts) authorized to call MCP gateways",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
-  openappaPolicy: "OpenAPPA policy, batteries, and coverage",
-  openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
-  log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
+  guardrailsPolicy: "Guardrails (OpenAPPA) policy, batteries, and coverage",
+  log: "LLM proxy, MCP tool-call, and Guardrails consult logs, with separate own and organization-wide visibility, plus Guardrails yells",
   chat: "Chat conversations",
   project:
-    "Projects — shared collections of chats, Agent Runtime runs, and files",
-  scheduledTask: "Scheduled agent tasks that run on a schedule",
+    "Projects — shared collections of chats, schedules, Agent Runtime runs, and files",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
-  llmOauthClient: "OAuth clients authorized to call the LLM Proxy",
   llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
   llmCost: "Organization-wide LLM usage and cost analytics",
@@ -138,7 +127,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallation: "Installed MCP servers and their runtime",
   environment: "Deployment environments (namespace) for catalog items",
   credential:
-    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform",
+    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform. Who can view, connect, edit and delete each one is granted per credential, on its Permissions tab.",
   member:
     "People in the organization: inviting them, changing their roles, and removing them",
   ac: "Custom RBAC roles",
@@ -146,6 +135,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   invitation: "User invitations",
   identityProvider: "Identity providers for authentication",
   apiKey: "User API keys for programmatic access",
+  oauthClient:
+    "Applications authorized to access MCP gateways, A2A agents, and the LLM Proxy",
   serviceAccount: "Service accounts and tokens for programmatic access",
   auditLog: "Audit events, with separate own and organization-wide visibility",
   accessPolicies:
@@ -168,18 +159,16 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app", "scheduledTask"],
-  MCP: ["mcpGateway", "mcpOauthClient", "mcpRegistry", "mcpServerInstallation"],
+  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
+  MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",
     "llmProviderApiKey",
     "llmVirtualKey",
-    "llmOauthClient",
     "llmModel",
     "llmLimit",
     "llmCost",
   ],
-  OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
   Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
   Administration: [
     "accessPolicies",
@@ -188,6 +177,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "team",
     "identityProvider",
     "apiKey",
+    "oauthClient",
     "serviceAccount",
     "credential",
     "environment",

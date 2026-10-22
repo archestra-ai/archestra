@@ -219,6 +219,32 @@ export default class ResourcePermissionTargetModel {
           CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
       };
     }
+    if (params.resource === "credential") {
+      const table = schema.runtimeCredentialDefinitionsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          createdBy: table.createdBy,
+          createdByServiceAccountId: table.createdByServiceAccountId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // Organization-owned, like a service account: the creator is reported
+      // so the permissions editor can name them, not because they own it.
+      const { createdBy, createdByServiceAccountId, ...rest } = target;
+      return {
+        ...rest,
+        authorId:
+          CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
+      };
+    }
     if (params.resource === "llmVirtualKey") {
       const table = schema.virtualApiKeysTable;
       const [target] = await db
@@ -324,10 +350,7 @@ export default class ResourcePermissionTargetModel {
       // audience of its own. Its whole access story is the grants below.
       return { ...target, authorId: null };
     }
-    if (
-      params.resource === "mcpOauthClient" ||
-      params.resource === "llmOauthClient"
-    ) {
+    if (params.resource === "oauthClient") {
       // Both kinds share the OAuth provider's table; the registration's
       // organization, kind and author live in its metadata.
       const table = schema.oauthClientsTable;
@@ -342,11 +365,7 @@ export default class ResourcePermissionTargetModel {
         .where(
           and(
             eq(table.id, params.id),
-            sql`${table.metadata}->>'type' = ${
-              params.resource === "mcpOauthClient"
-                ? "mcp_oauth_client"
-                : "llm_oauth_client"
-            }`,
+            sql`${table.metadata}->>'type' IN ('mcp_oauth_client', 'llm_oauth_client', 'managed_oauth_client')`,
             sql`${table.metadata}->>'organizationId' = ${params.organizationId}`,
           ),
         );

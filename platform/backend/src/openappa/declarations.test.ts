@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { HttpResponse, http } from "msw";
+import config from "@/config";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
@@ -60,7 +61,10 @@ async function failedDispatch(params: {
   const content = `[policy]\nversion = 2\n[credentials]\n${JEV_KEY} = "${key}"\n[externals.jev]\ntoken_env = "${JEV_KEY}"\n`;
   return openappaFailure(
     await openappaDeclarations
-      .dispatchPolicy({ organizationId: params.organizationId, content })
+      .dispatchPolicy({
+        organizationId: params.organizationId,
+        content,
+      })
       .then(
         () => expect.unreachable("the dispatch policy resolved"),
         (error: unknown) => error,
@@ -82,6 +86,33 @@ test("a bound credential its provider cannot mint now fails the dispatch as retr
   });
   expect(failure.statusCode).toBe(503);
   expect(failure.shouldRetry).toBe(true);
+});
+
+test("a bound credential with no organization value is left out of the dispatch", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const userId = (await makeUser()).id;
+  const key = "jev-without-value";
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId,
+    createdBy: userId,
+    definition: {
+      key,
+      name: "Jev",
+      kind: "secret",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  const resolved = await openappaDeclarations.dispatchPolicy({
+    organizationId,
+    content: `[policy]\nversion = 2\n[credentials]\n${JEV_KEY} = "${key}"\n[externals.jev]\ntoken_env = "${JEV_KEY}"\n`,
+  });
+  expect(resolved.credentials).toEqual({});
 });
 
 test("a bound credential its provider refuses fails the dispatch as the organization's to fix", async ({
@@ -144,4 +175,22 @@ test("a policy line wins, a stored binding fills what an included battery reads,
   expect(won.content).toBe(declared);
   expect(won.resolution.credentials).toEqual({ [GITHUB_TOKEN]: "repo-github" });
   expect(won.credentialSource).toEqual({ [GITHUB_TOKEN]: "policy" });
+});
+
+test("publishes the proxy body limit as the default result cap of a policy that states none", () => {
+  const variable = "APPA_ARCHESTRA_MAX_BODY_BYTES";
+  const original = config.api.bodyLimit;
+  const prior = process.env[variable];
+  try {
+    openappaDeclarations.publishBridgeToken();
+    expect(process.env[variable]).toBe(String(original));
+
+    config.api.bodyLimit = 5 * 1024 * 1024;
+    openappaDeclarations.publishBridgeToken();
+    expect(process.env[variable]).toBe(String(5 * 1024 * 1024));
+  } finally {
+    config.api.bodyLimit = original;
+    if (prior === undefined) delete process.env[variable];
+    else process.env[variable] = prior;
+  }
 });

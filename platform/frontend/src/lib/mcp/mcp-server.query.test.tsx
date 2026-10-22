@@ -22,6 +22,7 @@ const {
   muteCatalogAlertMock,
   muteAlertMock,
   subscribeMock,
+  trackEventMock,
   toastErrorMock,
   toastSuccessMock,
   unmuteAlertMock,
@@ -33,6 +34,7 @@ const {
   muteCatalogAlertMock: vi.fn(),
   muteAlertMock: vi.fn(),
   subscribeMock: vi.fn(),
+  trackEventMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   unmuteAlertMock: vi.fn(),
@@ -67,6 +69,11 @@ vi.mock("sonner", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/analytics")>()),
+  trackEvent: trackEventMock,
+}));
+
 vi.mock("@/lib/websocket/websocket", () => ({
   default: {
     connect: connectMock,
@@ -84,6 +91,39 @@ describe("useMcpInstallationStatusCacheSync", () => {
       },
     });
     deleteMcpServerMock.mockResolvedValue({ data: undefined });
+  });
+
+  it("names a failed install from the registry's issue index when no server list is cached", () => {
+    let statusHandler:
+      | ((message: McpInstallationStatusMessage) => void)
+      | null = null;
+    subscribeMock.mockImplementation((type, handler) => {
+      if (type === "mcp_installation_status") statusHandler = handler;
+      return vi.fn();
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(["mcp-registry", "issue-index"], {
+      catalogItems: [],
+      servers: [{ id: "server-9", name: "jira-prod", catalogId: "cat-9" }],
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useMcpInstallationStatusCacheSync(), { wrapper });
+
+    act(() => {
+      statusHandler?.({
+        type: "mcp_installation_status",
+        payload: { serverId: "server-9", status: "error", error: "boom" },
+      } as McpInstallationStatusMessage);
+    });
+
+    expect(trackEventMock).toHaveBeenCalledWith(
+      "mcp_server_installation_failed",
+      expect.objectContaining({ serverName: "jira-prod", catalogId: "cat-9" }),
+    );
   });
 
   it("updates cached MCP server installation status from websocket messages", () => {
@@ -141,6 +181,53 @@ describe("useMcpInstallationStatusCacheSync", () => {
         localInstallationError: "Install failed",
       },
     ]);
+  });
+
+  it("updates discovery while preserving paginated automatic usage in the shared cache prefix", () => {
+    let statusHandler:
+      | ((message: McpInstallationStatusMessage) => void)
+      | undefined;
+    subscribeMock.mockImplementation((type, handler) => {
+      if (type === "mcp_installation_status") statusHandler = handler;
+      return vi.fn();
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const serverKey = ["mcp-servers", {}];
+    const usageKey = [
+      "mcp-servers",
+      "automatic-agent-usage",
+      { limit: 20 },
+      false,
+    ];
+    const usage = {
+      data: [{ id: "agent-1", name: "Automatic" }],
+      pagination: { hasNextPage: false, nextCursor: null },
+    };
+    queryClient.setQueryData(serverKey, [
+      {
+        id: "server-1",
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      },
+    ]);
+    queryClient.setQueryData(usageKey, usage);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useMcpInstallationStatusCacheSync(), { wrapper });
+    act(() =>
+      statusHandler?.({
+        type: "mcp_installation_status",
+        payload: { serverId: "server-1", status: "success", error: null },
+      }),
+    );
+    expect(queryClient.getQueryData(serverKey)).toMatchObject([
+      { id: "server-1", localInstallationStatus: "success" },
+    ]);
+    expect(queryClient.getQueryData(usageKey)).toEqual(usage);
+    expect(queryClient.getQueryState(usageKey)?.isInvalidated).toBe(true);
   });
 
   it("invalidates external Skills when installation discovery completes", () => {

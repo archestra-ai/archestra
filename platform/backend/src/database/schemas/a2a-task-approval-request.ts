@@ -24,21 +24,24 @@ const a2aTaskApprovalRequestTable = pgTable(
     approved: boolean("approved").notNull().default(false),
     resolved: boolean("resolved").notNull().default(false),
     // OpenAPPA human review: set only when the paused call is the
-    // `execute_remedy_plan` for an offer that needs the `hitl` authority.
+    // `execute_remedy_plan` for an offer that needs the `human-approval` authority.
     // The blocked action itself lives in OpenAPPA's tables.
     openappaOfferId: text("openappa_offer_id"),
     openappaReviewText: text("openappa_review_text"),
     /** The exact `execute_remedy_plan` arguments, proxy stamps included. */
     remedyArguments: jsonb("remedy_arguments").$type<Record<string, unknown>>(),
     /**
-     * The only user who may decide, in Slack. Null when the A2A caller
+     * The only user who may decide, in a chat (Slack or MS Teams). Null when
+     * the A2A caller
      * answers the task's approvals.
      */
     reviewerUserId: text("reviewer_user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
-    slackChannelId: text("slack_channel_id"),
-    slackThreadTs: text("slack_thread_ts"),
+    // The chat channel and thread the review was posted to. The columns were
+    // named when only Slack posted reviews; they hold MS Teams ids too.
+    chatChannelId: text("slack_channel_id"),
+    chatThreadId: text("slack_thread_ts"),
     expiresAt: timestamp("expires_at", { mode: "date" }),
     ruling: text("ruling").$type<"approve" | "deny">(),
     decidedAt: timestamp("decided_at", { mode: "date" }),

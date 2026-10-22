@@ -1,6 +1,8 @@
 "use client";
 
+import { formatDistance } from "date-fns";
 import {
+  Activity,
   Bot,
   Copy,
   History,
@@ -35,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
@@ -43,10 +46,13 @@ import {
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
 import { useRuntimeClock } from "@/lib/agent-runtime-time";
-import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
-import { AgentRunOpenappaReview } from "./openappa-review-card";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [resumedRun, setResumedRun] = useState<{
@@ -81,7 +87,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
   usePageTitle(run?.title ?? "Agent Runtime");
-  const now = useRuntimeClock(Boolean(run?.workspace));
+  const now = useRuntimeClock(true);
+
+  // The run's LLM requests are logged under its session id, which only the
+  // owner is sent; `log:read` lets them open their own trace.
+  const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
   // Metadata and the log stream are readable by shared viewers, but attaching
   // to the live terminal runs a shell under the owner's own credentials — so it
@@ -120,7 +130,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     ["idle", "suspended"].includes(run.workspace.state) &&
     new Date(run.workspace.expiresAt).getTime() > now;
   const workspaceNotice = run?.workspace
-    ? workspaceNoticeFor(run.workspace.state, canReattach)
+    ? workspaceNoticeFor({
+        state: run.workspace.state,
+        canReattach,
+        failed: run.state === "TASK_STATE_FAILED",
+      })
     : null;
 
   const actions: {
@@ -129,10 +143,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     onSelect: () => void;
     disabled?: boolean;
     primary?: boolean;
+    prominent?: boolean;
   }[] = [];
   if (isOwner && (live || (reattached && canReattach))) {
     actions.push({
-      label: showHistory ? "Live terminal" : "Session history",
+      label: showHistory ? "Live terminal" : "Run history",
       icon: History,
       onSelect: () => setShowHistory(!showHistory),
     });
@@ -173,6 +188,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   if (isOwner && live) {
     actions.push({
       label: "Stop",
+      prominent: true,
       icon: Square,
       onSelect: () => setStopDialogOpen(true),
     });
@@ -192,13 +208,13 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       <header
         className={
           run
-            ? "flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 @2xl:px-5"
+            ? "flex shrink-0 flex-wrap items-start justify-between gap-3 border-b px-4 py-3 @2xl:px-5"
             : "hidden"
         }
       >
         {run ? (
           <>
-            <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
               <div className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 @2xl:flex">
                 <AgentIcon icon={run.agent.icon} size={20} />
               </div>
@@ -220,14 +236,25 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     compact
                   />
                 </div>
-                <p className="mt-1 truncate text-xs text-muted-foreground @2xl:mt-0">
-                  {run.agent.name}
-                </p>
+                <div className="mt-1 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground @2xl:mt-0">
+                  <span>{run.agent.name}</span>
+                  <span aria-hidden>·</span>
+                  <time
+                    dateTime={run.startedAt}
+                    title={`Started ${new Date(run.startedAt).toLocaleString()}`}
+                  >
+                    Started{" "}
+                    {formatDistance(new Date(run.startedAt), now, {
+                      addSuffix: true,
+                    })}
+                  </time>
+                </div>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <div className="hidden items-center gap-2 @2xl:flex">
-                {actions.map((action) => (
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {actions
+                .filter((action) => action.primary || action.prominent)
+                .map((action) => (
                   <Button
                     key={action.label}
                     size="sm"
@@ -243,12 +270,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     <span>{action.label}</span>
                   </Button>
                 ))}
-              </div>
               {(isOwner || canManageAccess) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon-sm"
                       aria-label="More run actions"
                     >
@@ -260,21 +286,26 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {actions.map((action) => (
-                      <DropdownMenuItem
-                        key={action.label}
-                        disabled={action.disabled}
-                        onSelect={action.onSelect}
-                      >
-                        <action.icon
-                          className={
-                            action.disabled ? "size-4 animate-spin" : "size-4"
-                          }
-                        />
-                        <span>{action.label}</span>
-                      </DropdownMenuItem>
-                    ))}
-                    {actions.length > 0 && isOwner && <DropdownMenuSeparator />}
+                    {actions
+                      .filter((action) => !action.primary && !action.prominent)
+                      .map((action) => (
+                        <DropdownMenuItem
+                          key={action.label}
+                          disabled={action.disabled}
+                          onSelect={action.onSelect}
+                        >
+                          <action.icon
+                            className={
+                              action.disabled ? "size-4 animate-spin" : "size-4"
+                            }
+                          />
+                          <span>{action.label}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    {actions.some(
+                      (action) => !action.primary && !action.prominent,
+                    ) &&
+                      isOwner && <DropdownMenuSeparator />}
                     {isOwner && (
                       <>
                         <DropdownMenuItem
@@ -289,6 +320,14 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                             <span>View Agent</span>
                           </Link>
                         </DropdownMenuItem>
+                        {canReadLogs && run.sessionId ? (
+                          <DropdownMenuItem asChild>
+                            <Link href={llmSessionHref(run.sessionId)}>
+                              <Activity className="size-4" />
+                              <span>View trace</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuItem
                           disabled={!availableConnectionCommand}
                           onSelect={() => setConnectionDialogOpen(true)}
@@ -306,7 +345,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                               }
                             >
                               <Trash2 className="size-4" />
-                              <span>Delete workspace</span>
+                              <span>Delete saved files</span>
                             </DropdownMenuItem>
                           )}
                       </>
@@ -320,25 +359,23 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
-        {run ? <AgentRunOpenappaReview taskId={activeTaskId} /> : null}
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
-          <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <InlineNotice
+            variant={run.state === "TASK_STATE_FAILED" ? "error" : "neutral"}
+            role={run.state === "TASK_STATE_FAILED" ? "alert" : "status"}
+            className="shrink-0"
+          >
             {workspaceNotice && (
-              <div className="flex min-w-0 items-start gap-2 sm:items-center">
-                <Info
-                  aria-hidden
-                  className="mt-0.5 size-3.5 shrink-0 sm:mt-0"
-                />
-                <span className="font-medium text-foreground">
-                  {workspaceNotice}
-                </span>
-              </div>
+              <>
+                <Info aria-hidden />
+                <InlineNoticeText>{workspaceNotice}</InlineNoticeText>
+              </>
             )}
             {run.workspace.state !== "deleted" && (
               <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
             )}
-          </output>
+          </InlineNotice>
         )}
         {showLiveTerminal ? (
           <AgentRunTerminal
@@ -380,7 +417,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
         title="Stop this run?"
-        description="The Agent process will stop. Its workspace, saved files, and run history will be retained so you can continue later."
+        description="The Agent process will stop. Saved files and run history will be retained so you can continue later."
         isPending={cancelRun.isPending}
         confirmLabel="Stop run"
         pendingLabel="Stopping…"
@@ -394,9 +431,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       <DeleteConfirmDialog
         open={deleteWorkspaceDialogOpen}
         onOpenChange={setDeleteWorkspaceDialogOpen}
-        title="Delete this workspace?"
-        description="This permanently removes the development environment and all its files. You cannot continue it afterward. Saved run transcripts remain available."
-        confirmLabel="Delete workspace"
+        title="Delete saved files?"
+        description="This permanently removes this run's saved files. You cannot resume the run afterward. Run history remains available."
+        confirmLabel="Delete saved files"
         isPending={deleteWorkspace.isPending}
         onConfirm={() =>
           deleteWorkspace.mutate(taskId, {
@@ -413,12 +450,12 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         open={connectionDialogOpen}
         onOpenChange={setConnectionDialogOpen}
         title="Terminal connection details"
-        description="Connect from a terminal with access to this workspace's cluster."
+        description="Connect from a terminal with access to the Kubernetes cluster running this Agent."
         className="max-w-3xl"
         bodyClassName="space-y-2"
       >
         <p className="text-sm font-medium">
-          {live ? "Manual attach command" : "Workspace shell command"}
+          {live ? "Manual attach command" : "Saved run shell command"}
         </p>
         <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
           <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
@@ -479,20 +516,27 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   );
 }
 
-function workspaceNoticeFor(
-  state: string,
-  canReattach: boolean,
-): string | null {
+function workspaceNoticeFor({
+  state,
+  canReattach,
+  failed,
+}: {
+  state: string;
+  canReattach: boolean;
+  failed: boolean;
+}): string | null {
   switch (state) {
     case "suspended":
-      return "Workspace suspended; saved files are retained.";
+      return failed
+        ? "The run failed. Saved files are retained. Open Failed details for the reason, or select Resume to try again."
+        : "Paused to save resources. Your files are saved. Select Resume to continue.";
     case "idle":
       return canReattach
         ? null
         : "Session ended; resume the saved conversation.";
     case "deleted":
-      return "Workspace removed. Run history remains available.";
+      return "Saved files removed. Run history remains available.";
     default:
-      return "Workspace is in use or changing state.";
+      return "The Agent is busy or changing state. Try again shortly.";
   }
 }

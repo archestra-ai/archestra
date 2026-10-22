@@ -15,6 +15,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -26,7 +28,13 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
+import {
+  type AppaDelegationMarker,
+  mintDelegationMarker,
+} from "@/openappa/delegation";
 import authRoutes from "@/routes/auth";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
   accessGrants,
@@ -36,6 +44,7 @@ import {
   expect,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -68,6 +77,8 @@ import {
   zhipuaiAdapterFactory,
 } from "../adapters";
 import modelRouterProxyRoutes from "./model-router";
+
+setupTestCacheManager();
 
 function createFastifyApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -823,6 +834,82 @@ describe("model router proxy routes", () => {
     });
   }
 
+  test("collects a delegation marker from the Responses wire before flattening a two-part prompt", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "anthropic", modelId: "claude-test" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Anthropic Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const previousSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = "model-router-delegation-secret";
+    let collected: AppaDelegationMarker[] | undefined;
+    app.addHook("onSend", async (request) => {
+      collected = collectedDelegationMarkers(request);
+    });
+    try {
+      const prompt = "CHILD-MARKER: reply with exactly child-done";
+      const marker = mintDelegationMarker({
+        organizationId: organization.id,
+        callerId: "user:test",
+        parentId: "ses_parent",
+        spawnerNativeId: "ses_parent",
+        prompt,
+        spawnCallId: "toolu_spawn",
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "Kilo-Code/7.8.8 ai-sdk/provider-utils/4.0.46",
+        },
+        payload: {
+          model: "anthropic:claude-test",
+          input: [
+            {
+              role: "user",
+              content: [
+                // Kilo Code hands the child its prompt, marker last, and then
+                // appends an environment block as a part of its own. The
+                // translation to Chat Completions joins both parts, so the
+                // marker no longer ends the text the handler sees.
+                { type: "input_text", text: `${prompt}\n\n${marker}` },
+                {
+                  type: "input_text",
+                  text: "\n\n<environment_details>\nWorking directory: /tmp\n</environment_details>",
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(collected?.map((m) => [m.parentId, m.spawnCallId])).toEqual([
+        ["ses_parent", "toolu_spawn"],
+      ]);
+    } finally {
+      config.openappa.offerSigningSecret = previousSecret;
+    }
+  });
+
   test("routes an internal Agent through the model router for Agent Runtime attribution", async ({
     makeAgent,
     makeOrganization,
@@ -1510,6 +1597,98 @@ describe("model router proxy routes", () => {
     ]);
     expect(chatResponse.statusCode).toBe(404);
     expect(chatResponse.json().error.message).toContain("not available");
+  });
+
+  test.for([
+    "oauth",
+    "virtual_key",
+  ] as const)("attributes %s Model Router spend to its account and rejects disabled accounts", async (credentialKind, {
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeServiceAccount,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, { provider });
+    await linkAllProviderModelsToApiKey(provider, key.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const mappings: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[] = [{ provider, providerApiKeyId: key.id }];
+    let credential: string;
+    if (credentialKind === "oauth") {
+      const client = await LlmOauthClientModel.create({
+        organizationId: org.id,
+        authorId: crypto.randomUUID(),
+        name: "worker",
+        serviceAccountId: account.id,
+        providerApiKeys: mappings,
+      });
+      const minted = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "client_credentials",
+          client_id: client.oauthClient.clientId,
+          client_secret: client.clientSecret,
+          scope: LLM_PROXY_OAUTH_SCOPE,
+        },
+      });
+      expect(minted.statusCode, minted.body).toBe(200);
+      credential = minted.json().access_token;
+    } else {
+      credential = (
+        await VirtualApiKeyModel.create({
+          organizationId: org.id,
+          name: "worker",
+          authorId: serviceAccountUserId(account.id),
+          ...accessGrants("personal"),
+          providerApiKeys: mappings,
+        })
+      ).value;
+    }
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${credential}` },
+        payload: {
+          model: `${provider}:${modelId}`,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+    const accepted = await call();
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const rows = await InteractionModel.findAllPaginated({
+      limit: 10,
+      offset: 0,
+    });
+    expect(rows.data).toEqual([
+      expect.objectContaining({ serviceAccountId: account.id, userId: null }),
+    ]);
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+    const rejected = await call();
+    expect(rejected.statusCode, rejected.body).toBe(401);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/model-router/models",
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    expect(listed.statusCode, listed.body).toBe(401);
+    await app.close();
   });
 
   test("routes requests authenticated with an LLM OAuth client access token issued from client credentials", async ({
@@ -2256,6 +2435,148 @@ describe("model router proxy routes", () => {
       model: "gemini:gemini-2.5-pro",
     });
     expect(capturedApiKey).toBeUndefined();
+  });
+
+  test.for([
+    {
+      label: "a call the client declared",
+      tools: ["inventory__read"],
+      clientCallName: "inventory__read",
+    },
+    {
+      label: "a call the dispatch repair re-addressed to run_tool",
+      tools: ["archestra__search_tools", "archestra__run_tool"],
+      clientCallName: "archestra__run_tool",
+    },
+  ])("streams $label over Responses with a call_id that keeps Gemini's thought signature", async ({
+    tools,
+    clientCallName,
+  }, { makeAgent, makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "gemini", modelId: "gemini-3.7-flash" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "gemini",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Gemini Responses Agent",
+      agentType: "llm_proxy",
+    });
+
+    type GeminiStreamRequest = {
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const providerRequests: GeminiStreamRequest[] = [];
+    vi.mocked(geminiAdapterFactory.createClient).mockImplementation(
+      () =>
+        ({
+          models: {
+            generateContentStream: async (request: GeminiStreamRequest) => {
+              providerRequests.push(request);
+              const parts =
+                providerRequests.length === 1
+                  ? [
+                      {
+                        functionCall: {
+                          id: "call_read",
+                          name: "inventory__read",
+                          args: { itemId: "item-1" },
+                        },
+                        thoughtSignature: "opaque-thought-signature",
+                      },
+                    ]
+                  : [{ text: "Done" }];
+              return (async function* () {
+                yield {
+                  candidates: [
+                    {
+                      content: { role: "model", parts },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  usageMetadata: {
+                    promptTokenCount: 12,
+                    candidatesTokenCount: 10,
+                    totalTokenCount: 22,
+                  },
+                  modelVersion: "gemini-3.7-flash",
+                };
+              })();
+            },
+          },
+        }) as never,
+    );
+
+    const sendTurn = (input: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gemini:gemini-3.7-flash",
+          stream: true,
+          input,
+          tools: tools.map((name) => ({
+            type: "function",
+            name,
+            parameters: { type: "object", properties: {} },
+          })),
+        },
+      });
+    const prompt = { role: "user", content: "Read item 1" };
+
+    const firstResponse = await sendTurn([prompt]);
+
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    // The client reads calls from the item frames and from the completed
+    // envelope; both must name the call_id it will echo back.
+    const clientCalls = firstResponse.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)))
+      .flatMap((event) => [event.item, ...(event.response?.output ?? [])])
+      .filter((item) => item?.type === "function_call");
+    expect(clientCalls.length).toBeGreaterThan(0);
+    const [clientCall] = clientCalls;
+    expect(clientCall.name).toBe(clientCallName);
+    expect(new Set(clientCalls.map((call) => call.call_id))).toEqual(
+      new Set([clientCall.call_id]),
+    );
+
+    const secondResponse = await sendTurn([
+      prompt,
+      {
+        type: "function_call",
+        call_id: clientCall.call_id,
+        name: clientCall.name,
+        arguments: clientCall.arguments,
+      },
+      {
+        type: "function_call_output",
+        call_id: clientCall.call_id,
+        output: "available",
+      },
+    ]);
+
+    expect(secondResponse.statusCode, secondResponse.body).toBe(200);
+    expect(secondResponse.body).toContain("Done");
+    const replayedCall = providerRequests[1]?.contents
+      .find((content) => content.role === "model")
+      ?.parts.find((part) => part.functionCall);
+    expect(replayedCall).toMatchObject({
+      functionCall: { id: "call_read", name: clientCallName },
+      thoughtSignature: "opaque-thought-signature",
+    });
   });
 
   test("routes provider-qualified model ids to their provider", async ({

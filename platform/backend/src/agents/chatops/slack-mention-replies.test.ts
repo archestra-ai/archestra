@@ -19,9 +19,14 @@ const server = useMswServer();
 
 describe("mention reply delivery", () => {
   test.for([
-    "message",
-    "app_mention",
-  ])("replies once after a Stop when %s arrives first", async (firstType, {
+    { firstType: "message", control: "stop" },
+    { firstType: "app_mention", control: "stop" },
+    { firstType: "message", control: "reaction" },
+    { firstType: "app_mention", control: "reaction" },
+  ])("replies once after $control when $firstType arrives first", async ({
+    firstType,
+    control,
+  }, {
     makeUser,
     makeOrganization,
     makeTeam,
@@ -85,6 +90,12 @@ describe("mention reply delivery", () => {
       http.post("https://slack.com/api/conversations.info", () =>
         HttpResponse.json({ ok: true, channel: { id: "C_TEST" } }),
       ),
+      http.post("https://slack.com/api/reactions.get", () =>
+        HttpResponse.json({
+          ok: true,
+          message: { ts: "100.000010", thread_ts: "100.000001" },
+        }),
+      ),
       http.post("https://slack.com/api/conversations.replies", () =>
         HttpResponse.json({ ok: true, messages: [] }),
       ),
@@ -129,21 +140,62 @@ describe("mention reply delivery", () => {
         }),
       );
       expect(posts).toHaveLength(1);
-      await manager.handleIncomingMessage(provider, {
+      const firstReplyBlocks = JSON.parse(posts[0].get("blocks") ?? "[]");
+      const hint = firstReplyBlocks
+        .filter((block: { type: string }) => block.type === "context")
+        .flatMap((block: { elements: { type: string; text: string }[] }) =>
+          block.elements.filter((element) => element.type === "plain_text"),
+        )
+        .find((element: { text: string }) =>
+          element.text.includes('Reply "mute"'),
+        );
+      expect(hint?.text).toMatch(
+        /Press Stop to cancel only the current answer/,
+      );
+      expect(hint?.text).toContain(
+        'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies',
+      );
+      expect(hint?.text).toContain("@mention me to resume");
+      const controlPayload = {
         type: "event_callback",
+        event_id: `Ev_${control}`,
         team_id: "T_TEST",
         event: {
-          type: "agent_session_stopped",
+          type: control === "stop" ? "agent_session_stopped" : "reaction_added",
+          reaction: "mute",
+          item: { type: "message", channel: "C_TEST", ts: "100.000010" },
           channel: "C_TEST",
           thread_ts: "100.000001",
           user: "U_TEST",
           event_ts: "100.000003",
           streaming_message_ts: [],
         },
-      });
-      // Stopping posts nothing; it moves the session out of "processing".
+      };
+      await manager.handleIncomingMessage(provider, controlPayload);
+      // The control posts nothing; it moves the session out of "processing".
       expect(posts).toHaveLength(1);
       expect(sessionStatuses.at(-1)).toBe("active");
+      // Removing a reaction does not resume auto-replies; an explicit mention does.
+      await manager.handleIncomingMessage(provider, {
+        type: "event_callback",
+        team_id: "T_TEST",
+        event: {
+          type: "reaction_removed",
+          reaction: "mute",
+          user: "U_TEST",
+          item: { type: "message", channel: "C_TEST", ts: "100.000010" },
+          event_ts: "100.0000035",
+        },
+      });
+      // A replay of the original mention must not undo a later mute.
+      await manager.handleIncomingMessage(
+        provider,
+        payload({
+          type: "app_mention",
+          text: "<@UBOT123>",
+          ts: "100.000002",
+        }),
+      );
       await manager.handleIncomingMessage(
         provider,
         payload({
@@ -152,7 +204,8 @@ describe("mention reply delivery", () => {
           ts: "100.000004",
         }),
       );
-      expect(posts).toHaveLength(1);
+      const afterFollowup = control === "stop" ? 2 : 1;
+      expect(posts).toHaveLength(afterFollowup);
 
       // The ingress cache keeps only the first twin. Exercise the actual
       // parser, manager, database claim, and HTTP reply for either order.
@@ -166,10 +219,16 @@ describe("mention reply delivery", () => {
           await manager.handleIncomingMessage(provider, body);
         }
       }
-      expect(posts).toHaveLength(2);
-      expect(posts[1].get("text")).toContain("Hi! What can I do for you?");
-      expect(posts[1].get("channel")).toBe("C_TEST");
-      expect(posts[1].get("thread_ts")).toBe("100.000001");
+      expect(posts).toHaveLength(afterFollowup + 1);
+      expect(posts[afterFollowup].get("text")).toContain(
+        "Hi! What can I do for you?",
+      );
+      expect(posts[afterFollowup].get("channel")).toBe("C_TEST");
+      expect(posts[afterFollowup].get("thread_ts")).toBe("100.000001");
+      expect(posts[afterFollowup].get("blocks")).not.toContain(
+        "stop auto-replies",
+      );
+      expect(posts[afterFollowup].get("blocks")).not.toContain("Press Stop");
 
       // A retry on another process bypasses the in-memory cache but still
       // must not post again: the database claim owns reply deduplication.
@@ -181,7 +240,18 @@ describe("mention reply delivery", () => {
           ts: "100.000005",
         }),
       );
-      expect(posts).toHaveLength(2);
+      expect(posts).toHaveLength(afterFollowup + 1);
+      // A repeated control event after resuming must not affect the new turn.
+      await manager.handleIncomingMessage(provider, controlPayload);
+      await manager.handleIncomingMessage(
+        provider,
+        payload({
+          type: "message",
+          text: "another follow up",
+          ts: "100.000006",
+        }),
+      );
+      expect(posts).toHaveLength(afterFollowup + 2);
     } finally {
       await provider.cleanup();
       await manager.cleanup();

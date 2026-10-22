@@ -112,7 +112,7 @@ it.each([
   // manage access, so the draft grant is view-only.
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can view");
+  ).toHaveTextContent("Can read");
   expect(screen.getByTestId("audience-chip")).toHaveTextContent("Team-wide");
   await user.click(
     within(dialog).getByRole("button", { name: "Save permissions" }),

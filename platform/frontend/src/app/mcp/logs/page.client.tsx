@@ -1,18 +1,11 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  extractMcpExecutedAs,
-  isEncryptedChatUnavailableContent,
-  parseFullToolName,
-} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Boxes, MessagesSquare, User } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
-import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
-import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import {
   CollectionFilters,
   FilterBar,
@@ -20,56 +13,39 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Badge } from "@/components/ui/badge";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import {
-  formatAuthMethod,
-  formatCallerIdentity,
-  useMcpToolCalls,
-} from "@/lib/mcp/mcp-tool-call.query";
-import {
-  canShowMcpToolCallStatus,
-  resolveMcpToolCallStatus,
-} from "@/lib/mcp-logs/tool-call-status";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
+import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
+import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import { ErrorBoundary } from "../../_parts/error-boundary";
+import { CallCell, StatusCell } from "./_parts/call-cell";
+import { CredentialCell } from "./_parts/credential-cell";
+import { GatewayCell } from "./_parts/gateway-cell";
+import { CalledAtCell, DurationCell } from "./_parts/timing-cells";
+import type { McpToolCallRow } from "./_parts/types";
 
-type McpToolCallData =
-  archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];
+type McpToolCallData = McpToolCallRow;
 
-export default function McpGatewayLogsPage({
-  initialData,
-}: {
-  initialData?: {
-    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-  };
-}) {
+export default function McpGatewayLogsPage() {
   return (
     <div>
       <ErrorBoundary>
-        <McpToolCallsTable initialData={initialData} />
+        <McpToolCallsTable />
       </ErrorBoundary>
     </div>
   );
 }
 
-function McpToolCallsTable({
-  initialData,
-}: {
-  initialData?: {
-    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-  };
-}) {
+function McpToolCallsTable() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -80,10 +56,8 @@ function McpToolCallsTable({
   const profileIdFromUrl =
     searchParams.get("profileId") || searchParams.get("profileID");
   const mcpServerNameFromUrl = searchParams.get("mcpServerName") ?? "all";
+  const userIdFromUrl = searchParams.get("userId") ?? "all";
   const searchFromUrl = searchParams.get("search");
-  const cursorFromUrl = searchParams.get("cursor");
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const cursorPagination = useCursorPagination({
@@ -91,35 +65,28 @@ function McpToolCallsTable({
   });
   useEffect(() => {
     setProfileFilter(profileIdFromUrl || "all");
-    cursorPagination.goNewest();
-  }, [cursorPagination.goNewest, profileIdFromUrl]);
+  }, [profileIdFromUrl]);
 
+  // Free-text search was removed from this page; scrub it from old links.
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
-      return;
+    if (!searchFromUrl) return;
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("cursor");
-    params.delete("page");
-    params.delete("pageSize");
     params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
-  }, [
-    cursorFromUrl,
-    pageFromUrl,
-    pageSizeFromUrl,
-    pathname,
-    router,
-    searchFromUrl,
-    searchParams,
-  ]);
+  }, [pathname, router, searchFromUrl, searchParams]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+      // A cursor belongs to the listing it was issued for.
+      if (!("cursor" in updates)) {
+        params.delete("cursor");
+        params.delete("page");
+      }
       Object.entries(updates).forEach(([key, value]) => {
         if (value === null || value === "") {
           params.delete(key);
@@ -136,21 +103,26 @@ function McpToolCallsTable({
   const handleProfileFilterChange = useCallback(
     (value: string) => {
       setProfileFilter(value);
-      cursorPagination.goNewest();
       updateUrlParams({
         profileId: value === "all" ? null : value,
         profileID: null,
       });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleMcpServerChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ mcpServerName: value === "all" ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
+  );
+
+  const handleUserFilterChange = useCallback(
+    (value: string) => {
+      updateUrlParams({ userId: value === "all" ? null : value });
+    },
+    [updateUrlParams],
   );
 
   // Date time range picker hook
@@ -159,15 +131,30 @@ function McpToolCallsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
         updateUrlParams({
           startDate,
           endDate,
         });
       },
-      [cursorPagination.goNewest, updateUrlParams],
+      [updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const {
     data: mcpToolCallsResponse,
@@ -178,50 +165,31 @@ function McpToolCallsTable({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     mcpServerName:
       mcpServerNameFromUrl !== "all" ? mcpServerNameFromUrl : undefined,
+    userId: userIdFromUrl !== "all" ? userIdFromUrl : undefined,
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents } = useProfiles({
-    filters: { agentTypes: ["agent", "mcp_gateway"] },
-  });
-
-  const { data: mcpServers } = useMcpServers();
-  const { data: canReadMcpRegistry } = useHasPermissions({
-    mcpRegistry: ["read"],
-  });
-  const { data: catalogItems } = useInternalMcpCatalog({
-    enabled: canReadMcpRegistry === true,
-  });
-
-  // Tool-call rows store the installed server's deployment name. Join it to
-  // the catalog metadata already used by the registry so the log can show the
-  // human-readable name and its icon without changing the logs API.
-  const serverDisplayByName = useMemo(() => {
-    const catalogById = new Map(
-      catalogItems?.map((item) => [item.id, item]) ?? [],
-    );
-    const map = new Map<
-      string,
-      { name: string; icon: string | null; catalogId: string }
-    >();
-    if (mcpServers) {
-      for (const server of mcpServers) {
-        const catalog = catalogById.get(server.catalogId);
-        map.set(server.name, {
-          name: server.catalogName ?? catalog?.name ?? server.name,
-          icon: catalog?.icon ?? null,
-          catalogId: server.catalogId,
-        });
-      }
-    }
-    return map;
-  }, [catalogItems, mcpServers]);
+  // The install list (owners, teams) only labels the server filter's
+  // options, so it loads once the filter opens, or when a server is already
+  // selected in the URL and the trigger needs its label. The latch stays set
+  // on purpose: closing the filter is no reason to drop a list it will show
+  // again.
+  const [serverFilterOpened, setServerFilterOpened] = useState(false);
+  const { servers: mcpServers, displayByName: serverDisplayByName } =
+    useMcpServerDisplayByName({
+      installations: serverFilterOpened || mcpServerNameFromUrl !== "all",
+    });
+  // Without log:admin the server scopes every listing to the caller's own
+  // rows, so a user picker would have nothing to choose between.
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
 
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
+  const { data: agents } = useAgentOptionsByIds({
+    ids: mcpToolCalls.flatMap((call) => (call.agentId ? [call.agentId] : [])),
+  });
   const paginationMeta = mcpToolCallsResponse?.pagination;
 
   const mcpServerOptions = useMemo(() => {
@@ -298,241 +266,79 @@ function McpToolCallsTable({
     {
       id: "call",
       header: "Call",
-      size: 290,
-      minSize: 245,
-      cell: ({ row }) => {
-        const call = row.original.toolCall;
-        const method = row.original.method || "tools/call";
-        const fullName = isEncryptedChatUnavailableContent(call)
-          ? undefined
-          : call?.name;
-        const toolName = fullName
-          ? parseFullToolName(fullName).toolName || fullName
-          : null;
-        const rawServerName = row.original.mcpServerName;
-        const serverDisplay = serverDisplayByName.get(rawServerName);
-        const serverName = serverDisplay?.name ?? rawServerName;
-        return (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-              <McpCatalogIcon
-                icon={serverDisplay?.icon}
-                catalogId={serverDisplay?.catalogId}
-                size={14}
-              />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">
-                {isEncryptedChatUnavailableContent(call) ? (
-                  <EncryptedChatContentUnavailableLabel value={call} />
-                ) : toolName ? (
-                  <code className="font-mono text-xs">{toolName}</code>
-                ) : (
-                  formatMcpMethod(method)
-                )}
-              </div>
-              <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="truncate" title={rawServerName}>
-                  {serverName || "Platform"}
-                </span>
-                {method === "tools/call" ? null : (
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
-                  >
-                    {method}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      },
+      size: 360,
+      minSize: 280,
+      cell: ({ row }) => (
+        <CallCell
+          row={row.original}
+          server={serverDisplayByName.get(row.original.mcpServerName)}
+        />
+      ),
     },
     {
       id: "agent",
-      accessorFn: (row) => getGatewayDisplayName(row, agents),
       header: "Gateway",
-      size: 205,
-      minSize: 160,
+      size: 228,
+      minSize: 200,
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <Boxes className="size-3.5" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {getGatewayDisplayName(row.original, agents)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {row.original.ownerType === "app" ? "App" : "MCP gateway"}
-            </div>
-          </div>
-        </div>
+        <GatewayCell
+          row={row.original}
+          gateway={agents?.find((a) => a.id === row.original.agentId)}
+        />
       ),
     },
     {
-      id: "identity",
-      header: "Identity",
-      size: 245,
-      minSize: 215,
-      cell: ({ row }) => {
-        const { userName, authMethod } = row.original;
-        const executedAs = extractMcpExecutedAs(row.original.toolResult);
-        if (!userName && !authMethod && !executedAs) {
-          return <div className="text-xs text-muted-foreground">—</div>;
-        }
-        return (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-              <User className="size-3.5" />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">
-                {userName ?? "Unattributed"}
-              </div>
-              <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                {authMethod ? (
-                  <span className="shrink-0">
-                    {formatAuthMethod(authMethod)}
-                  </span>
-                ) : null}
-                {authMethod && executedAs ? (
-                  <span aria-hidden="true">·</span>
-                ) : null}
-                {executedAs ? (
-                  <span className="min-w-0 overflow-hidden">
-                    <ExecutedAsBadge
-                      executedAs={executedAs}
-                      caller={formatCallerIdentity(row.original)}
-                    />
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      },
+      id: "credential",
+      header: "Credential",
+      size: 220,
+      minSize: 190,
+      cell: ({ row }) => <CredentialCell row={row.original} />,
     },
     {
       id: "status",
-      header: "Result",
-      size: 105,
-      minSize: 95,
-      cell: ({ row }) => {
-        const result = row.original.toolResult;
-        const method = row.original.method || "tools/call";
-
-        // The status lives inside the result, so an encrypted-chat row has none to
-        // report. Falling through to the "Success" badge below would assert an
-        // outcome the row does not record.
-        if (
-          isEncryptedChatUnavailableContent(result) &&
-          !canShowMcpToolCallStatus(method, result)
-        ) {
-          return <EncryptedChatContentUnavailableLabel value={result} />;
-        }
-
-        // For tools/call, resolve success / error / cancelled (a call the
-        // user stopped mid-flight — neither a success nor a failure).
-        if (
-          method === "tools/call" &&
-          result &&
-          typeof result === "object" &&
-          "isError" in result
-        ) {
-          const status = resolveMcpToolCallStatus(result);
-          return (
-            <Badge
-              variant={
-                status === "error"
-                  ? "destructive"
-                  : status === "cancelled"
-                    ? "secondary"
-                    : "default"
-              }
-              className="text-xs whitespace-nowrap"
-            >
-              {status === "error"
-                ? "Error"
-                : status === "cancelled"
-                  ? "Cancelled"
-                  : "Success"}
-            </Badge>
-          );
-        }
-
-        // For other methods, just show success
-        return (
-          <Badge variant="default" className="text-xs whitespace-nowrap">
-            Success
-          </Badge>
-        );
-      },
+      header: "Status",
+      size: 112,
+      minSize: 104,
+      cell: ({ row }) => <StatusCell row={row.original} />,
+    },
+    {
+      id: "duration",
+      header: () => <div className="text-right">Duration</div>,
+      size: 92,
+      minSize: 84,
+      cell: ({ row }) => <DurationCell row={row.original} />,
     },
     {
       id: "createdAt",
-      header: "Time",
-      size: 175,
-      minSize: 160,
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="text-sm">
-            {formatRelativeTimeFromNow(row.original.createdAt)}
-          </div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
-            {formatDate({
-              date: row.original.createdAt,
-              dateFormat: "MMM d, yyyy · HH:mm:ss",
-            })}
-          </div>
-        </div>
-      ),
+      header: () => <div className="text-right">Time</div>,
+      size: 128,
+      minSize: 120,
+      cell: ({ row }) => <CalledAtCell row={row.original} />,
     },
   ];
 
   const hasFilters =
     profileFilter !== "all" ||
     mcpServerNameFromUrl !== "all" ||
+    userIdFromUrl !== "all" ||
     dateTimePicker.startDate !== undefined ||
     dateTimePicker.endDate !== undefined;
 
   const clearFilters = useCallback(() => {
     setProfileFilter("all");
-    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       profileId: null,
       profileID: null,
       mcpServerName: null,
+      userId: null,
       startDate: null,
       endDate: null,
       search: null,
       cursor: null,
       page: null,
-      pageSize: null,
     });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
-
-  // Shared date picker component
-  const datePickerComponent = (
-    <DateTimeRangePicker
-      startDate={dateTimePicker.startDate}
-      endDate={dateTimePicker.endDate}
-      isDialogOpen={dateTimePicker.isDateDialogOpen}
-      tempStartDate={dateTimePicker.tempStartDate}
-      tempEndDate={dateTimePicker.tempEndDate}
-      displayText={dateTimePicker.getDateRangeDisplay()}
-      onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-      onTempStartDateChange={dateTimePicker.setTempStartDate}
-      onTempEndDateChange={dateTimePicker.setTempEndDate}
-      onOpenDialog={dateTimePicker.openDateDialog}
-      onApply={dateTimePicker.handleApplyDateRange}
-      className={filterControlClass({
-        active: dateTimePicker.startDate !== undefined,
-      })}
-    />
-  );
+  }, [dateTimePicker, updateUrlParams]);
 
   if (isMcpToolCallsLoadError) {
     return (
@@ -559,7 +365,7 @@ function McpToolCallsTable({
             mode="single"
             flat
             compactTrigger
-            agents={agents ?? []}
+            remote={{ filters: { agentTypes: ["agent", "mcp_gateway"] } }}
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
             sentinelOption={{
@@ -581,34 +387,38 @@ function McpToolCallsTable({
             searchPlaceholder="Search MCP servers…"
             emptyMessage="No MCP servers found."
             items={mcpServerOptions}
+            onOpenChange={(open) => {
+              if (open) setServerFilterOpened(true);
+            }}
             pinnedItems={[{ value: "all", label: "All MCP Servers" }]}
             className={filterControlClass({
               active: mcpServerNameFromUrl !== "all",
             })}
             contentClassName="min-w-[min(20rem,calc(100vw-2rem))]"
           />
-          {datePickerComponent}
+          {canSeeAllLogs ? (
+            <UserFilterSelect
+              value={userIdFromUrl}
+              onValueChange={handleUserFilterChange}
+              source="members"
+            />
+          ) : null}
         </FilterBar>
       </CollectionFilters>
 
       <DataTable
         columns={columns}
+        fixedWidthColumnIds={[
+          "agent",
+          "credential",
+          "status",
+          "duration",
+          "createdAt",
+        ]}
+        flexibleColumnIds={["call"]}
         data={mcpToolCalls}
         hideSelectedCount
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
@@ -616,32 +426,18 @@ function McpToolCallsTable({
         emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
         filteredEmptyMessage="No MCP logs match your filters"
         onClearFilters={clearFilters}
-        onRowClick={(row) => {
-          router.push(`/mcp/logs/${row.id}`);
-        }}
+        onRowClick={(row) => router.push(mcpToolCallHref(row))}
       />
     </div>
   );
 }
 
-function getGatewayDisplayName(
-  row: Pick<McpToolCallData, "ownerType" | "agentId" | "appName">,
-  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined,
-) {
-  // App-owned calls have no agent by design — attribute them to the app
-  // instead of falling through to the deleted-gateway label.
-  if (row.ownerType === "app") {
-    return row.appName ?? "Deleted App";
-  }
-  const agent = agents?.find((a) => a.id === row.agentId);
-  return (
-    agent?.name ?? (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
-  );
-}
-
-function formatMcpMethod(method: string) {
-  if (method === "initialize") return "Initialize";
-  if (method === "tools/list") return "List tools";
-  if (method === "tools/call") return "Tool call";
-  return method;
+/**
+ * Where a row opens: the call in its LLM session's trace when the call is
+ * linked to one, otherwise its own detail page.
+ */
+function mcpToolCallHref(row: Pick<McpToolCallData, "id" | "sessionId">) {
+  return row.sessionId
+    ? llmSessionHref(row.sessionId, { toolCall: row.id })
+    : `/mcp/logs/${row.id}`;
 }

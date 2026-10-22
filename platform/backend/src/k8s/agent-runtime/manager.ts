@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
+import { followAgentCatalogImage } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -31,6 +32,7 @@ import {
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
+import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
@@ -60,6 +62,7 @@ import {
   execAgentRuntimeCommand,
   streamAgentRuntimeCommand,
 } from "./exec";
+import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
   AGENT_RUNTIME_TMUX_SESSION,
@@ -84,6 +87,7 @@ import {
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
 import { resolvePlatformServiceDestination } from "./platform-service";
+import { describeAgentRuntimePodFailure } from "./pod-failure";
 import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
@@ -231,7 +235,7 @@ class AgentRuntimeManager {
         pollDelayMs = Math.min(pollDelayMs * 2, 1000);
       }
       const session = await AgentRunModel.findByTaskId(spec.taskId);
-      if (!session) throw new Error("Workspace run no longer exists");
+      if (!session) throw new Error("This run no longer exists");
       await this.continueRun({ session, spec, initial: true });
       return;
     }
@@ -266,10 +270,7 @@ class AgentRuntimeManager {
     });
     const response = JSON.parse(result);
     if (response.ok !== true)
-      throw new ApiError(
-        400,
-        response.error || "Workspace file operation failed",
-      );
+      throw new ApiError(400, response.error || "File operation failed");
     return AgentWorkspaceFileResultSchema.parse(response);
   }
 
@@ -308,7 +309,7 @@ class AgentRuntimeManager {
     });
     const response = JSON.parse(result);
     if (response.ok !== true) {
-      throw new ApiError(400, response.error || "Workspace transfer failed");
+      throw new ApiError(400, response.error || "File transfer failed");
     }
     return response;
   }
@@ -416,20 +417,44 @@ class AgentRuntimeManager {
     initial?: boolean;
   }): Promise<void> {
     const clients = this.requireClients();
-    const sandbox = await readWorkspaceSandbox({
+    let sandbox = await readWorkspaceSandbox({
       api: clients.customObjectsApi,
       namespace: params.session.runtimeScope,
       name: params.session.workloadName,
     });
-    const container = sandbox.spec.podTemplate.spec?.containers.find(
-      (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
-    );
+    let container = findAgentRuntimeContainer(sandbox);
+    // A platform upgrade moves the maintained image tag under a retained
+    // workspace. Its old wrapper may no longer speak to this backend, so the
+    // next turn starts on the current image rather than refusing the workspace.
+    if (
+      container &&
+      container.image !== params.spec.image &&
+      followAgentCatalogImage({
+        image: container.image ?? "",
+        catalogImages: config.agentRuntime.catalogImages,
+      }) === params.spec.image &&
+      Boolean(container.securityContext?.privileged) === params.spec.privileged
+    ) {
+      sandbox = await this.moveWorkspaceToImage({
+        session: params.session,
+        sandbox,
+        image: params.spec.image,
+      });
+      container = findAgentRuntimeContainer(sandbox);
+    }
     if (
       container?.image !== params.spec.image ||
       Boolean(container.securityContext?.privileged) !== params.spec.privileged
     ) {
+      const changed = [
+        ...(container?.image !== params.spec.image ? ["software image"] : []),
+        ...(Boolean(container?.securityContext?.privileged) !==
+        params.spec.privileged
+          ? ["access to the host system"]
+          : []),
+      ].join(" and ");
       throw new Error(
-        "The Agent image or privilege configuration changed; start a new workspace instead",
+        `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
@@ -520,7 +545,10 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(409, "The workspace retention deadline has passed");
+      throw new ApiError(
+        409,
+        "The saved files have reached their retention deadline",
+      );
     }
     if (
       pending &&
@@ -529,7 +557,7 @@ class AgentRuntimeManager {
     ) {
       throw new ApiError(
         409,
-        "The saved continuation belongs to a different workspace",
+        "The saved conversation belongs to a different run",
       );
     }
     // The initial turn is already part of the Sandbox's bootstrap contract.
@@ -549,9 +577,9 @@ class AgentRuntimeManager {
     );
     const podName = await this.waitForRunningPod({
       session,
-      timeoutMessage: "The workspace could not be resumed",
+      timeoutMessage: "The run could not be resumed",
     });
-    if (!podName) throw new Error("The workspace is not running");
+    if (!podName) throw new Error("The Agent is not running");
     await this.projectWarmCredentials(session, podName);
     const script = pending?.data?.request;
     if (!script) {
@@ -569,7 +597,7 @@ class AgentRuntimeManager {
       if (published !== "present")
         throw new ApiError(
           502,
-          "The run was interrupted before its command was saved. Continue in the retained workspace to retry.",
+          "The run was interrupted before its command was saved. Select Resume to try again.",
         );
       return;
     }
@@ -690,7 +718,7 @@ class AgentRuntimeManager {
         (await this.hasRetainedTerminal(session)),
     );
     if (!retainCredentials) {
-      await this.revokeVirtualKey(session);
+      await this.revokeRunCredentials(session);
     }
     const clients = this.requireClients();
     // Keep the names for continuation's inherited-env unset list, but prevent
@@ -739,7 +767,7 @@ class AgentRuntimeManager {
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
-    await this.revokeVirtualKey(session);
+    await this.revokeRunCredentials(session);
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
       await this.suspendWorkspace(session);
@@ -819,7 +847,7 @@ class AgentRuntimeManager {
       if (!isK8sNotFoundError(error))
         logger.debug(
           { error, workloadName: session.workloadName },
-          "Workspace connection hints are unavailable",
+          "Terminal connection details are unavailable",
         );
       return null;
     }
@@ -857,11 +885,14 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(409, "The workspace retention deadline has passed");
+      throw new ApiError(
+        409,
+        "The saved files have reached their retention deadline",
+      );
     }
     const agent = await AgentModel.findById(session.agentId);
     if (!agent || agent.organizationId !== session.organizationId) {
-      throw new ApiError(404, "Workspace Agent not found");
+      throw new ApiError(404, "Agent not found");
     }
     const organization = await OrganizationModel.getById(
       session.organizationId,
@@ -893,10 +924,10 @@ class AgentRuntimeManager {
     if (
       !(await this.waitForRunningPod({
         session,
-        timeoutMessage: "The workspace could not be resumed",
+        timeoutMessage: "The run could not be resumed",
       }))
     ) {
-      throw new ApiError(409, "The workspace could not be resumed");
+      throw new ApiError(409, "The run could not be resumed");
     }
   }
 
@@ -1201,11 +1232,17 @@ class AgentRuntimeManager {
         const expired = sandbox.status?.conditions?.find(
           (entry) => entry.reason === "SandboxExpired",
         );
-        if (finished || expired) {
-          const condition = finished ?? expired;
+        const condition = finished ?? expired;
+        const podFailure = describeAgentRuntimePodFailure(
+          pod,
+          params.session.runtimeScope,
+          condition,
+        );
+        if (finished || expired || podFailure) {
           return {
             outcome: "failed",
             reason:
+              podFailure ??
               condition?.message ??
               condition?.reason ??
               "The Agent Runtime run exited without completing",
@@ -1240,7 +1277,7 @@ class AgentRuntimeManager {
   async teardown(session: AgentRunRecord): Promise<void> {
     // The key outlives the pod otherwise: a finished session's API key would
     // keep working, still charging the person it acted as.
-    await this.revokeVirtualKey(session);
+    await this.revokeRunCredentials(session);
     await this.deleteWorkspace(session);
   }
 
@@ -1328,7 +1365,7 @@ class AgentRuntimeManager {
       }
     }
     if (errors.length)
-      throw new AggregateError(errors, "Workspace cleanup did not complete");
+      throw new AggregateError(errors, "Saved file cleanup did not complete");
   }
 
   /**
@@ -1356,6 +1393,93 @@ class AgentRuntimeManager {
   }
 
   // ===================== internals =====================
+
+  /**
+   * Restart an idle workspace on the deployment's current maintained image.
+   * The workspace PVC holds HOME and the saved conversation, so the next turn
+   * resumes there exactly as it does after an idle suspension.
+   */
+  private async moveWorkspaceToImage(params: {
+    session: AgentRunRecord;
+    sandbox: AgentSandbox;
+    image: string;
+  }): Promise<AgentSandbox> {
+    const clients = this.requireClients();
+    const previous = findAgentRuntimeContainer(params.sandbox)?.image;
+    logger.info(
+      {
+        taskId: params.session.taskId,
+        workloadName: params.session.workloadName,
+        previousImage: previous,
+        image: params.image,
+      },
+      "Moving an Agent Runtime workspace to the current maintained image",
+    );
+    await this.suspendWorkspace(params.session);
+    await this.waitForPodRemoval(params.session);
+    const imagePullPolicy = usesFloatingAgentImageTag(params.image)
+      ? ("Always" as const)
+      : undefined;
+    const withImage = (entries: k8s.V1Container[] | undefined) =>
+      entries?.map((entry) => {
+        if (entry.image !== previous) return entry;
+        const { imagePullPolicy: _previousPolicy, ...rest } = entry;
+        return {
+          ...rest,
+          image: params.image,
+          ...(imagePullPolicy ? { imagePullPolicy } : {}),
+        };
+      });
+    const podSpec = params.sandbox.spec.podTemplate.spec;
+    await clients.customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: params.session.runtimeScope,
+        name: params.sandbox.metadata.name ?? params.session.workloadName,
+        // A merge patch replaces arrays whole, so send every container back.
+        body: {
+          spec: {
+            podTemplate: {
+              spec: {
+                containers: withImage(podSpec?.containers),
+                ...(podSpec?.initContainers
+                  ? { initContainers: withImage(podSpec.initContainers) }
+                  : {}),
+              },
+            },
+          },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+    return readWorkspaceSandbox({
+      api: clients.customObjectsApi,
+      namespace: params.session.runtimeScope,
+      name: params.session.workloadName,
+    });
+  }
+
+  /**
+   * A terminating Pod still holds the workspace volume, so wait until none
+   * is left, not merely until none is live.
+   */
+  private async waitForPodRemoval(
+    session: Pick<AgentRunRecord, "runtimeScope" | "workloadName">,
+  ): Promise<void> {
+    const clients = this.requireClients();
+    const deadline = Date.now() + AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const pods = await clients.coreApi.listNamespacedPod({
+        namespace: session.runtimeScope,
+        labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
+      });
+      if (pods.items.length === 0) return;
+      await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
+    }
+    throw new Error(
+      "The Agent did not stop in time to update its software image",
+    );
+  }
 
   private async projectWarmCredentials(
     session: AgentRunRecord,
@@ -1404,7 +1528,7 @@ class AgentRuntimeManager {
         AGENT_RUNTIME_TASK_LABEL
       ];
     if (!taskId)
-      throw new Error("Workspace is missing its network policy selector");
+      throw new Error("The Agent is missing its network policy selector");
     const spec = {
       ...params.spec,
       taskId,
@@ -1540,7 +1664,14 @@ class AgentRuntimeManager {
     }
   }
 
-  private async revokeVirtualKey(session: AgentRunRecord): Promise<void> {
+  private async revokeRunCredentials(session: AgentRunRecord): Promise<void> {
+    if (session.actorKind === "serviceAccount" && session.gatewayTokenId) {
+      await ServiceAccountModel.deleteToken({
+        serviceAccountId: session.actorId,
+        organizationId: session.organizationId,
+        tokenId: session.gatewayTokenId,
+      });
+    }
     if (!session.virtualApiKeyId) return;
     try {
       await VirtualApiKeyModel.delete(session.virtualApiKeyId);
@@ -1687,10 +1818,7 @@ done`
   ): Promise<string> {
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
-      throw new ApiError(
-        409,
-        "Resume this workspace before accessing its files",
-      );
+      throw new ApiError(409, "Resume this run before accessing its files");
     }
     return pod.metadata.name;
   }
@@ -1700,27 +1828,37 @@ done`
     timeoutMessage: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
   }): Promise<string | null> {
-    const deadline = Date.now() + AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS;
+    // A claimed warm workspace can still need scheduling and an image pull.
+    // Give it the same startup budget as a workspace created on demand.
+    const deadline =
+      Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
     let lastProgress: AgentRuntimeStartupProgress | null = null;
     while (Date.now() < deadline) {
       const pod = await this.findPod(params.session);
       const phase = pod?.status?.phase;
       if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
-      if (phase === "Succeeded" || phase === "Failed") return null;
+      const podFailure = describeAgentRuntimePodFailure(
+        pod,
+        params.session.runtimeScope,
+      );
+      if (podFailure) throw new Error(podFailure);
+      if (phase === "Succeeded") return null;
 
+      const progress = describeAgentRuntimeStartupProgress(pod);
       if (params.onProgress) {
-        const progress = describeAgentRuntimeStartupProgress(pod);
         if (!isSameAgentRuntimeStartupProgress(lastProgress, progress)) {
-          lastProgress = progress;
           params.onProgress({
             ...progress,
             resourceName: pod?.metadata?.name ?? null,
           });
         }
       }
+      lastProgress = progress;
       await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
     }
-    throw new Error(params.timeoutMessage);
+    throw new Error(
+      `${params.timeoutMessage} within ${config.agentRuntime.podStartTimeoutSeconds} seconds.${lastProgress ? ` Last observed startup step: ${lastProgress.message}.` : ""}`,
+    );
   }
 
   /**
@@ -1806,6 +1944,14 @@ function isTransientObservationError(error: unknown): boolean {
   );
 }
 
+function findAgentRuntimeContainer(
+  sandbox: AgentSandbox,
+): k8s.V1Container | undefined {
+  return sandbox.spec.podTemplate.spec?.containers.find(
+    (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
+  );
+}
+
 function pendingTurnSecretName(
   session: Pick<AgentRunRecord, "taskId">,
 ): string {
@@ -1819,7 +1965,7 @@ function pendingTurnSecretName(
  */
 const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
 const AGENT_RUNTIME_INPUT_STAGING_POLL_MS = 500;
-const AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
+const AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS = 5 * 60_000;
 const AGENT_RUNTIME_ATTACH_TIMEOUT_MS = 60_000;
 const AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE =
   "Agent Runtime needs the Agent Sandbox controller, and this cluster does not have it installed. Ask an administrator to install it.";
@@ -1886,6 +2032,6 @@ function describeWorkspaceHelperFailure(error: unknown): ApiError | null {
   }
   return new ApiError(
     400,
-    `This Agent's image has no python3, which ${archestraMcpBranding.appName} needs to read, write and transfer workspace files. Add python3 to the image, or use a maintained one.`,
+    `This Agent's image has no python3, which ${archestraMcpBranding.appName} needs to read, write and transfer saved files. Add python3 to the image, or use a maintained one.`,
   );
 }

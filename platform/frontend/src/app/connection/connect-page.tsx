@@ -14,7 +14,9 @@
 // for apps with one, Claude Desktop's download, the copy prompt for other
 // agents, or the manual steps themselves.
 
+import { DocsPage } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   ArrowDown,
   BookOpen,
@@ -32,7 +34,6 @@ import {
   ShieldCheck,
   ShieldOff,
   SlidersHorizontal,
-  TriangleAlert,
   Wrench,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -59,6 +60,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConnectedSignal } from "@/lib/connect-signal";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -66,6 +68,7 @@ import {
   type AfterConnectPhase,
   type AfterConnectRun,
 } from "./after-connect";
+import { BrowseDialog } from "./browse-dialog";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -82,15 +85,15 @@ import {
   type ConnectPageSkill,
   type ConnectPlugin,
   type ConnectServer,
+  gatewayServerName,
+  type StartingTools,
   useConnectPageData,
   welcomePrompt,
 } from "./connect-page-data";
 import {
   AgentSearch,
   approxTokens,
-  BrowseDialog,
   fmt,
-  InfoDialog,
   nameOf,
   PromptRow,
   plural,
@@ -104,6 +107,7 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
+import { GatewayLink } from "./gateway-link";
 import { type IncludeChange, IncludeDialog } from "./include-dialog";
 import {
   readsPrompts,
@@ -111,7 +115,6 @@ import {
   setupModeFor,
   useManualSteps,
 } from "./manual-setup";
-import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -121,7 +124,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "cursor" | "include";
+type DialogKind = "servers" | "skills" | "plugins" | "include";
 
 const MOTION_CSS = `
 @keyframes connect-icon {
@@ -150,8 +153,12 @@ export function ConnectPage() {
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  const data = useConnectPageData(pickedId, picks.gatewayId);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
+  const data = useConnectPageData({
+    pickedClientId: pickedId,
+    pickedGatewayId: picks.gatewayId,
+    showToolDetails: dialog === "servers",
+  });
   const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The copied command (or prompt, for
   // generic agents) carries it, and this browser keeps it for a while
@@ -302,7 +309,6 @@ export function ConnectPage() {
             choices={choices}
             picks={picks}
             prompt={prompt}
-            onCursorNote={() => setDialog("cursor")}
           />
         </div>
       </div>
@@ -317,7 +323,6 @@ export function ConnectPage() {
         onOpenChange={(v) => !v && setDialog(null)}
         data={data}
         client={client}
-        skills={skillsSorted}
         choices={choices}
       />
       <IncludeDialog
@@ -329,27 +334,6 @@ export function ConnectPage() {
         picks={picks}
         onChange={update}
       />
-      <InfoDialog
-        open={dialog === "cursor"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title="Cursor keeps its own models"
-      >
-        <div className="space-y-2">
-          <p>
-            Connecting Cursor adds {data.appName}'s tools and skills. Cursor
-            keeps using its current models.
-          </p>
-          <p>
-            To send Cursor's OpenAI requests through {data.appName} too, keep
-            the LLM proxy on in the browser approval. After setup, find "Cursor
-            model settings (manual step)" in the installer output: it shows the
-            proxy URL and, if chosen, a virtual key. In Cursor Settings, Models,
-            API Keys, enter those values and turn on Use OpenAI API Key and
-            Override OpenAI Base URL. A Cursor subscription can't be used as a
-            key.
-          </p>
-        </div>
-      </InfoDialog>
     </div>
   );
 }
@@ -453,6 +437,7 @@ function AgentTiles({
           icon={<ClientIcon client={c} size={iconSize} />}
           label={c.label}
           marker={markFor(c.id)}
+          guardrailsSupported={GUARDRAILS_NATIVE.has(c.id)}
         />
       ))}
       {showOther && (
@@ -467,6 +452,9 @@ function AgentTiles({
             roomy={row}
             active={!!otherPicked}
             marker={otherPicked ? markFor(otherPicked.id) : undefined}
+            guardrailsSupported={
+              !!otherPicked && GUARDRAILS_NATIVE.has(otherPicked.id)
+            }
             aria-label={
               otherPicked
                 ? `${otherPicked.label}, change agent`
@@ -535,6 +523,7 @@ function Tile({
   label,
   sub,
   marker,
+  guardrailsSupported,
   onClick,
   ...rest
 }: {
@@ -543,6 +532,7 @@ function Tile({
   label: ReactNode;
   /** Pinned to the tile's top-right corner, e.g. the last connected mark. */
   marker?: ReactNode;
+  guardrailsSupported?: boolean;
   /** One small line under the label, shown in full. */
   sub?: string;
   roomy?: boolean;
@@ -553,6 +543,15 @@ function Tile({
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-label={typeof label === "string" ? label : undefined}
+      aria-description={
+        [
+          guardrailsSupported ? "Supports LLM proxy guardrails" : null,
+          marker ? "Last connected" : null,
+        ]
+          .filter(Boolean)
+          .join(". ") || undefined
+      }
       {...rest}
       className={cn(
         "relative flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
@@ -560,15 +559,36 @@ function Tile({
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
-            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-primary"
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-inset ring-primary"
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
       {marker && <span className="absolute top-1.5 right-1.5">{marker}</span>}
       {icon}
       {/* Labels wrap to two lines rather than truncate. */}
-      <span className="line-clamp-2 w-full text-center leading-tight break-words">
-        {label}
+      <span className="flex max-w-full items-center justify-center gap-1.5">
+        <span className="line-clamp-2 min-w-0 text-center leading-tight break-words">
+          {label}
+        </span>
+        {guardrailsSupported && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                aria-label="Supports LLM proxy guardrails"
+                className="shrink-0"
+              >
+                <ShieldCheck className="size-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-60">
+              <span>
+                Supports LLM proxy guardrails out of the box. Enforcement
+                depends on your organization&apos;s settings.
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </span>
       {sub && (
         <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">
@@ -614,7 +634,6 @@ function ConnectArea({
   choices,
   picks,
   prompt,
-  onCursorNote,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
@@ -624,13 +643,12 @@ function ConnectArea({
   picks: ConnectPicks;
   /** The generic prompt; null when every part is left out. */
   prompt: string | null;
-  onCursorNote: () => void;
 }) {
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const [windows, setWindows] = useState(false);
-  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The page's OS, so the plugins it shows are the ones this command installs.
+  const { windows, setWindows } = data;
   const manual = setup === "manual";
   const script = setup === "script";
   const download = setup === "download";
@@ -651,6 +669,12 @@ function ConnectArea({
         keptPlugins.length === 0),
   );
 
+  const serverName = gatewayServerName({
+    client,
+    gateway: data.gateway,
+    appName: data.appName,
+    tools: choices.tools && data.partsFor(client).tools,
+  });
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
   const setupKey = [
@@ -660,6 +684,7 @@ function ConnectArea({
     download,
     ...leftOutParts,
     data.gateway?.id,
+    serverName,
     ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
@@ -667,11 +692,12 @@ function ConnectArea({
     key: setupKey,
     client,
     script,
+    serverName,
   });
   const phase =
     run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
   const setPhase = (next: AfterConnectPhase) =>
-    setRun({ phase: next, key: setupKey, client, script });
+    setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude
   // Desktop's download have nothing to copy.
   const startWaiting = () => {
@@ -742,14 +768,6 @@ function ConnectArea({
                 </>
               )}
             </p>
-            {client.id === "cursor" && (
-              <p className="flex items-center gap-1.5">
-                <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
-                Cursor keeps its own models. Routing them through {data.appName}{" "}
-                takes one manual step after setup.
-                <TextButton onClick={onCursorNote}>How</TextButton>
-              </p>
-            )}
           </div>
 
           {script && command ? (
@@ -810,7 +828,15 @@ function ConnectArea({
         phase={phase}
         client={run.client}
         script={run.script}
-        welcome={origin ? welcomePrompt(origin, data.appName) : null}
+        welcome={
+          origin
+            ? welcomePrompt({
+                origin,
+                appName: data.appName,
+                serverName: run.serverName,
+              })
+            : null
+        }
         // n8n has no agent to follow up with; "everything left out" has
         // nothing to follow up on.
         showLink={
@@ -874,29 +900,34 @@ function scriptNextSteps(client: ConnectClient): string[] {
     case "claude-code":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Open a new terminal and run the claude command it prints. Skills load on their own.",
+        "Press Enter when it offers to start Claude Code, or run the claude command it prints in a new terminal. Skills load on their own.",
       ];
     case "cursor":
       return [
         "Reload Cursor.",
         "Open Customize > MCPs and sign in to the gateway.",
-        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
+        "Quit and reopen Cursor to load its model settings.",
       ];
     case "codex":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Open a new terminal and run the codex command it prints.",
+        "Press Enter when it offers to start Codex, or run the codex command it prints in a new terminal.",
         "For skills, run /plugins in Codex and install the plugin.",
       ];
     case "copilot-cli":
       return [
         "If you connected an LLM provider, its settings are saved in providers.json. The printed environment variables are optional.",
-        "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
+        "Press Enter when it offers to start Copilot CLI, or run the copilot command it prints in a new terminal. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
+        "Close OpenCode if it's open, then press Enter when it offers to start it.",
+      ];
+    case "kilo":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close Kilo Code if it's open, then press Enter when it offers to start it.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];
@@ -1007,12 +1038,12 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex and OpenCode
- * adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
+ * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */
-const GUARDRAILS_NATIVE = new Set(["claude-code", "codex", "opencode"]);
+const GUARDRAILS_NATIVE = new Set(Object.keys(NATIVE_SESSION_CLIENT_LABELS));
 
 /**
  * What the guardrails do for this agent, from the real deployment setting.
@@ -1137,6 +1168,17 @@ function ProfileCard({
   const skillsOn = data.skillsEnabled;
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
+  const guardrailsDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAiToolGuardrailsClients,
+  );
+  const sessionHeadersDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAiToolGuardrailsClients,
+    "session-headers",
+  );
+  const guardrailsClientNames = new Intl.ListFormat("en", {
+    style: "long",
+    type: "conjunction",
+  }).format(Object.values(NATIVE_SESSION_CLIENT_LABELS));
 
   // One line under the lists. A future capability is one more entry.
   const status: StatusItem[] = [];
@@ -1188,13 +1230,44 @@ function ProfileCard({
       tip: (
         <InfoTip label="What the guardrails do">
           <TipBody reason={guard.detail} />
+          {!GUARDRAILS_NATIVE.has(client.id) && (
+            <span className="mt-2 block">
+              LLM proxy guardrails support only{" "}
+              {guardrailsDocsUrl ? (
+                <Link
+                  href={guardrailsDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
+                >
+                  {guardrailsClientNames}
+                </Link>
+              ) : (
+                <span>{guardrailsClientNames}</span>
+              )}{" "}
+              out of the box. For other clients,{" "}
+              {sessionHeadersDocsUrl ? (
+                <Link
+                  href={sessionHeadersDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
+                >
+                  add APPA session headers
+                </Link>
+              ) : (
+                <span>add APPA session headers</span>
+              )}
+              .
+            </span>
+          )}
         </InfoTip>
       ),
       state: guard.label,
     });
 
   const included =
-    (skillsOn && !skillsOff ? skills.length : 0) +
+    (skillsOn && !skillsOff ? data.totalSkills : 0) +
     (pluginsOff ? 0 : plugins.length);
 
   return (
@@ -1262,7 +1335,7 @@ function ProfileCard({
                   tools === null
                     ? data.toolPreviewError
                       ? "Tool counts unavailable"
-                      : "Loading tool counts…"
+                      : "View tool counts and context cost"
                     : `${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? " loaded, more on demand" : ""}`
                 }
                 // The context cost sits on the header, across from the count.
@@ -1270,6 +1343,7 @@ function ProfileCard({
                   tools !== null && tools > 0 && data.toolTokens ? (
                     <ToolLoadingNote
                       progressive={data.progressive}
+                      startingTools={data.startingTools}
                       clientId={client.id}
                       tools={tools}
                       tokens={data.toolTokens.total}
@@ -1318,7 +1392,7 @@ function ProfileCard({
                 title={
                   skillsOff
                     ? "Skills off"
-                    : `+${fmt(skills.length)} ${plural(skills.length, "skill")}`
+                    : `+${fmt(data.totalSkills)} ${plural(data.totalSkills, "skill")}`
                 }
                 sub={
                   skillsOff
@@ -1327,7 +1401,7 @@ function ProfileCard({
                 }
                 muted={skillsOff}
                 onTitle={() => onOpen("skills")}
-                seeAll={seeAllLabel(skills.length, "skill")}
+                seeAll={seeAllLabel(data.totalSkills, "skill")}
               >
                 {skills.slice(0, SKILL_ROWS).map((s) => (
                   <ListRow
@@ -1537,12 +1611,14 @@ function ListRow({
 function ToolLoadingNote({
   clientId,
   progressive,
+  startingTools,
   tools,
   tokens,
   count,
 }: {
   clientId: string;
   progressive: boolean;
+  startingTools: StartingTools | null;
   tools: number;
   /** Observed or estimated tokens of the tool list the agent starts with. */
   tokens: number | null;
@@ -1561,7 +1637,7 @@ function ToolLoadingNote({
       {label}
       <InfoTip label="How tools load">
         {progressive
-          ? `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")} and finds more when a task needs them.`
+          ? startingToolsSentence(tools, startingTools)
           : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
         <span hidden={tokens === null}>
           {" "}
@@ -1576,6 +1652,30 @@ function ToolLoadingNote({
   );
 }
 
+/**
+ * How many tools a progressive gateway starts with, and why it is more than
+ * search_tools and run_tool when it lists tools that must be callable at once.
+ */
+function startingToolsSentence(
+  tools: number,
+  startingTools: StartingTools | null,
+): string {
+  const start = `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")}`;
+  if (!startingTools || startingTools.discovery === 0)
+    return `${start} and finds more when a task needs them.`;
+  const extras = [
+    startingTools.controls > 0 &&
+      `${fmt(startingTools.controls)} for questions and guardrail recovery`,
+    startingTools.apps > 0 &&
+      `${fmt(startingTools.apps)} that open an app's interface, which clients must see up front`,
+  ].filter((part): part is string => !!part);
+  const discovery =
+    "search_tools and run_tool, which find every other tool when a task needs it";
+  return extras.length === 0
+    ? `${start}: ${discovery}.`
+    : `${start}: ${discovery}, plus ${extras.join(" and ")}.`;
+}
+
 /** The gateway the admin picked, then the lists; empty states in words. */
 function cardIntro(
   data: ConnectPageData,
@@ -1586,8 +1686,9 @@ function cardIntro(
   if (servers.length > 0 || extras > 0)
     return data.gateway ? (
       <>
-        Connects to <span className="font-semibold">{data.gateway.name}</span>,
-        which gives it:
+        Connects to{" "}
+        <GatewayLink gateway={data.gateway} className="font-semibold" />, which
+        gives it:
       </>
     ) : (
       "Connects to your organization's gateway, which gives it:"

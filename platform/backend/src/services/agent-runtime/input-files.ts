@@ -46,7 +46,7 @@ export function taskWithAgentRunInputs(params: {
   const paths = params.inputs
     .map((input) => `- ${input.runtimePath}`)
     .join("\n");
-  return `${params.task ?? ""}\n\nAttached files are available in the run workspace:\n${paths}`.trim();
+  return `${params.task ?? ""}\n\nAttached files are available for this run:\n${paths}`.trim();
 }
 
 // === Internal helpers ===

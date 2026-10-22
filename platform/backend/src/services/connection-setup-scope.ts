@@ -14,4 +14,6 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
   "codex-turn-metadata": "codex",
   "opencode-session-header": "opencode",
   "opencode-hosted-header": "opencode",
+  "kilo-session-header": "kilo",
+  "kilo-hosted-header": "kilo",
 };

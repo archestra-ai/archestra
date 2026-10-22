@@ -6,7 +6,14 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArchiveRestore,
+  Database,
+  FileText,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -53,6 +60,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -78,6 +86,7 @@ import {
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
+  useHasLegacySalesforceConnector,
   usePermanentlyDeleteConnector,
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
@@ -94,6 +103,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
+  "salesforce",
   "perforce",
   "mfiles",
   "web_crawler",
@@ -349,6 +359,15 @@ function ConnectorsList() {
         />
       ),
     },
+    {
+      id: "documents",
+      header: "Documents",
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.totalDocsIngested.toLocaleString()}
+        </span>
+      ),
+    },
 
     {
       id: "schedule",
@@ -442,6 +461,7 @@ function ConnectorsList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >
+      <SalesforceAuthMigrationNotice />
       <TableCardView storageKey="archestra-connectors-view">
         <div>
           <CollectionFilters>
@@ -601,7 +621,9 @@ function ConnectorsList() {
                             />
                           </div>
                         }
-                      ></TableCard>
+                      >
+                        <DocumentCount total={connector.totalDocsIngested} />
+                      </TableCard>
                     ))}
                   </TableCardList>
                 }
@@ -761,5 +783,40 @@ function DeleteConnectorDialog({
       confirmLabel="Delete Connector"
       pendingLabel="Deleting..."
     />
+  );
+}
+
+// ===== Internal pieces =====
+
+/** Same shape as the document stat on knowledge base cards. */
+function DocumentCount({ total }: { total: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <FileText className="h-3.5 w-3.5" />
+      <span className="font-medium text-foreground tabular-nums">
+        {total.toLocaleString()}
+      </span>
+      <span>{total === 1 ? "document" : "documents"}</span>
+    </span>
+  );
+}
+
+function SalesforceAuthMigrationNotice() {
+  const { data: hasLegacyConnector } = useHasLegacySalesforceConnector();
+  if (!hasLegacyConnector) return null;
+  return (
+    <InlineNotice variant="warning" className="mb-4 sm:mb-6">
+      <AlertTriangle />
+      <InlineNoticeText>
+        Salesforce password login retires in Summer ’27. Migrate existing
+        connectors to OAuth.
+      </InlineNoticeText>
+      <Link
+        href="/knowledge/connectors?connectorType=salesforce"
+        className="underline underline-offset-4"
+      >
+        Review Salesforce connectors
+      </Link>
+    </InlineNotice>
   );
 }

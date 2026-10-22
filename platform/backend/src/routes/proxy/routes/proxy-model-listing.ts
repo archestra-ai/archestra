@@ -11,6 +11,7 @@ import type { ModelInfo } from "@/routes/chat/model-fetchers/types";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
 import {
+  createPassthroughAuthenticator,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
@@ -58,15 +59,18 @@ export interface ResolvedProxyModelsKey {
 /**
  * Resolve the upstream provider key for a `GET /models` request: an `arch_*`
  * virtual key is validated (rate limited per IP) and swapped for its mapped
- * provider key; any other token is used as a raw provider key.
+ * provider key; any other token is used as a raw provider key, which needs a
+ * platform credential beside it exactly like an inference request.
  */
 export async function resolveProxyModelsApiKey(params: {
-  request: Pick<FastifyRequest, "ip">;
+  request: FastifyRequest;
+  /** The agent in the URL, if any; the platform check resolves it. */
+  agentId: string | undefined;
   provider: SupportedProvider;
   token: string | undefined;
   allowKeyless?: boolean;
 }): Promise<ResolvedProxyModelsKey> {
-  const { request, provider, token, allowKeyless = false } = params;
+  const { request, agentId, provider, token, allowKeyless = false } = params;
 
   if (!token) {
     throw new ApiError(
@@ -78,6 +82,9 @@ export async function resolveProxyModelsApiKey(params: {
   // Raw keys carry no per-key extra headers, matching the inference path's
   // raw-bearer branch (no parent provider-key row to read them from).
   if (!hasArchestraTokenPrefix(token)) {
+    // A raw provider key is the caller's own upstream credential, not a
+    // platform credential: the same check as the catch-all routes applies.
+    await createPassthroughAuthenticator(provider)({ request, agentId });
     assertSubscriptionCredentialForProvider({ apiKey: token, provider });
     return { apiKey: token, baseUrl: undefined, extraHeaders: null };
   }
@@ -129,7 +136,7 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 export function extractBearerToken(
   authorization: string | string[] | undefined,
 ): string | undefined {
-  return headerValue(authorization)?.match(/^Bearer\s+(.+)$/i)?.[1];
+  return headerValue(authorization)?.match(/^Bearer\s+(\S.*)$/i)?.[1];
 }
 
 /**

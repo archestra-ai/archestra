@@ -1,8 +1,10 @@
 "use client";
 
+import { DEFAULT_CLAUDE_CODE_MODEL } from "@archestra/shared";
 import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ClaudeCodeSignInSteps } from "@/components/claude-code-sign-in-steps";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -28,8 +30,12 @@ export function ClaudeCodeAccount({
 }: {
   agentId: string;
   showDisconnectedNotice?: boolean;
-  /** `button` renders only the sign-in button, for a setup checklist row. */
-  variant?: "card" | "row" | "compact" | "button";
+  /**
+   * `button` renders only the sign-in button, for a setup checklist row.
+   * `inline` signs in right where it sits, inside another dialog, rather than
+   * opening a dialog of its own.
+   */
+  variant?: "card" | "row" | "compact" | "button" | "inline";
   model?: string;
   onModelChange?: (model: string) => void;
 }) {
@@ -81,6 +87,33 @@ export function ClaudeCodeAccount({
     return () => clearTimeout(timer);
   }, [open, state, flowId, finishing, signInFailed, finishSignIn]);
 
+  // Opening the dialog to sign in is asking to sign in, so the flow starts
+  // straight away instead of behind a second "Sign in with Claude" button.
+  // A Vault reference has to be entered first, and a flow already under way
+  // is picked up where it is.
+  const openAccount = () => {
+    setOpen(true);
+    if (
+      connected ||
+      account.data?.requiresVaultReference ||
+      signIn.isPending ||
+      (state && ["starting", "connecting", "awaiting_code"].includes(state))
+    )
+      return;
+    setSubmitted(true);
+    signIn.reset();
+    signIn.mutate(undefined);
+  };
+
+  const completeSignIn = () => {
+    if (!account.data?.flowId) return;
+    setSubmitted(true);
+    signIn.mutate(
+      { flowId: account.data.flowId, code: code.trim() },
+      { onSuccess: () => setCode("") },
+    );
+  };
+
   const statusText = account.isPending
     ? "Checking connection…"
     : account.isError
@@ -102,6 +135,176 @@ export function ClaudeCodeAccount({
       </p>
     );
 
+  const flow = account.isError ? (
+    <QueryLoadError
+      title="Could not check Claude Code"
+      error={account.error}
+      onRetry={() => void account.refetch()}
+    />
+  ) : connected ? (
+    <div className="space-y-3">
+      <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-500" />
+        <div>
+          <p className="font-medium text-green-600 dark:text-green-400">
+            Connected for you
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            This account is available to all your Claude Code agents. Other
+            users sign in separately.
+          </p>
+        </div>
+      </div>
+      {account.data?.expiresAt && (
+        <p className="text-xs text-muted-foreground">
+          Reconnect by {new Date(account.data.expiresAt).toLocaleDateString()}.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Disconnect prevents new runs across all your Claude Code agents from
+        using this account. Running sessions keep their token. Revoke the token
+        in Claude to end its access.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disconnect.isPending}
+        onClick={() => disconnect.mutate()}
+      >
+        <span>Disconnect</span>
+      </Button>
+    </div>
+  ) : signIn.isError ? (
+    <div className="space-y-2">
+      <p role="alert" className="text-sm text-destructive">
+        Could not complete sign-in. Please try again.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          signIn.reset();
+          signIn.mutate(vaultReference ? { vaultReference } : undefined);
+        }}
+      >
+        Try again
+      </Button>
+    </div>
+  ) : account.data?.state === "awaiting_code" ? (
+    <ClaudeCodeSignInSteps
+      authorizationUrl={account.data.authorizationUrl}
+      code={code}
+      onCodeChange={setCode}
+      onSubmit={completeSignIn}
+      submitting={signIn.isPending}
+      submitLabel={variant === "inline" ? "Connect" : undefined}
+    />
+  ) : signIn.isPending ||
+    account.data?.state === "starting" ||
+    account.data?.state === "connecting" ? (
+    <div className="space-y-2">
+      <output className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        <span>
+          {account.data?.state === "connecting"
+            ? "Completing sign-in…"
+            : "Preparing Claude sign-in…"}
+        </span>
+      </output>
+    </div>
+  ) : (
+    <div className="space-y-2">
+      {account.data?.state === "failed" && (
+        <p role="alert" className="text-sm text-destructive">
+          Sign-in did not complete. Please try again.
+        </p>
+      )}
+      {account.data?.state === "expired" && (
+        <p className="text-sm text-muted-foreground">
+          Your connection expired. Sign in again to start new runs.
+        </p>
+      )}
+      {/* SPDX-SnippetBegin */}
+      {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+      {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+      {account.data?.requiresVaultReference && (
+        <div className="space-y-2">
+          <Label htmlFor="claude-vault-reference">Vault reference</Label>
+          <Input
+            id="claude-vault-reference"
+            autoComplete="off"
+            placeholder="path/to/secret#key"
+            value={vaultReference}
+            onChange={(event) => setVaultReference(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Generate a token with <code>claude setup-token</code>, store it in
+            Vault, then enter its path#key reference.
+          </p>
+        </div>
+      )}
+      {/* SPDX-SnippetEnd */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={
+          account.data?.requiresVaultReference && !vaultReference.trim()
+        }
+        onClick={() => {
+          setSubmitted(true);
+          signIn.mutate(
+            account.data?.requiresVaultReference
+              ? { vaultReference: vaultReference.trim() }
+              : undefined,
+          );
+        }}
+      >
+        <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
+        <span>
+          {account.data?.requiresVaultReference
+            ? "Connect Vault credential"
+            : "Sign in with Claude"}
+        </span>
+      </Button>
+    </div>
+  );
+
+  if (variant === "inline") {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+          <RuntimeCredentialIcon
+            icon="logo:anthropic"
+            className="size-4 shrink-0"
+            size={16}
+          />
+          <span className="text-sm font-medium">Claude subscription</span>
+          {connected ? (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="size-3.5 text-green-500" aria-hidden />
+              <span>Signed in for you</span>
+            </span>
+          ) : (
+            !open && (
+              <Button
+                type="button"
+                size="sm"
+                className="ml-auto"
+                onClick={openAccount}
+                disabled={account.isPending}
+              >
+                Sign in with Claude
+              </Button>
+            )
+          )}
+        </div>
+        {open && !connected && flow}
+      </div>
+    );
+  }
+
   return (
     <div className={variant === "button" ? "contents" : "space-y-4"}>
       {variant === "button" ? (
@@ -109,22 +312,26 @@ export function ClaudeCodeAccount({
           type="button"
           size="sm"
           variant={connected ? "outline" : "default"}
-          onClick={() => setOpen(true)}
+          onClick={openAccount}
           disabled={account.isPending}
         >
           <span>{connected ? "Manage" : "Sign in with Claude"}</span>
         </Button>
       ) : variant === "compact" ? (
-        <InlineNotice>
+        <InlineNotice
+          variant={connected ? "success" : "warning"}
+          role={connected ? "status" : "alert"}
+        >
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
           <span className="font-medium">Claude Code</span>
           <InlineNoticeText>{statusText}</InlineNoticeText>
+          {connected && <CheckCircle2 aria-label="Connected" />}
           <Button
             type="button"
             variant="outline"
             size="xs"
             className="ml-auto shrink-0 bg-background"
-            onClick={() => setOpen(true)}
+            onClick={openAccount}
             disabled={account.isPending}
           >
             <span>{connected ? "Manage" : "Sign in"}</span>
@@ -156,7 +363,7 @@ export function ClaudeCodeAccount({
             variant="outline"
             size="xs"
             className="shrink-0"
-            onClick={() => setOpen(true)}
+            onClick={openAccount}
             disabled={account.isPending}
           >
             <span>{connected ? "Manage" : "Sign in"}</span>
@@ -174,19 +381,27 @@ export function ClaudeCodeAccount({
           ) : discoveredModels.isError ? (
             <QueryLoadError
               title="Could not load Claude Code models"
+              error={discoveredModels.error}
               onRetry={() => void discoveredModels.refetch()}
             />
           ) : (
             <div>
               <ModelSelector
                 models={models}
-                selectedModel={model ?? "default"}
+                selectedModel={model ?? DEFAULT_CLAUDE_CODE_MODEL}
                 onModelChange={(value) => {
                   if (value) onModelChange(value);
                 }}
                 variant="outline"
                 suppressAutoSelect
               />
+              {(!model || model === "default") && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {model === "default"
+                    ? "Claude chooses the model from your account settings. Choose a named model here to make it explicit."
+                    : "New runs use Opus unless you choose another model."}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -208,14 +423,7 @@ export function ClaudeCodeAccount({
               <Button
                 type="button"
                 disabled={!code.trim() || signIn.isPending}
-                onClick={() => {
-                  if (!account.data?.flowId) return;
-                  setSubmitted(true);
-                  signIn.mutate(
-                    { flowId: account.data.flowId, code: code.trim() },
-                    { onSuccess: () => setCode("") },
-                  );
-                }}
+                onClick={completeSignIn}
               >
                 <span>Complete sign-in</span>
               </Button>
@@ -223,168 +431,7 @@ export function ClaudeCodeAccount({
           </>
         }
       >
-        {account.isError ? (
-          <QueryLoadError
-            title="Could not check Claude Code"
-            onRetry={() => void account.refetch()}
-          />
-        ) : connected ? (
-          <div className="space-y-3">
-            <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-500" />
-              <div>
-                <p className="font-medium text-green-600 dark:text-green-400">
-                  Connected for you
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  This account is available to all your Claude Code agents.
-                  Other users sign in separately.
-                </p>
-              </div>
-            </div>
-            {account.data?.expiresAt && (
-              <p className="text-xs text-muted-foreground">
-                Reconnect by{" "}
-                {new Date(account.data.expiresAt).toLocaleDateString()}.
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Disconnect prevents new runs across all your Claude Code agents
-              from using this account. Running sessions keep their token. Revoke
-              the token in Claude to end its access.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disconnect.isPending}
-              onClick={() => disconnect.mutate()}
-            >
-              <span>Disconnect</span>
-            </Button>
-          </div>
-        ) : signIn.isError ? (
-          <div className="space-y-2">
-            <p role="alert" className="text-sm text-destructive">
-              Could not complete sign-in. Please try again.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                signIn.reset();
-                signIn.mutate(vaultReference ? { vaultReference } : undefined);
-              }}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : account.data?.state === "awaiting_code" ? (
-          <div className="space-y-4">
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={account.data.authorizationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <RuntimeCredentialIcon
-                  icon="logo:anthropic"
-                  className="size-4"
-                />
-                <span>Open Claude sign-in</span>
-                <ExternalLink className="size-3.5" />
-              </a>
-            </Button>
-            <div className="space-y-2">
-              <Label htmlFor="claude-authorization-code">
-                Authorization code
-              </Label>
-              <p
-                id="claude-authorization-code-description"
-                className="text-sm text-muted-foreground"
-              >
-                After signing in, paste the code Claude shows you.
-              </p>
-              <Input
-                id="claude-authorization-code"
-                aria-describedby="claude-authorization-code-description"
-                type="password"
-                autoComplete="off"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
-            </div>
-          </div>
-        ) : signIn.isPending ||
-          account.data?.state === "starting" ||
-          account.data?.state === "connecting" ? (
-          <div className="space-y-2">
-            <output className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span>
-                {account.data?.state === "connecting"
-                  ? "Completing sign-in…"
-                  : "Preparing Claude sign-in…"}
-              </span>
-            </output>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {account.data?.state === "failed" && (
-              <p role="alert" className="text-sm text-destructive">
-                Sign-in did not complete. Please try again.
-              </p>
-            )}
-            {account.data?.state === "expired" && (
-              <p className="text-sm text-muted-foreground">
-                Your connection expired. Sign in again to start new runs.
-              </p>
-            )}
-            {/* SPDX-SnippetBegin */}
-            {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
-            {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-            {account.data?.requiresVaultReference && (
-              <div className="space-y-2">
-                <Label htmlFor="claude-vault-reference">Vault reference</Label>
-                <Input
-                  id="claude-vault-reference"
-                  autoComplete="off"
-                  placeholder="path/to/secret#key"
-                  value={vaultReference}
-                  onChange={(event) => setVaultReference(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Generate a token with <code>claude setup-token</code>, store
-                  it in Vault, then enter its path#key reference.
-                </p>
-              </div>
-            )}
-            {/* SPDX-SnippetEnd */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={
-                account.data?.requiresVaultReference && !vaultReference.trim()
-              }
-              onClick={() => {
-                setSubmitted(true);
-                signIn.mutate(
-                  account.data?.requiresVaultReference
-                    ? { vaultReference: vaultReference.trim() }
-                    : undefined,
-                );
-              }}
-            >
-              <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
-              <span>
-                {account.data?.requiresVaultReference
-                  ? "Connect Vault credential"
-                  : "Sign in with Claude"}
-              </span>
-            </Button>
-          </div>
-        )}
+        {flow}
       </StandardDialog>
     </div>
   );

@@ -45,10 +45,9 @@ describe("saved agent setup notices", () => {
     expect(
       screen.getAllByRole("button", { name: "Sign in with Claude" }),
     ).toHaveLength(1);
-    expect(screen.getByText("Before this agent can run")).toBeVisible();
-    expect(screen.getByText("Connect your Claude subscription")).toBeVisible();
-    expect(screen.getByText("Provide API token")).toBeVisible();
-    expect(screen.getByText("0 of 2 done")).toBeVisible();
+    expect(screen.getByText("Before it runs")).toBeVisible();
+    expect(screen.getByText("Claude subscription")).toBeVisible();
+    expect(screen.getByText("API token")).toBeVisible();
     await act(async () => {
       client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
         ...preflight,
@@ -56,12 +55,13 @@ describe("saved agent setup notices", () => {
       });
     });
     // A row resolved while the page is open stays, ticked.
-    expect(await screen.findByText("1 of 2 done")).toBeVisible();
-    expect(
-      within(
-        screen.getByText("Provide API token").closest("li") as HTMLElement,
-      ).getByText("Done"),
-    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByText("API token").closest("li") as HTMLElement,
+        ).getByText("Done"),
+      ).toBeVisible(),
+    );
     expect(
       screen.getByRole("button", { name: "Sign in with Claude" }),
     ).toBeVisible();
@@ -77,9 +77,64 @@ describe("saved agent setup notices", () => {
         screen.queryByRole("button", { name: "Sign in with Claude" }),
       ).not.toBeInTheDocument(),
     );
-    expect(
-      screen.queryByText("Before this agent can run"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Before it runs")).not.toBeInTheDocument();
     client.clear();
+  });
+
+  it("collapses admin-only credentials into one row and hides what the member cannot use", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as never);
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    // A Codex agent, so the ChatGPT subscription row would normally show too.
+    client.setQueryData(["agents", "agent-1"], {
+      id: "agent-1",
+      runtime: { command: ["archestra-codex"], credentials: [] },
+    });
+    const adminOnly = { canConnect: false, adminOnly: true };
+    client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
+      ready: false,
+      configured: [],
+      misconfigured: [],
+      incompatible: "This model is not supported.",
+      missing: [
+        { key: "MIRROR", label: "Private mirror sync", ...adminOnly },
+        { key: "NITPICK", label: "Nitpicker model-router key", ...adminOnly },
+        {
+          key: "GEMINI",
+          label: "Gemini API key for demo narration",
+          ...adminOnly,
+        },
+        { key: "GITHUB_TOKEN", label: "GitHub account" },
+        { key: "CLAUDE_CODE_ACCOUNT", label: "Claude" },
+      ],
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <AgentSavedSetupBanner agentId="agent-1" canEditAgent={false} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getAllByText("Only admins can run this agent")).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getByText(
+        "It uses Private mirror sync, Nitpicker model-router key and Gemini API key for demo narration from your organization. Ask an admin to run it for you or change its setup.",
+      ),
+    ).toBeVisible();
+    for (const hidden of [
+      /Provide GitHub account/,
+      /Claude subscription/,
+      /ChatGPT subscription/,
+      /not supported/,
+    ]) {
+      expect(screen.queryByText(hidden)).toBeNull();
+    }
+    expect(screen.queryByRole("button", { name: "Set up" })).toBeNull();
+    expect(screen.queryByText(/internet connection/)).toBeNull();
   });
 });

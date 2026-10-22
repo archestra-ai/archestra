@@ -33,6 +33,7 @@ import type { ConnectClient } from "./clients";
 import type { ConnectChoices, ConnectPicks } from "./connect-choices";
 import type { ConnectPageData } from "./connect-page-data";
 import { fmt, plural } from "./connect-page-parts";
+import { GatewayLink } from "./gateway-link";
 import { PluginPickPane } from "./plugin-pick-pane";
 
 /** One change to the setup; the page saves switches and picks together. */
@@ -61,7 +62,7 @@ export function IncludeDialog({
   const parts = data.partsFor(client);
   const servers = data.servers.length;
   const tools = data.totalTools;
-  const skills = data.skills.length;
+  const skills = data.totalSkills;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,6 +87,12 @@ export function IncludeDialog({
                   flat
                   className="w-full"
                   agents={data.gateways}
+                  remote={{
+                    filters: {
+                      agentTypes: ["profile", "mcp_gateway"],
+                      excludeOtherPersonalAgents: true,
+                    },
+                  }}
                   value={data.gateway.id}
                   onValueChange={(id) =>
                     onChange({
@@ -98,7 +105,9 @@ export function IncludeDialog({
                   searchPlaceholder="Search gateways…"
                 />
               ) : (
-                <p className="text-sm font-medium">{data.gateway.name}</p>
+                <p className="text-sm">
+                  <GatewayLink gateway={data.gateway} className="font-medium" />
+                </p>
               )}
             </Section>
           )}

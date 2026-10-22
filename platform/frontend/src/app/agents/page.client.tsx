@@ -2,11 +2,11 @@
 
 import {
   type archestraApiTypes,
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import type {
+  CellContext,
   Column,
   ColumnDef,
   RowSelectionState,
@@ -21,7 +21,16 @@ import {
   Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
@@ -72,7 +81,10 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { TableSectionHeading } from "@/components/table-section-heading";
+import {
+  EmptyTableSection,
+  TableSectionHeading,
+} from "@/components/table-section-heading";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -128,16 +140,24 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
 import { AgentPinnedTiles } from "./agent-pinned-tiles";
-
-type AgentsInitialData = {
-  agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
-  pinnedAgents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
-};
+import {
+  AGENTS_PAGE_DESCRIPTION,
+  AgentsTableSkeleton,
+} from "./agents-skeleton";
+import {
+  agentListQuery,
+  automaticPinIds,
+  automaticPinsQuery,
+  type CatalogFilters,
+  pinnedAgentsQuery,
+  pinsForViewer,
+} from "./catalog-queries";
 
 type AgentListRow =
   archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];
 type AgentData = Extract<AgentListRow, { type: "agent" }>["value"];
+/** What a row's actions hand back: the agent, without the row's counts. */
+type AgentActionTarget = Omit<AgentData, "toolsCount" | "subagentsCount">;
 type ExternalAgentData = Extract<AgentListRow, { type: "external" }>["value"];
 
 function getAgentListRowId(row: AgentListRow) {
@@ -161,15 +181,11 @@ function partitionAgentRows(rows: readonly AgentListRow[]) {
   return { agents, externalAgents };
 }
 
-export default function AgentsPage({
-  initialData,
-}: {
-  initialData?: AgentsInitialData;
-}) {
+export default function AgentsPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <Agents initialData={initialData} />
+        <Agents />
       </ErrorBoundary>
     </div>
   );
@@ -200,7 +216,7 @@ function SortIcon({
   );
 }
 
-function Agents({ initialData }: { initialData?: AgentsInitialData }) {
+function Agents() {
   const queryParamsAdapter = useQueryParamsAdapter();
   const {
     searchParams,
@@ -267,13 +283,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
-  } satisfies Omit<
-    NonNullable<archestraApiTypes.GetAgentCatalogData["query"]>,
-    "limit" | "offset"
-  >;
+  } satisfies CatalogFilters;
 
-  const { data: personalDefaultAgentId } = useDefaultAgentId();
-  const { data: organization } = useOrganization();
+  const { data: personalDefaultAgentId, isLoading: isDefaultAgentLoading } =
+    useDefaultAgentId();
+  const { data: organization, isLoading: isOrganizationLoading } =
+    useOrganization();
   // Exactly one agent starts this viewer's new chats, so exactly one row is
   // badged — badging a personal pin AND the organization default would put two
   // answers on screen to a question that has one.
@@ -281,44 +296,48 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     personalDefaultAgentId,
     organizationDefaultAgentId: organization?.defaultAgentId,
   });
-  const { data: personalChatAgentId } = usePersonalChatAgentId();
+  const { data: personalChatAgentId, isLoading: isPersonalChatAgentLoading } =
+    usePersonalChatAgentId();
+  // Until all three are known an automatic pin would show as a row first, and
+  // the list (which leaves them out) would fetch a page replaced the moment
+  // they arrive, so the list's queries wait for them too.
+  const isPinnedForViewerLoading =
+    isDefaultAgentLoading ||
+    isOrganizationLoading ||
+    isPersonalChatAgentLoading;
   // Pinned for the viewer without their pinning them: what starts their
   // chats, the assistant made for them, and the organization's default.
-  const pinnedForViewer = collectPinReasons([
-    [personalDefaultAgentId, "Your default"],
-    [personalChatAgentId, "Personal agent"],
-    [organization?.defaultAgentId, "Org default"],
-  ]);
+  const pinnedForViewer = pinsForViewer({
+    personalDefaultAgentId,
+    personalChatAgentId,
+    organizationDefaultAgentId: organization?.defaultAgentId,
+  });
   // The table leaves out what the viewer sees as automatic pins on the
   // server, so its count, paging and "select all" match the rows it shows.
   const excludeIds = isDeletedView
     ? undefined
-    : pinnedForViewer.map(({ id }) => id).sort();
-  const listExclusions = excludeIds?.length ? { excludeIds } : {};
+    : automaticPinIds(pinnedForViewer);
   // The same pins as list rows, which carry everything the tile's menu acts on.
   const { data: automaticPinsResponse } = useAgentCatalog({
-    limit: 20,
-    offset: 0,
-    ids: excludeIds,
-    enabled: !!excludeIds?.length,
+    ...automaticPinsQuery(excludeIds),
+    enabled: !isPinnedForViewerLoading && !!excludeIds?.length,
   });
-  const automaticPinRows: AgentListRow[] = automaticPinsResponse?.data ?? [];
 
   const {
-    data: catalogResponse,
+    data: currentCatalog,
     isPending,
     isFetching,
     isLoadingError: isAgentsLoadError,
     refetch: refetchAgents,
   } = useAgentCatalog({
-    limit: pageSize,
-    offset: pageIndex * pageSize,
-    initialData: initialData?.agents ?? undefined,
-    initialDataPinned: isDeletedView ? undefined : false,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-    pinned: isDeletedView ? undefined : false,
-    ...catalogFilters,
-    ...listExclusions,
+    ...agentListQuery({
+      filters: catalogFilters,
+      pageIndex,
+      pageSize,
+      isDeletedView,
+      excludeIds,
+    }),
+    enabled: isDeletedView || !isPinnedForViewerLoading,
   });
   const {
     data: pinnedAgentsResponse,
@@ -327,17 +346,31 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     isLoadingError: isPinnedAgentsLoadError,
     refetch: refetchPinnedAgents,
   } = useAgentCatalog({
-    limit: 100,
-    offset: 0,
-    initialData: initialData?.pinnedAgents ?? undefined,
-    initialDataPinned: true,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-    initialDataLimit: 100,
+    ...pinnedAgentsQuery(catalogFilters),
     enabled: !isDeletedView,
-    ...catalogFilters,
-    status: undefined,
-    pinned: true,
   });
+  // Table rows already at hand when the page mounts (restored, or streamed
+  // before its code loaded) render in the task after the first frame: the
+  // shell, header and pinned tiles paint first, instead of waiting on one long
+  // render of every row. An effect alone would not do: when the page mounts
+  // in a synchronous update, React runs it, and renders its update, before
+  // the browser paints.
+  const [rowsReady, setRowsReady] = useState(false);
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timeout = setTimeout(() => setRowsReady(true), 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timeout);
+    };
+  }, []);
+  const catalogResponse = rowsReady ? currentCatalog : undefined;
+  // True only from mount to the deferred render: for that one frame the list
+  // shows its placeholder even though its rows are at hand.
+  const areRowsDeferred = !rowsReady && currentCatalog !== undefined;
+  const automaticPinRows: AgentListRow[] = automaticPinsResponse?.data ?? [];
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -373,9 +406,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [deletingExternalAgent, setDeletingExternalAgent] =
     useState<A2aRemoteAgent | null>(null);
   const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
-    useState<AgentData | null>(null);
+    useState<AgentActionTarget | null>(null);
 
-  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
+  const [cloningAgent, setCloningAgent] = useState<AgentActionTarget | null>(
+    null,
+  );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
@@ -454,6 +489,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const showLoading =
     (isPending ||
       isFetching ||
+      areRowsDeferred ||
       (!isDeletedView && (isPinnedPending || isPinnedFetching))) &&
     rows.length === 0;
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -502,7 +538,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       ...catalogFilters,
       pinned: isDeletedView ? undefined : false,
-      ...listExclusions,
+      ...(excludeIds?.length ? { excludeIds } : {}),
     },
     {
       enabled: allMatchingSelected,
@@ -563,7 +599,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkDeleteDescription = (() => {
     const noun = selectedCount === 1 ? "agent" : "agents";
     if (selectedExternalAgents.length === 0) {
-      return `Delete ${selectedCount} ${noun}? This cannot be undone.`;
+      return `Delete ${selectedCount} ${noun}? ${selectedCount === 1 ? "It moves" : "They move"} to Deleted, where ${selectedCount === 1 ? "it" : "they"} can be restored.`;
     }
 
     const externalCount = selectedExternalAgents.length;
@@ -777,9 +813,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllTools
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => !tool.delegateToAgentId,
-                ).length}
+              : row.original.value.toolsCount}
           </span>
         ),
     },
@@ -796,9 +830,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllSubagents
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => tool.delegateToAgentId,
-                ).length}
+              : row.original.value.subagentsCount}
           </span>
         ),
     },
@@ -807,7 +839,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: ({ column }) => (
         <SortableHeader column={column} label="Last used" />
       ),
-      size: 140,
+      // Fits the longest relative time, "less than a minute ago", with room
+      // before the Provider icon.
+      size: 180,
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.value.lastUsedAt ?? null, {
@@ -869,15 +903,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       enableHiding: false,
       // Pin, then Edit, Chat and the menu as one group.
       size: 156,
-      cell: ({ row }) => (
-        // The whole cell, so a disabled action's tooltip wrapper cannot let
-        // the click through to the row either.
-        <RowClickShield>
-          {row.original.type === "external"
-            ? renderExternalAgentActions(row.original.value)
-            : renderAgentActions(row.original.value)}
-        </RowClickShield>
-      ),
+      cell: AgentRowActionsCell,
     },
   ];
 
@@ -912,6 +938,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     </BulkActions>
   );
 
+  const renderLoadingSection = (title: string) => (
+    <section className="space-y-3">
+      <TableSectionHeading title={title} bulkActions={bulkActions} />
+      <AgentsTableSkeleton showEnvironment={showEnvironmentColumn} />
+    </section>
+  );
+
   const renderAgentSection = ({
     title,
     sectionRows,
@@ -920,75 +953,87 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     title: string;
     sectionRows: AgentListRow[];
     sectionPagination?: { pageIndex: number; pageSize: number; total: number };
-  }) => (
-    <section className="space-y-3">
-      <TableSectionHeading title={title} bulkActions={bulkActions} />
-      <DataTable
-        columns={columns}
-        tableClassName="table-fixed"
-        fixedWidthColumnIds={[
-          "toolsCount",
-          "subagentsCount",
-          "lastUsedAt",
-          "team",
-          "provider",
-          "environment",
-        ]}
-        flexibleColumnIds={["name"]}
-        columnDropOrder={[
-          "environment",
-          "provider",
-          "lastUsedAt",
-          "subagentsCount",
-          "toolsCount",
-        ]}
-        data={sectionRows}
-        isLoading={showLoading}
-        getRowId={getAgentListRowId}
-        rowSelection={effectiveRowSelection}
-        onRowSelectionChange={onRowSelectionChange}
-        rangeSelection={rangeSelection}
-        hideSelectedCount
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
-        manualSorting
-        manualPagination
-        pagination={sectionPagination}
-        onPaginationChange={
-          sectionPagination ? handlePaginationChange : undefined
-        }
-        onRowClick={
-          isDeletedView
-            ? undefined
-            : (row, event) =>
-                openRowOnPlainClick(event, () => {
-                  if (row.type === "external") {
-                    openExternalAgent(row.value);
-                  } else {
-                    router.push(agentDetailHref("agent", row.value.id));
-                  }
-                })
-        }
-        emptyIcon={Bot}
-        emptyMessage="No agents found"
-        hasActiveFilters={hasActiveFilters}
-        filteredEmptyMessage={
-          isDeletedView
-            ? "No deleted agents found."
-            : "No agents match your filters"
-        }
-        onClearFilters={clearFilters}
-      />
-    </section>
-  );
+  }) =>
+    // The first page draws as the route's skeleton did until it arrives, so
+    // the rows replace placeholders of their own size.
+    showLoading && sectionRows.length === 0 ? (
+      renderLoadingSection(title)
+    ) : (
+      <section className="space-y-3">
+        <TableSectionHeading title={title} bulkActions={bulkActions} />
+        <AgentRowActionsContext.Provider
+          value={(row) =>
+            row.type === "external"
+              ? renderExternalAgentActions(row.value)
+              : renderAgentActions(row.value)
+          }
+        >
+          <DataTable
+            columns={columns}
+            tableClassName="table-fixed"
+            fixedWidthColumnIds={[
+              "toolsCount",
+              "subagentsCount",
+              "lastUsedAt",
+              "team",
+              "provider",
+              "environment",
+            ]}
+            flexibleColumnIds={["name"]}
+            columnDropOrder={[
+              "environment",
+              "provider",
+              "lastUsedAt",
+              "subagentsCount",
+              "toolsCount",
+            ]}
+            data={sectionRows}
+            isLoading={showLoading}
+            getRowId={getAgentListRowId}
+            rowSelection={effectiveRowSelection}
+            onRowSelectionChange={onRowSelectionChange}
+            rangeSelection={rangeSelection}
+            hideSelectedCount
+            sorting={sorting}
+            onSortingChange={handleSortingChange}
+            manualSorting
+            manualPagination
+            pagination={sectionPagination}
+            onPaginationChange={
+              sectionPagination ? handlePaginationChange : undefined
+            }
+            onRowClick={
+              isDeletedView
+                ? undefined
+                : (row, event) =>
+                    openRowOnPlainClick(event, () => {
+                      if (row.type === "external") {
+                        openExternalAgent(row.value);
+                      } else {
+                        router.push(agentDetailHref("agent", row.value.id));
+                      }
+                    })
+            }
+            emptyIcon={Bot}
+            emptyMessage="No agents found"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage={
+              isDeletedView
+                ? "No deleted agents found."
+                : "No agents match your filters"
+            }
+            onClearFilters={clearFilters}
+          />
+        </AgentRowActionsContext.Provider>
+      </section>
+    );
 
   return (
     <PageLayout
       title="Agents"
       description={
         <p className="text-sm text-muted-foreground">
-          Build and manage AI agents, and connect external A2A agents for them
-          to use as subagents.
+          {AGENTS_PAGE_DESCRIPTION}
         </p>
       }
       actionButton={
@@ -1093,34 +1138,53 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         ? renderAgentActions(row.value, "menu")
                         : null;
                     }}
-                    isLoading={isPinnedPending}
+                    isLoading={isPinnedPending || isPinnedForViewerLoading}
                     onUnpin={(agent) =>
                       pinAgent.mutate({ id: agent.id, pinned: false })
                     }
                   />
                 )}
-                {isDeletedView
-                  ? renderAgentSection({
-                      title: "Deleted agents",
-                      sectionRows: unpinnedRows,
-                      sectionPagination: {
-                        pageIndex,
-                        pageSize,
-                        total: pagination.total,
-                      },
-                    })
-                  : unpinnedRows.length > 0 ||
-                      (pinnedRows.length === 0 && pageRows.length === 0)
-                    ? renderAgentSection({
-                        title: "All agents",
-                        sectionRows: unpinnedRows,
-                        sectionPagination: {
-                          pageIndex,
-                          pageSize,
-                          total: pagination.total,
-                        },
-                      })
-                    : null}
+                {isDeletedView ? (
+                  renderAgentSection({
+                    title: "Deleted agents",
+                    sectionRows: unpinnedRows,
+                    sectionPagination: {
+                      pageIndex,
+                      pageSize,
+                      total: pagination.total,
+                    },
+                  })
+                ) : isPinnedForViewerLoading ? (
+                  // Held until the automatic pins are known, so none shows
+                  // as a row first; drawn as the loading table it becomes.
+                  renderLoadingSection("All agents")
+                ) : unpinnedRows.length > 0 ||
+                  isPending ||
+                  areRowsDeferred ||
+                  (pinnedRows.length === 0 &&
+                    pageRows.length === 0 &&
+                    // The automatic pins ignore the filters, so only an
+                    // unfiltered list can leave its table out for them.
+                    (hasActiveFilters || pinnedForViewer.length === 0)) ? (
+                  renderAgentSection({
+                    title: "All agents",
+                    sectionRows: unpinnedRows,
+                    sectionPagination: {
+                      pageIndex,
+                      pageSize,
+                      total: pagination.total,
+                    },
+                  })
+                ) : (
+                  <EmptyTableSection
+                    title="All agents"
+                    message={
+                      hasActiveFilters
+                        ? "No other agents match your filters"
+                        : "No other agents yet"
+                    }
+                  />
+                )}
               </div>
 
               {bulkDeleteOpen && (
@@ -1283,29 +1347,13 @@ function DeleteAgentDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Agent"
-      description="Are you sure you want to delete this agent? This action cannot be undone."
+      description="Are you sure you want to delete this agent? It moves to Deleted, where it can be restored."
       isPending={deleteAgent.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Agent"
       pendingLabel="Deleting..."
     />
   );
-}
-
-/**
- * Agents pinned for the viewer with every reason each one is, in the order
- * given, so one agent that is both your default and your personal agent is
- * one tile with two chips.
- */
-function collectPinReasons(
-  entries: Array<[string | null | undefined, string]>,
-): Array<{ id: string; reasons: string[] }> {
-  const byId = new Map<string, string[]>();
-  for (const [id, reason] of entries) {
-    if (!id) continue;
-    byId.set(id, [...(byId.get(id) ?? []), reason]);
-  }
-  return [...byId].map(([id, reasons]) => ({ id, reasons }));
 }
 
 function SortableHeader({
@@ -1324,5 +1372,23 @@ function SortableHeader({
       <span>{label}</span>
       <SortIcon isSorted={column.getIsSorted()} />
     </Button>
+  );
+}
+
+// TanStack renders cells as components. Keep this type stable across list
+// refreshes while context supplies the latest permissions and action handlers.
+const AgentRowActionsContext = createContext<
+  ((row: AgentListRow) => ReactNode) | null
+>(null);
+
+function AgentRowActionsCell({ row }: CellContext<AgentListRow, unknown>) {
+  const renderActions = useContext(AgentRowActionsContext);
+  // Shield the whole cell, including disabled actions' tooltip wrappers.
+  // Right-aligned so rows with fewer actions (external A2A agents, which have
+  // no pin or chat) still end flush with the others.
+  return (
+    <RowClickShield className="flex justify-end">
+      {renderActions?.(row.original)}
+    </RowClickShield>
   );
 }

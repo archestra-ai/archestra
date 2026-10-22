@@ -3,8 +3,7 @@
 import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { useMemo } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import {
   attentionCatalogIds,
   computeMcpServerIssues,
@@ -28,8 +27,9 @@ export interface McpServerFacetCounts {
 
 /**
  * Issues across every MCP server the viewer can see, scoped to what they can
- * act on. Reads the same catalog + installed-server queries the registry page
- * uses (cached, so it costs nothing extra there).
+ * act on. Reads the registry's slim issue index — every visible item and
+ * install, reduced to the fields issue classification reads — rather than the
+ * full catalog and server lists.
  *
  * `deploymentStatuses` is required rather than defaulted: runtime faults
  * (Failed to start, Not running) are classified from the live feed, so a
@@ -39,15 +39,16 @@ export interface McpServerFacetCounts {
  */
 export function useMcpServerIssues(
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
+  /** False holds the issue index and team reads (the sidebar badge). */
+  { enabled = true }: { enabled?: boolean } = {},
 ): {
   issuesByCatalog: Map<string, McpServerIssue[]>;
   facetCounts: McpServerFacetCounts;
 } {
-  const { data: catalogItems } = useInternalMcpCatalog();
-  const { data: servers } = useMcpServers();
+  const { data: index } = useMcpRegistryIssueIndex({ enabled });
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
-  const canReauthenticate = useCanReauthenticate();
+  const canReauthenticate = useCanReauthenticate({ enabled });
   const { data: canManageInstalls } = useHasPermissions(
     { mcpRegistry: ["update"] },
     "*",
@@ -56,8 +57,8 @@ export function useMcpServerIssues(
   const issuesByCatalog = useMemo(
     () =>
       computeMcpServerIssues({
-        items: catalogItems ?? [],
-        servers: servers ?? [],
+        items: index?.catalogItems ?? [],
+        servers: index?.servers ?? [],
         deploymentStatuses,
         viewer: {
           userId,
@@ -65,14 +66,7 @@ export function useMcpServerIssues(
           canManageInstalls: !!canManageInstalls,
         },
       }),
-    [
-      catalogItems,
-      servers,
-      deploymentStatuses,
-      userId,
-      canReauthenticate,
-      canManageInstalls,
-    ],
+    [index, deploymentStatuses, userId, canReauthenticate, canManageInstalls],
   );
   const facetCounts = useMemo(
     () => ({

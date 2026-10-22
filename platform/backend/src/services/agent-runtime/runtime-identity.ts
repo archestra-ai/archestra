@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -39,6 +40,8 @@ const ACTOR_KINDS = new Set<AgentRunActorKind>([
   "user",
   "team",
   "organization",
+  "oauthClient",
+  "serviceAccount",
   "system",
 ]);
 
@@ -82,6 +85,8 @@ type GatewayTokenActor = {
   userId?: string;
   teamId?: string | null;
   isOrganizationToken: boolean;
+  oauthClientId?: string;
+  serviceAccountId?: string;
 };
 
 /** @public — principal constructor shared with review and gateway callers */
@@ -148,8 +153,17 @@ export function authenticatedRuntimeSpender(params: {
   userId?: string;
   callerId?: string;
 }): string | undefined {
+  const workload = parseWorkloadPrincipal(params.callerId)
+    ? params.callerId
+    : undefined;
+  // A service account key carrying a verified runtime binding spends as the
+  // workspace it runs, as team and organization tokens did. Without the
+  // binding it spends as itself.
+  if (workload && params.userId && isServiceAccountUserId(params.userId)) {
+    return workload;
+  }
   if (params.userId) return `user:${params.userId}`;
-  return parseWorkloadPrincipal(params.callerId) ? params.callerId : undefined;
+  return workload;
 }
 
 /**
@@ -304,48 +318,6 @@ export async function resolveRuntimeSessionForWorkspace(params: {
 }
 
 /**
- * Signed offer session to the workspace that minted it. A session suffix is
- * not enough: the caller must be that workspace's principal, and the session
- * or its parent must be the scoped workspace root. A child offer whose
- * parent is that root is the same workspace; its session id is not required
- * to equal the workload name.
- */
-export async function resolveVerifiedRuntimeAssociation(params: {
-  organizationId: string;
-  sessionId: string;
-  callerId: string | null | undefined;
-  parentId?: string | null;
-}): Promise<VerifiedRuntimeAssociation | null> {
-  const workspace = await workspaceForCaller({
-    organizationId: params.organizationId,
-    callerId: params.callerId,
-    sessionId: params.sessionId,
-  });
-  if (!workspace || !params.callerId) return null;
-  const callerId = runtimeCallerId({
-    actorKind: workspace.actorKind,
-    actorId: workspace.actorId,
-    workspaceId: workspace.id,
-  });
-  const root = scopedSessionId(callerId, workspace.workloadName);
-  if (params.callerId !== callerId) {
-    return null;
-  }
-  if (
-    !(await offerSessionMatchesWorkspace({
-      organizationId: params.organizationId,
-      sessionId: params.sessionId,
-      parentId: params.parentId,
-      callerId: params.callerId,
-      root,
-    }))
-  ) {
-    return null;
-  }
-  return associationForCurrentTurn(workspace);
-}
-
-/**
  * Non-user gateway origin. A shared actor token does not select a workspace.
  * A presented binding that does not verify, or that disagrees with the
  * anchor session or run id, is a rejection rather than an unbound session.
@@ -384,7 +356,7 @@ export async function resolveGatewayRuntimeSession(params: {
   ) {
     return {
       kind: "reject",
-      message: "OpenAPPA runtime credential does not match this workspace",
+      message: "OpenAPPA runtime credential does not match this run",
     };
   }
   const run = await AgentRunModel.findByTaskId(claims.taskId);
@@ -455,10 +427,7 @@ export async function stampRuntimeBinding(params: {
     identity.workspaceId !== params.workspaceId ||
     identity.taskId !== params.taskId
   ) {
-    throw new ApiError(
-      409,
-      "Runtime binding does not match the persisted workspace",
-    );
+    throw new ApiError(409, "Runtime binding does not match the saved run");
   }
   const deadlineMs =
     Math.max(1, params.spec.activeDeadlineSeconds ?? 60) * 1000;
@@ -483,73 +452,6 @@ export async function stampRuntimeBinding(params: {
   }
   params.spec.secretEnv[RUNTIME_BINDING_ENV] = token;
   delete params.spec.env[RUNTIME_BINDING_ENV];
-}
-
-async function workspaceForCaller(params: {
-  organizationId: string;
-  callerId: string | null | undefined;
-  sessionId: string;
-}): Promise<AgentWorkspace | null> {
-  const workspaceId = parseWorkloadPrincipal(params.callerId);
-  if (workspaceId) {
-    const workspace = await AgentWorkspaceModel.findById(workspaceId);
-    return workspace?.organizationId === params.organizationId
-      ? workspace
-      : null;
-  }
-  if (!params.callerId?.startsWith("user:")) return null;
-  const actorId = params.callerId.slice("user:".length);
-  if (actorId.length === 0) return null;
-  const workloadName = unscopedSession(params.sessionId, params.callerId);
-  if (!workloadName) return null;
-  const workspace = await AgentWorkspaceModel.findByWorkloadName(workloadName);
-  if (
-    !workspace ||
-    workspace.organizationId !== params.organizationId ||
-    workspace.actorKind !== "user" ||
-    workspace.actorId !== actorId
-  ) {
-    return null;
-  }
-  return workspace;
-}
-
-function unscopedSession(sessionId: string, callerId: string): string | null {
-  const prefix = `${callerId}|`;
-  if (sessionId.startsWith(prefix)) {
-    const rest = sessionId.slice(prefix.length);
-    const child = rest.indexOf(":");
-    const name = child >= 0 ? rest.slice(0, child) : rest;
-    return name.length > 0 ? name : null;
-  }
-  return null;
-}
-
-async function offerSessionMatchesWorkspace(params: {
-  organizationId: string;
-  sessionId: string;
-  parentId?: string | null;
-  callerId: string;
-  root: string;
-}): Promise<boolean> {
-  if (params.sessionId === params.root && !params.parentId) return true;
-  const row = await OpenAppaSessionModel.familySession({
-    organizationId: params.organizationId,
-    sessionId: params.sessionId,
-    callerId: params.callerId,
-  });
-  if (row?.callerId !== params.callerId || params.parentId !== row.parentId) {
-    return false;
-  }
-  return (
-    params.sessionId === params.root ||
-    (await OpenAppaSessionModel.hasAncestor({
-      organizationId: params.organizationId,
-      callerId: params.callerId,
-      sessionId: params.sessionId,
-      ancestorSessionId: params.root,
-    }))
-  );
 }
 
 async function associationForCurrentTurn(
@@ -601,8 +503,22 @@ function tokenOwnsActor(
   if (token.userId) {
     return claims.actorKind === "user" && claims.actorId === token.userId;
   }
+  // Before the team check: an account acting for a team carries its teamId
+  // but is never the team.
+  if (token.serviceAccountId) {
+    return (
+      claims.actorKind === "serviceAccount" &&
+      claims.actorId === token.serviceAccountId
+    );
+  }
   if (token.teamId && !token.isOrganizationToken) {
     return claims.actorKind === "team" && claims.actorId === token.teamId;
+  }
+  if (token.oauthClientId) {
+    return (
+      claims.actorKind === "oauthClient" &&
+      claims.actorId === token.oauthClientId
+    );
   }
   if (token.isOrganizationToken) {
     if (
@@ -610,6 +526,11 @@ function tokenOwnsActor(
       claims.actorId === organizationId
     ) {
       return true;
+    }
+    // The host launches application runs with its gateway credential. The
+    // signed binding and persisted run, not the org token, identify the app.
+    if (claims.actorKind === "oauthClient") {
+      return claims.organizationId === organizationId;
     }
     // Host-created system runs use the organization gateway token. The
     // signed binding, not the token alone, names that workload.

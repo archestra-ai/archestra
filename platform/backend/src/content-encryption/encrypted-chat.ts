@@ -136,6 +136,11 @@ export function encryptedChatDekMatches(params: {
  * overlap, so a column's AAD context reads the same in both layers.
  */
 export type EncryptedChatContentContext =
+  | "interactions.session_preview"
+  | "openappa_thread_states.calls"
+  | "openappa_thread_states.tools"
+  | "openappa_yells.message"
+  | "openappa_yells.archive"
   | "messages.content"
   | "interactions.request"
   | "interactions.processed_request"

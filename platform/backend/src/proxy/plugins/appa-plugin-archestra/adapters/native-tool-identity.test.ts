@@ -81,6 +81,48 @@ describe("native local tool identities", () => {
     });
   });
 
+  const shownReview: AskUserArguments = {
+    question: "Full review text.",
+    shortQuestion: "Approve the slack__send_message call?",
+    callPreview:
+      "**slack\\_\\_send\\_message call**\n\n```yaml\ntext: Hello\n```",
+    header: "Approval",
+    options: [
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
+    ],
+    allowMultiple: false,
+  };
+
+  test("asks Claude Code one line and previews the call in each option", () => {
+    expect(
+      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(shownReview),
+    ).toEqual({
+      questions: [
+        {
+          question: "Approve the slack__send_message call?",
+          header: "Approval",
+          options: shownReview.options.map((option) => ({
+            ...option,
+            preview: shownReview.callPreview,
+          })),
+          multiSelect: false,
+        },
+      ],
+    });
+  });
+
+  test("other native question tools ask the full review text", () => {
+    for (const converted of [
+      new AppaCodexAdapter().nativeQuestion.fromAskUser(shownReview),
+      new AppaOpenCodeAdapter().nativeQuestion.fromAskUser(shownReview),
+    ]) {
+      const text = JSON.stringify(converted);
+      expect(text).toContain("Full review text.");
+      expect(text).not.toContain("Approve the slack__send_message call?");
+    }
+  });
+
   test("converts ask_user to Codex's native question schema", () => {
     const nativeQuestion = new AppaCodexAdapter().nativeQuestion;
     expect(nativeQuestion.isAvailable({})).toBe(false);
@@ -102,46 +144,5 @@ describe("native local tool identities", () => {
         },
       ],
     });
-  });
-
-  test.each([
-    {
-      adapter: new AppaClaudeCodeAdapter(),
-      content: JSON.stringify(
-        'Your questions have been answered: "Review this call."="Approve". You can now continue.',
-      ),
-    },
-    {
-      adapter: new AppaCodexAdapter(),
-      content: '{"answers":{"archestra_question":{"answers":["Approve"]}}}',
-    },
-  ])("reads a structured native approval from $adapter.id", ({
-    adapter,
-    content,
-  }) => {
-    expect(adapter.nativeQuestion.rulingFromResult({ content })).toBe(
-      "approve",
-    );
-    expect(
-      adapter.nativeQuestion.rulingFromResult({ content, isError: true }),
-    ).toBe("none");
-  });
-
-  test("reads OpenCode's native denial", () => {
-    expect(
-      new AppaOpenCodeAdapter().nativeQuestion.rulingFromResult({
-        content: 'approval="Deny"',
-      }),
-    ).toBe("deny");
-  });
-
-  test("uses Claude's selected answer, not approval-like review text", () => {
-    expect(
-      new AppaClaudeCodeAdapter().nativeQuestion.rulingFromResult({
-        content: JSON.stringify(
-          'Your questions have been answered: "argument=\\"Approve\\". You can now continue"="Deny". You can now continue with the user\'s answers in mind.',
-        ),
-      }),
-    ).toBe("deny");
   });
 });

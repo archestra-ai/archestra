@@ -10,23 +10,27 @@ import {
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { requestScope } from "@/auth/request-scope";
 import db, { schema, withDbTransaction } from "@/database";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 import type {
   InsertTeam,
   LabelWithDetails,
   Team,
   TeamExternalGroup,
+  TeamListItem,
   TeamMember,
   TeamMemberListItem,
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
 import type { TeamMemberRole } from "@/types/team-role";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentLabelModel from "./agent-label";
 import CreatedByModel from "./created-by";
 import TeamLabelModel from "./team-label";
-import TeamTokenModel from "./team-token";
 
 class TeamModel {
   /** SQL predicate matching direct team membership plus every ancestor. */
@@ -120,11 +124,6 @@ class TeamModel {
     // No prune needed here: on create, label sync only creates keys/values and
     // inserts rows (never deletes), so nothing can be orphaned.
 
-    // Auto-create a team token. Kept outside the transaction (pre-existing
-    // behavior); the atomicity guarantee covers the team row + labels only.
-    await TeamTokenModel.createTeamToken(teamId, input.name);
-    logger.debug({ teamId }, "TeamModel.create: created team token");
-
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {
       ...team,
@@ -187,7 +186,9 @@ class TeamModel {
     offset: number;
     name?: string;
     labels?: Record<string, string[]>;
-  }): Promise<{ data: Team[]; total: number }> {
+    includeRelations?: boolean;
+    includeMembers?: boolean;
+  }): Promise<{ data: TeamListItem[]; total: number }> {
     const { organizationId, limit, offset, name, labels } = params;
     logger.debug(
       { organizationId, limit, offset, name, labels },
@@ -202,7 +203,9 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamsTable.organizationId, organizationId),
-      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(name
+        ? [ilike(schema.teamsTable.name, `%${escapeLikePattern(name)}%`)]
+        : []),
       ...(labelFilteredIds
         ? [inArray(schema.teamsTable.id, labelFilteredIds)]
         : []),
@@ -210,7 +213,10 @@ class TeamModel {
 
     const [teams, totalResult] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.teamsTable),
+          memberCount: teamMemberCountSql(),
+        })
         .from(schema.teamsTable)
         .where(and(...filters))
         .orderBy(schema.teamsTable.name)
@@ -222,7 +228,12 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+    const teamsWithRelations =
+      params.includeRelations === false
+        ? teams
+        : await TeamModel.attachMembersAndLabels(teams, {
+            includeMembers: params.includeMembers !== false,
+          });
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(
@@ -271,9 +282,13 @@ class TeamModel {
   }
 
   /**
-   * Find a team by ID
+   * Find a team by ID. Pass `includeMembers: false` when only the team row is
+   * needed: a large team has thousands of member rows.
    */
-  static async findById(id: string): Promise<Team | null> {
+  static async findById(
+    id: string,
+    options: { includeMembers?: boolean } = {},
+  ): Promise<Team | null> {
     logger.debug({ id }, "TeamModel.findById: fetching team");
     const [team] = await db
       .select()
@@ -284,6 +299,11 @@ class TeamModel {
     if (!team) {
       logger.debug({ id }, "TeamModel.findById: team not found");
       return null;
+    }
+
+    if (options.includeMembers === false) {
+      logger.debug({ id }, "TeamModel.findById: completed without members");
+      return team;
     }
 
     const members = await TeamModel.getTeamMembers(id);
@@ -433,6 +453,91 @@ class TeamModel {
   }
 
   /**
+   * One page of a team's members with their user details, ordered by name.
+   * `search` matches every word against the name or email; `userIds` keeps
+   * only those users, so a caller can ask which of a few users are members.
+   */
+  static async getTeamMembersWithUsersPaginated(params: {
+    teamId: string;
+    limit: number;
+    offset: number;
+    search?: string;
+    userIds?: string[];
+  }): Promise<{ data: TeamMemberListItem[]; total: number }> {
+    const { teamId, limit, offset, search, userIds } = params;
+    const searchFilter = buildTokenizedSearchFilter({
+      query: search,
+      columns: [schema.usersTable.name, schema.usersTable.email],
+    });
+    const filters = and(
+      eq(schema.teamMembersTable.teamId, teamId),
+      ...(userIds ? [inArray(schema.teamMembersTable.userId, userIds)] : []),
+      ...(searchFilter ? [searchFilter] : []),
+    );
+
+    const [data, totalResult] = await Promise.all([
+      db
+        .select({
+          ...getTableColumns(schema.teamMembersTable),
+          name: schema.usersTable.name,
+          email: schema.usersTable.email,
+          image: schema.usersTable.image,
+        })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.teamMembersTable.userId, schema.usersTable.id),
+        )
+        .where(filters)
+        .orderBy(schema.usersTable.name, schema.teamMembersTable.userId)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.teamMembersTable.userId, schema.usersTable.id),
+        )
+        .where(filters),
+    ]);
+
+    return { data, total: totalResult[0]?.count ?? 0 };
+  }
+
+  /** The user's role in the team, or null when they are not a member. */
+  static async getMemberRole(
+    teamId: string,
+    userId: string,
+  ): Promise<TeamMemberRole | null> {
+    const [membership] = await db
+      .select({ role: schema.teamMembersTable.role })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .limit(1);
+    return membership?.role ?? null;
+  }
+
+  /** How many admins the team has, counted without loading its members. */
+  static async countAdmins(teamId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  /**
    * Get members for multiple teams in a single query to avoid N+1
    */
   static async getTeamMembersBatch(
@@ -546,49 +651,10 @@ class TeamModel {
   }
 
   /**
-   * Get all teams a user is a member of
-   */
-  static async getUserTeams(userId: string): Promise<Team[]> {
-    logger.debug({ userId }, "TeamModel.getUserTeams: fetching user teams");
-    // Fetch user's team memberships
-    const teamMemberships = await db
-      .select()
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
-
-    if (teamMemberships.length === 0) {
-      logger.debug({ userId, count: 0 }, "TeamModel.getUserTeams: completed");
-      return [];
-    }
-
-    const teamIds = teamMemberships.map((m) => m.teamId);
-
-    // Batch fetch teams and their members in parallel
-    const [teams, membersByTeam] = await Promise.all([
-      db
-        .select()
-        .from(schema.teamsTable)
-        .where(inArray(schema.teamsTable.id, teamIds)),
-      TeamModel.getTeamMembersBatch(teamIds),
-    ]);
-
-    const teamsWithMembers = teams.map((team) => ({
-      ...team,
-      members: membersByTeam.get(team.id) || [],
-    }));
-
-    logger.debug(
-      { userId, count: teamsWithMembers.length },
-      "TeamModel.getUserTeams: completed",
-    );
-    return teamsWithMembers;
-  }
-
-  /**
-   * Get the teams a user belongs to within a single organization. Unlike
-   * {@link getUserTeams}, this is scoped to one org, so callers that render
-   * user context into prompts (templated skills, agent system prompts) cannot
-   * leak team names from the user's other organizations.
+   * Get the teams a user belongs to within a single organization. Scoping to
+   * one org keeps callers that render user context into prompts (templated
+   * skills, agent system prompts) from leaking team names from the user's
+   * other organizations.
    */
   static async getUserTeamsForOrganization(params: {
     userId: string;
@@ -644,7 +710,9 @@ class TeamModel {
     offset: number;
     name?: string;
     labels?: Record<string, string[]>;
-  }): Promise<{ data: Team[]; total: number }> {
+    includeRelations?: boolean;
+    includeMembers?: boolean;
+  }): Promise<{ data: TeamListItem[]; total: number }> {
     const { userId, limit, offset, name, labels } = params;
     logger.debug(
       { userId, limit, offset, name, labels },
@@ -659,7 +727,9 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamMembersTable.userId, userId),
-      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(name
+        ? [ilike(schema.teamsTable.name, `%${escapeLikePattern(name)}%`)]
+        : []),
       ...(labelFilteredIds
         ? [inArray(schema.teamsTable.id, labelFilteredIds)]
         : []),
@@ -670,6 +740,7 @@ class TeamModel {
         .select({
           ...getTableColumns(schema.teamsTable),
           myRole: schema.teamMembersTable.role,
+          memberCount: teamMemberCountSql(),
         })
         .from(schema.teamMembersTable)
         .innerJoin(
@@ -690,7 +761,12 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+    const teamsWithRelations =
+      params.includeRelations === false
+        ? teams
+        : await TeamModel.attachMembersAndLabels(teams, {
+            includeMembers: params.includeMembers !== false,
+          });
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(
@@ -845,6 +921,61 @@ class TeamModel {
   }
 
   /**
+   * A caller's teams for authorization, in one statement: the
+   * organization's teams they belong to with ancestors, with names and roles
+   * (role sources, as {@link effectiveMembershipCondition}), and every team id
+   * their grants can name (as {@link getUserTeamIds}). A read request's scope
+   * reads them once.
+   */
+  static async getUserTeamContext(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<{
+    sourceTeams: Array<{ id: string; name: string; roles: string[] }>;
+    subjectTeamIds: string[];
+  }> {
+    const context = await requestScope.memo(
+      `teams\0${params.organizationId}\0${params.userId}`,
+      async () => {
+        const result = await db.execute<{
+          source_teams: Array<{ id: string; name: string; roles: string[] }>;
+          subject_team_ids: string[];
+        }>(sql`
+          WITH RECURSIVE subject_teams(team_id, organization_id) AS (
+            SELECT tm.team_id, direct_team.organization_id
+            FROM team_member tm
+            INNER JOIN team direct_team ON direct_team.id = tm.team_id
+            WHERE tm.user_id = ${params.userId}
+            UNION
+            SELECT child_team.parent_team_id, st.organization_id
+            FROM subject_teams st
+            INNER JOIN team child_team
+              ON child_team.id = st.team_id
+              AND child_team.organization_id = st.organization_id
+            WHERE child_team.parent_team_id IS NOT NULL
+          )
+          SELECT
+            (SELECT coalesce(array_agg(DISTINCT team_id), '{}') FROM subject_teams) AS subject_team_ids,
+            (SELECT coalesce(json_agg(json_build_object('id', source_team.id, 'name', source_team.name, 'roles', source_team.roles)), '[]'::json)
+              FROM team source_team
+              WHERE source_team.organization_id = ${params.organizationId}
+                AND ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: sql`source_team.id` })}
+            ) AS source_teams
+        `);
+        const [row] = result.rows;
+        return {
+          sourceTeams: row?.source_teams ?? [],
+          subjectTeamIds: row?.subject_team_ids ?? [],
+        };
+      },
+    );
+    return {
+      sourceTeams: context.sourceTeams.map((team) => ({ ...team })),
+      subjectTeamIds: [...context.subjectTeamIds],
+    };
+  }
+
+  /**
    * Get all team IDs a user can access through direct membership. Membership
    * in a child team inherits resource access from every ancestor team.
    */
@@ -951,46 +1082,6 @@ class TeamModel {
       "TeamModel.getTeammateUserIds: completed",
     );
     return filteredIds;
-  }
-
-  /**
-   * Distinct user IDs sharing at least one team with `userId` within the given
-   * organization (self excluded). Org-scoped so a shared team in another org
-   * never surfaces someone as a teammate here.
-   */
-  static async getTeammateUserIdsInOrganization(params: {
-    userId: string;
-    organizationId: string;
-  }): Promise<string[]> {
-    const { userId, organizationId } = params;
-    const userTeamIds = (
-      await db
-        .select({ teamId: schema.teamMembersTable.teamId })
-        .from(schema.teamMembersTable)
-        .innerJoin(
-          schema.teamsTable,
-          eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
-        )
-        .where(
-          and(
-            eq(schema.teamMembersTable.userId, userId),
-            eq(schema.teamsTable.organizationId, organizationId),
-          ),
-        )
-    ).map((row) => row.teamId);
-
-    if (userTeamIds.length === 0) {
-      return [];
-    }
-
-    const teammates = await db
-      .select({ userId: schema.teamMembersTable.userId })
-      .from(schema.teamMembersTable)
-      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
-
-    return [...new Set(teammates.map((t) => t.userId))].filter(
-      (id) => id !== userId,
-    );
   }
 
   /**
@@ -1490,17 +1581,21 @@ class TeamModel {
   }
 
   /**
-   * Batch-attach members and labels to a page of team rows (avoids N+1).
+   * Batch-attach members (optional), labels and descendant teams to a page of
+   * team rows (avoids N+1).
    */
-  private static async attachMembersAndLabels(
-    teams: (typeof schema.teamsTable.$inferSelect)[],
-  ): Promise<Team[]> {
+  private static async attachMembersAndLabels<
+    T extends typeof schema.teamsTable.$inferSelect,
+  >(
+    teams: T[],
+    options: { includeMembers: boolean },
+  ): Promise<Array<T & Pick<Team, "members" | "labels" | "descendantTeams">>> {
     const teamIds = teams.map((t) => t.id);
     const organizationIds = [
       ...new Set(teams.map((team) => team.organizationId)),
     ];
     const [membersByTeam, labelsByTeam, hierarchy] = await Promise.all([
-      TeamModel.getTeamMembersBatch(teamIds),
+      options.includeMembers ? TeamModel.getTeamMembersBatch(teamIds) : null,
       TeamLabelModel.getLabelsForTeams(teamIds),
       organizationIds.length === 0
         ? []
@@ -1516,7 +1611,7 @@ class TeamModel {
 
     return teams.map((team) => ({
       ...team,
-      members: membersByTeam.get(team.id) || [],
+      ...(membersByTeam && { members: membersByTeam.get(team.id) || [] }),
       labels: labelsByTeam.get(team.id) || [],
       descendantTeams: TeamModel.findDescendants(hierarchy, team.id),
     }));
@@ -1578,3 +1673,26 @@ class TeamModel {
 }
 
 export default TeamModel;
+
+// ===
+// Internal helpers
+// ===
+
+const memberCountTeamMembers = alias(
+  schema.teamMembersTable,
+  "member_count_team_member",
+);
+
+/**
+ * Correlated count of a team's members, evaluated in the same statement as the
+ * page query so list endpoints never issue one count query per team. Uses an
+ * alias so it stays unambiguous when the outer query also joins team_member.
+ */
+function teamMemberCountSql() {
+  return sql<number>`(${db
+    .select({ count: count() })
+    .from(memberCountTeamMembers)
+    .where(eq(memberCountTeamMembers.teamId, schema.teamsTable.id))})`.mapWith(
+    Number,
+  );
+}

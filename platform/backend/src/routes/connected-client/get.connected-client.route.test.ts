@@ -1,3 +1,5 @@
+import { PGlite } from "@electric-sql/pglite";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -166,6 +168,123 @@ describe("GET /api/connected-clients", () => {
     expect(body.find((c) => c.clientId === "claude-code")?.lastSeenAt).toBe(
       null,
     );
+  });
+
+  test("a call sent with a passthrough key is seen as its author's", async ({
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInteraction,
+    makeVirtualApiKey,
+  }) => {
+    await redeem(user.id, "claude-code");
+    await redeem(user.id, "codex");
+    const bob = await makeUser();
+    await makeMember(bob.id, organizationId);
+    const gateway = await makeAgent({ organizationId });
+    const userKey = await makeVirtualApiKey(organizationId, {
+      authorId: user.id,
+    });
+    const bobKey = await makeVirtualApiKey(organizationId, {
+      authorId: bob.id,
+    });
+    const authorless = await makeVirtualApiKey(organizationId);
+    const codexSeen = new Date(Date.now() - 2 * DAY_MS);
+    const claudeSeen = new Date(Date.now() - 3 * DAY_MS);
+    // Bob's user header, the user's key: the user's call.
+    await makeInteraction(gateway.id, {
+      userId: bob.id,
+      passthroughVirtualKeyId: userKey.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+      createdAt: codexSeen,
+    });
+    // The user's header, Bob's key: Bob's call, however recent.
+    await makeInteraction(gateway.id, {
+      userId: user.id,
+      passthroughVirtualKeyId: bobKey.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+      createdAt: new Date(Date.now() - DAY_MS),
+    });
+    // A key nobody authors leaves the call with its user header.
+    await makeInteraction(gateway.id, {
+      userId: user.id,
+      passthroughVirtualKeyId: authorless.id,
+      source: "api",
+      externalAgentId: "anthropic_claude_code",
+      createdAt: claudeSeen,
+    });
+
+    const body = await listClients();
+
+    expect(body.find((c) => c.clientId === "codex")?.lastSeenAt).toBe(
+      codexSeen.toISOString(),
+    );
+    expect(body.find((c) => c.clientId === "claude-code")?.lastSeenAt).toBe(
+      claudeSeen.toISOString(),
+    );
+  });
+
+  test("a signed-in agent is last seen at its newest gateway call", async ({
+    makeAgent,
+    makeOAuthClient,
+  }) => {
+    const clientId = "https://claude.ai/oauth/claude-code-client-metadata";
+    await makeOAuthClient({ clientId });
+    await OAuthRefreshTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId,
+      userId: user.id,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() + DAY_MS),
+    });
+    const gateway = await makeAgent({ organizationId });
+    const seen = new Date(Date.now() - DAY_MS);
+    await db.insert(schema.mcpToolCallsTable).values(
+      [new Date(Date.now() - 5 * DAY_MS), seen].map((createdAt) => ({
+        agentId: gateway.id,
+        mcpServerName: "mcp-gateway",
+        method: "tools/call",
+        userId: user.id,
+        authMethod: "oauth" as const,
+        source: "api" as const,
+        oauthClientId: clientId,
+        createdAt,
+      })),
+    );
+
+    const body = await listClients();
+
+    expect(body).toEqual([
+      expect.objectContaining({
+        clientId: "claude-code",
+        lastSeenAt: seen.toISOString(),
+      }),
+    ]);
+  });
+
+  // The page used to build the whole adoption report for one member: seven
+  // statements, the heaviest scanning months of interactions.
+  test("reads the page in three statements", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    await redeem(user.id, "codex");
+    const gateway = await makeAgent({ organizationId });
+    await makeInteraction(gateway.id, {
+      userId: user.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+    });
+
+    const query = vi.spyOn(PGlite.prototype, "query");
+    try {
+      await listClients();
+      expect(query).toHaveBeenCalledTimes(3);
+    } finally {
+      query.mockRestore();
+    }
   });
 
   async function listClients() {

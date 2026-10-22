@@ -4,31 +4,25 @@ import {
   type Action,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
-  type OpenAppaPolicyTargetKind,
   type Permissions,
 } from "@archestra/shared";
 import Link from "next/link";
 import type { ButtonProps } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useChatAgents } from "@/lib/agent.query";
+import { useChatAgentBootstrap } from "@/lib/agent.query";
 import {
   type OpenAppaLaunchPromptKey,
+  type OpenAppaLaunchTarget,
   openAppaYellInvestigationPrompt,
   resolveOpenAppaLaunchPrompt,
 } from "@/lib/openappa-chat-prompts";
 import { openAppaChatHref } from "@/lib/openappa-routes";
 
-type OpenAppaChatTarget = {
-  kind: OpenAppaPolicyTargetKind;
-  id: string;
-  name: string;
-};
-
 export type OpenAppaChatSubject =
   | {
       kind: "prompt";
       promptKey: OpenAppaLaunchPromptKey;
-      target?: OpenAppaChatTarget;
+      target?: OpenAppaLaunchTarget;
     }
   | { kind: "yell"; yellId: string }
   /** Sends nothing: the chat opens on the agent's suggested prompts. */
@@ -44,7 +38,7 @@ export function OpenAppaChatButton({
   permissions?: Permissions;
   /** Omit to open the chat on the agent's suggested prompts. */
   promptKey?: OpenAppaLaunchPromptKey;
-  target?: OpenAppaChatTarget;
+  target?: OpenAppaLaunchTarget;
 }) {
   const {
     agents,
@@ -86,7 +80,7 @@ export function useOpenAppaChatLaunch({
   subject: OpenAppaChatSubject;
   permissions?: Permissions;
 }) {
-  const agents = useChatAgents();
+  const agents = useChatAgentBootstrap();
   const agent = agents.data?.find(
     (candidate) =>
       candidate.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
@@ -106,12 +100,12 @@ export function useOpenAppaChatLaunch({
     ],
     agent: [...new Set<Action>(["read", ...(permissions?.agent ?? [])])],
     skill: [...new Set<Action>(["read", ...(permissions?.skill ?? [])])],
-    openappaPolicy: [
-      ...new Set<Action>(["read", ...(permissions?.openappaPolicy ?? [])]),
+    guardrailsPolicy: [
+      ...new Set<Action>(["read", ...(permissions?.guardrailsPolicy ?? [])]),
     ],
     ...(target?.kind === "mcp_gateway" ? { mcpGateway: ["read"] } : {}),
     ...(target?.kind === "mcp_server" ? { mcpRegistry: ["read"] } : {}),
-    ...(subject.kind === "yell" ? { openappaDiagnostics: ["read"] } : {}),
+    ...(subject.kind === "yell" ? { log: ["read"] } : {}),
   };
 
   return {

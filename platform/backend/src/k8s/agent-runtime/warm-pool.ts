@@ -1,3 +1,4 @@
+import { followAgentCatalogImage, TimeInMs } from "@archestra/shared";
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
@@ -52,7 +53,8 @@ export async function readWorkspaceSandbox(params: {
           condition.reason ?? "",
         ),
     );
-    if (failure) throw new Error(`Workspace claim rejected: ${failure.reason}`);
+    if (failure)
+      throw new Error(`Agent allocation rejected: ${failure.reason}`);
     const assigned = claim.status?.sandbox?.name;
     if (!assigned) throw error;
     const sandbox = (await api.getNamespacedCustomObject({
@@ -67,7 +69,7 @@ export async function readWorkspaceSandbox(params: {
           owner.uid === claim.metadata.uid && owner.kind === "SandboxClaim",
       )
     )
-      throw new Error("Sandbox does not belong to this workspace claim");
+      throw new Error("Sandbox does not belong to this Agent allocation");
     return sandbox;
   }
 }
@@ -98,7 +100,9 @@ class AgentWarmPoolManager {
         this.clients = createK8sClients(kubeConfig, namespace);
       }
       const clients = this.clients;
-      const candidates = await AgentModel.listWarmPoolCandidates();
+      const candidates = await AgentModel.listWarmPoolCandidates({
+        since: new Date(Date.now() - RECENT_RUN_WINDOW_MS),
+      });
       const desired = new Map<
         string,
         {
@@ -125,7 +129,14 @@ class AgentWarmPoolManager {
         ),
       ]);
       for (const agent of candidates) {
-        const runtime = agent.runtime;
+        // Pool the image a launch resolves to, or no claim would ever match.
+        const runtime = agent.runtime && {
+          ...agent.runtime,
+          image: followAgentCatalogImage({
+            image: agent.runtime.image,
+            catalogImages: config.agentRuntime.catalogImages,
+          }),
+        };
         if (
           !runtime ||
           runtime.backend !== "kubernetes" ||
@@ -393,6 +404,8 @@ class AgentWarmPoolManager {
 
 export const agentWarmPoolManager = new AgentWarmPoolManager();
 
+/** Agents idle longer than this hold no spare capacity. */
+const RECENT_RUN_WINDOW_MS = 7 * TimeInMs.Day;
 const POOL_LABEL = "archestra.io/warm-pool";
 const MANAGED_LABELS = { "archestra.io/purpose": "agent-warm-pool" };
 const MANAGED_SELECTOR = "archestra.io/purpose=agent-warm-pool";

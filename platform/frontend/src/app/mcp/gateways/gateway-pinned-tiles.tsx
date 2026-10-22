@@ -1,7 +1,6 @@
 "use client";
 
 import type { AgentType } from "@archestra/shared";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -9,6 +8,7 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,12 @@ import { useOrganization } from "@/lib/organization.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { type GatewayToolRow, gatewayToolNames } from "./gateway-tools";
 
-/** What a tile needs of a gateway, whichever read it came from. */
-interface PinnableGateway {
+/**
+ * What a tile needs of a gateway, whichever read it came from. List rows carry
+ * a tool count and no tools; single-gateway reads carry the tools and no
+ * count. Each read has one or the other.
+ */
+type PinnableGateway = {
   id: string;
   name: string;
   icon?: string | null;
@@ -33,28 +37,36 @@ interface PinnableGateway {
   lastUsedAt?: string | null;
   /** Exposes every tool the caller can reach, not just assigned ones. */
   accessAllTools: boolean;
-  tools: GatewayToolRow[];
-}
+} & (
+  | { toolsCount: number; tools?: GatewayToolRow[] }
+  | { toolsCount?: undefined; tools: GatewayToolRow[] }
+);
 
 /**
  * Gateways pinned for the viewer without their pinning them, with why: their
  * personal gateway, and the one the Connect page starts on. The page's table
- * leaves these out, since they are tiles.
+ * leaves these out, since they are tiles. `isLoading` holds while either is
+ * still unknown, so the page does not list one as a row first.
  */
-export function useGatewaysPinnedForViewer(): Array<{
-  id: string;
-  reasons: string[];
-}> {
-  const { data: personalGateway } = useDefaultMcpGateway();
-  const { data: organization } = useOrganization();
+export function useGatewaysPinnedForViewer(): {
+  pins: Array<{ id: string; reasons: string[] }>;
+  isLoading: boolean;
+} {
+  const { data: personalGateway, isLoading: isPersonalGatewayLoading } =
+    useDefaultMcpGateway();
+  const { data: organization, isLoading: isOrganizationLoading } =
+    useOrganization();
   const personalGatewayId = personalGateway?.id ?? null;
   // The same pick the Connect page makes when nothing is chosen there.
   const connectDefaultId =
     organization?.connectionDefaultMcpGatewayId ?? personalGatewayId;
-  return collectPinReasons([
-    [personalGatewayId, "Personal"],
-    [connectDefaultId, "Connect default"],
-  ]);
+  return {
+    pins: collectPinReasons([
+      [personalGatewayId, "Personal"],
+      [connectDefaultId, "Connect default"],
+    ]),
+    isLoading: isPersonalGatewayLoading || isOrganizationLoading,
+  };
 }
 
 /**
@@ -80,7 +92,8 @@ export function GatewayPinnedTiles({
   renderMenu?: (id: string) => ReactNode;
 }) {
   const { data: personalGateway } = useDefaultMcpGateway();
-  const pinnedFor = useGatewaysPinnedForViewer();
+  const { pins: pinnedFor, isLoading: isPinnedForLoading } =
+    useGatewaysPinnedForViewer();
 
   // List rows first: a single-gateway read does not say when it was last used.
   const known = new Map<string, PinnableGateway>(
@@ -127,7 +140,9 @@ export function GatewayPinnedTiles({
         action:
           connect.visible && connect.href ? (
             <Button size="sm" asChild>
-              <Link href={connect.href}>{connect.label}</Link>
+              <IntentPrefetchLink href={connect.href}>
+                {connect.label}
+              </IntentPrefetchLink>
             </Button>
           ) : undefined,
         // A pin the viewer made, on a gateway that is not also pinned for
@@ -141,7 +156,9 @@ export function GatewayPinnedTiles({
     ];
   });
 
-  return <PinnedTiles tiles={tiles} isLoading={isLoading} />;
+  return (
+    <PinnedTiles tiles={tiles} isLoading={isLoading || isPinnedForLoading} />
+  );
 }
 
 /**
@@ -164,7 +181,10 @@ function GatewayToolsChip({ gateway }: { gateway: PinnableGateway }) {
       </Tooltip>
     );
   }
-  const count = gatewayToolNames(gateway.tools).length;
+  const count =
+    gateway.toolsCount !== undefined
+      ? gateway.toolsCount
+      : gatewayToolNames(gateway.tools).length;
   return (
     <Badge variant="outline">
       <span>{count === 1 ? "1 tool" : `${count} tools`}</span>

@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import type { ExternalConsultOutcome } from "@/lib/openappa/external-consults.query";
+import { cn } from "@/lib/utils/tailwind";
 
 export const OUTCOME_LABEL: Record<ExternalConsultOutcome, string> = {
   answered: "Answered",
@@ -20,17 +20,22 @@ export const ALL_OUTCOMES = Object.keys(
   OUTCOME_LABEL,
 ) as ExternalConsultOutcome[];
 
+/** A consult's outcome as a small chip, sized like the trace's check chips. */
 export function ConsultOutcomeBadge({
   outcome,
 }: {
   outcome: ExternalConsultOutcome;
 }) {
   return (
-    <Badge
-      variant={outcome === "answered" ? "secondary" : "destructive"}
-      className="px-1.5 py-0 text-[10px]"
+    <span
+      className={cn(
+        "inline-flex h-4 shrink-0 items-center rounded-sm px-1 text-[10px] leading-none font-medium",
+        outcome === "answered"
+          ? "bg-muted text-muted-foreground"
+          : "bg-destructive/15 text-destructive",
+      )}
     >
       {OUTCOME_LABEL[outcome]}
-    </Badge>
+    </span>
   );
 }

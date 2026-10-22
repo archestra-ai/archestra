@@ -1,6 +1,7 @@
 import { SupportedProviders } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
@@ -386,6 +387,53 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(screen.getByText("reconnect:chatgpt-key")).toBeInTheDocument();
   });
 
+  it("opens connections requested by the setup menu and retains the dialog across rerenders", () => {
+    const ref = createRef<{ selectKey: (keyId: string) => void }>();
+    const props = {
+      currentConversationChatApiKeyId: null,
+      suppressAutoSelect: true,
+    };
+    const { rerender } = render(
+      <LlmProviderApiKeySelector ref={ref} {...props} />,
+    );
+    act(() => ref.current?.selectKey("connect-subscription-chatgpt"));
+    rerender(<LlmProviderApiKeySelector ref={ref} {...props} />);
+    expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
+  });
+
+  it("reconnects an expired unselected subscription instead of selecting its expired credential", () => {
+    const key = {
+      id: "expired-sub",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      scope: "personal",
+      userId: "current-user",
+      subscriptionKind: "chatgpt",
+      requiresReauthentication: true,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [key],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    const ref = createRef<{ selectKey: (keyId: string) => void }>();
+    const onProviderChange = vi.fn();
+    render(
+      <LlmProviderApiKeySelector
+        ref={ref}
+        currentConversationChatApiKeyId="another-key"
+        onProviderChange={onProviderChange}
+        suppressAutoSelect
+      />,
+    );
+    act(() => ref.current?.selectKey(key.id));
+    expect(
+      screen.getByText("Reconnect ChatGPT Subscription"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("reconnect:expired-sub")).toBeInTheDocument();
+    expect(onProviderChange).not.toHaveBeenCalled();
+  });
+
   it("opens the provider-specific subscription flow", async () => {
     const user = userEvent.setup();
     renderSelector();
@@ -504,6 +552,52 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       "anthropic",
       "existing-key-id",
     );
+  });
+
+  it("neither offers nor auto-selects keys of providers that cannot chat", () => {
+    // Jev serves decisions and Voyage serves embeddings; neither can answer a
+    // conversation, so listing their keys here only offered a dead end.
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [
+        { id: "jev-key", name: "Jev", provider: "jev", scope: "personal" },
+        {
+          id: "voyage-key",
+          name: "Voyage",
+          provider: "voyage",
+          scope: "personal",
+        },
+        {
+          id: "anthropic-key",
+          name: "Anthropic",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ] as unknown as LlmProviderApiKey[],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    const onApiKeyChange = vi.fn();
+
+    // No OpenAI key exists, so auto-select falls back to any key — personal
+    // first, which used to be the Jev key.
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="openai"
+        onApiKeyChange={onApiKeyChange}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /^Jev/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Voyage/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Anthropic Connected/ }),
+    ).toBeInTheDocument();
+    expect(onApiKeyChange).toHaveBeenCalledWith("anthropic-key");
+    expect(onApiKeyChange).not.toHaveBeenCalledWith("jev-key");
   });
 
   it("recognizes a SuperGrok key as connected without absorbing plain xAI API keys", () => {

@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   TOOL_GET_RUN_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
@@ -22,12 +24,16 @@ import {
   ModelModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
+import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
@@ -37,6 +43,8 @@ import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
 import * as startTask from "./start-task";
 import { workspaceTransferTickets } from "./workspace-transfers";
+
+setupTestCacheManager();
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 useMswServer(
@@ -51,6 +59,9 @@ useMswServer(
 const PARENT = "user:parent|conversation";
 const TOOL_WRITE_WORKSPACE_FILE_FULL_NAME = archestraMcpBranding.getToolName(
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+);
+const TOOL_TRANSFER_WORKSPACE_FILE_FULL_NAME = archestraMcpBranding.getToolName(
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
 );
 const OTHER = "user:parent|other-session";
 
@@ -244,7 +255,7 @@ describe("runtime crossing", () => {
         resumeFromTaskId: started.previousTaskId,
         runtimeCrossing: crossing(false, started.organizationId),
       }),
-    ).rejects.toThrow("opened without a parent");
+    ).rejects.toMatchObject({ name: "RuntimeCrossingRefusal" });
     expect(openappa.addressRuntimeChild).not.toHaveBeenCalled();
     expect(backend.continueRun).not.toHaveBeenCalled();
   });
@@ -394,11 +405,120 @@ describe("model-facing runtime tools", () => {
 
     for (const result of [read, steered, written]) {
       expect(result.isError).toBe(true);
-      expect(JSON.stringify(result)).toContain("bound to a different session");
+      // Without a proof the gateway cannot tell the parent from a stranger,
+      // so the refusal names the missing proof rather than another session.
+      expect(JSON.stringify(result)).toContain(
+        "carried no proof of its source",
+      );
+      expect(JSON.stringify(result)).not.toContain("different session");
     }
     expect(JSON.stringify(read)).not.toContain("RAW ARTIFACT");
     expect(steer).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
+  });
+
+  for (const superyelled of ["run", "parent"] as const) {
+    test(`no proof reads, steers and writes a bound run after its ${superyelled} was superyelled`, async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    }) => {
+      const seeded = await seededRun({
+        makeAgent,
+        makeMember,
+        makeOrganization,
+        makeUser,
+        seedAndAssignArchestraTools,
+      });
+      await superyellSession(
+        superyelled === "run"
+          ? { ...seeded.child, parent_id: PARENT }
+          : proofSession(seeded.organizationId),
+      );
+      await db.insert(schema.a2aArtifactsTable).values({
+        taskId: seeded.task.id,
+        name: "agent-response",
+        parts: [{ text: "RAW ARTIFACT" }],
+      });
+      const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+      const write = vi
+        .spyOn(workspaceFiles, "accessAgentWorkspaceFile")
+        .mockResolvedValue({ path: "note.txt", size: 10, sha256: "0" });
+      // The proxy signs no proof for a session OpenAPPA no longer governs, so
+      // the run's own calls and its parent's both arrive without one.
+      const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+      const read = await executeArchestraTool(
+        TOOL_GET_RUN_FULL_NAME,
+        { task_id: seeded.task.id },
+        context,
+      );
+      const steered = await executeArchestraTool(
+        TOOL_STEER_RUN_FULL_NAME,
+        { task_id: seeded.task.id, message: "Carry on" },
+        context,
+      );
+      const written = await executeArchestraTool(
+        TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
+        { task_id: seeded.task.id, path: "note.txt", content: "PLAIN FILE" },
+        context,
+      );
+
+      for (const result of [read, steered, written]) {
+        expect(result.isError).not.toBe(true);
+      }
+      expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
+      expect(steer).toHaveBeenCalledOnce();
+      expect(write).toHaveBeenCalledOnce();
+      // The gateway only reads: the run's own record is the proxy's to write.
+      const records = await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [seeded.child.session_id],
+      });
+      expect(records).toHaveLength(superyelled === "run" ? 1 : 0);
+    });
+  }
+
+  test("a proof from another session is still refused by a superyelled run", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await superyellSession({ ...seeded.child, parent_id: PARENT });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const stranger = {
+      ...seeded.context,
+      openappaRuntimeCall: {
+        session: {
+          organization_id: seeded.organizationId,
+          caller_id: "user:stranger",
+          session_id: "user:stranger|conversation",
+        },
+        toolCallId: "call-1",
+        spawn: false,
+      },
+    };
+
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "SECRET STEER" },
+      stranger,
+    );
+
+    expect(steered.isError).toBe(true);
+    expect(JSON.stringify(steered)).toContain("bound to a different session");
+    expect(steer).not.toHaveBeenCalled();
   });
 
   test("a classified spawn that resolves in-process is refused", async ({
@@ -414,6 +534,8 @@ describe("model-facing runtime tools", () => {
       organizationId: org.id,
       authorId: actor.id,
     });
+
+    await releasedSpawn(org.id);
 
     const result = await startDelegatedTask({
       agentId: agent.id,
@@ -434,6 +556,113 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(result.content)).toContain(
       "no longer the resolved target",
     );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "refused",
+    });
+  });
+
+  // The proxy tells the model what the gateway recorded for the call, so the
+  // record must exist before the client gets the result.
+  test("records the run that a released launch started", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: runtimeConfig(),
+    });
+    await releasedSpawn(org.id);
+    // The launch itself is not under test, and a real one would outlive it.
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: actor.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    vi.spyOn(startTask, "startDetachedAgentTask").mockResolvedValue(task);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "launched",
+      session_id: task.id,
+      state: "submitted",
+    });
+  });
+
+  test("records that a launch needs credentials, with the setup link", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(org.id);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "credentials_needed",
+      setup_url: expect.stringContaining(
+        `/agents/${agent.id}?setup=credentials&keys=GITHUB_TOKEN`,
+      ),
+    });
   });
 
   test("a parent gets only the exact admitted turn value", async ({
@@ -708,6 +937,47 @@ function proofSession(organizationId: string) {
   };
 }
 
+/** The released `call-1` spawn of the proof session, as the proxy leaves it. */
+async function releasedSpawn(organizationId: string) {
+  const session = proofSession(organizationId);
+  await db.insert(schema.openappaSessionsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    actor: openappaActor(session.session_id),
+    root: openappaActor(session.session_id),
+    parentId: null,
+    startDecision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    operationId: "call:call-1",
+    root: openappaActor(session.session_id),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "archestra__start_run",
+        spawn: true,
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+}
+
+async function recordedLaunch(organizationId: string) {
+  const session = proofSession(organizationId);
+  const launches = await OpenAppaSpawnCorrelationModel.runtimeLaunches({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    toolCallIds: ["call-1"],
+  });
+  return launches.get("call-1");
+}
+
 function runtimeConfig() {
   return {
     image: "runtime:test",
@@ -805,7 +1075,7 @@ for (const transformed of [false, true]) {
   });
 }
 
-test("an oversized protected export reads no bytes and issues no ticket", async ({
+test("a protected export above the inline size crosses chunk by chunk and is served only from verified chunks", async ({
   makeAgent,
   makeMember,
   makeOrganization,
@@ -819,16 +1089,187 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
     makeUser,
     seedAndAssignArchestraTools,
   });
+  const chunk = 4 * 1024 * 1024;
+  const size = chunk + 5;
+  const bytes = Buffer.alloc(size);
+  for (let i = 0; i < chunk; i += 4099) bytes[i] = (i * 31) & 0xff;
+  bytes.write("tail!", chunk);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
   vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
-    transfer_id: "oversized",
+    transfer_id: "big",
     path: "report.bin",
-    size: 4 * 1024 * 1024 + 1,
-    sha256: "0".repeat(64),
+    size,
+    sha256,
     mtime_ns: "1",
     ino: "1",
   });
-  const reader = vi.spyOn(backend, "readWorkspaceTransferRange");
-  const crossing = vi.spyOn(openappa, "returnRuntimeValue");
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockImplementation(
+    async ({ offset, length }) => ({
+      stdout: Readable.from([
+        bytes.subarray(offset, length < 0 ? undefined : offset + length),
+      ]),
+      completed: Promise.resolve(),
+    }),
+  );
+  const crossing = vi
+    .spyOn(openappa, "returnRuntimeValue")
+    .mockImplementation(async ({ value }) => ({ kind: "admitted", value }));
+  const minted = await workspaceTransferTickets.mintDownload({
+    actor: {
+      kind: "user",
+      id: seeded.context.userId,
+      organizationId: seeded.organizationId,
+    },
+    taskId: seeded.task.id,
+    path: "report.bin",
+    crossing: { child: seeded.child, operationId: "big-export" },
+  });
+  expect(minted.ticket).toMatchObject({ sha256, size });
+  expect(minted.ticket).not.toHaveProperty("admittedBytes");
+  // Every byte crossed as content, in order, each chunk naming its digest.
+  expect(crossing.mock.calls.map((call) => call[0].operationId)).toEqual([
+    expect.stringMatching(
+      new RegExp(`^file-export:big-export:${sha256}:0/2:[0-9a-f]+$`),
+    ),
+    expect.stringMatching(
+      new RegExp(`^file-export:big-export:${sha256}:1/2:[0-9a-f]+$`),
+    ),
+  ]);
+  // Bytes that are not text cross as base64; text crosses as text, so a rule
+  // that reads content sees what the file says.
+  expect(JSON.parse(crossing.mock.calls[0][0].value)).toMatchObject({
+    encoding: "base64",
+  });
+  const tail = JSON.parse(crossing.mock.calls[1][0].value);
+  expect(tail).toMatchObject({
+    path: "report.bin",
+    encoding: "utf8",
+    content: "tail!",
+    sha256,
+    chunk: {
+      index: 1,
+      count: 2,
+      sha256: createHash("sha256").update("tail!").digest("hex"),
+    },
+  });
+  // The snapshot stays pinned: it is what the download is served from.
+  expect(backend.runWorkspaceTransferCommand).not.toHaveBeenCalledWith(
+    expect.objectContaining({ args: ["discard", "big"] }),
+  );
+  const ticket = workspaceTransferTickets.resolve(
+    minted.ticket.id,
+    minted.token,
+  );
+  const across = await workspaceTransferTickets.read({
+    ticket,
+    offset: chunk - 3,
+    length: -1,
+  });
+  const parts: Buffer[] = [];
+  for await (const part of across.stdout) parts.push(Buffer.from(part));
+  await across.completed;
+  expect(Buffer.concat(parts).equals(bytes.subarray(chunk - 3))).toBe(true);
+  // A runtime that rewrites the snapshot after admission releases nothing.
+  bytes[chunk + 2] ^= 0xff;
+  const tampered = await workspaceTransferTickets.read({
+    ticket,
+    offset: chunk,
+    length: 2,
+  });
+  await expect(
+    (async () => {
+      for await (const _part of tampered.stdout) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow("no longer matches its admitted bytes");
+});
+
+test("the transfer tool reports a held export with the Guardrails ruling, not an internal error", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  await GuardrailsDeploymentModel.setEnabled(true);
+  config.openappa.enabled = true;
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  const bytes = Buffer.from("progress while a tool runs");
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
+    transfer_id: "busy",
+    path: "reports/progress.md",
+    size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    mtime_ns: "1",
+    ino: "1",
+  });
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockResolvedValue({
+    stdout: Readable.from([bytes]),
+    completed: Promise.resolve(),
+  });
+  vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
+    kind: "held",
+    reason: "ruling-sentinel: allowed readers would narrow",
+  });
+
+  const result = await executeArchestraTool(
+    TOOL_TRANSFER_WORKSPACE_FILE_FULL_NAME,
+    {
+      task_id: seeded.task.id,
+      direction: "download",
+      path: "reports/progress.md",
+      local_path: "/tmp/progress.md",
+    },
+    seeded.context,
+  );
+
+  expect(result.isError).toBe(true);
+  const text = JSON.stringify(result.content);
+  expect(text).toContain(
+    "Guardrails ruling: ruling-sentinel: allowed readers would narrow",
+  );
+  expect(text).toContain("No download ticket was issued");
+  expect(text).not.toContain("internal error");
+});
+
+test("a held protected export names the Guardrails ruling and issues no ticket", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  const bytes = Buffer.from("held report");
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
+    transfer_id: "held",
+    path: "report.txt",
+    size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    mtime_ns: "1",
+    ino: "1",
+  });
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockResolvedValue({
+    stdout: Readable.from([bytes]),
+    completed: Promise.resolve(),
+  });
+  vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
+    kind: "held",
+    reason: "ruling-sentinel: allowed readers would narrow",
+  });
   await expect(
     workspaceTransferTickets.mintDownload({
       actor: {
@@ -837,18 +1278,21 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
         organizationId: seeded.organizationId,
       },
       taskId: seeded.task.id,
-      path: "report.bin",
-      crossing: { child: seeded.child, operationId: "oversized-export" },
+      path: "report.txt",
+      crossing: { child: seeded.child, operationId: "held-export" },
     }),
-  ).rejects.toThrow("limited to 4 MiB");
-  expect(reader).not.toHaveBeenCalled();
-  expect(crossing).not.toHaveBeenCalled();
+  ).rejects.toThrow("ruling-sentinel: allowed readers would narrow");
   expect(backend.runWorkspaceTransferCommand).toHaveBeenLastCalledWith(
-    expect.objectContaining({ args: ["discard", "oversized"] }),
+    expect.objectContaining({ args: ["discard", "held"] }),
   );
 });
 
-test("a signed released get_run proof executes once and replay cannot read the runtime again", async ({
+// The gateway lists only some runtime tools, so a connected client reaches the
+// others through `run_tool`, with the proof inside `tool_args`.
+test.for([
+  false,
+  true,
+])("a signed released get_run proof executes once and replay cannot read the runtime again (wrapped=%s)", async (wrapped, {
   makeAgent,
   makeMember,
   makeOrganization,
@@ -915,17 +1359,18 @@ test("a signed released get_run proof executes once and replay cannot read the r
       },
     ]);
     const context = { ...seeded.context, openappaRuntimeCall: undefined };
-    const first = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const signed = { ...args, runtime_proof: proof };
+    const dispatch = () =>
+      wrapped
+        ? executeArchestraTool(
+            TOOL_RUN_TOOL_FULL_NAME,
+            { tool_name: TOOL_GET_RUN_FULL_NAME, tool_args: signed },
+            context,
+          )
+        : executeArchestraTool(TOOL_GET_RUN_FULL_NAME, signed, context);
+    const first = await dispatch();
     expect(JSON.stringify(first.content)).toContain("checked answer");
-    const replay = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const replay = await dispatch();
     expect(replay.isError).toBe(true);
     expect(JSON.stringify(replay.content)).toContain("already claimed");
     expect(read).toHaveBeenCalledOnce();
@@ -934,10 +1379,10 @@ test("a signed released get_run proof executes once and replay cannot read the r
   }
 });
 
-test("a held file returns a generic refusal without private native diagnostics", async () => {
+test("a held file carries the Guardrails ruling with its refusal", async () => {
   vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
     kind: "held",
-    reason: "private-diagnostic-qa-sentinel",
+    reason: "ruling-sentinel: allowed readers would narrow",
   });
   const result = crossRuntimeFile({
     child: {
@@ -949,9 +1394,12 @@ test("a held file returns a generic refusal without private native diagnostics",
     value: "private file bytes",
   });
   await expect(result).rejects.toThrow("protected file could not be admitted");
-  await result.catch((error: Error) =>
-    expect(error.message).not.toContain("private-diagnostic-qa-sentinel"),
-  );
+  await result.catch((error: Error) => {
+    expect(error.message).toContain(
+      "Guardrails ruling: ruling-sentinel: allowed readers would narrow",
+    );
+    expect(error.message).not.toContain("private file bytes");
+  });
 });
 
 async function runnable(params: {

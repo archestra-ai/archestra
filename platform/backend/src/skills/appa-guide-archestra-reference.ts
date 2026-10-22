@@ -10,11 +10,11 @@ export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
 
 ## The policy document
 
-Archestra stores one root policy per organization, \`organization.appa.toml\`. With GitHub sync the repository owns the text: publishing opens a pull request, and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
+Archestra stores one root policy per organization, \`organization.appa.toml\`. With Git sync the repository owns the text: publishing opens a pull request (a merge request on GitLab), and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 
-The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations.
+The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations. \`externals.max_body_bytes\` accepts a positive integer of bytes, not a size string such as \`70MB\`; omit it to inherit \`ARCHESTRA_API_BODY_LIMIT\`. One value caps both external helper responses and tool results, without changing the proxy HTTP request limit; oversized tool results are withheld.
 
 ## Tool names
 
@@ -22,48 +22,57 @@ A rule can use the name a client sends or the canonical ID \`<family>/<namespace
 
 - MCP tools: \`<catalog>__<tool>\`, canonical \`mcp/<catalog>/<tool>\`. Archestra splits a name at its last \`__\`; when the catalog or tool name contains another \`__\`, the name is evaluated as \`host/archestra/<full name>\` instead. Write rules with the exact name from the inventory rather than a derived canonical ID.
 - Platform tools: \`archestra__<name>\`, canonical \`mcp/archestra/<name>\`. \`archestra__execute_remedy_plan\` is \`appa/execute_remedy_plan\`.
-- A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`; Archestra does not, so such a rule matches nothing here.
+- A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`. A root rule spelled that way matches nothing here; a battery's rules spelled that way govern \`host/archestra/<Name>\` when \`[aliases.host]\` binds \`claude-code = ["archestra"]\`, as the default policy does for the \`claude-code\` battery. Shell, file and web rules live in the \`coding\` battery under canonical \`tool/coding/<tool>\` ids: \`claude-code\`'s \`[aliases.tool.coding]\` maps them onto Claude Code's tools, and the default root's \`[aliases.tool.coding]\` maps them onto Codex's \`exec_command\` and OpenCode's \`bash\`, \`read\`, \`write\`, \`edit\`, \`grep\` and \`webfetch\`. To cover another client's spelling of those tools, add a target to the root's \`[aliases.tool.coding]\` instead of copying rules. A root \`host/archestra/<Name>\` rule takes precedence over that battery rule. Before you add or keep one for a client built-in, compare it with the battery rule it shadows, and drop it when the battery already covers the tool, unless the operator asked for that override.
 - \`archestra__run_command\` runs a command in the Archestra chat sandbox. It is not a client's shell: a rule on it does not govern Claude Code's \`Bash\`, and the reverse.
 - Command tools such as \`Bash\`, \`shell\`, \`exec_command\`, and \`run_command\` may send the command as \`command\` or \`cmd\`; the proxy aliases the two, so a selector on \`command\` matches either.
 - \`archestra__run_tool\` needs no rule: a call is evaluated as the target tool it runs.
 
 ## Default rules
 
-The starting policy routes unlisted tools to a catch-all annotator that adds no restrictions:
+The starting policy routes unlisted tools to the \`archestra.llm-annotator\` catch-all. It asks the OpenAPPA annotator model, which is the organization's default model unless Guardrails settings pick another. The model may rank the call \`suspicious\` and limit its audience to \`self\` or \`internal\`:
 
 \`\`\`toml
 [[policy.annotator]]
-name = "noop"
+name = "archestra.llm-annotator"
+builtin = "archestra"
+ranks = ["suspicious", "trusted"]
+audiences = ["self", "internal"]
+marks = []
+effects = []
 
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "archestra.llm-annotator"
 \`\`\`
 
-Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
+Without a configured model the catch-all cannot answer, and an unlisted call is refused. To let unlisted tools run without restrictions, route \`*\` to the declared \`noop\` annotator instead, and keep its \`[externals.annotators.noop]\` URL. The starting policy also includes the \`claude-code\` battery for client built-ins, and re-declares its two shell annotators with \`builtin = "archestra"\` so the annotator model answers them instead of a local \`claude\` process. It declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the annotator model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
-A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
+For an annotator that judges calls touching a GitHub repository, list \`@github:repo/$owner/$repo/collaborators\` in its \`audiences\` so it can answer with the repository's readers instead of \`internal\`. Every tool routed to it then needs \`owner\` and \`repo\` string arguments, so never add it to the catch-all or to a \`Bash\` annotator; cover GitHub's MCP tools with the \`github\` battery.
 
-Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, \`mcp/appa/yell\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
+A rule declares either \`annotator\` or static fields such as \`requires\`, never both. A static selector rule placed before an annotated rule replaces the annotator's whole contract for the calls it matches: \`delta\` states what the matched command returns, and \`requires\` what it may send. A read that only names a repository, ref, or path needs no audience requirement. \`requires.trust\` belongs on sends, writes that people read, publishes, and running fetched code, never on a read, list, or search.
+
+\`requires = { attention = ["blocked"] }\` denies every matching call with no remedy. Use it only for an action that has no safe form, where no sanitizer could make the flow safe. When the operator asks to block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and that \`requires\`.
+
+Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
 
 ## Batteries
 
-A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes:
+A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[aliases.mcp]\` points each battery namespace at an installed server's tool prefixes:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
 
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod"]
 \`\`\`
 
-Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides the binding and locks it in the Batteries dialog; do not add one.
+Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. For now the policy text may not name credentials: validation refuses a \`[credentials]\` line and a \`token_env\` in the policy's own \`[externals]\`.
 
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 
 ## Approvals and remedies
 
-The default \`hitl\` authority covers only \`human-approval\`. Require that mark for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
+The default \`human-approval\` authority covers every attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience. Require \`human-approval\` for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
 
 An approval needs an authority whose permits cover the requirement, and a review channel. Do not invent an authority. When a ruling offers a remedy, call \`archestra__execute_remedy_plan\` with the exact \`offer_id\`; it requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 
@@ -77,7 +86,7 @@ This protection is for native CLI subagents. Loading a skill runs in the current
 
 ## Provider-hosted tools
 
-Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred \`tool_search\` declarations, including versioned Anthropic types and \`defer_loading\` tools, are refused because their client-callable tools are not on the wire.
+Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred tools are governed: \`tool_search\` declarations, Anthropic's provider-run tool-search types and \`defer_loading\` tools are accepted. A call to a tool the request does not declare, because the client has not loaded it, is refused with the instruction to search for it and call it again.
 
 No policy setting refuses all provider-hosted declarations with a signed offer to call a client-side counterpart. A hosted declaration arrives before the provider chooses a call or its arguments, so a tool rule cannot provide that substitute. If the operator requires this boundary, identify the client and provider tools and report it as unsupported. Do not add a rule that claims to protect provider-side execution.
 

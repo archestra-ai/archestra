@@ -16,7 +16,7 @@ An agent is a reusable assistant: instructions, a model, and the tools, knowledg
 ## Create an Agent
 
 1. Go to **Agents** and click **Add Agent**.
-2. Start from scratch, or pick a template under **Coding agents**.
+2. Start from scratch, or pick a template under **Agent Runtimes**.
 3. On **Configuration**, enter a name and instructions, and choose the model.
 4. Click **Continue setup** to choose tools, knowledge, skills, subagents, and messaging channels.
 5. Click **Create**, then **Chat** to send your first task.
@@ -98,12 +98,12 @@ What to know:
 Each conversation gets a private Linux container, so the agent can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command).
 
 - **Files you attach** appear under `/home/sandbox/attachments/`.
-- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 64 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
+- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 32 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
 - **Files the agent saves** appear in the conversation's **Files** panel.
 - **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment.
 
 What to know:
 
 - Files stay between commands. Running processes do not.
-- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 64 KB.
+- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 32 KB.
 - The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment#code-sandbox).

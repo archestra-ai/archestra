@@ -438,6 +438,54 @@ describe("GET /api/agent-tools", () => {
     expect(body.data.length).toBeGreaterThan(0);
   });
 
+  test("includeToolDetails=false leaves out tool schemas but keeps the assignment", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      description: "Reads the ledger",
+      parameters: { type: "object", properties: { year: { type: "number" } } },
+    });
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+
+    const get = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agent-tools?agentId=${agent.id}&skipPagination=true${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+
+    const full = await get("");
+    expect(full.data[0].tool).toMatchObject({
+      description: "Reads the ledger",
+      parameters: { properties: { year: { type: "number" } } },
+    });
+
+    const slim = await get("&includeToolDetails=false");
+    expect(slim.pagination.total).toBe(1);
+    expect(slim.data).toHaveLength(1);
+    expect(slim.data[0]).toMatchObject({
+      credentialResolutionMode: "dynamic",
+      agent: { id: agent.id },
+      tool: {
+        id: tool.id,
+        name: tool.name,
+        catalogId: catalog.id,
+        description: null,
+        parameters: {},
+      },
+    });
+  });
+
   test("excludeArchestraTools filters out archestra tools", async ({
     makeAgent,
     makeTool,
@@ -1517,6 +1565,84 @@ describe("GET /api/agents/:agentId/tools", () => {
     );
   });
 
+  test("authorizes from the agent row alone, without hydrating the full agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const tool = await makeTool({ name: "listed-tool", catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id);
+    // findById joins every tool row and hydrates teams, labels, prompts and
+    // the resolved LLM; this route reads the tools on its own.
+    const findById = vi.spyOn(AgentModel, "findById");
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=${catalog.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().map((t: Tool) => t.id)).toEqual([tool.id]);
+    expect(findById).not.toHaveBeenCalled();
+  });
+
+  test("hides an agent of another organization, on its tools and its delegations", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    // An admin of their own organization: only the organization fence can
+    // keep another organization's agent out.
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    user = admin;
+    const foreign = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: foreign.id,
+      authorId: admin.id,
+      agentType: "agent",
+      access: "org",
+    });
+
+    for (const url of [
+      `/api/agents/${agent.id}/tools`,
+      `/api/agents/${agent.id}/delegations`,
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, url).toBe(404);
+    }
+  });
+
+  test("hides a team agent from a member outside the team", async ({
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const team = await makeTeam(organizationId, owner.id, { name: "Other" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      access: { teams: [team.id] },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   test("returns only one catalog's tools when catalogId is given", async ({
     makeAgent,
     makeAgentTool,
@@ -1555,6 +1681,13 @@ describe("GET /api/agents/:agentId/tools", () => {
       url: `/api/agents/${agent.id}/tools`,
     });
     expect(all.json()).toHaveLength(2);
+
+    const malformed = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=not-a-uuid`,
+    });
+    expect(malformed.statusCode).toBe(200);
+    expect(malformed.json()).toEqual([]);
   });
 
   test("allows a team member to read tools for a team-scoped MCP gateway in their team", async ({

@@ -8,6 +8,51 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("keeps the action menu open during a background list refresh", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const agent = makeAgent({ id: "refresh-agent", name: "Example agent" });
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "false" },
+        body: makeAgentCatalog({ agents: [agent] }),
+      },
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "true" },
+        body: makeAgentCatalog(),
+      },
+    ]);
+    await agentsPage.goto();
+    await expect(agentsPage.rowFor(agent.name)).toBeVisible();
+    await agentsPage.openRowMenu(agent.name);
+    const history = page.getByRole("menuitem", { name: "Version history" });
+    await expect(history).toBeVisible();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [{ ...agent, name: "Updated agent" }],
+      }),
+    });
+    // Returning to a stale tab refreshes the list while its menu is open.
+    await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(
+      agentsPage.table.getByText("Updated agent", { exact: true }),
+    ).toBeVisible();
+    await expect(history).toBeVisible();
+  });
+
   test("keeps count columns compact as the table grows", async ({
     page,
     agentsPage,
@@ -518,12 +563,15 @@ test.describe("Agents", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     // Register this after the dynamic `/api/agents/:id` override: without the
-    // exact route winning, `/api/agents/all` is treated as id "all" and the
-    // editor receives one agent object instead of the delegation-target array.
+    // exact route winning, `/api/agents/options` is treated as id "options" and the
+    // editor receives one agent object instead of the delegation-target page.
     await mswControl.use({
       method: "get",
-      url: "/api/agents/all",
-      body: [original, clonedDraft],
+      url: "/api/agents/options",
+      body: {
+        data: [original, clonedDraft],
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      },
     });
     // Same for the skills count the edit page's Tools step reads on load.
     await mswControl.use({

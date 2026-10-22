@@ -1,3 +1,4 @@
+import { openCodeFamilyRecord } from "./opencode-family";
 /**
  * Loopback host every self-directed dial names — the frontend server reaching
  * the backend in the same container, and the backend reaching its own LLM
@@ -35,6 +36,22 @@ export const LOOPBACK_HOST = "127.0.0.1";
  * reach it.
  */
 export const DEFAULT_INTERNAL_API_BASE_URL = `http://${LOOPBACK_HOST}:9000`;
+
+/**
+ * Prefix of the Better Auth cookie names when `ARCHESTRA_AUTH_COOKIE_PREFIX`
+ * is not set. The backend names its cookies with it, and the frontend server
+ * reads the same variable to recognise a session cookie on a document request.
+ */
+export const DEFAULT_AUTH_COOKIE_PREFIX = "archestra";
+
+/**
+ * Names the Better Auth session cookie can carry for `prefix`: the plain name,
+ * and the `__Secure-` variant Better Auth uses when the cookie is Secure.
+ */
+export function getAuthSessionCookieNames(prefix: string): string[] {
+  const name = `${prefix}.session_token`;
+  return [name, `__Secure-${name}`];
+}
 
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
@@ -194,8 +211,6 @@ export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
 export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
-/** Typeform behind the "Share feedback" pop-up. */
-export const FEEDBACK_TYPEFORM_URL = "https://form.typeform.com/to/qVvzSmEn";
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
@@ -285,13 +300,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra copilot guard >>>",
     markerEnd: "# <<< archestra copilot guard <<<",
   },
-  opencode: {
-    scriptRelpath: ".archestra/opencode-startup-guard.sh",
-    psScriptRelpath: ".archestra/opencode-startup-guard.ps1",
-    skipRelpath: ".archestra/opencode-startup-guard.skip",
-    markerStart: "# >>> archestra opencode guard >>>",
-    markerEnd: "# <<< archestra opencode guard <<<",
-  },
+  ...openCodeFamilyRecord((client) => ({
+    scriptRelpath: `.archestra/${client.stateName}-startup-guard.sh`,
+    psScriptRelpath: `.archestra/${client.stateName}-startup-guard.ps1`,
+    skipRelpath: `.archestra/${client.stateName}-startup-guard.skip`,
+    markerStart: `# >>> archestra ${client.stateName} guard >>>`,
+    markerEnd: `# <<< archestra ${client.stateName} guard <<<`,
+  })),
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */
@@ -301,23 +316,48 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * Monotonic format version of the installed startup guard. It is NOT the
  * platform release version — it is a plain counter that increments by one
  * whenever the generated guard's behavior or install layout changes in a way
- * that warrants asking users to re-run connect.
+ * that warrants refreshing the installed startup check.
  *
  * The connect setup stamps this number into the guard it installs; the public
  * `/v1/health` endpoint reports the running instance's current value. On every
- * launch the guard flags an update ONLY when the instance reports a STRICTLY
+ * launch the guard refreshes ONLY when the instance reports a STRICTLY
  * GREATER number than the one it was stamped with. Comparing a monotonic
  * counter — rather than release strings — is what keeps a rollback or an older
  * instance silent: a guard from a newer deploy simply sees an equal-or-lower
- * number and says nothing. Bump this by exactly one when, and only when, a
- * guard change should prompt a re-connect.
+ * number and says nothing. Bump this by exactly one when a guard change
+ * should refresh installed generated checks. User settings and permissions
+ * are never replayed by this update.
  *
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 4;
+export const STARTUP_GUARD_FORMAT_VERSION = 6;
 
-export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+/**
+ * The managed instructions a deployment uses until an admin edits them. It
+ * names the deployment's own Remote Agents, so users of Claude Code or Codex
+ * don't mistake them for their client vendor's.
+ */
+export function defaultRuntimeHandoffInstructions(appName: string): string {
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Remote Agents' to continue this session in the cloud." Say this only once per session. When asked, use the Remote Agents Handoff skill and create a remote agent if needed.`;
+}
+
+/**
+ * The managed instructions in effect. Unedited ones (stored as null, or the
+ * earlier default's exact text) follow the current default, so a deployment
+ * that never changed them picks up new wording.
+ */
+export function resolveRuntimeHandoffInstructions(params: {
+  stored: string | null | undefined;
+  appName: string;
+}): string {
+  const { stored, appName } = params;
+  return stored == null || stored === LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS
+    ? defaultRuntimeHandoffInstructions(appName)
+    : stored;
+}
+
+const LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 
 /**
  * Header name for external agent ID.
@@ -372,16 +412,6 @@ export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
  * This enables session-based grouping in the LLM proxy logs UI.
  */
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
-
-/**
- * Header set on the available-models response while a lazy provider model sync
- * is in flight. Clients refetch until it clears so freshly synced models appear.
- */
-export const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
-
-/** Sole value of {@link LAZY_MODEL_SYNC_STATUS_HEADER}: a sync is pending. */
-export type LazyModelSyncStatus = "pending";
-export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
 
 /**
  * Header name for interaction source.
@@ -463,3 +493,11 @@ export function isEditableTextFile(params: {
     mime === "text/plain"
   );
 }
+
+/**
+ * Bounds of `GET /api/agents/options`. IDs travel in the query string, and
+ * Node refuses a request line + headers over 16 KB with a 431, so the ID
+ * filter stays at the same cap as `/api/agents/credential-readiness`.
+ */
+export const AGENT_OPTIONS_MAX_IDS = 200;
+export const AGENT_OPTIONS_MAX_PAGE_SIZE = 1000;

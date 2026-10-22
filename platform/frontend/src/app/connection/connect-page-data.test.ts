@@ -9,15 +9,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
-import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
 import {
   ALL_INCLUDED,
   type ConnectChoices,
   type ConnectPicks,
 } from "./connect-choices";
-import { useConnectPageData } from "./connect-page-data";
+import {
+  gatewayServerName,
+  useConnectPageData,
+  welcomePrompt,
+} from "./connect-page-data";
 
 // The command only depends on the page origin, the app, the choices and
 // picks; the data hooks render with nothing loaded unless a test sets a
@@ -41,7 +45,10 @@ vi.mock("@/lib/agent.query", () => ({
     data: mocks.gateway ? { id: "gw-default" } : undefined,
     isLoading: false,
   }),
-  useProfiles: () => ({ data: [], isPending: false }),
+}));
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsPage: () => ({ data: undefined, isPending: false }),
+  useAgentOptionsByIds: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
@@ -77,7 +84,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({ data: mocks.plugins }),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({
-  useAllSkills: () => ({ data: undefined }),
+  useSkillsPaginated: () => ({ data: undefined }),
 }));
 vi.mock("./use-gateway-servers", () => ({
   useGatewayServers: () => ({
@@ -181,6 +188,73 @@ describe("Connect page installer command", () => {
   });
 });
 
+describe("Connect page plugins on the command's OS", () => {
+  const claudeCode = CONNECT_CLIENTS.find((c) => c.id === "claude-code");
+  if (!claudeCode) throw new Error("Missing client: claude-code");
+  // Opened in a Windows browser.
+  let platform: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
+    mocks.plugins = [
+      plugin("everywhere", ["posix", "windows"]),
+      plugin("posix-only", ["posix"]),
+      plugin("windows-only", ["windows"]),
+    ];
+  });
+  afterEach(() => {
+    platform.mockRestore();
+    mocks.plugins = undefined;
+  });
+
+  it("offers the plugins the other command installs once the user picks it", () => {
+    const { result } = renderHook(() => useConnectPageData());
+    const offered = () =>
+      result.current.pluginsFor(claudeCode).map((p) => p.slug);
+    expect(result.current.windows).toBe(true);
+    expect(offered()).toEqual(["everywhere", "windows-only"]);
+
+    // "Use the macOS / Linux command"
+    act(() => result.current.setWindows(false));
+    expect(offered()).toEqual(["everywhere", "posix-only"]);
+    expect(
+      result.current.keptPlugins(claudeCode, null).map((p) => p.slug),
+    ).toEqual(["everywhere", "posix-only"]);
+  });
+
+  it("names only the kept plugins built for the command's OS", () => {
+    const origin = "http://127.0.0.1:9000";
+    // Both plugins on the Windows list kept.
+    const picks: ConnectPicks = {
+      gatewayId: null,
+      pluginIds: ["id-everywhere", "id-windows-only"],
+    };
+    const flags = (windows: boolean) =>
+      pageInstallerCommand(
+        origin,
+        "claude-code",
+        ALL_INCLUDED,
+        windows,
+        picks,
+      ).split("| node - ")[1];
+    // Every Windows plugin kept: the default, no flag.
+    expect(flags(true)).toBe(`--url ${origin} --client claude-code`);
+    // The macOS / Linux command must not install the posix plugin never kept.
+    expect(flags(false)).toBe(
+      `--url ${origin} --client claude-code --plugins everywhere`,
+    );
+  });
+});
+
+function plugin(slug: string, supportedPlatforms: string[]) {
+  return {
+    id: `id-${slug}`,
+    pluginSlug: slug,
+    displayName: slug,
+    description: null,
+    supportedPlatforms,
+  };
+}
+
 /** The command exactly as the Connect page builds it on `origin`. */
 function pageInstallerCommand(
   origin: string,
@@ -251,3 +325,67 @@ async function runPosixCommand(clientId: string, choices: ConnectChoices) {
     await rm(root, { recursive: true, force: true });
   }
 }
+
+describe("Connect page welcome prompt", () => {
+  const client = (id: string) => {
+    const found = CONNECT_CLIENTS.find((c) => c.id === id);
+    if (!found) throw new Error(`no client ${id}`);
+    return found;
+  };
+  const gateway = (name: string, isPersonalGateway = false) => ({
+    id: "gw-1",
+    slug: "gw",
+    name,
+    agentType: "mcp_gateway" as const,
+    isPersonalGateway,
+  });
+  const serverFor = (
+    id: string,
+    gw: ReturnType<typeof gateway> | null,
+    tools = true,
+  ) =>
+    gatewayServerName({
+      client: client(id),
+      gateway: gw,
+      appName: "Acme AI",
+      tools,
+    });
+
+  it("names the gateway as installer setups register it", () => {
+    expect(serverFor("claude-code", gateway("My Gateway", true))).toBe(
+      "acme_ai",
+    );
+    expect(serverFor("claude-desktop", gateway("Team Gateway"))).toBe(
+      "team_gateway",
+    );
+    expect(
+      welcomePrompt({
+        origin: "https://acme.test",
+        appName: "Acme AI",
+        serverName: "team_gateway",
+      }),
+    ).toBe(
+      "Read https://acme.test/welcome.md?server=team_gateway and show me what I can do with Acme AI. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.",
+    );
+  });
+
+  it("names no server when the page can't know it", () => {
+    // Agents set up from a prompt or by hand pick their own name.
+    expect(serverFor("amp", gateway("Team Gateway"))).toBeNull();
+    expect(serverFor("generic", gateway("Team Gateway"))).toBeNull();
+    // Tools left out, or no gateway: nothing was registered.
+    expect(serverFor("claude-code", gateway("Team Gateway"), false)).toBeNull();
+    expect(serverFor("claude-code", null)).toBeNull();
+    // A name a prompt can't carry plainly.
+    expect(serverFor("claude-code", gateway('R&D "prod"'))).toBeNull();
+    expect(
+      welcomePrompt({
+        origin: "https://acme.test",
+        appName: "Acme AI",
+        serverName: null,
+      }),
+    ).toBe(
+      "Read https://acme.test/welcome.md and show me what I can do with Acme AI.",
+    );
+  });
+});

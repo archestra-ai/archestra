@@ -1,36 +1,22 @@
 "use client";
-import {
-  Clock,
-  Info,
-  MessageCircle,
-  Play,
-  Plus,
-  TriangleAlert,
-} from "lucide-react";
-import Link from "next/link";
+import { Info, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
-import { formatDate } from "@/lib/utils/date-time";
 import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
-import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
+import { validationSuiteSummary } from "../../_parts/validation-run-history";
 import { useValidation } from "./validation-context";
 
 export function ValidationNotices({
   sourceChanged: editorSourceChanged = false,
+  hideManagedChip = false,
 }: {
   sourceChanged?: boolean;
+  /** The page links to the repository from its ⋯ menu instead. */
+  hideManagedChip?: boolean;
 } = {}) {
   const {
     github,
@@ -40,6 +26,11 @@ export function ValidationNotices({
     loadError,
   } = useValidation();
   const sourceChanged = collectionChanged || editorSourceChanged;
+  // Until the setup PR merges, sync has no accepted commit to read validations
+  // from; the merge notice above says what to do, so skip the error.
+  const sync = useAppaGithubSync();
+  const awaitingSetupMerge =
+    github && !!sync.data?.source?.setupPullRequestNumber;
   if (
     !github &&
     !collection.error &&
@@ -63,9 +54,10 @@ export function ValidationNotices({
       {github && (
         <GithubManagedPolicyNotice
           validationDirectory={collection.activeDirectory}
+          hideHealthy={hideManagedChip}
         />
       )}
-      {collection.error && (
+      {collection.error && !awaitingSetupMerge && (
         <InlineNotice variant="error">
           <TriangleAlert />
           <span className="font-medium">Validation unavailable</span>
@@ -95,82 +87,15 @@ export function ValidationNotices({
   );
 }
 
-export function ValidationActions() {
-  const { files, busy, github, canWrite, add } = useValidation();
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <OpenAppaChatButton
-        size="sm"
-        variant="outline"
-        promptKey="writeValidations"
-        permissions={{ openappaPolicy: ["read", "update"] }}
-        disabled={busy}
-      >
-        <MessageCircle />
-        <span>Ask About Validations</span>
-      </OpenAppaChatButton>
-      {!github && canWrite && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || files.length >= 32}
-          title={
-            files.length >= 32 ? "The current limit is 32 files" : undefined
-          }
-          onClick={add}
-        >
-          <Plus />
-          <span>Add validation</span>
-        </Button>
-      )}
-    </div>
-  );
-}
-
-export function ValidationRunAction() {
-  const { files, runnable, runAll } = useValidation();
-  return (
-    <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
-      <Play />
-      <span>Run all</span>
-    </Button>
-  );
-}
-
-export function ValidationLastRun() {
-  const { currentRun, history } = useValidation();
+/** What the per-file statuses cannot say: history did not load, or the last run never started. */
+export function ValidationRunNotices() {
+  const { files, history } = useValidation();
+  const summary = history.data
+    ? validationSuiteSummary(files, history.data)
+    : null;
+  if (!history.isError && !summary?.error) return null;
   return (
     <div className="space-y-2">
-      <InlineNotice
-        variant="neutral"
-        role="status"
-        aria-label="Last validation run"
-      >
-        <Clock />
-        <span className="font-medium">Last run</span>
-        {currentRun ? (
-          <>
-            <InlineNoticeText>
-              {formatDate({ date: currentRun.createdAt })}
-            </InlineNoticeText>
-            <ValidationRunOutcome run={currentRun} binary />
-            {currentRun.trigger === "github_sync" && (
-              <Badge variant="outline">Git sync run</Badge>
-            )}
-            {currentRun.trigger === "policy_change" && (
-              <Badge variant="outline">Policy change run</Badge>
-            )}
-            {currentRun.draft && <Badge variant="secondary">Draft run</Badge>}
-          </>
-        ) : history.isLoading ? (
-          <Skeleton className="h-4 w-32" />
-        ) : !history.isError ? (
-          <InlineNoticeText>No runs yet.</InlineNoticeText>
-        ) : null}
-        <Button size="sm" variant="link" className="ml-auto" asChild>
-          <Link href="/openappa/validation/history">Run history</Link>
-        </Button>
-      </InlineNotice>
       {history.isError && (
         <InlineNotice variant="error">
           <TriangleAlert />
@@ -185,7 +110,13 @@ export function ValidationLastRun() {
           </Button>
         </InlineNotice>
       )}
-      {currentRun && <ValidationRunDiagnostics run={currentRun} />}
+      {summary?.error && (
+        <InlineNotice variant="warning">
+          <TriangleAlert />
+          <span className="font-medium">Validation could not run</span>
+          <InlineNoticeText>{summary.error}</InlineNoticeText>
+        </InlineNotice>
+      )}
     </div>
   );
 }
@@ -212,75 +143,6 @@ export function ValidationStatusBadge({
   );
 }
 
-export function ValidationRunOutcome({
-  run,
-  binary = false,
-}: {
-  run: PolicyTestRun;
-  binary?: boolean;
-}) {
-  if (run.executionError)
-    return <ValidationStatusBadge status={binary ? "failed" : "cannot_run"} />;
-  const passed = run.files.filter((file) => file.status === "passed").length;
-  const failed = run.files.filter((file) => file.status === "failed").length;
-  const cannotRun = run.files.filter(
-    (file) => file.status === "cannot_run",
-  ).length;
-  return (
-    <div className="flex flex-wrap gap-2">
-      <ValidationStatusBadge status="passed">
-        {passed} passed
-      </ValidationStatusBadge>
-      <ValidationStatusBadge status="failed">
-        {failed + (binary ? cannotRun : 0)} failed
-      </ValidationStatusBadge>
-      {!binary && (
-        <ValidationStatusBadge status="cannot_run">
-          {cannotRun} cannot run
-        </ValidationStatusBadge>
-      )}
-    </div>
-  );
-}
-
-export function StepResults({
-  steps,
-}: {
-  steps: PolicyTestRun["files"][number]["steps"];
-}) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Line / tool</TableHead>
-          <TableHead>Expected</TableHead>
-          <TableHead>Actual</TableHead>
-          <TableHead>Result</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {steps.map((step) => (
-          <TableRow key={`${step.line}:${step.tool}`}>
-            <TableCell>
-              <span className="font-mono text-xs">{`${step.line} · ${step.tool}`}</span>
-            </TableCell>
-            <TableCell>{step.expected}</TableCell>
-            <TableCell>{step.actual ?? "—"}</TableCell>
-            <TableCell>
-              <div className="space-y-1">
-                <ValidationStatusBadge status={step.status} />
-                {step.error && (
-                  <p className="whitespace-pre-wrap text-xs">{step.error}</p>
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
 export function statusLabel(status: string) {
   return status === "cannot_run"
     ? "Cannot run"
@@ -288,11 +150,9 @@ export function statusLabel(status: string) {
       ? "Passed"
       : status === "failed"
         ? "Failed"
-        : status === "stale"
-          ? "Stale result"
-          : status === "not_run"
-            ? "Not run"
-            : status;
+        : status === "not_run"
+          ? "Not run"
+          : status;
 }
 
 export function ValidationRunDiagnostics({
@@ -328,6 +188,7 @@ export function ValidationRunDiagnostics({
   );
 }
 
+/** Downloads one validation file, e.g. a draft to keep before refreshing. */
 export function exportValidationFile(file: { path: string; content: string }) {
   const url = URL.createObjectURL(
     new Blob([file.content], { type: "text/plain;charset=utf-8" }),

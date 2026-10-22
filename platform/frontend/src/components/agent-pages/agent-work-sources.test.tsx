@@ -14,6 +14,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentWorkSources } from "./agent-work-sources";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/chatops/chatops.query", () => ({
@@ -199,7 +200,7 @@ describe("AgentWorkSources", () => {
       />,
     );
     expect(
-      screen.getByText("Available once setup above is done."),
+      screen.getByText("Runs start once setup above is done."),
     ).toBeVisible();
 
     mockSetupReady(true);
@@ -213,7 +214,7 @@ describe("AgentWorkSources", () => {
       />,
     );
     expect(
-      screen.queryByText("Available once setup above is done."),
+      screen.queryByText("Runs start once setup above is done."),
     ).toBeNull();
   });
 
@@ -283,6 +284,19 @@ describe("AgentWorkSources", () => {
       screen.getByRole("link", { name: "Add Telegram channel" }),
     ).toBeVisible();
     expect(screen.queryByRole("link", { name: "Add a channel" })).toBeNull();
+  });
+
+  it("shows no channel buttons until it knows whether Slack has a bot per agent", () => {
+    vi.mocked(useSlackAgentBots).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useSlackAgentBots>);
+
+    renderBuiltIn();
+
+    // Not "Add Slack channel" first, then "Add Slack bot" once it loads.
+    expect(screen.queryByRole("link", { name: /Add Slack/ })).toBeNull();
+    expect(screen.getByText("Loading channels…")).toBeVisible();
   });
 
   it("offers only the chat apps the organization has connected", () => {

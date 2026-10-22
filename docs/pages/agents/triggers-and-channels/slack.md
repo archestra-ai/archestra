@@ -2,7 +2,7 @@
 title: Slack
 description: Give each Archestra agent its own Slack bot
 order: 3
-lastUpdated: 2026-10-11
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,7 +49,10 @@ With an HTTPS address, installing a new bot is one click: Slack sends you back t
 
 One bot per channel can reply to all messages, with no mention needed. Turning it on for a bot takes it from the bot that had it. Other bots in the channel still wait for their mention.
 
-To quiet a thread, press **Stop** while the bot is working. It drops the answer in progress and stops answering that thread. Mention it again to wake it.
+The first reply in a channel thread includes a reminder of how to mute it.
+
+- **Mute:** reply `mute` or react `:mute:` or `:shushing_face:` to any message in the thread. This cancels the current answer and stops later auto-replies until you mention the bot again. Removing the reaction keeps the thread muted.
+- **Stop:** press it while the bot is working to cancel only the current answer. The bot can still answer later messages in that thread.
 
 <span id="streaming"></span>
 

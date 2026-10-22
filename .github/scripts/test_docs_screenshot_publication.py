@@ -46,6 +46,11 @@ class ScreenshotPublicationTests(unittest.TestCase):
         self.commit("chore(main): release platform 1.4.0-rc.36", ["platform/package.json"])
         self.assertEqual(self.decision(), "true")
 
+    def test_queue_and_unknown_events_never_publish(self):
+        for event in ("merge_group", "push", "", "unknown"):
+            with self.subTest(event=event):
+                self.assertEqual(self.decision(event), "false")
+
     def test_manual_capture_still_publishes(self):
         self.commit("docs: update screenshots", ["docs/assets/example.webp"])
         self.assertEqual(self.decision("workflow_dispatch"), "true")

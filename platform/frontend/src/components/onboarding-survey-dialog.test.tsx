@@ -9,6 +9,8 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
+// The shell's gate is released in these tests.
+vi.mock("@/lib/shell-deferral", () => ({ useShellReady: () => true }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 
@@ -28,8 +30,8 @@ vi.mock("@/lib/onboarding/onboarding.query", () => ({
   }),
 }));
 
-vi.mock("posthog-js", () => ({
-  default: { capture: vi.fn() },
+vi.mock("@/lib/posthog-client", () => ({
+  posthogClient: { capture: vi.fn() },
 }));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";

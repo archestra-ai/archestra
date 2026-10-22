@@ -11,12 +11,14 @@ import { useIsGlobalAdmin, useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import ConnectorsPage from "./page.client";
 
+const mockHasLegacySalesforceConnector = vi.fn();
 const mockUseConnectorsPaginated = vi.fn();
 const mockUseAllMatchingConnectors = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
+  useHasLegacySalesforceConnector: () => mockHasLegacySalesforceConnector(),
   useConnectorsPaginated: (params: unknown) =>
     mockUseConnectorsPaginated(params),
   useConnector: () => ({ data: null }),
@@ -56,7 +58,7 @@ vi.mock("@/components/resource-scope-filter", () => ({
 
 vi.mock("@/components/resource-access-filter", () => ({
   ResourceAccessFilter: () => null,
-  RESOURCE_ACCESS_FILTER_PARAMS: ["access", "sharedWith", "owner", "builtIn"],
+  RESOURCE_ACCESS_FILTER_PARAMS: ["access", "sharedWith", "owner"],
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
@@ -107,12 +109,14 @@ function makeConnector(overrides: Record<string, unknown>) {
     lastSyncAt: "2026-07-13T10:00:00.000Z",
     schedule: null,
     labels: [],
+    totalDocsIngested: 0,
     ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockHasLegacySalesforceConnector.mockReturnValue({ data: false });
   window.localStorage.clear();
   mockUseAllMatchingConnectors.mockReturnValue({
     data: [],
@@ -167,6 +171,37 @@ beforeEach(() => {
 });
 
 describe("ConnectorsPage", () => {
+  it("warns about legacy Salesforce authentication even when the visible page contains other connector types", async () => {
+    mockHasLegacySalesforceConnector.mockReturnValue({ data: true });
+    render(<ConnectorsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Salesforce password login retires in Summer ’27.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Summer ’27");
+    expect(
+      screen.getByRole("link", { name: "Review Salesforce connectors" }),
+    ).toHaveAttribute("href", "/knowledge/connectors?connectorType=salesforce");
+  });
+  it("shows Salesforce as the selected type when following the migration notice", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectorType=salesforce") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    render(<ConnectorsPage />);
+    expect(
+      await screen.findByRole("combobox", { name: "Filter by connector type" }),
+    ).toHaveTextContent("Salesforce");
+    expect(mockUseConnectorsPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ connectorType: "salesforce" }),
+    );
+  });
+  it("does not show a migration warning when no accessible legacy Salesforce connectors remain", () => {
+    render(<ConnectorsPage />);
+    expect(
+      screen.queryByText("Salesforce password login retires in Summer ’27."),
+    ).not.toBeInTheDocument();
+  });
   it("keeps type and labels with the connector name in the compact table", async () => {
     window.localStorage.setItem("archestra-connectors-view", "table");
     mockUseConnectorsPaginated.mockReturnValue({
@@ -189,8 +224,30 @@ describe("ConnectorsPage", () => {
     await screen.findByRole("columnheader", { name: "Connector" });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["", "Connector", "Status", "Schedule", "Actions"]);
+    ).toEqual(["", "Connector", "Status", "Documents", "Schedule", "Actions"]);
     expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
+  });
+
+  it("shows each connector's document count on its card", async () => {
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({ name: "Big Jira", totalDocsIngested: 21_534 }),
+          makeConnector({ name: "One Page", totalDocsIngested: 1 }),
+        ],
+        pagination: { total: 2 },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    });
+
+    render(<ConnectorsPage />);
+
+    expect((await screen.findByText("21,534")).parentElement).toHaveTextContent(
+      "21,534documents",
+    );
+    expect(screen.getByText("1").parentElement).toHaveTextContent("1document");
   });
 
   it("keeps the bulk bar visible while all matching connectors load", async () => {

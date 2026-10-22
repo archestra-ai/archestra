@@ -17,6 +17,7 @@ import logger from "@/logging";
 import { Archestra, constructResponseSchema, UuidIdSchema } from "@/types";
 import { archestraAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -40,6 +41,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         upstream: config.llm.archestra.baseUrl as string,
         // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
         providerName: "Archestra",
+        authenticate: createPassthroughAuthenticator("archestra"),
       }),
     });
   } else {

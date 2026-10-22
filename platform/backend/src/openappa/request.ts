@@ -51,6 +51,7 @@ import {
   stripDeclaredParameters,
   stripProxyArguments,
   stripSessionReceiptsFromRequest,
+  stripToolReferences,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -60,6 +61,10 @@ export type AppaRequestTools = {
   notice: DeclaredToolSpelling;
   /** The ask_user tool's declaration, when this session declares one. */
   askUser: DeclaredToolSpelling | undefined;
+  /** Exact accepted members; absent for an ordinary singleton declaration. */
+  controlAliases?: readonly DeclaredToolSpelling[];
+  noticeAliases?: readonly DeclaredToolSpelling[];
+  askUserAliases?: readonly DeclaredToolSpelling[];
   /** Declared spellings that resolve to the platform's ask_user. */
   platformToolNames: ReadonlySet<string>;
   /** Tool name to declaration namespace mapping (Codex). */
@@ -77,6 +82,17 @@ export type AppaPreparedRequest = {
   customTools: ReadonlySet<string>;
   /** Tool declarations retained so adapters can detect native local tools. */
   declaredTools: readonly DeclaredToolSpelling[];
+  /**
+   * The request defers tools to a tool search: some callable tools are not
+   * declared until the client loads them, the gateway remedy tools among them.
+   */
+  defersTools?: true;
+  /**
+   * Gateway remedy and ask_user tools the client declared while the remedy
+   * pair was incomplete. They are withheld from the model, and a call to one
+   * is refused, until both remedy tools are declared.
+   */
+  heldTools?: readonly DeclaredToolSpelling[];
   promptOperationId?: string;
   turnEndOperationId?: string;
   /** Original call IDs whose results are restored rulings, not executions. */
@@ -114,7 +130,8 @@ export function prepareAppaRequest(params: {
     | "verified"
     | "unverifiedMarkerCount"
     | "gatewayConnected"
-  >;
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf" | "spellingOf">>;
   /**
    * Markers the proxy already collected before it stripped them
    * unconditionally at request entry.
@@ -122,20 +139,30 @@ export function prepareAppaRequest(params: {
   delegationMarkers?: AppaDelegationMarker[];
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
+  /**
+   * The client's own wire, when a Model Router route translated it to this
+   * one. Turns are counted on it.
+   */
+  clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
   // and results are still ruled on, but a notice stays in the history as the
-  // notice call the client ran, and no turn accounting runs.
+  // notice call the client ran, and no turn accounting runs unless a Model
+  // Router route kept the client's own wire to count turns on.
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  refuseDeferredTools(declared);
+  const defersTools = declared.some(declaresToolSearch);
   refuseUnsupportedToolTypes(declared);
   // Provider-run tools never return a client call to gate. Responses web search
   // remains governed by the response adapter, not by its declaration.
   const clientEntries = entries.filter((entry) => {
     if (providerHostedTool(entry.tool)) return false;
+    // A Responses `tool_search` names no tool and returns no call to run: the
+    // tools it loads are declared in `tools` or `tool_search_output` and
+    // their calls are ruled on by name like any other.
+    if (asToolDeclaration(entry.tool)?.type === "tool_search") return false;
     if (
       params.interactionType === "gemini:generateContent" &&
       !entry.grouped &&
@@ -169,7 +196,7 @@ export function prepareAppaRequest(params: {
   if ([...hostedNames].some((name) => clientNames.has(name))) {
     throw new ApiError(
       400,
-      "A provider-hosted tool conflicts with a client tool; rename or remove that declaration.",
+      "OpenAPPA found a provider-hosted tool that conflicts with a client tool; rename or remove that declaration.",
     );
   }
   if (
@@ -194,6 +221,13 @@ export function prepareAppaRequest(params: {
       "OpenAPPA cannot govern tool traffic over Azure Responses. Use Azure Chat Completions or disable OpenAPPA for this client.",
     );
   }
+  // Read where they are spread: the body changes on its way there.
+  const turnBoundaries = () =>
+    family
+      ? appaTurnBoundaries({ family, body: params.body })
+      : params.clientWire
+        ? appaTurnBoundaries(params.clientWire)
+        : {};
   let historicalControlToolName: string | undefined;
   let restoredNoticeCallIds: ReadonlySet<string> | undefined;
   let delegation: AppaPreparedRequest["delegation"];
@@ -229,6 +263,11 @@ export function prepareAppaRequest(params: {
         body: params.body,
       }),
     ];
+  } else if (params.delegationMarkers) {
+    // A Model Router route collected these from the client's own wire, and
+    // stripped them there, before translating it to this one.
+    delegation = { markers: params.delegationMarkers };
+    childTrajectoryReceipts = params.childTrajectoryReceipts;
   }
 
   // A tool-free child can still return a value. Proxy-only clients still need
@@ -238,11 +277,12 @@ export function prepareAppaRequest(params: {
     declaredTools: readonly DeclaredToolSpelling[],
   ): AppaPreparedRequest => ({
     tools: undefined,
+    ...(defersTools ? { defersTools: true as const } : {}),
     ...(historicalControlToolName ? { historicalControlToolName } : {}),
     session,
     customTools,
     declaredTools,
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
@@ -288,8 +328,28 @@ export function prepareAppaRequest(params: {
       entries: clientEntries,
       identity: params.identity,
     });
-  let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  let notice = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const controlAliases = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const noticeAliases = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const select = (members: readonly DeclaredToolSpelling[]) => {
+    const first = members[0];
+    if (!first) return undefined;
+    const stable = params.identity.spellingOf?.(
+      params.identity.canonicalize(first.name, first.namespace),
+    );
+    return (
+      members.find(
+        (member) =>
+          member.name === stable?.name && member.namespace === stable.namespace,
+      ) ?? first
+    );
+  };
+  let control = select(controlAliases);
+  let notice = select(noticeAliases);
+  const heldWhenIncomplete = [
+    ...controlAliases,
+    ...noticeAliases,
+    ...askUserDeclarations,
+  ];
   if (params.identity.mode === "attested" && control && notice) {
     // Control and notice status come from one gateway: each declaration must
     // still hold its attestation after demotion, and both must name the same
@@ -342,7 +402,7 @@ export function prepareAppaRequest(params: {
       ) {
         throw new ApiError(
           400,
-          "A provider-hosted tool conflicts with the OpenAPPA remedy tools; rename or remove that declaration.",
+          "OpenAPPA found a provider-hosted tool that conflicts with its remedy tools; rename or remove that declaration.",
         );
       }
       if (!notice) {
@@ -354,6 +414,30 @@ export function prepareAppaRequest(params: {
         appendDeclaredTool(params.body, family, control.name);
       }
     } else {
+      // A session that defers tools has not loaded the remedy tools yet. Every
+      // call is still ruled on, and a denial is refused with the tools to
+      // load; once the client loads them they arrive declared and attested,
+      // and the remedy flow runs as usual.
+      if (defersTools) {
+        // Codex loads tools one search at a time, and an older gateway tool
+        // list has no alwaysLoad: part of the set can be declared. None of it
+        // is usable on its own, so it is withheld from the model and refused
+        // when called, until the pair is complete.
+        stripAppaTools({ body: params.body, tools: heldWhenIncomplete });
+        stripToolReferences({ body: params.body, tools: heldWhenIncomplete });
+        const isHeld = (tool: DeclaredToolSpelling) =>
+          heldWhenIncomplete.some(
+            (held) =>
+              held.name === tool.name && held.namespace === tool.namespace,
+          );
+        return {
+          ...withoutRemedies(
+            customTools,
+            declaredTools.filter((t) => !isHeld(t)),
+          ),
+          heldTools: heldWhenIncomplete,
+        };
+      }
       const missing = [
         control ? undefined : TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
         notice ? undefined : TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -375,7 +459,10 @@ export function prepareAppaRequest(params: {
     const short =
       name === undefined
         ? null
-        : control && name === control.name && namespace === control.namespace
+        : controlAliases.some(
+              (member) =>
+                member.name === name && member.namespace === namespace,
+            )
           ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
           : isAskUser
             ? TOOL_ASK_USER_SHORT_NAME
@@ -394,19 +481,27 @@ export function prepareAppaRequest(params: {
   // tool was declared in, so restoration can put the call back under it.
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
-  stripAppaTools({ body: params.body, tools: [notice] });
+  const notices = noticeAliases.length > 0 ? noticeAliases : [notice];
+  stripAppaTools({ body: params.body, tools: notices });
+  stripToolReferences({ body: params.body, tools: notices });
   return {
     tools: {
       control,
       notice,
-      askUser: askUserDeclarations[0],
+      askUser: select(askUserDeclarations),
+      ...(controlAliases.length > 1 ? { controlAliases } : {}),
+      ...(noticeAliases.length > 1 ? { noticeAliases } : {}),
+      ...(askUserDeclarations.length > 1
+        ? { askUserAliases: askUserDeclarations }
+        : {}),
       platformToolNames,
       namespaces,
     },
     session,
     customTools,
     declaredTools,
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...(defersTools ? { defersTools: true as const } : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
@@ -502,25 +597,6 @@ export function sanitizeForwardedRequest(body: object): boolean {
     interactionType,
   });
   return marks || stamps + sanitized > 0;
-}
-
-/**
- * Resolves an OpenCode tool spelling where the gateway label is joined to the
- * tool name with an underscore (`my_gateway_archestra__run_tool`).
- * Only resolves when the label matches one of the organization's gateways.
- */
-export function underscoreLabeledPlatformToolName(
-  name: string,
-  canonicalize: (name: string) => string,
-): string | null {
-  for (let at = name.indexOf("_"); at > 0; at = name.indexOf("_", at + 1)) {
-    const rest = name.slice(at + 1);
-    if (rest.startsWith("_") || !archestraMcpBranding.isToolName(rest))
-      continue;
-    const canonical = canonicalize(`mcp__${name.slice(0, at)}__${rest}`);
-    if (archestraMcpBranding.isToolName(canonical)) return canonical;
-  }
-  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -831,7 +907,13 @@ function platformDeclarationsOf(
       .filter(
         (declaration) =>
           declaration.kind === "b" &&
-          shortToolName(declaration.advertisedName) === shortName,
+          shortToolName(declaration.advertisedName) === shortName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.advertisedName === declaration.advertisedName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.gatewayId === declaration.gatewayId &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.kind === "b",
       )
       .map((declaration) => ({
         name: declaration.name,
@@ -852,7 +934,7 @@ function platformDeclarationsOf(
 }
 
 /**
- * The one declaration of a remedy tool this session makes, if any.
+ * Exact declarations of a remedy tool, including explicitly authorized aliases.
  *
  * With attestations, only a declaration the gateway attested as that built-in
  * counts, whatever its spelling, and a lookalike under any label stays a
@@ -861,15 +943,19 @@ function platformDeclarationsOf(
  * demotion, so a replayed marker or a second gateway reads as the conflict it
  * is. Without attestations the identity's own resolution decides.
  *
- * A second declaration of the same tool leaves the session ambiguous about
- * which name to render and which call to trust, so it is refused with the way
- * out, as is a declaration that takes free-form input.
+ * Copyable markers do not authorize an alias group. Only the identity's
+ * client-bound alias proof can admit its surviving members. Other duplicates
+ * are refused, as are accepted declarations that take free-form input.
  */
 function oneRemedyDeclaration(params: {
   shortName: ArchestraToolShortName;
   entries: ReturnType<typeof declaredToolEntries>;
-  identity: Pick<GatewayToolIdentity, "mode" | "canonicalize" | "verified">;
-}): DeclaredToolSpelling | undefined {
+  identity: Pick<
+    GatewayToolIdentity,
+    "mode" | "canonicalize" | "verified" | "attestationOf"
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf">>;
+}): DeclaredToolSpelling[] {
   const { shortName, entries, identity } = params;
   const found =
     identity.mode === "attested"
@@ -892,18 +978,49 @@ function oneRemedyDeclaration(params: {
     });
   }
   const [first, second] = candidates.values();
-  if (second) {
+  const raw = identity.verified.filter(
+    (declaration) =>
+      declaration.kind === "b" &&
+      shortToolName(declaration.advertisedName) === shortName,
+  );
+  const authorized =
+    identity.mode === "attested" && raw[0]
+      ? identity.aliasesOf?.(raw[0].advertisedName)
+      : undefined;
+  const grouped =
+    authorized !== undefined &&
+    raw.every(
+      (declaration) =>
+        declaration.gatewayId === raw[0].gatewayId &&
+        declaration.advertisedName === raw[0].advertisedName,
+    );
+  if (second && !grouped) {
     throw new ApiError(
       400,
       `OpenAPPA needs exactly one declaration of ${shortName}. This request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
     );
   }
-  if (!first) return undefined;
+  if (!first) return [];
+  const members = grouped
+    ? authorized.filter((member) => {
+        const attestation = identity.attestationOf(
+          member.name,
+          member.namespace,
+        );
+        return (
+          candidates.has(`${member.namespace ?? ""}\u0000${member.name}`) &&
+          attestation?.kind === "b" &&
+          attestation.gatewayId === raw[0].gatewayId &&
+          attestation.advertisedName === raw[0].advertisedName
+        );
+      })
+    : [first];
   const custom = entries.some(
     (entry) =>
-      entry.name === first.name &&
-      entry.namespace === first.namespace &&
-      asToolDeclaration(entry.tool)?.type === "custom",
+      members.some(
+        (member) =>
+          entry.name === member.name && entry.namespace === member.namespace,
+      ) && asToolDeclaration(entry.tool)?.type === "custom",
   );
   if (custom) {
     throw new ApiError(
@@ -911,7 +1028,7 @@ function oneRemedyDeclaration(params: {
       "OpenAPPA control tools require structured function arguments, not free-form custom input",
     );
   }
-  return first;
+  return [...members];
 }
 
 /** The gateway that attested this exact declaration, after demotion. */
@@ -1012,22 +1129,18 @@ function appendDeclaredTool(
   ];
 }
 
-/** Refuses sessions where tools are deferred to a provider tool search. */
-function refuseDeferredTools(declared: readonly unknown[]): void {
-  const deferred = declared.some((tool) => {
-    const declaration = asToolDeclaration(tool);
-    return (
-      declaration?.type === "tool_search" ||
-      declaration?.type?.startsWith("tool_search_tool_") === true ||
-      declaration?.defer_loading === true
-    );
-  });
-  if (deferred) {
-    throw new ApiError(
-      400,
-      "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
-    );
-  }
+/**
+ * Whether the request defers tools to a tool search: a `tool_search`
+ * declaration (Responses; Anthropic's provider-run `tool_search_tool_*`) or
+ * any tool declared with `defer_loading`.
+ */
+function declaresToolSearch(tool: unknown): boolean {
+  const declaration = asToolDeclaration(tool);
+  return (
+    declaration?.type === "tool_search" ||
+    declaration?.type?.startsWith("tool_search_tool_") === true ||
+    declaration?.defer_loading === true
+  );
 }
 
 function refuseUnsupportedToolTypes(declared: readonly unknown[]): void {

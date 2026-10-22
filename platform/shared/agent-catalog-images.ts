@@ -1,5 +1,6 @@
 /** Maintained runtime image names shared by the catalog and background prefetch. */
 import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
+import { DEFAULT_CLAUDE_CODE_MODEL } from "./model-constants";
 
 export type AgentCatalogId = keyof typeof AGENT_CATALOG_IMAGE_NAMES;
 
@@ -27,6 +28,41 @@ export function getAgentCatalogImages(params: {
       `${registry}/${name}:${params.tag}`,
     ]),
   ) as Record<AgentCatalogId, string>;
+}
+
+/**
+ * The image a saved runtime launches with on this deployment.
+ *
+ * An Agent made from a template saves the maintained image tag that was
+ * current when it was created. The wrapper inside that image and the platform
+ * change together, so after an upgrade an older tag can stop working with the
+ * backend it talks to. A maintained image therefore follows the deployment's
+ * current catalog: same template, this deployment's registry and tag. The
+ * public registry counts as maintained too, so Agents created before an
+ * operator mirrored the images move to the mirror.
+ *
+ * A digest reference is a deliberate pin, and any other image is the author's
+ * own; both launch exactly as saved.
+ */
+export function followAgentCatalogImage(params: {
+  image: string;
+  catalogImages: Record<AgentCatalogId, string>;
+}): string {
+  if (params.image.includes("@")) return params.image;
+  const repository = imageRepository(params.image);
+  for (const [id, name] of Object.entries(AGENT_CATALOG_IMAGE_NAMES) as [
+    AgentCatalogId,
+    string,
+  ][]) {
+    const current = params.catalogImages[id];
+    if (
+      repository === imageRepository(current) ||
+      repository === `${AGENT_CATALOG_IMAGE_REGISTRY}/${name}`
+    ) {
+      return current;
+    }
+  }
+  return params.image;
 }
 
 /** Display name of each maintained CLI template. */
@@ -64,7 +100,10 @@ export function buildAgentCatalogRuntime(params: {
     environment: null,
     credentials: [],
     ...(params.id === "claude-code" && {
-      claudeCode: { authentication: "subscription" as const },
+      claudeCode: {
+        authentication: "subscription" as const,
+        model: DEFAULT_CLAUDE_CODE_MODEL,
+      },
     }),
     ttlHours: null,
     maxCostUsd: null,
@@ -131,3 +170,11 @@ const CATALOG_RUNTIME_PROFILES: Record<
   hermes: { inferenceProtocol: "openai_chat" },
   openclaw: { inferenceProtocol: "openai_chat" },
 };
+
+/** An image reference without its tag. A registry port is not a tag. */
+function imageRepository(image: string): string {
+  const tagSeparator = image.lastIndexOf(":");
+  return tagSeparator > image.lastIndexOf("/")
+    ? image.slice(0, tagSeparator)
+    : image;
+}

@@ -1,17 +1,22 @@
 "use client";
 
 import {
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   type Permissions,
   RESOURCE_ACCESS_RELATIONS,
   type ResourceAccessRelation,
-  ResourceAccessRelationSchema,
   type ScopedResource,
 } from "@archestra/shared";
 import { Check, ChevronDown, Users } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
+import {
+  OWNER_PARAM,
+  RESOURCE_ACCESS_PARAM,
+  resolveResourceAccess,
+  SHARED_WITH_PARAM,
+  serializeAccess,
+} from "@/components/resource-access-params";
 import {
   ResourceOwnerFilter,
   ResourceSharedWithFilter,
@@ -38,6 +43,8 @@ import { cn } from "@/lib/utils/tailwind";
  *    viewer) is off, and offered only to a viewer who reads every object of
  *    the type through a `*` grant, because nobody else can see such objects.
  * 2. "Shared with": objects whose own grants reach a picked recipient.
+ *    Shown only while "Admin access" is on, the one view where the viewer
+ *    browses objects shared with other people.
  * 3. "Owner": objects authored by a picked person.
  *
  * The selection lives in the `access`, `sharedWith` and `owner` URL
@@ -49,6 +56,7 @@ export function ResourceAccessFilter({
   noun,
   offerBuiltIn = false,
   owned = true,
+  offerAdminAccess = true,
   navigate,
   queryParamsAdapter,
 }: {
@@ -63,20 +71,24 @@ export function ResourceAccessFilter({
    * Owner box, since neither could match anything.
    */
   owned?: boolean;
+  /**
+   * Off where other people's objects do not belong (Personal Settings): no
+   * "Admin access" option, and so no "Shared with" or "Owner" box.
+   */
+  offerAdminAccess?: boolean;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
   /** Optional logical-to-URL adapter shared by a page section. */
   queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const {
     access,
     sharedWith,
     owner,
     isDefault: isDefaultFilters,
-  } = useResourceAccessParam({ queryParamsAdapter });
+  } = useResourceAccessParam({ queryParamsAdapter, offerAdminAccess });
   const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
   const builtIn =
     offerBuiltIn && activeSearchParams.get(BUILT_IN_PARAM) === "true";
@@ -84,8 +96,13 @@ export function ResourceAccessFilter({
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
+      // The lists fetch on the client, so the URL changes in place: a
+      // router navigation would re-render the server page on every click.
       if (queryParamsAdapter) {
-        queryParamsAdapter.updateQueryParams({ ...updates, page: null });
+        queryParamsAdapter.updateQueryParams(
+          { ...updates, page: null },
+          { shallow: true },
+        );
         return;
       }
       const params = new URLSearchParams(searchParams.toString());
@@ -95,11 +112,10 @@ export function ResourceAccessFilter({
       }
       // reset server-side pagination (a no-op on pages without a page param)
       params.delete("page");
-      const navigateTo =
-        navigate ?? ((url: string) => router.push(url, { scroll: false }));
+      const navigateTo = navigate ?? pushUrlInPlace;
       navigateTo(`${pathname}?${params.toString()}`);
     },
-    [searchParams, router, pathname, navigate, queryParamsAdapter],
+    [searchParams, pathname, navigate, queryParamsAdapter],
   );
 
   const reset = isDefault ? null : (
@@ -130,20 +146,23 @@ export function ResourceAccessFilter({
         builtIn={builtIn}
         offerBuiltIn={offerBuiltIn}
         owned={owned}
+        offerAdminAccess={offerAdminAccess}
         updateParams={updateParams}
         reset={reset}
       />
-      <ResourceSharedWithFilter
-        resource={resource}
-        value={sharedWith ?? []}
-        onChange={(next) =>
-          updateParams({
-            [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
-          })
-        }
-        footer={reset}
-      />
-      {owned && (
+      {offerAdminAccess && (access.includes("others") || sharedWith) && (
+        <ResourceSharedWithFilter
+          resource={resource}
+          value={sharedWith ?? []}
+          onChange={(next) =>
+            updateParams({
+              [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
+            })
+          }
+          footer={reset}
+        />
+      )}
+      {offerAdminAccess && owned && (access.includes("others") || owner) && (
         <ResourceOwnerFilter
           resource={resource}
           value={owner ?? []}
@@ -166,6 +185,8 @@ export function ResourceAccessFilter({
  */
 export function useResourceAccessParam(options?: {
   queryParamsAdapter?: QueryParamsAdapter;
+  /** False drops "Admin access" and its boxes, even from a bookmarked URL. */
+  offerAdminAccess?: boolean;
 }): {
   access: ResourceAccessRelation[];
   sharedWith: string[] | undefined;
@@ -177,39 +198,28 @@ export function useResourceAccessParam(options?: {
   const rawAccess = active.get(RESOURCE_ACCESS_PARAM);
   const rawSharedWith = active.get(SHARED_WITH_PARAM);
   const rawOwner = active.get(OWNER_PARAM);
-  return useMemo(() => {
-    const access = parseAccess(rawAccess);
-    const sharedWith = parseList(rawSharedWith);
-    const owner = parseList(rawOwner);
-    return {
-      access,
-      sharedWith,
-      owner,
-      isDefault: serializeAccess(access) === null && !sharedWith && !owner,
-    };
-  }, [rawAccess, rawSharedWith, rawOwner]);
+  const offerAdminAccess = options?.offerAdminAccess ?? true;
+  return useMemo(
+    () =>
+      resolveResourceAccess({
+        rawAccess,
+        rawSharedWith,
+        rawOwner,
+        offerAdminAccess,
+      }),
+    [rawAccess, rawSharedWith, rawOwner, offerAdminAccess],
+  );
 }
 
-/**
- * Every URL parameter the access filters own, for a page's "Clear" action.
- * The Agents-only `builtIn` parameter is included; deleting it elsewhere is
- * a no-op.
- */
+/** Every URL parameter the access filters own, for a page's "Clear" action. */
 export const RESOURCE_ACCESS_FILTER_PARAMS = [
   "access",
   "sharedWith",
   "owner",
-  "builtIn",
 ] as const;
 
 // ===
 
-/** The URL parameter every grant-governed list keeps the relation filter in. */
-const RESOURCE_ACCESS_PARAM = "access";
-/** The URL parameter of the "Shared with" filter: subject keys. */
-const SHARED_WITH_PARAM = "sharedWith";
-/** The URL parameter of the "Owner" filter: user ids. */
-const OWNER_PARAM = "owner";
 /** The URL parameter the Agents page keeps the "Built-in" option in. */
 const BUILT_IN_PARAM = "builtIn";
 
@@ -242,6 +252,7 @@ function AccessRelationFilter({
   builtIn,
   offerBuiltIn,
   owned,
+  offerAdminAccess,
   updateParams,
   reset,
 }: {
@@ -251,6 +262,7 @@ function AccessRelationFilter({
   builtIn: boolean;
   offerBuiltIn: boolean;
   owned: boolean;
+  offerAdminAccess: boolean;
   updateParams: (updates: Record<string, string | null>) => void;
   reset: ReactNode;
 }) {
@@ -266,7 +278,8 @@ function AccessRelationFilter({
   // the viewer can still clear it.
   const options = ACCESS_OPTION_IDS.filter(
     (id) =>
-      (id !== "others" || readsEveryObject || isOn("others")) &&
+      (id !== "others" ||
+        (offerAdminAccess && (readsEveryObject || isOn("others")))) &&
       (id !== "mine" || owned),
   );
   const onCount = options.filter(isOn).length;
@@ -280,8 +293,16 @@ function AccessRelationFilter({
       toggled.has(relation) ? turnOn : selected.has(relation),
     );
     // An empty selection would list nothing; keep the last option on.
-    if (next.length > 0)
-      updateParams({ [RESOURCE_ACCESS_PARAM]: serializeAccess(next) });
+    if (next.length === 0) return;
+    updateParams({
+      [RESOURCE_ACCESS_PARAM]: serializeAccess(next),
+      // "Shared with" and "Owner" are shown only with "Admin access"; never
+      // leave them filtering the list while hidden.
+      ...(!next.includes("others") && {
+        [SHARED_WITH_PARAM]: null,
+        [OWNER_PARAM]: null,
+      }),
+    });
   };
 
   return (
@@ -404,39 +425,9 @@ function CheckboxRow({
   );
 }
 
-function parseAccess(raw: string | null): ResourceAccessRelation[] {
-  if (!raw) return DEFAULT_RESOURCE_ACCESS_RELATIONS;
-  const requested = new Set(
-    raw.split(",").flatMap((value) => {
-      const parsed = ResourceAccessRelationSchema.safeParse(value);
-      return parsed.success ? [parsed.data] : [];
-    }),
-  );
-  const access = RESOURCE_ACCESS_RELATIONS.filter((relation) =>
-    requested.has(relation),
-  );
-  return access.length > 0 ? access : DEFAULT_RESOURCE_ACCESS_RELATIONS;
-}
-
-/** Null for the default selection, so the default keeps a clean URL. */
-function serializeAccess(access: ResourceAccessRelation[]): string | null {
-  const value = RESOURCE_ACCESS_RELATIONS.filter((relation) =>
-    access.includes(relation),
-  ).join(",");
-  return value === DEFAULT_RESOURCE_ACCESS_RELATIONS.join(",") ? null : value;
-}
-
-/** A comma-separated list parameter; undefined when absent or empty. */
-function parseList(raw: string | null): string[] | undefined {
-  const values = [
-    ...new Set(
-      (raw ?? "")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ];
-  return values.length > 0 ? values : undefined;
+/** Change the URL without re-rendering the server page; Next.js syncs `useSearchParams`. */
+function pushUrlInPlace(url: string) {
+  window.history.pushState(null, "", url);
 }
 
 function summarize({

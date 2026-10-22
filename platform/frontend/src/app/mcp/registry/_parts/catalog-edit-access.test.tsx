@@ -1,9 +1,13 @@
-import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 
-type CatalogItem = NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 function catalogItem(overrides: Partial<CatalogItem> = {}): CatalogItem {
   return {
     id: "a326cad4-f47c-4cfa-a950-cc6f98a6e98c",

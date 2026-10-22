@@ -1,11 +1,18 @@
+import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
+import {
+  isKiloClientAgentId,
+  isKiloUserAgent,
+} from "@archestra/shared/interactions/client";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
   AppaSpawnPromptField,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { openCodeQuestionRuling } from "./native-question-ruling";
@@ -15,7 +22,6 @@ import { openCodeQuestionRuling } from "./native-question-ruling";
 const QUESTION_HEADER_MAX_LENGTH = 30;
 
 import {
-  asRecord,
   bindMintedChildTrajectory,
   namesChildrenFromArguments,
   stringField,
@@ -28,8 +34,16 @@ const CHILD_ID_KEYS = ["task_id", "session_id", "sessionID"] as const;
 
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
-  readonly id = "opencode" as const;
-  readonly trajectoryPrefix = "opencode";
+  readonly id: "opencode" | "kilo" = "opencode";
+  readonly trajectoryPrefix: string = "opencode";
+  /** The client named in errors about its session headers. */
+  protected readonly clientLabel: string = "OpenCode";
+  /** The command a person runs, named in sign-in instructions. */
+  protected readonly cliBinary: string = "opencode";
+  protected readonly provenance: {
+    session: NonNullable<AppaSessionIdentity["provenance"]>;
+    hosted: NonNullable<AppaSessionIdentity["provenance"]>;
+  } = { session: "opencode-session-header", hosted: "opencode-hosted-header" };
   // OpenCode shows no MCP forms (its client declares no elicitation), but its
   // own `question` tool renders one.
   readonly nativeQuestion = {
@@ -47,8 +61,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
         },
       ],
     }),
-    rulingFromResult: openCodeQuestionRuling,
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      openCodeQuestionRuling(result, asked.question),
   };
+
+  // A running session does not pick up a sign-in or a config change.
+  gatewayToolsHint(serverName: string): string {
+    return `Run ${this.cliBinary} mcp auth ${serverName} and finish the sign-in in your browser. If "${serverName}" is not configured, connect ${this.clientLabel} again. Then start a new session.`;
+  }
 
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
@@ -93,26 +113,21 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     const hosted = readHeader(context.headers, "x-opencode-session");
     const explicitParent = readHeader(context.headers, "x-session-id");
     const [normal] = claims;
+    const contradiction = `OpenAPPA cannot bind contradictory ${this.clientLabel} session headers`;
     if (claims.some((claim) => claim !== normal)) {
-      throw new ApiError(
-        400,
-        "OpenAPPA cannot bind contradictory OpenCode session headers",
-      );
+      throw new ApiError(400, contradiction);
     }
     if (normal && hosted && normal !== hosted) {
       if (explicitParent === normal) {
-        return { sessionId: hosted, provenance: "opencode-hosted-header" };
+        return { sessionId: hosted, provenance: this.provenance.hosted };
       }
-      throw new ApiError(
-        400,
-        "OpenAPPA cannot bind contradictory OpenCode session headers",
-      );
+      throw new ApiError(400, contradiction);
     }
     if (normal) {
-      return { sessionId: normal, provenance: "opencode-session-header" };
+      return { sessionId: normal, provenance: this.provenance.session };
     }
     return hosted
-      ? { sessionId: hosted, provenance: "opencode-hosted-header" }
+      ? { sessionId: hosted, provenance: this.provenance.hosted }
       : undefined;
   }
 
@@ -126,13 +141,14 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   }
 
   isChildCompletionResult(result: CommonToolResult): boolean {
+    const text = resultText(result.content);
     return (
       this.isSpawnTool(result.name, result.namespace) &&
       !result.isError &&
       !(
-        typeof result.content === "string" &&
+        text !== undefined &&
         /^\s*<task\b[^>]*\bstate\s*=\s*(["'])(?:running|pending|queued)\1[^>]*>/.test(
-          result.content,
+          text,
         )
       )
     );
@@ -195,6 +211,31 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
 }
 
 /**
+ * Kilo Code's CLI, an OpenCode fork: the same session headers, `task` and
+ * `question` tools, answer wording and `<task>` framing. Only its identity
+ * differs: a `kilo/…` User-Agent, or the agent id its setup sends. Its
+ * ChatGPT-login OpenAI requests carry OpenCode's identity and match the
+ * OpenCode adapter instead.
+ */
+export class AppaKiloAdapter extends AppaOpenCodeAdapter {
+  override readonly id = "kilo" as const;
+  override readonly trajectoryPrefix = "kilo";
+  protected override readonly clientLabel = "Kilo Code";
+  protected override readonly cliBinary = "kilo";
+  protected override readonly provenance = {
+    session: "kilo-session-header",
+    hosted: "kilo-hosted-header",
+  } as const;
+
+  override matches(context: AppaMatchContext): boolean {
+    return (
+      isKiloUserAgent(readHeader(context.headers, "user-agent")) ||
+      isKiloClientAgentId(readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER))
+    );
+  }
+}
+
+/**
  * Normalizes OpenCode tool names by removing builtin: and host/archestra/ prefixes.
  * Leaves other tool prefixes unchanged.
  */
@@ -203,6 +244,24 @@ function nativeOpenCodeToolName(name: string): string {
     if (name.startsWith(prefix)) return name.slice(prefix.length);
   }
   return name;
+}
+
+/**
+ * The text of a tool result as a provider wire carries it: a string, text
+ * parts, or an object that wraps either in `content` (Gemini's
+ * functionResponse, as the Model Router translates a tool message).
+ */
+function resultText(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const texts = content.flatMap((part) => {
+      const text = typeof part === "string" ? part : asRecord(part)?.text;
+      return typeof text === "string" ? [text] : [];
+    });
+    return texts.length > 0 ? texts.join("\n") : undefined;
+  }
+  const wrapped = asRecord(content)?.content;
+  return wrapped === undefined ? undefined : resultText(wrapped);
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

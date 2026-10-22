@@ -61,8 +61,13 @@ class McpGatewayTaskReaper {
       // can be abandoned without another reader.
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
+      await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
+      );
+      // A runtime that never makes another request leaves its pinned files.
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.AgentRuntimePendingExports,
       );
       if (failed > 0 || purged > 0) {
         logger.info(

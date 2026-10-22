@@ -34,6 +34,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import type { BillingUsage, PricedBillingUsage } from "@/utils/billable-usage";
 
 import type { GatewayAgent } from "./agent";
 
@@ -284,8 +285,12 @@ export interface LLMResponseAdapter<TResponse> {
       arguments: string;
       /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
       wireId?: string;
+      /** Server-generated review to emit as text immediately before this call. */
+      reviewDetails?: string;
     }>,
   ): TResponse;
+  /** The adapter can emit a call's review details as text before the call. */
+  readonly supportsToolCallReview?: boolean;
 
   /**
    * Calls the provider ran inside the inference call, each with what it
@@ -346,6 +351,8 @@ export interface StreamAccumulatorState {
     namespace?: string;
     /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
     wireId?: string;
+    /** Server-generated review to emit as text immediately before this call. */
+    reviewDetails?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
@@ -436,6 +443,18 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   getRawToolCallEvents(): (string | Uint8Array)[];
 
   /**
+   * The id the client must echo back for the call at `index` of this turn,
+   * when it carries more than the call's own id. Gemini packs each call's
+   * thought signature into it. A wrapper that writes its own tool-call
+   * frames from `state.toolCalls` (the Responses-from-chat surface) uses it
+   * so the next request still reaches the provider with that data.
+   */
+  wireToolCallId?(params: {
+    toolCall: { id: string; name: string };
+    index: number;
+  }): string;
+
+  /**
    * Format a complete, self-contained text response as SSE events.
    * Used when replacing the response entirely (e.g., policy refusal).
    * Returns provider-specific events that form a valid complete response.
@@ -470,6 +489,8 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   formatToolCallsSSE?(
     toolCalls: StreamAccumulatorState["toolCalls"],
   ): (string | Uint8Array)[];
+  /** The adapter can emit a call's review details as text before the call. */
+  readonly supportsToolCallReview?: boolean;
 
   /**
    * Asks the adapter to withhold every chunk from the first hosted call on, so
@@ -552,6 +573,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * upstream cause.
    */
   readonly formatStreamErrorFrame?: (event: unknown) => string;
+
+  /**
+   * Set by adapters that serve a client wire format different from the
+   * upstream provider's (e.g. OpenAI-format client, Anthropic upstream). The
+   * upstream's error body is foreign to the client there, so the proxy keeps
+   * its own error envelope instead of relaying it.
+   */
+  readonly translatesWireFormat?: boolean;
 
   // ---------------------------------------------------------------------------
   // Adapter Creation
@@ -641,6 +670,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
  * Token usage from response
  */
 export interface UsageView {
+  /** Disjoint provider billing components; primary token fields remain unchanged. */
+  billingUsage?: BillingUsage;
+  /** Internal quote attached to this normalized request snapshot, never forwarded. */
+  billingQuote?: {
+    model: string;
+    provider: SupportedProvider;
+    priced: PricedBillingUsage;
+  };
   /** Uncached input tokens only (normalized across providers). */
   inputTokens: number;
   outputTokens: number;
@@ -654,6 +691,8 @@ export interface UsageView {
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
+  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
+  providerReportedCost?: number;
 }
 
 /**

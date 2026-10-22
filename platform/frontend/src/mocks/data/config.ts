@@ -1,6 +1,5 @@
 import {
   AGENT_CATALOG_IMAGE_REGISTRY,
-  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   type archestraApiTypes,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   getAgentCatalogImages,
@@ -17,6 +16,7 @@ export function makeConfig(
   } = {},
 ): Config {
   return {
+    version: "0.0.0-test",
     enterpriseFeatures: {
       core: false,
       knowledgeBase: false,
@@ -71,7 +71,7 @@ export function makeConfig(
       environmentNamespaces: [],
       isQuickstart: false,
       ngrokDomain: "",
-      virtualKeyDefaultExpirationSeconds: 3600,
+      virtualKeyDefaultExpirationSeconds: 30 * 24 * 60 * 60,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
       encryptedChatEnabled: false,
@@ -91,11 +91,6 @@ export function makeConfig(
           "http://localhost:3000/api/connectors/gdrive/oauth/callback",
       },
       mcpGatewaySkillsEnabled: false,
-      hackathonRecorderEnabled: true,
-      // Off by default, exactly as a real deployment has it.
-      hackathonVideoDownloadEnabled: false,
-      hackathonMaxFinalCutMs: APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
-      hackathonGalleryRepo: null,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
@@ -116,7 +111,6 @@ export function makePublicConfig(
     disableImpersonation: false,
     devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
-    mcpSandboxDomain: null,
     analytics: {
       enabled: false,
       instanceId: null,

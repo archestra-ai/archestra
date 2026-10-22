@@ -1,12 +1,12 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { errorReporting } from "@/lib/error-reporting";
 import { ErrorBoundary } from "./error-boundary";
 
-vi.mock("@sentry/nextjs", () => ({
-  captureException: vi.fn(),
+vi.mock("@/lib/error-reporting", () => ({
+  errorReporting: { setUser: vi.fn(), captureException: vi.fn() },
 }));
 
 function ThrowingComponent(): never {
@@ -27,7 +27,7 @@ describe("ErrorBoundary", () => {
 
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
     await waitFor(() => {
-      expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect(errorReporting.captureException).toHaveBeenCalledWith(
         expect.objectContaining({ message: "boom" }),
         expect.objectContaining({
           extra: expect.objectContaining({

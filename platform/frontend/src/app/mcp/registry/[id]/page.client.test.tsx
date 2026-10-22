@@ -35,6 +35,10 @@ const {
   useMcpServers,
   useMcpDeploymentStatuses,
   reauthenticateMutateAsync,
+  deleteMutateAsync,
+  updateCatalogMutate,
+  useResourcePermissions,
+  useCatalogTools,
   stubs,
 } = vi.hoisted(() => {
   const quiet = () => ({
@@ -52,11 +56,23 @@ const {
     useMcpServers: vi.fn(),
     useMcpDeploymentStatuses: vi.fn(),
     reauthenticateMutateAsync: vi.fn(),
+    deleteMutateAsync: vi.fn(),
+    updateCatalogMutate: vi.fn(),
+    useResourcePermissions: vi.fn(),
+    useCatalogTools: vi.fn(
+      (
+        ..._args: unknown[]
+      ): {
+        data: Array<{ id: string; name: string; description: string }>;
+        isLoading: boolean;
+      } => ({ data: [], isLoading: false }),
+    ),
     stubs: stubbed,
   };
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE: "remote_server_url_not_allowed",
   CATALOG_NAME_CONFLICT_CODE: "catalog_name_conflict",
   getCatalogMutationErrorCode: () => undefined,
@@ -80,10 +96,34 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
     {
       useInternalMcpCatalog: (...args: unknown[]) =>
         useInternalMcpCatalog(...args),
-      useCatalogTools: () => ({ data: [], isPending: false }),
+      useCatalogTools: (...args: unknown[]) => useCatalogTools(...args),
+      useUpdateInternalMcpCatalogItem: () => ({
+        mutate: updateCatalogMutate,
+        isPending: false,
+      }),
     },
   ),
 }));
+
+// By-id and issue-index reads answer from the same fixtures the list mocks
+// hold, so the page sees one consistent registry.
+vi.mock("@/lib/mcp/mcp-registry.query", () => {
+  const catalog = () =>
+    (useInternalMcpCatalog()?.data ?? []) as Array<{ id: string }>;
+  return {
+    useInternalMcpCatalogItem: (id: string | null | undefined) => ({
+      data: catalog().find((item) => item.id === id) ?? null,
+    }),
+    useMcpRegistryIssueIndex: () => ({
+      data: {
+        catalogItems: catalog(),
+        servers: useMcpServers()?.data ?? [],
+      },
+    }),
+    fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+      catalog().find((item) => item.id === id) ?? null,
+  };
+});
 
 vi.mock("@/lib/mcp/mcp-server.query", () =>
   stubs(
@@ -102,9 +142,26 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useMcpDeploymentStatuses",
       "useDismissMcpServerAlerts",
       "useRestoreMcpServerAlerts",
+      "useMcpServersAssignedAgents",
     ],
     {
       useMcpServers: () => useMcpServers(),
+      // Stands in for GET /api/mcp_server/:id, which returns the same install
+      // with its agents.
+      useMcpServersAssignedAgents: ({ serverIds }: { serverIds: string[] }) => {
+        const servers: Array<{ id: string; assignedAgents?: unknown[] }> =
+          useMcpServers()?.data ?? [];
+        return {
+          agentsByServerId: new Map(
+            serverIds.map((id) => [
+              id,
+              servers.find((server) => server.id === id)?.assignedAgents ?? [],
+            ]),
+          ),
+          isPending: false,
+          isError: false,
+        };
+      },
       useAutoModeAgents: () => ({ data: [] }),
       useMcpDeploymentStatuses: () => useMcpDeploymentStatuses(),
       useMcpInstallationStatusCacheSync: () => {},
@@ -112,24 +169,36 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
         mutateAsync: reauthenticateMutateAsync,
         isPending: false,
       }),
+      useDeleteMcpServer: () => ({
+        mutateAsync: deleteMutateAsync,
+        isPending: false,
+      }),
     },
   ),
 );
+
+vi.mock("@/lib/resource-permissions.query", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/resource-permissions.query")
+  >()),
+  useResourcePermissions: (...args: unknown[]) =>
+    useResourcePermissions(...args),
+}));
 
 vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
+const initiateOAuth = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/oauth.query", () => ({
+  useInitiateOAuth: () => ({ mutateAsync: initiateOAuth, isPending: false }),
+}));
 vi.mock("@/lib/organization.query", () => ({
   useDefaultEnvironment: () => ({ name: "Default" }),
   useOrganization: () => ({ data: null }),
 }));
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: () => ({ data: [] }),
-}));
-vi.mock("../_parts/mcp-server-agent-usage", () => ({
-  deriveAgentUsage: () => ({ agents: [], count: 0 }),
-  McpServerAgentUsage: () => null,
 }));
 
 const localItem = {
@@ -188,7 +257,7 @@ function renderPage(overrides: Record<string, unknown> = {}) {
 }
 
 /** The card whose heading names it. Every card title is one rank. */
-function section(name: string) {
+function section(name: string | RegExp) {
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
   if (!root) throw new Error(`No section around "${name}"`);
@@ -234,6 +303,8 @@ describe("McpCatalogItemDetailPage overview", () => {
     useMcpServers.mockReturnValue({ data: [] });
     useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
     reauthenticateMutateAsync.mockResolvedValue({ id: "srv-1" });
+    // Shared with the whole organization unless a test says otherwise.
+    sharedWith("organization");
   });
 
   /** One installed connection for this catalog entry, with no pod reported. */
@@ -246,6 +317,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           serverType: "local",
           ownerId: "u1",
           teamId: null,
+          canUseCredential: true,
           createdAt: "2026-08-02T10:00:00.000Z",
         },
       ],
@@ -255,14 +327,20 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("states the Overview facts without a click and keeps installations visible", () => {
     renderPage();
 
-    const overview = section("Overview");
-    expect(overview.getByText("Transport")).toBeVisible();
+    const overview = section("Connection");
+    expect(overview.getByText("Hosting")).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Installations" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Installations" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not open an app's backing entry, which the registry never lists", () => {
+    renderPage({ serverType: "app" });
+
+    expect(screen.getByText("Server not found")).toBeInTheDocument();
   });
 
   it("names the main page in the tab strip, so a secondary tab has a way back", () => {
@@ -278,10 +356,12 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(usageTab).not.toHaveAttribute("aria-current");
   });
 
-  it("keeps editor-only command and installation prompts out of Overview", () => {
+  it("shows what the server runs, but keeps its environment out of Overview", () => {
     renderPage();
 
-    expect(screen.queryByText("sh -c node server.js --port 8080")).toBeNull();
+    expect(
+      section("Connection").getByText(/-c "node server\.js --port 8080"/),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Environment variables" }),
     ).toBeNull();
@@ -292,10 +372,20 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("shows the deployment facts the wizard asks for", () => {
     renderPage();
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText(/Single-tenant/)).toBeInTheDocument();
     expect(overview.getByText("stdio")).toBeInTheDocument();
     expect(overview.queryByText("Generated")).toBeNull();
+  });
+
+  it("labels a server with no transport set as stdio, which is what it runs", () => {
+    renderPage({
+      localConfig: { ...localItem.localConfig, transportType: undefined },
+    });
+
+    const overview = section("Connection");
+    expect(overview.getByText("stdio")).toBeInTheDocument();
+    expect(overview.queryByText(/Streamable HTTP/)).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -312,10 +402,10 @@ describe("McpCatalogItemDetailPage overview", () => {
       },
     });
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText("OAuth 2.1")).toBeInTheDocument();
     expect(
-      overview.getByText("https://tools.example.com/mcp"),
+      overview.getByTitle("https://tools.example.com/mcp"),
     ).toBeInTheDocument();
     // The client id, the secret's state and the endpoints are the wizard's;
     // the row says only how callers authenticate, and never a secret's value.
@@ -345,7 +435,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       "href",
       "/mcp/registry/cat-1/edit?step=configuration",
     );
-    expect(section("Overview").queryByRole("link")).toBeNull();
+    expect(section("Connection").queryByRole("link")).toBeNull();
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {
@@ -354,10 +444,9 @@ describe("McpCatalogItemDetailPage overview", () => {
       new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
     );
     renderPage();
-    expect(screen.getByRole("link", { name: "K8s YAML" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    // PageLayout renders each tab in a desktop row and a mobile row.
+    const [yamlTab] = screen.getAllByRole("link", { name: "K8s YAML" });
+    expect(yamlTab).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
   });
 
@@ -391,7 +480,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     );
     renderPage();
     expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
   });
 
   it("hides managed Playwright configuration actions and ignores YAML deep links", () => {
@@ -416,10 +505,41 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
   });
 
-  it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {
+  it("lists Playwright's tools and points to the Inspector to try one", () => {
+    useCatalogTools.mockReturnValue({
+      data: [
+        {
+          id: "tool-1",
+          name: "microsoft__playwright-mcp__browser_navigate",
+          description: "Navigate to a URL",
+        },
+      ],
+      isLoading: false,
+    });
+    vi.mocked(usePathname).mockReturnValue(
+      `/mcp/registry/${PLAYWRIGHT_MCP_CATALOG_ID}`,
+    );
+    renderPage({ id: PLAYWRIGHT_MCP_CATALOG_ID, name: "Playwright" });
+
+    const tools = section(/^Tools/);
+    expect(tools.getByText("browser_navigate")).toBeVisible();
+    expect(tools.getByText("Navigate to a URL")).toBeVisible();
+    expect(tools.getByRole("link", { name: "Inspector" })).toHaveAttribute(
+      "href",
+      `/mcp/registry/${PLAYWRIGHT_MCP_CATALOG_ID}?tab=inspector`,
+    );
+  });
+
+  it("offers Sign in instead of Dismiss on your own rejected token", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
     // A remote connection whose token was rejected: a row exists, and it is
     // not working. Deriving the status from the row alone read "Connected"
     // with a green dot directly above the notice saying otherwise.
@@ -456,14 +576,21 @@ describe("McpCatalogItemDetailPage overview", () => {
       issue.getByText(/The provider rejected the stored token/),
     ).toBeVisible();
     expect(
-      issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
-    ).toBeVisible();
+      issue.queryByRole("button", { name: "Dismiss alert for internal-tools" }),
+    ).toBeNull();
     expect(issue.queryByRole("button", { name: "Re-authenticate" })).toBeNull();
     expect(
       issue.queryByRole("button", { name: "Edit configuration" }),
     ).toBeNull();
     expect(issue.queryByRole("button", { name: /More actions/ })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
+
+    await user.click(issue.getByRole("button", { name: "Sign in" }));
+    expect(push).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /tab=credentials.*server=srv-1|server=srv-1.*tab=credentials/,
+      ),
+    );
   });
 
   it("keeps dismissed alerts off the server details page", () => {
@@ -495,6 +622,37 @@ describe("McpCatalogItemDetailPage overview", () => {
     ).toBeNull();
   });
 
+  it("sends an OAuth connection straight to the provider instead of asking first", () => {
+    // Never resolves: the test stops before the browser would navigate away.
+    initiateOAuth.mockReturnValue(new Promise(() => {}));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-own") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    installed([
+      ownInstall({ serverType: "remote", oauthRefreshError: "refresh_failed" }),
+    ]);
+    renderPage({
+      serverType: "remote",
+      localConfig: null,
+      oauthConfig: {
+        grantType: "authorization_code",
+        client_id: "abc123",
+        tokenEndpoint: "https://auth.example.com/token",
+        scopes: ["read"],
+      },
+    });
+
+    expect(initiateOAuth).toHaveBeenCalledTimes(1);
+    expect(initiateOAuth).toHaveBeenCalledWith({
+      catalogId: "cat-1",
+      serverId: "srv-own",
+    });
+    expect(screen.getByText("Redirecting to sign in…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
   it("repairs the selected connection inline without opening a dialog", async () => {
     const user = userEvent.setup();
     const replace = vi.fn();
@@ -521,6 +679,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           ownerEmail: "admin@example.com",
           teamId: null,
           scope: "org",
+          canUseCredential: true,
           secretStorageType: "none",
           createdAt: "2026-08-02T10:00:00.000Z",
           assignedAgents: [],
@@ -575,7 +734,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       ),
     ).toBeNull();
     expect(
-      within(installationRow).getByRole("button", { name: "Revoke" }),
+      within(installationRow).getByRole("button", { name: /^Revoke/ }),
     ).toBeInTheDocument();
     await user.type(within(form).getByLabelText(/API_TOKEN/), "new-token");
     await user.click(
@@ -594,6 +753,66 @@ describe("McpCatalogItemDetailPage overview", () => {
       "/mcp/registry/cat-1?tab=credentials",
       { scroll: false },
     );
+  });
+
+  it("confirms revoking an organization connection against the agents it affects", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const agent = { agentType: "agent", ownerId: null, ownerEmail: null };
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-org",
+          catalogId: "cat-1",
+          name: "internal-tools",
+          serverType: "remote",
+          ownerId: "u1",
+          ownerEmail: "admin@example.com",
+          teamId: null,
+          scope: "org",
+          secretStorageType: "none",
+          createdAt: "2026-08-02T10:00:00.000Z",
+          // Every caller may resolve to an org connection, so unpinned agents
+          // count as affected too.
+          assignedAgents: [
+            {
+              ...agent,
+              id: "a1",
+              name: "Sales Agent",
+              scope: "org",
+              pinned: false,
+            },
+            {
+              ...agent,
+              id: "a2",
+              name: "Ops Gateway",
+              scope: "org",
+              pinned: true,
+            },
+          ],
+        },
+      ],
+    });
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const row = screen.getByRole("row", { name: /Organization/ });
+    await user.click(within(row).getByRole("button", { name: /^Revoke/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(deleteMutateAsync).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent(
+      "removes the organization-wide connection for everyone",
+    );
+    expect(dialog).toHaveTextContent("Used by 2 agents");
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+    expect(deleteMutateAsync).toHaveBeenCalledWith({
+      id: "srv-org",
+      name: "internal-tools",
+    });
   });
 
   it("reports the live fault, not the one the reader silenced", () => {
@@ -661,6 +880,23 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Not installed")).toBeNull();
   });
 
+  it("leads an installed server with tools on to the Connect page", () => {
+    installedWithNoDeploymentEntry();
+    renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
+
+    expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute(
+      "href",
+      "/connection",
+    );
+  });
+
+  it("offers no Connect before the server is installed", () => {
+    useMcpServers.mockReturnValue({ data: [] });
+    renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
+
+    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+  });
+
   it("says it is still checking while the deployment feed is loading", () => {
     installedWithNoDeploymentEntry();
     useMcpDeploymentStatuses.mockReturnValue({
@@ -679,4 +915,405 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
   });
+
+  it("gives a built-in server an Overview with something in it", () => {
+    renderPage({ serverType: "builtin", localConfig: null, toolCount: 12 });
+
+    const overview = section("Connection");
+    expect(overview.getByText("Built into Archestra")).toBeInTheDocument();
+    expect(overview.getByText("12 tools")).toBeInTheDocument();
+  });
 });
+describe("McpCatalogItemDetailPage installations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/cat-1");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "u1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map(),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    useMcpServers.mockReturnValue({ data: [] });
+    useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
+    viewAs("editor");
+    sharedWith("organization");
+  });
+
+  it("shows a member only their own installations, without shared ones or pod details", () => {
+    viewAs("member");
+    installed([teamInstall(), ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByText("Shared installations")).toBeNull();
+    expect(content.queryByText("Platform")).toBeNull();
+    expect(
+      content.queryByRole("button", { name: /Add shared installation/ }),
+    ).toBeNull();
+    expect(columnNames(content)).toEqual(["Owner", "Actions"]);
+    const [row, ...otherRows] = content.getAllByRole("row").slice(1);
+    expect(row).toHaveTextContent("member@example.com");
+    expect(otherRows).toEqual([]);
+    // One's own installation is at most one, so the heading names one, with
+    // neither a count nor an explanation.
+    const heading = screen.getByRole("heading", { name: /Installation/ });
+    expect(heading).toHaveTextContent(/^Installation$/);
+    expect(screen.queryByText(/available only to/)).toBeNull();
+  });
+
+  it("keeps a member's remote server free of shared credential choices", () => {
+    viewAs("member");
+    installed([
+      teamInstall({ serverType: "remote" }),
+      ownInstall({ serverType: "remote" }),
+    ]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.queryByText("Agents connect with")).toBeNull();
+    expect(content.queryByText("Service accounts")).toBeNull();
+    expect(
+      content.queryByRole("button", { name: /Add service account/ }),
+    ).toBeNull();
+    expect(content.getByText("member@example.com")).toBeVisible();
+  });
+
+  it("keeps the full view for someone who manages installations", () => {
+    installed([teamInstall(), ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.getByText("Shared installations")).toBeVisible();
+    expect(content.getByText("Platform")).toBeVisible();
+    expect(columnNames(content)).toContain("Pod");
+    expect(
+      screen.getByRole("heading", { name: /Installations/ }),
+    ).toHaveTextContent(/^Installations2$/);
+  });
+
+  it("tells a member their server's state without a ratio, and gives them no shell", () => {
+    installed([ownInstall({ canUseCredential: true })]);
+    const { unmount } = renderPage();
+    expect(screen.getByText("1/1 running")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Shell" }).length,
+    ).toBeGreaterThan(0);
+    unmount();
+
+    viewAs("member");
+    renderPage();
+    // One's own installation is the only one, so "1/1" could only ever read
+    // 0/1 or 1/1.
+    expect(screen.queryByText(/\d+\/\d+ running/)).toBeNull();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole("link", { name: "Shell" })).toEqual([]);
+    expect(
+      screen.getAllByRole("link", { name: "Logs" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows access on Overview only to someone who can change it", () => {
+    installed([ownInstall()]);
+    const { unmount } = renderPage();
+    expect(screen.getByRole("heading", { name: "Access" })).toBeVisible();
+    expect(screen.queryAllByRole("link", { name: "Permissions" })).toEqual([]);
+    unmount();
+
+    viewAs("member");
+    sharedWith("organization", { canManagePermissions: false });
+    renderPage();
+    expect(screen.queryByRole("heading", { name: "Access" })).toBeNull();
+  });
+
+  it("keeps Usage for someone who manages installations and drops it for a member", () => {
+    installed([ownInstall()]);
+    const { unmount } = renderPage();
+    expect(
+      screen.getAllByRole("link", { name: /Usage/ }).length,
+    ).toBeGreaterThan(0);
+    unmount();
+
+    viewAs("member");
+    renderPage();
+    expect(screen.queryAllByRole("link", { name: /Usage/ })).toEqual([]);
+  });
+
+  it("keeps the full section for an editor on a server shared with nobody", () => {
+    sharedWith("owner", { canManagePermissions: false });
+    installed([ownInstall()]);
+    renderPage();
+
+    // The one-row layout, but an editor's heading, count and access section.
+    const heading = screen.getByRole("heading", { name: /Installations/ });
+    expect(heading).toHaveTextContent(/^Installations1$/);
+    expect(
+      screen.getByText(/Running instances of this server/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Access" })).toBeVisible();
+  });
+
+  it("lets someone who manages a remote server pin agents to a service account", async () => {
+    const user = userEvent.setup();
+    installed([teamInstall({ serverType: "remote" })]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.getByText("Service accounts")).toBeVisible();
+    const picker = content.getByRole("combobox", {
+      name: "Account agents connect with",
+    });
+    expect(picker).toHaveTextContent("Each caller's own account");
+
+    // The picker's list scrolls its active option into view; jsdom has no
+    // layout to scroll.
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      await user.click(picker);
+      await user.click(await screen.findByRole("option", { name: /Platform/ }));
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+    expect(updateCatalogMutate).toHaveBeenCalledWith({
+      id: "cat-1",
+      data: { dynamicConnectionMcpServerId: "srv-team" },
+    });
+  });
+
+  it("shows a personal server's own installation as one row and uninstalls it after confirming", async () => {
+    const user = userEvent.setup();
+    viewAs("member");
+    sharedWith("owner");
+    installed([ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.getByText("Running")).toBeVisible();
+    expect(content.getByText("Installed Aug 2, 2026")).toBeVisible();
+    expect(content.queryByText("Personal installations")).toBeNull();
+
+    await user.click(content.getByRole("button", { name: "Uninstall" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(deleteMutateAsync).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+    expect(deleteMutateAsync).toHaveBeenCalledWith({
+      id: "srv-own",
+      name: "internal-tools",
+    });
+  });
+
+  it("offers to install a personal server the viewer has not installed", () => {
+    viewAs("member");
+    sharedWith("owner");
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.getByText("Not installed")).toBeVisible();
+    expect(content.getByRole("button", { name: "Install" })).toBeVisible();
+  });
+
+  it.each([
+    ["local", "Installed Aug 2, 2026"],
+    ["remote", "Connected Aug 2, 2026"],
+  ] as const)("states a %s personal installation once when it has no status to add", (serverType, line) => {
+    viewAs("member");
+    sharedWith("owner");
+    useMcpServers.mockReturnValue({ data: [ownInstall({ serverType })] });
+    renderPage(
+      serverType === "remote" ? { serverType, localConfig: null } : {},
+    );
+
+    const row = screen.getByTestId("credential-row");
+    expect(row).toHaveTextContent(new RegExp(`^${line}Uninstall$`));
+  });
+
+  it("says a personal remote server without a connection is not connected", () => {
+    viewAs("member");
+    sharedWith("owner");
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.getByText("Not connected")).toBeVisible();
+    expect(
+      content.getByRole("button", { name: "Connect my account" }),
+    ).toBeVisible();
+  });
+
+  it("offers re-authentication on a personal connection whose token was rejected", () => {
+    viewAs("member");
+    sharedWith("owner");
+    installed([
+      ownInstall({ serverType: "remote", oauthRefreshError: "refresh_failed" }),
+    ]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.getByText("Needs re-authentication")).toBeVisible();
+    expect(
+      content.getByRole("button", { name: "Re-authenticate" }),
+    ).toBeVisible();
+    expect(content.getByRole("button", { name: "Uninstall" })).toBeVisible();
+  });
+
+  it("keeps the tables on a personal server when someone else has installed it", () => {
+    sharedWith("owner");
+    installed([
+      ownInstall({ id: "srv-other", ownerId: "u2", ownerEmail: "b@x.com" }),
+    ]);
+    renderPage();
+
+    const content = connections();
+    expect(content.getByRole("table")).toBeVisible();
+    expect(content.getByText("b@x.com")).toBeVisible();
+  });
+
+  it.each([
+    "team",
+    "unreadable",
+  ] as const)("keeps the tables when the sharing level is %s", (sharing) => {
+    sharedWith(sharing);
+    installed([ownInstall()]);
+    renderPage();
+
+    expect(connections().getByRole("table")).toBeVisible();
+  });
+
+  it("shows neither layout while the sharing level loads", () => {
+    sharedWith("loading");
+    installed([ownInstall()]);
+    renderPage();
+
+    const content = within(
+      screen
+        .getByRole("heading", { name: /Installations/ })
+        .closest("section") as HTMLElement,
+    );
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.queryByText("Running")).toBeNull();
+  });
+});
+
+function viewAs(role: "member" | "editor") {
+  vi.mocked(useHasPermissions).mockImplementation(((
+    permissions: Record<string, string[]>,
+  ) => ({
+    // A member may install for themselves but neither manage others'
+    // installations nor edit the catalog.
+    data:
+      role === "editor" ||
+      !(
+        permissions.mcpServerInstallation?.includes("update") ||
+        permissions.mcpRegistry?.includes("update")
+      ),
+  })) as unknown as typeof useHasPermissions);
+}
+
+function sharedWith(
+  audience: "owner" | "team" | "organization" | "unreadable" | "loading",
+  { canManagePermissions = true }: { canManagePermissions?: boolean } = {},
+) {
+  if (audience === "loading") {
+    useResourcePermissions.mockReturnValue({
+      data: undefined,
+      isPending: true,
+    });
+    return;
+  }
+  if (audience === "unreadable") {
+    useResourcePermissions.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    });
+    return;
+  }
+  const subject =
+    audience === "owner"
+      ? { type: "user", id: "u1" }
+      : audience === "team"
+        ? { type: "team", id: "t1" }
+        : { type: "organization", id: "org" };
+  useResourcePermissions.mockReturnValue({
+    data: {
+      grants: [{ subject, actions: ["read", "use"] }],
+      inheritedGrants: [],
+      actorSubjects: [],
+      effectiveActions: canManagePermissions
+        ? ["read", "use", "update", "delete", "manage-permissions"]
+        : ["read", "use"],
+    },
+    isPending: false,
+  });
+}
+
+function ownInstall(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "srv-own",
+    catalogId: "cat-1",
+    name: "internal-tools",
+    serverType: "local",
+    ownerId: "u1",
+    ownerEmail: "member@example.com",
+    teamId: null,
+    scope: "personal",
+    secretStorageType: "database",
+    createdAt: "2026-08-02T10:00:00.000Z",
+    assignedAgents: [],
+    ...overrides,
+  };
+}
+
+function teamInstall(overrides: Record<string, unknown> = {}) {
+  return ownInstall({
+    id: "srv-team",
+    ownerId: "u9",
+    ownerEmail: "admin@example.com",
+    teamId: "t1",
+    teamDetails: { teamId: "t1", name: "Platform" },
+    scope: "team",
+    ...overrides,
+  });
+}
+
+function installed(servers: Record<string, unknown>[]) {
+  useMcpServers.mockReturnValue({ data: servers });
+  useMcpDeploymentStatuses.mockReturnValue({
+    statuses: Object.fromEntries(
+      servers.map((server) => [
+        server.id,
+        {
+          state: "running",
+          message: "",
+          error: null,
+          podName: `pod-${server.id}`,
+        },
+      ]),
+    ),
+    state: "ready",
+  });
+}
+
+function connections() {
+  return within(screen.getByTestId("mcp-server-settings-connections-content"));
+}
+
+function columnNames(content: ReturnType<typeof within>) {
+  return content
+    .getAllByRole("columnheader")
+    .map((header: HTMLElement) => header.textContent);
+}

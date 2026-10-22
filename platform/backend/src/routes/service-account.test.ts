@@ -1,9 +1,12 @@
 import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_TOKEN_PREFIX,
+  MEMBER_ROLE_NAME,
   ROLE_ASSIGNMENT_BLOCKED_CODE,
 } from "@archestra/shared";
 import { adminPermissions } from "@archestra/shared/access-control";
+import { PGlite } from "@electric-sql/pglite";
+import { auth as betterAuth } from "@/auth/better-auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -12,6 +15,7 @@ import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
+import TeamModel from "@/models/team";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -46,6 +50,53 @@ describe("service account routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("persists icons through create, list, edit, omission, and removal", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Icon automation", role: "member", icon: "🤖" },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().icon).toBe("🤖");
+    const id = created.json().id;
+    const readIcon = async () => {
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/service-accounts/${id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/service-accounts",
+      });
+      expect(
+        list.json().find((item: { id: string }) => item.id === id).icon,
+      ).toBe(detail.json().icon);
+      return detail.json().icon;
+    };
+    expect(await readIcon()).toBe("🤖");
+    for (const icon of [
+      "logo:github",
+      "data:image/svg+xml;base64,PHN2Zy8+",
+      null,
+    ]) {
+      const changed = await app.inject({
+        method: "PATCH",
+        url: `/api/service-accounts/${id}`,
+        payload: { icon },
+      });
+      expect(changed.statusCode).toBe(200);
+      expect(await readIcon()).toBe(icon);
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: `/api/service-accounts/${id}`,
+        payload: { name: "Renamed automation" },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(await readIcon()).toBe(icon);
+    }
   });
 
   test("persists and audits multiple roles and rejects an unknown component", async ({
@@ -223,6 +274,7 @@ describe("service account routes", () => {
     const created = createResponse.json();
     expect(created).toMatchObject({
       name: "Build Automation",
+      icon: null,
       role: ADMIN_ROLE_NAME,
       disabled: false,
       tokenCount: 0,
@@ -358,6 +410,130 @@ describe("service account routes", () => {
       },
     });
   });
+
+  test("links an account to a team and audits the change", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "team-bot", role: MEMBER_ROLE_NAME, teamId: team.id },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().teamId).toBe(team.id);
+
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/api/service-accounts/${created.json().id}`,
+    });
+    expect(fetched.json().teamId).toBe(team.id);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((a: { id: string }) => a.id === created.json().id)
+        .teamId,
+    ).toBe(team.id);
+
+    const unlinked = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${created.json().id}`,
+      payload: { teamId: null },
+    });
+    expect(unlinked.statusCode).toBe(200);
+    expect(unlinked.json().teamId).toBeNull();
+
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: created.json().id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: expect.objectContaining({ teamId: team.id }),
+          after: expect.objectContaining({ teamId: null }),
+        }),
+      ]),
+    );
+  });
+
+  test("rejects a team outside the organization or an unknown team", async ({
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const foreignTeam = await makeTeam(otherOrganization.id, user.id);
+
+    for (const teamId of [foreignTeam.id, crypto.randomUUID()]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/service-accounts",
+        payload: { name: `bot-${teamId}`, role: MEMBER_ROLE_NAME, teamId },
+      });
+      expect(created.statusCode).toBe(400);
+    }
+
+    const account = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "unlinked-bot", role: MEMBER_ROLE_NAME },
+    });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${account.json().id}`,
+      payload: { teamId: foreignTeam.id },
+    });
+    expect(updated.statusCode).toBe(400);
+  });
+
+  test("lets only an org team manager or the team's admin link an account to a team", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const admin = user;
+    const team = await makeTeam(organizationId, admin.id);
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeTeamMember(team.id, member.id, { role: "member" });
+    user = member;
+
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "member-bot", role: MEMBER_ROLE_NAME, teamId: team.id },
+    });
+    expect(refused.statusCode).toBe(403);
+
+    const unlinked = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "member-bot", role: MEMBER_ROLE_NAME },
+    });
+    expect(unlinked.statusCode).toBe(200);
+    const refusedUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${unlinked.json().id}`,
+      payload: { teamId: team.id },
+    });
+    expect(refusedUpdate.statusCode).toBe(403);
+
+    // Promoted to the team's admin, the same member may link it.
+    await TeamModel.removeMember(team.id, member.id);
+    await makeTeamMember(team.id, member.id, { role: "admin" });
+    const linked = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${unlinked.json().id}`,
+      payload: { teamId: team.id },
+    });
+    expect(linked.statusCode).toBe(200);
+    expect(linked.json().teamId).toBe(team.id);
+  });
 });
 
 describe("service account API authentication", () => {
@@ -455,6 +631,58 @@ describe("service account API authentication", () => {
 
     expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(verifyTokenSpy).toHaveBeenCalledOnce();
+  });
+
+  // A service-account token is one indexed lookup by hash. Checking Better
+  // Auth's API keys first cost every service-account request two misses on
+  // the apikey table (each logged as an error), and the token's last_used_at
+  // was rewritten on every request.
+  test("a service-account request skips the API-key lookup and writes last_used_at once a minute", async ({
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const role = await makeCustomRole(organization.id, {
+      permission: { serviceAccount: ["read"] },
+    });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Crawler automation",
+      role: role.role,
+      createdBy: null,
+    });
+    const serviceToken = await ServiceAccountModel.createToken({
+      serviceAccountId: serviceAccount.id,
+      organizationId: organization.id,
+      name: "Route token",
+    });
+    await runScopedResourcePermissionCutover();
+    const verifyApiKeySpy = vi.spyOn(betterAuth.api, "verifyApiKey");
+    const query = vi.spyOn(PGlite.prototype, "query");
+
+    try {
+      for (let i = 0; i < 2; i++) {
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/service-accounts",
+          headers: {
+            authorization: serviceToken.token,
+          },
+        });
+        expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      }
+
+      expect(verifyApiKeySpy).not.toHaveBeenCalled();
+      const lastUsedWrites = query.mock.calls.filter(
+        ([statement]) =>
+          typeof statement === "string" &&
+          statement.includes('update "service_account_tokens"'),
+      );
+      expect(lastUsedWrites).toHaveLength(1);
+    } finally {
+      verifyApiKeySpy.mockRestore();
+      query.mockRestore();
+    }
   });
 
   // Listing accounts is no longer role-gated — it answers from grants and a

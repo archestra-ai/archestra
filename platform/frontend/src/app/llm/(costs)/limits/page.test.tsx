@@ -1,5 +1,24 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  within,
+} from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import type { ReactElement } from "react";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
@@ -70,7 +89,7 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
-  useModelsWithApiKeys: () => ({
+  useLlmModelOptions: () => ({
     data: [
       {
         modelId: "gpt-4o",
@@ -88,14 +107,17 @@ vi.mock("@/lib/llm-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useProfiles: (params?: { filters?: { agentTypes?: string[] } }) => {
-    const agentType = params?.filters?.agentTypes?.[0];
-    if (agentType === "agent") {
-      return { data: [{ id: "agent-1", name: "Test Agent" }] };
-    }
-    return { data: [] };
-  },
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: (params: {
+    ids: readonly string[];
+    filters?: { agentType?: string };
+  }) => ({
+    data:
+      params.filters?.agentType === "agent" && params.ids.includes("agent-1")
+        ? [{ id: "agent-1", name: "Test Agent" }]
+        : [],
+  }),
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -112,10 +134,7 @@ import {
   useHasPermissions,
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
-import {
-  useOrganization,
-  useOrganizationMembers,
-} from "@/lib/organization.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
@@ -363,9 +382,6 @@ describe("LimitsPage", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: { id: "org-1", defaultUserLimitValue: 100 },
     } as unknown as ReturnType<typeof useOrganization>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
@@ -915,4 +931,40 @@ function limitRow({
     labels: [],
     modelUsage: [{ model: "gpt-4o", tokensIn: 0, tokensOut: 0, cost }],
   };
+}
+
+const agentServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", () =>
+    HttpResponse.json({
+      data: [
+        { id: "agent-1", name: "Test Agent", agentType: "agent", scope: "org" },
+      ],
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    }),
+  ),
+  http.get("http://localhost:9000/api/agents/options/page", () =>
+    HttpResponse.json({
+      data: [
+        { id: "agent-1", name: "Test Agent", agentType: "agent", scope: "org" },
+      ],
+      pagination: { limit: 20, hasNext: false, nextCursor: null },
+    }),
+  ),
+);
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  agentServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => agentServer.resetHandlers());
+afterAll(() => {
+  agentServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
 }

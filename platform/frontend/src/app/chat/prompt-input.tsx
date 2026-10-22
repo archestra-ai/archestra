@@ -14,7 +14,7 @@ import {
   parseSandboxCommand,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import { TerminalSquare, XIcon } from "lucide-react";
+import { PaperclipIcon, TerminalSquare, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -36,8 +36,9 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
+import { ChatComposerSecurity } from "@/components/chat/chat-composer-security";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
-import { OpenappaSessionStatus } from "@/components/chat/openappa-session-status";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import {
   chatMessageQueue,
+  type QueuedChatFile,
   useConversationMessageQueue,
 } from "@/lib/chat/chat-message-queue";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -68,6 +70,7 @@ import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.quer
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
+import { dataUrlToBlob } from "@/lib/utils/data-url";
 import { cn } from "@/lib/utils/tailwind";
 import {
   ChatPromptInputTools,
@@ -201,10 +204,17 @@ export interface ArchestraPromptInputProps
    * nowhere to go yet — the new-chat screen before its agent has resolved.
    */
   sendDisabled?: boolean;
+  /**
+   * Why sending is blocked, shown on the disabled Send button. Without it the
+   * button just looks dead: a disabled button gets no hover of its own.
+   */
+  disabledReason?: string;
   /** Disable chat input while context compaction is running */
   isContextCompacting?: boolean;
   /** Manually compact the active conversation */
   onCompactConversation?: () => Promise<void> | void;
+  /** Open the conversation's Files panel (where unreadable attachments land) */
+  onOpenFiles?: () => void;
   /**
    * One-shot composer prefill (e.g. a skill slash command from a deep link).
    * Applied to the controller-owned input, then acknowledged via
@@ -218,9 +228,17 @@ export interface ArchestraPromptInputProps
     skill: ChatExternalMcpSkillMetadata,
   ) => void;
   placeholderPreview?: string | null;
+  /** The composer's text answers the open question rather than starting a new message. */
+  answersQuestion?: boolean;
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
+  /**
+   * Open the encrypted-chat/runtime drawer under the composer as an overlay
+   * instead of above it in the flow — for the new-chat screen, where the
+   * composer is vertically centered and would otherwise jump when it opens.
+   */
+  drawerBelow?: boolean;
 }
 
 type SlashCommand = {
@@ -262,10 +280,13 @@ const PromptInputContent = ({
   agentLlmApiKeyId,
   submitDisabled = false,
   sendDisabled = false,
+  disabledReason,
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
+  onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -285,15 +306,23 @@ const PromptInputContent = ({
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
   placeholderPreview,
+  answersQuestion = false,
   runtimeMode = false,
   runtimeAgentName,
+  drawerBelow = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
 }) => {
   const selectedCredentialId =
     currentConversationChatApiKeyId ?? initialApiKeyId ?? agentLlmApiKeyId;
+  // Waits for the resolved permission: the composer renders before it, and
+  // a role without the grant must not get a 403 from this.
+  const { data: canReadProviderKeys } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
   const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
+    enabled: canReadProviderKeys === true,
     toastOnError: false,
   });
   const rejectedCredential = credentialOptions?.find(
@@ -331,7 +360,9 @@ const PromptInputContent = ({
 
   // /debug needs the conversation below; fetched early so the encrypted-chat gate
   // can read it too.
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation } = useConversation(conversationId, {
+    refetchOnMount: false,
+  });
 
   // EncryptedChat is "active" for the composer both while chatting in an encrypted
   // chat and while the new-chat toggle is on. It drives the composer's own
@@ -363,9 +394,11 @@ const PromptInputContent = ({
 
   const defaultPlaceholder = runtimeMode
     ? "Describe the task to run..."
-    : conversationId
-      ? "Ask a follow-up..."
-      : (chatPlaceholder ?? "What would you like to get done?");
+    : answersQuestion
+      ? "Type your answer..."
+      : conversationId
+        ? "Ask a follow-up..."
+        : (chatPlaceholder ?? "What would you like to get done?");
   const isPreviewingSuggestion =
     !!placeholderPreview && controller.textInput.value.length === 0;
   const placeholder = isPreviewingSuggestion
@@ -383,7 +416,7 @@ const PromptInputContent = ({
     .trimStart()
     .startsWith("/");
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100, forAgentId: agentId ?? undefined },
+    { limit: 100, forAgentId: agentId ?? undefined, includeContent: false },
     {
       enabled: skillSlashCommandsEnabled && !!agentId && isSkillCommandDraft,
     },
@@ -447,9 +480,24 @@ const PromptInputContent = ({
   }, []);
 
   // Restore draft on mount or conversation change
+  const typedBeforeHydration = useRef<
+    { storageKey: string; text: string } | null | undefined
+  >(undefined);
   useEffect(() => {
     isRestored.current = false;
-    const savedDraft = getRestorableDraft(localStorage, storageKey);
+    // The composer is server-rendered, so a fast typist can get text into the
+    // textarea before React hydrates it. The controlled value starts empty
+    // and would overwrite that text on the next render; adopt it instead (it
+    // is newer than any saved draft). Read once, on the first run: a re-run
+    // (Strict Mode, or the same key again) must not lose it either.
+    if (typedBeforeHydration.current === undefined) {
+      const text = textareaRef.current?.value;
+      typedBeforeHydration.current = text ? { storageKey, text } : null;
+    }
+    const savedDraft =
+      typedBeforeHydration.current?.storageKey === storageKey
+        ? typedBeforeHydration.current.text
+        : getRestorableDraft(localStorage, storageKey);
     if (savedDraft) {
       controller.textInput.setInput(savedDraft);
     } else {
@@ -461,7 +509,7 @@ const PromptInputContent = ({
       isRestored.current = true;
     }, 0);
     return () => clearTimeout(timeout);
-  }, [storageKey, controller.textInput.setInput]);
+  }, [storageKey, controller.textInput.setInput, textareaRef]);
 
   // Save draft on change
   useEffect(() => {
@@ -821,6 +869,8 @@ const PromptInputContent = ({
   const canComposeDuringCompaction = !!conversationId;
   const composerLocked =
     submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
+  const isSendBlocked =
+    composerLocked || subscriptionConnectRequired || sendDisabled;
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(conversationId);
@@ -828,11 +878,14 @@ const PromptInputContent = ({
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
   //   • ArrowUp on an empty composer — pop the most recently queued message
-  //     back into the input to edit / resend (like shell history recall).
+  //     (text and attachments) back into the input to edit / resend (like
+  //     shell history recall).
   // Both defer to the slash-command menu when it is open: Esc dismisses that
   // menu and ArrowUp navigates it (handled further down).
   const handleTextareaKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // The reply will need the markdown renderer: start loading it now.
+      void preloadResponseMarkdown();
       if (
         event.key === "Escape" &&
         !isSlashCommandOpen &&
@@ -849,6 +902,7 @@ const PromptInputContent = ({
         !isSlashCommandOpen &&
         conversationId &&
         controller.textInput.value === "" &&
+        controller.attachments.files.length === 0 &&
         queuedMessages.length > 0
       ) {
         event.preventDefault();
@@ -868,6 +922,18 @@ const PromptInputContent = ({
             .filter(Boolean)
             .join(" ");
           controller.textInput.setInput(restored);
+          if (mostRecent.files?.length) {
+            controller.attachments.add(
+              mostRecent.files.map(
+                (file) =>
+                  new File(
+                    [dataUrlToBlob(file.url)],
+                    file.filename ?? "attachment",
+                    { type: file.mediaType },
+                  ),
+              ),
+            );
+          }
           // Caret to the end so the user can append / edit immediately.
           requestAnimationFrame(() => {
             const element = textareaRef.current;
@@ -916,6 +982,7 @@ const PromptInputContent = ({
     },
     [
       conversationId,
+      controller.attachments,
       controller.textInput,
       isResponseInFlight,
       isSlashCommandOpen,
@@ -927,6 +994,221 @@ const PromptInputContent = ({
       textareaRef,
       visibleSlashCommands,
     ],
+  );
+
+  const privacyDetails = (
+    <span>
+      Use this mode for highly sensitive work. This chat is private from the
+      team running {appName}: your messages are encrypted with a key stored in
+      this browser, so you can't open the chat anywhere else. A backup key is
+      held in escrow in case it's ever needed. Keep in mind that{" "}
+      {currentProvider
+        ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
+        : "your LLM provider"}{" "}
+      still sees the conversation.
+    </span>
+  );
+
+  // EncryptedChat/runtime "drawer": a slim strip tucked against the composer,
+  // carrying the explanation that used to live in the toggle's tooltip.
+  // Paired with the dashed composer border so an encrypted chat is
+  // unmistakable while composing. With drawerBelow it overlays the space under
+  // the composer rather than taking layout room above it.
+  const drawerPlacement = drawerBelow
+    ? "absolute inset-x-3 top-full z-10 -mt-px rounded-b-lg border-t-0 slide-in-from-top-2"
+    : "mx-3 -mb-px rounded-t-lg border-b-0 slide-in-from-bottom-2";
+  const drawer = runtimeMode ? (
+    <div
+      className={cn(
+        "flex items-center gap-2 border border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <TerminalSquare className="size-3.5 text-primary" />
+      <span>
+        Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime. This
+        becomes its live terminal when ready.
+      </span>
+    </div>
+  ) : encryptedChatActive ? (
+    <div
+      data-testid={E2eTestId.EncryptedChatNotice}
+      className={cn(
+        "flex items-center gap-2 border border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <EncryptedChatIcon className="size-3.5" />
+      {privacyDetails}
+    </div>
+  ) : null;
+
+  const composer = (
+    <PromptInput
+      globalDrop
+      multiple
+      onSubmit={handleWrappedSubmit}
+      accept={showFileUploadButton ? undefined : "application/x-empty"}
+      maxFileSize={storageByteLimit}
+      onError={handleFileError}
+      className={cn(
+        "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
+        runtimeMode &&
+          "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
+        encryptedChatActive &&
+          // The dashed border replaces the composer's ring outright (both
+          // at once read as two competing outlines). !important because the
+          // ring and focus border are has-[]-variant classes on the
+          // InputGroup that otherwise win on specificity; focus feedback
+          // comes from brightening the dashes instead.
+          "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
+      )}
+    >
+      {/* File attachments display - shown inline above textarea */}
+      <PromptInputAttachments className="px-3 pt-2 pb-0">
+        {(attachment) => <PromptInputAttachment data={attachment} />}
+      </PromptInputAttachments>
+      <PromptInputBody className="relative block w-full">
+        <PromptInputTextarea
+          placeholder={placeholder}
+          ref={textareaRef}
+          // Keep empty composers stable: sizing to a long placeholder moves
+          // the hovered suggestion and repeatedly toggles its preview.
+          className={cn(
+            "px-4",
+            isPreviewingSuggestion &&
+              "field-sizing-fixed h-16 overflow-hidden placeholder:text-transparent",
+          )}
+          autoFocus
+          disabled={composerLocked}
+          // In a live conversation, Enter during a stream submits and the
+          // submit handler queues the message. On the new-chat composer
+          // (no conversation to queue into yet) Enter stays blocked while
+          // the conversation is being created.
+          disableEnterSubmit={isResponseInFlight && !conversationId}
+          onKeyDown={handleTextareaKeyDown}
+          data-testid={E2eTestId.ChatPromptTextarea}
+        />
+        {isPreviewingSuggestion && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-4 top-3 line-clamp-2 whitespace-pre-wrap text-base leading-5 text-muted-foreground [overflow-wrap:anywhere] md:text-sm"
+          >
+            {placeholderPreview}
+          </div>
+        )}
+      </PromptInputBody>
+      <PromptInputFooter ref={footerRef}>
+        <ChatPromptInputTools
+          isNarrow={isNarrow}
+          toolbarRef={toolbarRef}
+          selectedModel={selectedModel}
+          onModelChange={onModelChange}
+          conversationId={conversationId}
+          currentConversationChatApiKeyId={currentConversationChatApiKeyId}
+          currentProvider={currentProvider}
+          initialApiKeyId={initialApiKeyId}
+          onApiKeyChange={onApiKeyChange}
+          onProviderChange={onProviderChange}
+          allowFileUploads={allowFileUploads}
+          encryptedChat={encryptedChat}
+          onEncryptedChatChange={onEncryptedChatChange}
+          sandboxAvailable={sandboxAvailable}
+          isModelsLoading={isModelsLoading}
+          tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
+          maxContextLength={maxContextLength}
+          agentLlmApiKeyId={agentLlmApiKeyId}
+          selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
+          onAgentChange={onAgentChange}
+          modelSource={modelSource}
+          toolsUnavailable={toolsUnavailable}
+          notRecommendedForAgents={notRecommendedForAgents}
+          runtimeMode={runtimeMode}
+          onResetModelOverride={onResetModelOverride}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={onThinkingEffortChange}
+          agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          subscriptionConnectRequired={subscriptionConnectRequired}
+          subscriptionProvider={subscriptionProvider}
+          onSubscriptionConnect={requestSubscriptionConnect}
+          subscriptionConnectRequest={subscriptionConnectRequest}
+          agentModelDisplayName={agentModelDisplayName}
+          textareaRef={textareaRef}
+          contextWindow={contextWindow}
+          lastCompaction={lastCompaction}
+          onCompactConversation={compactConversation}
+          isContextCompacting={isContextCompacting}
+          onOpenFiles={onOpenFiles}
+        />
+        {/* shrink-0: the send/mic cluster is a fixed unit and must never
+            compress. When the toolbar runs out of room the collapse hook
+            folds the inline tools into a menu (freeing space for the pinned
+            recorder pill) rather than squeezing the send button. */}
+        <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
+          {!runtimeMode && (
+            <PromptInputSpeechButton
+              textareaRef={textareaRef}
+              onTranscriptionChange={handleTranscriptionChange}
+            />
+          )}
+          <Tooltip>
+            {/* A disabled button takes no pointer events, so the tooltip
+                hangs off a wrapper that still does — otherwise a blocked
+                Send gives no hint why. */}
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <PromptInputSubmit
+                  className="!h-8"
+                  aria-label={
+                    isResponseInFlight && onStop && !isQueueingSubmit
+                      ? "Stop"
+                      : "Submit"
+                  }
+                  status={submitStatus}
+                  disabled={isSendBlocked}
+                  onPointerDown={() => void preloadResponseMarkdown()}
+                  onClick={(event) => {
+                    // While a response is in-flight the button shows Stop; a
+                    // click stops the stream instead of submitting the form
+                    // (which would queue the typed text — see onStop docs).
+                    // With a queueable draft the button is a Send button, so
+                    // the click must submit (and queue) instead; Esc stops.
+                    if (onStop && isResponseInFlight && !isQueueingSubmit) {
+                      event.preventDefault();
+                      onStop();
+                    }
+                  }}
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {subscriptionConnectRequired ? (
+                <span>
+                  Connect the subscription or choose another credential
+                </span>
+              ) : isSendBlocked ? (
+                <span>
+                  {disabledReason ??
+                    (isContextCompacting
+                      ? "Compacting the conversation…"
+                      : "You can't send yet")}
+                </span>
+              ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
+                <span className="flex items-center gap-1.5">
+                  Stop <Kbd>Esc</Kbd>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  Send <Kbd>Enter</Kbd>
+                </span>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </PromptInputFooter>
+    </PromptInput>
   );
 
   return (
@@ -948,12 +1230,18 @@ const PromptInputContent = ({
               className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
               data-testid={E2eTestId.ChatMessageQueueItem}
             >
+              {queued.files && queued.files.length > 0 && (
+                <QueuedMessageAttachments files={queued.files} />
+              )}
               <span className="min-w-0 grow truncate">
                 {queued.skill ? `/${queued.skill.name} ` : ""}
                 {queued.externalMcpSkill
                   ? `${queued.externalMcpSkill.commandValue} `
                   : ""}
-                {queued.text}
+                {queued.text ||
+                  (queued.files?.length
+                    ? formatAttachmentCount(queued.files.length)
+                    : "")}
               </span>
               <Button
                 aria-label="Remove queued message"
@@ -1027,198 +1315,22 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {/* EncryptedChat "drawer": a slim strip tucked against the composer's top
-          edge, carrying the explanation that used to live in the toggle's
-          tooltip. Paired with the dashed composer border below so an
-          encrypted chat is unmistakable while composing. */}
-      {runtimeMode && (
-        <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
-          <TerminalSquare className="size-3.5 text-primary" />
-          <span>
-            Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime.
-            This becomes its live terminal when ready.
-          </span>
-        </div>
-      )}
-      {encryptedChatActive && !runtimeMode && (
-        <div
-          data-testid={E2eTestId.EncryptedChatNotice}
-          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
-        >
-          <EncryptedChatIcon className="size-3.5" />
-          <span>
-            Use this mode for highly sensitive work. This chat is private from
-            the team running {appName}: your messages are encrypted with a key
-            stored in this browser, so you can't open the chat anywhere else. A
-            backup key is held in escrow in case it's ever needed. Keep in mind
-            that{" "}
-            {currentProvider
-              ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
-              : "your LLM provider"}{" "}
-            still sees the conversation.
-          </span>
-        </div>
-      )}
-      {conversationId && !runtimeMode && (
-        <OpenappaSessionStatus
-          key={conversationId}
+      {!runtimeMode ? (
+        <ChatComposerSecurity
+          key={conversationId ?? "new"}
           conversationId={conversationId}
-        />
+        >
+          {!drawerBelow && drawer}
+          {composer}
+          {drawerBelow && drawer}
+        </ChatComposerSecurity>
+      ) : (
+        <>
+          {!drawerBelow && drawer}
+          {composer}
+          {drawerBelow && drawer}
+        </>
       )}
-      <PromptInput
-        globalDrop
-        multiple
-        onSubmit={handleWrappedSubmit}
-        accept={showFileUploadButton ? undefined : "application/x-empty"}
-        maxFileSize={storageByteLimit}
-        onError={handleFileError}
-        className={cn(
-          "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
-          runtimeMode &&
-            "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
-          encryptedChatActive &&
-            // The dashed border replaces the composer's ring outright (both
-            // at once read as two competing outlines). !important because the
-            // ring and focus border are has-[]-variant classes on the
-            // InputGroup that otherwise win on specificity; focus feedback
-            // comes from brightening the dashes instead.
-            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
-        )}
-      >
-        {/* File attachments display - shown inline above textarea */}
-        <PromptInputAttachments className="px-3 pt-2 pb-0">
-          {(attachment) => <PromptInputAttachment data={attachment} />}
-        </PromptInputAttachments>
-        <PromptInputBody className="relative block w-full">
-          <PromptInputTextarea
-            placeholder={placeholder}
-            ref={textareaRef}
-            // Keep empty composers stable: sizing to a long placeholder moves
-            // the hovered suggestion and repeatedly toggles its preview.
-            className={cn(
-              "px-4",
-              isPreviewingSuggestion &&
-                "field-sizing-fixed h-16 overflow-hidden placeholder:text-transparent",
-            )}
-            autoFocus
-            disabled={composerLocked}
-            // In a live conversation, Enter during a stream submits and the
-            // submit handler queues the message. On the new-chat composer
-            // (no conversation to queue into yet) Enter stays blocked while
-            // the conversation is being created.
-            disableEnterSubmit={isResponseInFlight && !conversationId}
-            onKeyDown={handleTextareaKeyDown}
-            data-testid={E2eTestId.ChatPromptTextarea}
-          />
-          {isPreviewingSuggestion && (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-4 top-3 line-clamp-2 whitespace-pre-wrap text-base leading-5 text-muted-foreground [overflow-wrap:anywhere] md:text-sm"
-            >
-              {placeholderPreview}
-            </div>
-          )}
-        </PromptInputBody>
-        <PromptInputFooter ref={footerRef}>
-          <ChatPromptInputTools
-            isNarrow={isNarrow}
-            toolbarRef={toolbarRef}
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
-            conversationId={conversationId}
-            currentConversationChatApiKeyId={currentConversationChatApiKeyId}
-            currentProvider={currentProvider}
-            initialApiKeyId={initialApiKeyId}
-            onApiKeyChange={onApiKeyChange}
-            onProviderChange={onProviderChange}
-            allowFileUploads={allowFileUploads}
-            encryptedChat={encryptedChat}
-            onEncryptedChatChange={onEncryptedChatChange}
-            sandboxAvailable={sandboxAvailable}
-            isModelsLoading={isModelsLoading}
-            tokensUsed={tokensUsed}
-            cachedTokens={cachedTokens}
-            maxContextLength={maxContextLength}
-            agentLlmApiKeyId={agentLlmApiKeyId}
-            selectorAgentId={selectorAgentId}
-            onAgentChange={onAgentChange}
-            modelSource={modelSource}
-            toolsUnavailable={toolsUnavailable}
-            notRecommendedForAgents={notRecommendedForAgents}
-            runtimeMode={runtimeMode}
-            onResetModelOverride={onResetModelOverride}
-            thinkingEffort={thinkingEffort}
-            onThinkingEffortChange={onThinkingEffortChange}
-            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
-            subscriptionConnectRequired={subscriptionConnectRequired}
-            subscriptionProvider={subscriptionProvider}
-            onSubscriptionConnect={requestSubscriptionConnect}
-            subscriptionConnectRequest={subscriptionConnectRequest}
-            agentModelDisplayName={agentModelDisplayName}
-            textareaRef={textareaRef}
-            contextWindow={contextWindow}
-            lastCompaction={lastCompaction}
-            onCompactConversation={compactConversation}
-            isContextCompacting={isContextCompacting}
-          />
-          {/* shrink-0: the send/mic cluster is a fixed unit and must never
-              compress. When the toolbar runs out of room the collapse hook
-              folds the inline tools into a menu (freeing space for the pinned
-              recorder pill) rather than squeezing the send button. */}
-          <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
-            {!runtimeMode && (
-              <PromptInputSpeechButton
-                textareaRef={textareaRef}
-                onTranscriptionChange={handleTranscriptionChange}
-              />
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PromptInputSubmit
-                  className="!h-8"
-                  aria-label={
-                    isResponseInFlight && onStop && !isQueueingSubmit
-                      ? "Stop"
-                      : "Submit"
-                  }
-                  status={submitStatus}
-                  disabled={
-                    composerLocked ||
-                    subscriptionConnectRequired ||
-                    sendDisabled
-                  }
-                  onClick={(event) => {
-                    // While a response is in-flight the button shows Stop; a
-                    // click stops the stream instead of submitting the form
-                    // (which would queue the typed text — see onStop docs).
-                    // With a queueable draft the button is a Send button, so
-                    // the click must submit (and queue) instead; Esc stops.
-                    if (onStop && isResponseInFlight && !isQueueingSubmit) {
-                      event.preventDefault();
-                      onStop();
-                    }
-                  }}
-                />
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {subscriptionConnectRequired ? (
-                  <span>
-                    Connect the subscription or choose another credential
-                  </span>
-                ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
-                  <span className="flex items-center gap-1.5">
-                    Stop <Kbd>Esc</Kbd>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    Send <Kbd>Enter</Kbd>
-                  </span>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </PromptInputFooter>
-      </PromptInput>
       <SensitiveDataConfirmDialog
         open={sensitiveDataDialogOpen}
         onConfirm={handleSensitiveDataConfirm}
@@ -1253,10 +1365,13 @@ const ArchestraPromptInput = ({
   agentLlmApiKeyId,
   submitDisabled,
   sendDisabled,
+  disabledReason,
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
+  onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1275,8 +1390,10 @@ const ArchestraPromptInput = ({
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
   placeholderPreview,
+  answersQuestion,
   runtimeMode,
   runtimeAgentName,
+  drawerBelow,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1369,11 +1486,14 @@ const ArchestraPromptInput = ({
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
           sendDisabled={sendDisabled}
+          disabledReason={disabledReason}
           subscriptionConnectRequired={subscriptionConnectRequired}
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
+          onOpenFiles={onOpenFiles}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
@@ -1387,8 +1507,10 @@ const ArchestraPromptInput = ({
           encryptedChat={encryptedChat}
           onEncryptedChatChange={onEncryptedChatChange}
           placeholderPreview={placeholderPreview}
+          answersQuestion={answersQuestion}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
+          drawerBelow={drawerBelow}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}
@@ -1424,3 +1546,45 @@ function getRestorableDraft(storage: Storage, key: string): string | null {
 
   return draft;
 }
+
+// Compact attachment preview on a queued-message row: image thumbnails, a
+// paperclip for anything else. The row stays one line, so only the first few
+// render and the rest collapse into a count.
+function QueuedMessageAttachments({ files }: { files: QueuedChatFile[] }) {
+  const shown = files.slice(0, MAX_QUEUED_ATTACHMENT_PREVIEWS);
+  const hidden = files.length - shown.length;
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1"
+      role="img"
+      aria-label={formatAttachmentCount(files.length)}
+    >
+      {shown.map((file, index) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a queued message's files never change or reorder
+          key={index}
+          className="flex size-5 items-center justify-center overflow-hidden rounded bg-background"
+        >
+          {file.mediaType.startsWith("image/") ? (
+            <img
+              alt=""
+              className="size-5 object-cover"
+              height={20}
+              src={file.url}
+              width={20}
+            />
+          ) : (
+            <PaperclipIcon className="size-3" />
+          )}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-xs">+{hidden}</span>}
+    </span>
+  );
+}
+
+function formatAttachmentCount(count: number): string {
+  return count === 1 ? "1 attachment" : `${count} attachments`;
+}
+
+const MAX_QUEUED_ATTACHMENT_PREVIEWS = 3;

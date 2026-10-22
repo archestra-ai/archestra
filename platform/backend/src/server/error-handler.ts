@@ -7,6 +7,7 @@ import {
 import config from "@/config";
 import {
   getDbResourceExhaustionErrorCode,
+  getNonDatabaseConnectionTarget,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
@@ -95,8 +96,7 @@ export function handleServerError(
   // useful text here flows straight into the UI.
   if (isBodyTooLargeError(error)) {
     // Report the limit that actually applied. A route can raise its own
-    // above the global default (the app-recording render route accepts
-    // large recording bundles), so naming the global here would misstate
+    // above the global default, so naming the global here would misstate
     // the ceiling the request hit.
     const routeLimit = request.routeOptions?.bodyLimit;
     const limit =
@@ -151,17 +151,20 @@ export function handleServerError(
     });
   }
 
-  // Native HTTP fetch errors share socket codes with database connections.
-  // Preserve their known origin before the broader database errno matching.
-  if (isFetchConnectivityError(error)) {
+  // Native HTTP fetch errors and connection failures to a host other than
+  // the database share socket codes with database connections. Preserve
+  // their known origin before the broader database errno matching.
+  const outboundTarget = getNonDatabaseConnectionTarget(error);
+  if (outboundTarget || isFetchConnectivityError(error)) {
     this.log.warn(
-      { ...requestContext, statusCode: 503 },
+      { ...requestContext, statusCode: 503, outboundTarget },
       "HTTP 503 upstream service unavailable",
     );
     return reply.status(503).send({
       error: {
-        message:
-          "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        message: outboundTarget
+          ? `Could not connect to ${outboundTarget}. Check that the network egress policy allows this host and that the service is reachable, then retry.`
+          : "Could not connect to an upstream service. Check the service URL and network access, then retry.",
         type: "api_service_unavailable_error",
       },
     });

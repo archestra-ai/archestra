@@ -27,6 +27,7 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   organizationKeys,
   useActiveMemberRole,
+  useActiveOrganizationId,
   useIsGlobalAdmin,
   useOrganization,
   useUpdateAuthSettings,
@@ -73,6 +74,20 @@ function sessionWith(activeOrganizationId: string | null) {
     error: null,
   };
 }
+
+describe("useActiveOrganizationId", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("reads the id from the session without fetching the full organization", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
+
+    const { result } = renderWithClient(() => useActiveOrganizationId());
+
+    await waitFor(() => expect(result.current.data).toBe("org-1"));
+    expect(authClient.useActiveOrganization).not.toHaveBeenCalled();
+    expect(authClient.organization.getFullOrganization).not.toHaveBeenCalled();
+  });
+});
 
 describe("useActiveMemberRole", () => {
   beforeEach(() => {

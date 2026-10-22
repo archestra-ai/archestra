@@ -86,6 +86,7 @@ export function ProxyCostPanel({
             {backButton}
             <QueryLoadError
               title="Could not load proxy costs"
+              error={query.error}
               onRetry={() => query.refetch()}
             />
           </>
@@ -285,6 +286,7 @@ const METHOD_NAMES: Record<NonNullable<AuthMethod>, string> = {
   oauth_user: "OAuth user sign-in",
   jwks: "JWT / JWKS",
   provider_key: "Provider key",
+  personal_token: "Personal token",
   internal: "Internal",
   unknown: "Unknown / legacy",
 };

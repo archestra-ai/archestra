@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,13 +21,13 @@ Give each client the right tools from one URL, and never hand out a server crede
 
 ## Create a Gateway
 
-You may not need to. Everyone already has a personal gateway, My Gateway, with every tool they can use. Create a gateway when a team, an app, or a script needs a fixed set of tools.
+You may not need to. Everyone already has My Gateway; **Settings → MCP → Default personal tool mode** controls whether new personal gateways and My Assistant agents start with all accessible or assigned tools. Create a gateway when a team, an app, or a script needs a fixed set of tools.
 
 1. Go to **MCP Gateways** and click **Create MCP Gateway**.
 2. Enter a name, such as `support-tools`. Under **Advanced**, choose the people and teams who can use it.
 3. Under **Tools & Knowledge**, pick its tools. See [Choose Its Tools](#choose-its-tools).
 4. Click **Create**.
-5. Use it from your coding agent: go to **Connect**, click **Customize setup**, and pick the gateway under **Gateway**.
+5. Use it from your coding agent: on **Connect**, run the setup command. On the approval page, open **Setup options** and click **Change** next to **Tools** to pick the gateway.
 
 Your agent then lists only the tools you chose. For a script or your own app, use the authentication options on the gateway's **Connect** tab. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
 
@@ -39,12 +39,12 @@ Give the client every tool its person can use, or only the ones you pick. Set it
 
 | Mode | The client gets | Use it for |
 | --- | --- | --- |
-| **All** | Every tool the signed-in person can use. New servers show up by themselves. | A person's own coding agent |
+| **All tools** | Every tool the signed-in person can use. New servers show up by themselves. | A person's own coding agent |
 | **Manual** | Only the tools you pick. For each, pick a shared account, or **Resolve at call time** to use each person's own. | A team, an app, or a script |
 
 - **Subagents** go here too. The client gets one `agent__<name>` tool for each [subagent](/docs/agents/subagents), to hand it a task.
 - **Progressive tool loading** is on by default: the client gets [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool). Turn it off in Manual mode when the client needs the full list up front.
-- A team or organization token has no person behind it, so it gets only the tools you picked, even in All mode.
+- A team or organization token has no person behind it, so it gets only the tools you picked, even with **All tools**.
 
 <span id="knowledge"></span>
 
@@ -53,7 +53,7 @@ Give the client every tool its person can use, or only the ones you pick. Set it
 Let Claude Code or Cursor answer from your company's documents, with links to the sources. The gateway brings your [knowledge bases](/docs/knowledge) into any MCP client: Confluence, Google Drive, SharePoint, uploaded files, and [more](/docs/knowledge/connectors).
 
 1. On the gateway, go to **Tools & Knowledge**.
-2. Under **Knowledge sources**, pick **All** for every source the person can use, or **Manual** to choose.
+2. Choose **All tools** for every source the person can use, or **Manual** and pick the sources.
 3. Save. The client gets [`query_knowledge_sources`](/docs/reference/archestra-mcp-server#query_knowledge_sources).
 4. Ask the client a question, such as "What is our deployment rollback procedure?". Each result comes with its document title and link.
 
@@ -68,10 +68,10 @@ Each person finds only the documents [they can open](/docs/knowledge#permissions
 Give every MCP client the same [skills](/docs/agents/skills), from one place. The gateway publishes them as `skill://` resources. Clients that support the draft MCP Skills extension list and read them like local skills. Other clients do not see them.
 
 1. Open the gateway, go to **Advanced**, and find **Skills over MCP**.
-2. Pick **All** for every organization skill in the gateway's [environment](/docs/admin/environments), or **Manual** to choose.
+2. Pick **All skills** for every organization skill in the gateway's [environment](/docs/admin/environments), or **Manual** to choose.
 3. Save, then check that your client lists a skill.
 
-**Manual** says why a skill cannot be published. **All** skips it. Templated skills, other people's personal skills, and names that break the [Agent Skills specification](https://agentskills.io/specification) cannot be published.
+**Manual** says why a skill cannot be published. **All skills** skips it. Templated skills, other people's personal skills, and names that break the [Agent Skills specification](https://agentskills.io/specification) cannot be published.
 
 <span id="custom-headers"></span><span id="elicitation"></span><span id="access-control"></span><span id="version-history"></span>
 
@@ -79,3 +79,4 @@ Give every MCP client the same [skills](/docs/agents/skills), from one place. Th
 
 - Gateway access is its own grant. A person who can use the gateway can use its shared tools, even if they cannot see the server in MCP Registry.
 - **Custom headers:** to pass headers from the client to the server, such as a tenant ID, list them under **Advanced → Custom headers**. Stdio servers cannot get headers.
+- **Description:** the client gives it to its model as the server's instructions when it connects. Say what the gateway is for and which of its tools to prefer.

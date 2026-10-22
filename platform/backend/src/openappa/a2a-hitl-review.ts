@@ -44,22 +44,32 @@ export async function remedyCallNeedsHumanReview(params: {
 }
 
 /**
- * Who answers a paused review: one Slack user in one thread, or whoever can
+ * Who answers a paused review: one chat user (Slack or MS Teams) in one
+ * thread, or whoever can
  * send `taskOps.approvalDecisions` for the task over A2A.
  */
 type HitlReviewAnswerer =
   | {
-      kind: "slack";
+      kind: "chat";
       reviewerUserId: string;
       channelId: string;
-      threadTs: string | undefined;
+      threadId: string | undefined;
     }
   | { kind: "caller" };
 
+/** What a chat surface shows for one OpenAPPA review. */
+type HitlReviewDisplay = {
+  text: string;
+  /** The reviewed call's tool, as OpenAPPA proposed it for ruling. */
+  tool?: string;
+  /** The reviewed call's arguments as JSON text. */
+  arguments?: string;
+};
+
 /**
  * Links each paused `execute_remedy_plan` request to its OpenAPPA review and
- * its answerer. Returns the review text per approval id; requests for other
- * tools are skipped.
+ * its answerer. Returns the review per approval id; requests for other tools
+ * are skipped.
  */
 export async function attachHitlReviews(params: {
   organizationId: string;
@@ -67,8 +77,8 @@ export async function attachHitlReviews(params: {
   approvalRequests: A2AArchestraApprovalRequest[];
   answerer: HitlReviewAnswerer;
   now: Date;
-}): Promise<Map<string, string>> {
-  const reviewTexts = new Map<string, string>();
+}): Promise<Map<string, HitlReviewDisplay>> {
+  const reviews = new Map<string, HitlReviewDisplay>();
   for (const request of params.approvalRequests) {
     if (!isRemedyTool(request.toolName) || !request.toolInput) continue;
     const offer = reviewedOffer(request.toolInput);
@@ -86,18 +96,23 @@ export async function attachHitlReviews(params: {
       reviewText: review.text,
       remedyArguments: request.toolInput,
       expiresAt: new Date(params.now.getTime() + A2A_HITL_REVIEW_TTL_MS),
-      ...(params.answerer.kind === "slack" && {
+      ...(params.answerer.kind === "chat" && {
         reviewerUserId: params.answerer.reviewerUserId,
-        slackChannelId: params.answerer.channelId,
-        slackThreadTs: params.answerer.threadTs,
+        chatChannelId: params.answerer.channelId,
+        chatThreadId: params.answerer.threadId,
       }),
     });
-    if (attached) reviewTexts.set(request.approvalId, review.text);
+    if (attached)
+      reviews.set(request.approvalId, {
+        text: review.text,
+        ...(review.tool ? { tool: review.tool } : {}),
+        ...(review.arguments ? { arguments: review.arguments } : {}),
+      });
   }
-  return reviewTexts;
+  return reviews;
 }
 
-export type SlackHitlDecision =
+export type ChatHitlDecision =
   | { status: "not_openappa" }
   | { status: "recorded"; ruling: "approve" | "deny" }
   | { status: "forbidden"; reviewerUserId: string | null }
@@ -106,11 +121,11 @@ export type SlackHitlDecision =
   | { status: "closed" };
 
 /**
- * Records a Slack reviewer's click for the exact offer the paused task waits
+ * Records a chat reviewer's click for the exact offer the paused task waits
  * on, then hands the ruling to `execute_remedy_plan`. The resumed run spends
  * it once; OpenAPPA decides what it allows.
  */
-export async function decideSlackHitlReview(params: {
+export async function decideChatHitlReview(params: {
   organizationId: string;
   taskId: string;
   approvalId: string;
@@ -118,7 +133,7 @@ export async function decideSlackHitlReview(params: {
   clickChannelId: string;
   approved: boolean;
   now: Date;
-}): Promise<SlackHitlDecision> {
+}): Promise<ChatHitlDecision> {
   const row = await A2ATaskApprovalRequestModel.findByTaskIdAndApprovalId({
     taskId: params.taskId,
     approvalId: params.approvalId,
@@ -128,7 +143,7 @@ export async function decideSlackHitlReview(params: {
   if (!row.openappaOfferId) return { status: "not_openappa" };
   if (
     row.reviewerUserId !== params.clickerUserId ||
-    row.slackChannelId !== params.clickChannelId
+    row.chatChannelId !== params.clickChannelId
   ) {
     return { status: "forbidden", reviewerUserId: row.reviewerUserId };
   }
@@ -180,14 +195,14 @@ export async function decideCallerHitlReviews(params: {
     if (row.reviewerUserId !== null) {
       throw new A2AError(
         A2AErrorKind.UnsupportedOperation,
-        "this OpenAPPA review is answered in Slack",
+        "OpenAPPA review is answered in chat",
       );
     }
     if (row.ruling) throw new A2AError(A2AErrorKind.ApprovalIdAlreadyResolved);
     if (!row.expiresAt || row.expiresAt <= params.now) {
       throw new A2AError(
         A2AErrorKind.UnsupportedOperation,
-        "the OpenAPPA review expired, so the action stays blocked",
+        "OpenAPPA review expired, so the action stays blocked",
       );
     }
     reviews.set(decision.approvalId, row);
@@ -247,7 +262,8 @@ async function handRulingToRemedyCall(params: {
     trajectory: _trajectory,
     ...remedyArguments
   } = row.remedyArguments;
-  await stageHitlReview({
+  const staged = await stageHitlReview({
+    prepareSummary: false,
     session,
     review: {
       offerId: offer.offerId,
@@ -255,6 +271,9 @@ async function handRulingToRemedyCall(params: {
       remedyArguments,
     },
   });
+  if (staged.status !== "staged") {
+    throw new Error("Could not record the OpenAPPA ruling");
+  }
   if (!(await recordHitlRuling({ session, offerId: offer.offerId, ruling }))) {
     throw new Error("Could not record the OpenAPPA ruling");
   }

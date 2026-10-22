@@ -5,6 +5,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -39,7 +40,6 @@ import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
-import TeamTokenModel from "@/models/team-token";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -170,7 +170,11 @@ export const AUDIT_DECISIONS = {
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
-  teamTokensTable: { audited: true, model: TeamTokenModel },
+  teamTokensTable: {
+    audited: false,
+    reason:
+      "Retired: read only by the startup migration onto service accounts; no route writes it",
+  },
   toolsTable: {
     audited: false,
     reason:
@@ -574,6 +578,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "per-viewer UI state; intentionally excluded from audit logs",
   },
+  mcpServerToolDescriptionsTable: {
+    audited: false,
+    reason:
+      "derived from each installation's MCP tool discovery, like tools; no route mutates it directly",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",
@@ -691,6 +700,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
+  agentRunAttentionNoticesTable: {
+    audited: false,
+    reason:
+      "internal Slack delivery state; contains only routing, message identity, and attention resolution",
+  },
   agentRunsTable: {
     audited: false,
     reason:
@@ -795,6 +809,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
   },
+  kbConnectorDocumentCountsTable: {
+    audited: false,
+    reason:
+      "derived per-connector document totals; written by sync runs, document deletes and uploads, or the first read, never edited by a user",
+  },
   kbContainerAclsTable: {
     audited: false,
     reason:
@@ -869,6 +888,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // ChatOps runtime
   // =========================================================================
+  chatopsUserAdmissionsTable: {
+    audited: false,
+    reason: "pending ChatOps execution admission; runtime state",
+  },
   chatopsProcessedMessagesTable: {
     audited: false,
     reason: "ChatOps message dedup; runtime state",
@@ -931,6 +954,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral browser tab state; per-user UI cache",
   },
+  browserStorageStatesTable: {
+    audited: true,
+    model: BrowserStorageStateModel,
+  },
 
   // =========================================================================
   // Chat active run (streaming execution state)
@@ -981,6 +1008,15 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "OpenAPPA owns content-addressed policy history",
   },
+  openappaDeploymentsTable: {
+    audited: false,
+    reason:
+      "OpenAPPA moves each organization's policy head when it publishes; derived from the audited policy",
+  },
+  openappaPolicyRevisionsTable: {
+    audited: false,
+    reason: "OpenAPPA owns each organization's published policy revisions",
+  },
   openappaOperationsTable: {
     audited: false,
     reason: "native hook idempotency ledger",
@@ -997,6 +1033,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "native dispatch ownership markers; no user-facing state",
   },
+  openappaRootsTable: {
+    audited: false,
+    reason: "native lock rows for each trajectory family; no user-facing state",
+  },
+  openappaPeerInboxesTable: {
+    audited: false,
+    reason: "native lock rows for each peer inbox; no user-facing state",
+  },
   openappaEmbeddedPeerMessagesTable: {
     audited: false,
     reason: "runtime-owned peer inbox; admissions belong to OpenAPPA history",
@@ -1012,7 +1056,12 @@ export const AUDIT_DECISIONS = {
   },
   openappaUnenforcedSessionsTable: {
     audited: false,
-    reason: "proxy record of sessions that started while enforcement was off",
+    reason:
+      "proxy record of sessions that started while enforcement was off or were superyelled",
+  },
+  openappaThreadStatesTable: {
+    audited: false,
+    reason: "proxy record of what a governed provider thread was ruled on",
   },
   openappaUnenforcedCallsTable: {
     audited: false,
@@ -1032,6 +1081,51 @@ export const AUDIT_DECISIONS = {
   openappaExternalConsultsTable: {
     audited: false,
     reason: "external consult dataset the native runtime appends",
+  },
+  openappaLabelChangesTable: {
+    audited: false,
+    reason: "label history dataset the native runtime appends",
+  },
+  startupMigrationsTable: {
+    audited: false,
+    reason:
+      "internal completion ledger committed with application data upgrades",
+  },
+  interactionUserActivityTable: {
+    audited: false,
+    reason: "derived log user activity counts",
+  },
+  interactionUserActivityDeltasTable: {
+    audited: false,
+    reason: "transactional rebuild delta balances",
+  },
+  interactionUserActivityStateTable: {
+    audited: false,
+    reason: "internal rebuild readiness and owner revision",
+  },
+  interactionUserActivityUsersTable: {
+    audited: false,
+    reason: "internal per-user rebuild checkpoints",
+  },
+  interactionUserActivityMissingOwnersTable: {
+    audited: false,
+    reason: "internal unresolved owner dependencies",
+  },
+  interactionSessionHeadsTable: {
+    audited: false,
+    reason: "derived newest-interaction index of log sessions",
+  },
+  interactionSessionHeadsBackfillTable: {
+    audited: false,
+    reason: "internal backfill progress marker",
+  },
+  interactionBillingTable: {
+    audited: false,
+    reason: "content-free idempotent billing receipts",
+  },
+  limitBillingUsageTable: {
+    audited: false,
+    reason: "transactional settled usage projection",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

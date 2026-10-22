@@ -7,6 +7,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { forwardRef, type ReactElement } from "react";
+import { renderToString } from "react-dom/server";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
@@ -85,6 +86,13 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: vi.fn(),
   })),
 });
+
+const { mockPreloadResponseMarkdown } = vi.hoisted(() => ({
+  mockPreloadResponseMarkdown: vi.fn(async () => {}),
+}));
+vi.mock("@/components/ai-elements/response", () => ({
+  preloadResponseMarkdown: mockPreloadResponseMarkdown,
+}));
 
 vi.mock("sonner", () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
@@ -274,8 +282,9 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/model-selector", () => ({
-  ModelSelector: () => <div data-testid="model-selector" />,
+// The model button has its own hooks and menu; here it only needs to show up.
+vi.mock("@/components/chat/chat-model-button", () => ({
+  ChatModelButton: () => <div data-testid="chat-model-button" />,
 }));
 
 vi.mock("@/components/chat/initial-agent-selector", () => ({
@@ -293,12 +302,6 @@ vi.mock("@/components/chat/initial-agent-selector", () => ({
       Select agent
     </button>
   ),
-}));
-
-// The Apps Hackathon recorder cluster is a self-contained feature with its own
-// tests; stub it here so the composer test needs no QueryClient/config context.
-vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
-  AppRecordingControls: () => null,
 }));
 
 // Mock the Tooltip components to avoid Radix UI complexity
@@ -519,7 +522,7 @@ describe("ArchestraPromptInput", () => {
     expect(
       screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model-button")).not.toBeInTheDocument();
     expect(screen.queryByText("Speech")).not.toBeInTheDocument();
   });
 
@@ -538,7 +541,7 @@ describe("ArchestraPromptInput", () => {
     );
 
     expect(screen.getByTestId("prompt-submit")).toBeDisabled();
-    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model-button")).not.toBeInTheDocument();
     expect(screen.queryByText("agent")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Sign in with ChatGPT" }),
@@ -768,9 +771,9 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
-      // Enabled state shows the supported-types tooltip rather than the
+      // Enabled state shows the attach hint rather than the
       // disabled "does not support file uploads" message.
-      expect(getFileUploadTooltip("Supports:")).toHaveTextContent("Supports:");
+      expect(getFileUploadTooltip("Attach any file")).toBeInTheDocument();
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
@@ -865,7 +868,7 @@ describe("ArchestraPromptInput", () => {
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
 
-      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
     });
 
     it("should keep a single organization placeholder static", () => {
@@ -980,6 +983,18 @@ describe("ArchestraPromptInput", () => {
           "Generate an epic gif of a lobster shipping code",
         ),
       ).not.toBeInTheDocument();
+    });
+
+    it("starts loading the reply's markdown renderer on the first key press", () => {
+      mockPreloadResponseMarkdown.mockClear();
+      render(<ArchestraPromptInput {...defaultProps} />);
+      expect(mockPreloadResponseMarkdown).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "h",
+      });
+
+      expect(mockPreloadResponseMarkdown).toHaveBeenCalled();
     });
 
     it("should reset slash command selection when the menu reopens", () => {
@@ -1104,7 +1119,7 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
     });
 
-    it("keeps the drawer and a usable attach button on an existing encrypted chat", () => {
+    it("keeps the privacy details visible and the attach button usable after the encrypted chat starts", () => {
       mockConversationState.conversation = { encryptedChat: true };
 
       render(
@@ -1117,7 +1132,7 @@ describe("ArchestraPromptInput", () => {
 
       expect(
         screen.getByTestId(E2eTestId.EncryptedChatNotice),
-      ).toBeInTheDocument();
+      ).toHaveTextContent("Use this mode for highly sensitive work.");
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
@@ -1178,7 +1193,9 @@ describe("ArchestraPromptInput", () => {
         screen.getByRole("link", { name: /Learn how to enable it/ }),
       ).toHaveAttribute(
         "href",
-        expect.stringContaining("/docs/chat#key-escrow"),
+        expect.stringContaining(
+          "/docs/admin/security/content-encryption#key-escrow",
+        ),
       );
       expect(onEncryptedChatChange).not.toHaveBeenCalled();
     });
@@ -1516,7 +1533,7 @@ describe("ArchestraPromptInput", () => {
       render(<ArchestraPromptInput {...defaultProps} />);
 
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: false },
       );
     });
@@ -1526,8 +1543,9 @@ describe("ArchestraPromptInput", () => {
 
       render(<ArchestraPromptInput {...defaultProps} />);
 
+      // The command menu needs names and descriptions, never SKILL.md bodies.
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: true },
       );
     });
@@ -1787,6 +1805,30 @@ describe("ArchestraPromptInput", () => {
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(onSubmit).not.toHaveBeenCalled();
     });
+  });
+
+  it("keeps text typed into the server-rendered composer before hydration", () => {
+    // A saved draft is older than what the user just typed.
+    localStorage.setItem(NEW_CHAT_DRAFT_STORAGE_KEY, "an older draft");
+    const ui = (
+      <QueryClientProvider client={queryClient}>
+        <ArchestraPromptInput {...defaultProps} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(ui);
+    document.body.appendChild(container);
+    const textarea = container.querySelector("textarea");
+    if (!textarea) throw new Error("server markup has no textarea");
+    textarea.value = "typed before hydration";
+
+    renderComponent(ui, { container, hydrate: true });
+
+    expect(mockTextInputSetInput).toHaveBeenLastCalledWith(
+      "typed before hydration",
+    );
+    expect(mockTextInputSetInput).not.toHaveBeenCalledWith("an older draft");
+    container.remove();
   });
 
   describe("draft retention on submit", () => {

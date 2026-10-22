@@ -9,6 +9,7 @@ import {
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -332,13 +333,12 @@ export const PatchModelBodySchema = createUpdateSchema(
         data.customPricePerMillionCacheWrite,
       ]) {
         if (value != null) {
-          const price = parseFloat(value);
-          if (Number.isNaN(price) || price < 0) return false;
+          if (!isValidModelPrice(value)) return false;
         }
       }
       return true;
     },
-    { message: "Prices must be non-negative numbers" },
+    { message: "Prices must be decimal numbers between 0 and 99999999.99" },
   );
 export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
 
@@ -419,3 +419,18 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   embeddingClientImageCapable: z.boolean().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;
+
+/**
+ * A model as a picker shows it: name, provider and price. The slim form of
+ * {@link ModelWithApiKeysSchema}.
+ */
+export const LlmModelOptionSchema = ModelWithApiKeysSchema.pick({
+  id: true,
+  modelId: true,
+  provider: true,
+  description: true,
+  pricePerMillionInput: true,
+  pricePerMillionOutput: true,
+  isFree: true,
+  isBest: true,
+});

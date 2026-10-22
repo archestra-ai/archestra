@@ -1,3 +1,5 @@
+import { generateText } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
 import { vi } from "vitest";
 import { A2AContextModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -313,7 +315,7 @@ describe("A2AManager.sendMessage", () => {
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("first\nsecond");
   });
 
-  test("a team actor passes its team id to execution", async ({
+  test("a service-account actor runs the turn as that account", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({ name: "agent1" });
@@ -329,7 +331,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     await manager.sendMessage({
-      actor: { id: "team1", kind: "team", organizationId: "org1" },
+      actor: { id: "sa1", kind: "serviceAccount", organizationId: "org1" },
       agentId: agent.id,
       request: {
         message: {
@@ -344,8 +346,7 @@ describe("A2AManager.sendMessage", () => {
 
     expect(executeA2AMessage).toHaveBeenCalledTimes(1);
     const call = executeA2AMessage.mock.calls[0][0];
-    expect(call.userId).toBe("system");
-    expect(call.actorTeamId).toBe("team1");
+    expect(call.userId).toBe("service-account:sa1");
   });
 
   test("a blank text part does not pad the joined turn", async ({
@@ -1229,7 +1230,95 @@ describe("A2AManager.sendMessage", () => {
   });
 });
 
-describe("A2AManager.sendMessage malformed tool input", () => {
+describe("A2AManager.sendMessage history replay", () => {
+  test("continues the same context after interrupted tools without rewriting history", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Interrupted tools" });
+    const manager = new A2AManager();
+    const assistantId = crypto.randomUUID();
+    executeA2AMessage.mockReturnValueOnce({
+      messageId: assistantId,
+      text: "",
+      finishReason: "other",
+      responseUiMessage: {
+        id: assistantId,
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "fixture",
+            toolCallId: "interrupted-dynamic",
+            state: "input-available",
+            input: {},
+          },
+          {
+            type: "tool-fixture",
+            toolCallId: "interrupted-static",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    });
+    const first = await sendTextMessage(manager, agent.id, "Start a task");
+    const contextId = first.message?.contextId;
+    expect(contextId).toBeDefined();
+    const persistedBefore = await A2AMessageModel.findById(assistantId);
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [{ type: "text", text: "Conversation continues" }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      }),
+    });
+    executeA2AMessage.mockImplementation(async ({ messages, message }) => {
+      // Run the SDK's real prompt validation; mock only the provider boundary.
+      const result = await generateText({
+        model,
+        messages: [...messages, { role: "user", content: message }],
+        maxRetries: 0,
+      });
+      const id = crypto.randomUUID();
+      return {
+        messageId: id,
+        text: result.text,
+        finishReason: result.finishReason,
+        responseUiMessage: {
+          id,
+          role: "assistant",
+          parts: [{ type: "text", text: result.text }],
+        },
+      };
+    });
+    for (const text of ["Change the task", "Continue again"]) {
+      const response = await manager.sendMessage({
+        actor,
+        agentId: agent.id,
+        request: {
+          message: {
+            messageId: crypto.randomUUID(),
+            role: A2AProtocolRole.User,
+            contextId,
+            parts: [{ text }],
+          },
+        },
+      });
+      expect(response.message?.contextId).toBe(contextId);
+      expect(response.message?.parts).toContainEqual({
+        text: "Conversation continues",
+      });
+    }
+    expect(model.doGenerateCalls).toHaveLength(2);
+    expect(await A2AMessageModel.findById(assistantId)).toEqual(
+      persistedBefore,
+    );
+  });
+
   test("coerces a poisoned tool input from context history before replay", async ({
     makeAgent,
   }) => {

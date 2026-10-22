@@ -19,6 +19,7 @@
 
 import { randomUUID } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
+import { A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -26,6 +27,7 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
+import AgentRunModel from "@/models/agent-run";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import OrganizationModel from "@/models/organization";
 import type { ChatOpsProviderType } from "@/types/chatops";
@@ -91,14 +93,14 @@ export async function clearChannelThreadActive(params: {
 /**
  * Mute a channel thread — the single side-effecting entry point both providers
  * use when a user asks the bot to be quiet (a mute command, a mute reaction, or
- * a "Mute this thread" button). It does three things, in order:
+ * a "Mute this thread" button). It does four things:
  *
  *  1. Records a fresh mute marker in the distributed cache. Every in-flight
  *     agent run re-reads this marker before posting and drops its reply if it
  *     changed since the run began (see getThreadMuteMarker) — so a mute is never
  *     followed by a late answer, even for a run executing on another pod.
- *  2. Aborts in-flight runs for this thread on THIS pod, stopping their model
- *     requests immediately instead of letting them finish unseen.
+ *  2. Aborts local foreground runs and durably cancels runtime tasks for this
+ *     thread, including tasks executing on another pod.
  *  3. Drops the sticky auto-reply activation, so future un-mentioned messages
  *     stay quiet.
  *  4. Records the answer-all mute marker, which is what keeps an answer-all
@@ -114,8 +116,7 @@ export async function clearChannelThreadActive(params: {
  * muteChannelThreadAndNotify, which every mute path goes through to decide
  * whether to confirm.
  *
- * @public — called by muteChannelThreadAndNotify and by Slack's Stop button
- * handler; the side effects have their own suite in
+ * @public — called by muteChannelThreadAndNotify and Slack mute reactions; the side effects have their own suite in
  * channel-activation.test.ts, which knip --production cannot see.
  */
 export async function muteChannelThread(params: {
@@ -124,10 +125,56 @@ export async function muteChannelThread(params: {
   threadId: string;
   scope?: string;
 }): Promise<boolean> {
-  await recordThreadMute(params);
-  chatOpsRunRegistry.cancelThread(params);
+  await stopChannelThreadReply(params);
   await markChannelThreadMuted(params);
   return await clearChannelThreadActive(params);
+}
+
+/** Cancel in-flight replies across pods while keeping the thread's activation. */
+export async function stopChannelThreadReply(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+  scope?: string;
+}): Promise<void> {
+  await recordThreadMute(params);
+  chatOpsRunRegistry.cancelThread(params);
+  // Runtime turns outlive the local registry and may execute on another pod.
+  // A scoped bot must never cancel its siblings or the unscoped router bot.
+  if (params.scope && !params.scope.startsWith("agent:")) return;
+  const runs = await AgentRunModel.listCancelableInChatOpsThread({
+    provider: params.provider,
+    channelId: params.channelId,
+    threadId: params.threadId,
+    pinnedAgentId: params.scope?.slice("agent:".length),
+  });
+  if (runs.length === 0) return;
+  const { cancelDetachedAgentTask } = await import(
+    "@/services/agent-runtime/start-task"
+  );
+  await Promise.all(
+    runs.map(async (run) => {
+      try {
+        await cancelDetachedAgentTask({
+          actor: {
+            kind: run.actorKind,
+            id: run.actorId,
+            organizationId: run.organizationId,
+          },
+          agentId: run.agentId,
+          taskId: run.taskId,
+        });
+      } catch (error) {
+        if (
+          error instanceof A2AError &&
+          error.kind === A2AErrorKind.TaskNotCancelable
+        ) {
+          return;
+        }
+        throw error;
+      }
+    }),
+  );
 }
 
 /**
@@ -217,6 +264,12 @@ export async function isChannelAnswerAllEnabled(params: {
    * all reply to every message.
    */
   agentId?: string;
+  /**
+   * Asking for a bot that answers as whichever agent the channel picks (the
+   * Slack router bot): it leaves answering everything to these agents' own
+   * bots when one of them owns the channel, so the channel gets one reply.
+   */
+  agentsWithOwnBot?: ReadonlySet<string>;
 }): Promise<boolean> {
   const key = answerAllKey(params);
   let state = await cacheManager.get<AnswerAllState>(key);
@@ -228,10 +281,9 @@ export async function isChannelAnswerAllEnabled(params: {
     };
     await cacheManager.set(key, state, ANSWER_ALL_CACHE_TTL_MS);
   }
-  return (
-    state.enabled &&
-    (params.agentId === undefined || state.agentId === params.agentId)
-  );
+  if (!state.enabled) return false;
+  if (params.agentId !== undefined) return state.agentId === params.agentId;
+  return !(state.agentId && params.agentsWithOwnBot?.has(state.agentId));
 }
 
 /** Drop the cached "answer all messages" flag so a toggle takes effect promptly. */
@@ -460,9 +512,8 @@ export function mightBeAddressedMuteCommand(text: string): boolean {
  * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
  * avoids a per-provider mapping.
  *
- * Only Teams mutes on a reaction (and only ever receives reactions on the
- * bot's own messages). Slack threads are muted by the agent session's Stop
- * button instead.
+ * Slack resolves the reacted message to its thread root. Teams receives
+ * reactions on the bot's own messages.
  */
 export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
@@ -548,9 +599,8 @@ export async function applyChannelGate(params: {
    */
   botDisplayName?: string | null;
   /**
-   * Whether a "mute" message mutes the thread. Off for providers with a native
-   * Stop control (see ChatOpsProvider.hasNativeStopControl), where "mute" is
-   * just text for the agent. Defaults to on.
+   * Whether a "mute" message mutes the thread. Defaults to on; native Stop
+   * controls can coexist with mute commands.
    */
   muteCommandsEnabled?: boolean;
   /**
@@ -560,6 +610,8 @@ export async function applyChannelGate(params: {
    * every message.
    */
   pinnedAgentId?: string;
+  /** See isChannelAnswerAllEnabled; for a bot not pinned to an agent. */
+  agentsWithOwnBot?: ReadonlySet<string>;
   postMutedNotice: () => Promise<void>;
   resolveAnswerAllWorkspaceId: () => Promise<string | null>;
 }): Promise<{ proceed: boolean; addressed: boolean }> {
@@ -590,6 +642,7 @@ export async function applyChannelGate(params: {
         channelId,
         workspaceId: await params.resolveAnswerAllWorkspaceId(),
         agentId: params.pinnedAgentId,
+        agentsWithOwnBot: params.agentsWithOwnBot,
       });
     } catch (error) {
       logger.warn(

@@ -216,6 +216,7 @@ describe("ModelsPage", () => {
             grants: [],
             inheritedGrants: [],
             effectiveActions: ["read", "update", "manage-permissions"],
+            canShareOrganizationWide: true,
             actorSubjects: [],
           } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
       ),
@@ -240,14 +241,28 @@ describe("ModelsPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
+    // The model row and its edit permission resolve independently.
     await user.click(
-      await screen.findByRole("button", { name: `Edit ${model.modelId}` }),
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("");
     expect(screen.getByLabelText("Cache write")).toHaveValue("");
-    await user.type(screen.getByLabelText("Cache read"), "0.25");
+    await user.type(screen.getByLabelText("Cache read"), "0,25");
     await user.type(screen.getByLabelText("Cache write"), "0");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      await screen.findByTestId("edit-model-form-errors"),
+    ).toHaveTextContent(
+      "Enter a decimal number between 0 and 99999999.99 (use a dot)",
+    );
+    expect(updates).toHaveLength(0);
+    await user.clear(screen.getByLabelText("Cache read"));
+    await user.type(screen.getByLabelText("Cache read"), "0.25");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() =>
       expect(updates).toEqual([
@@ -261,7 +276,11 @@ describe("ModelsPage", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     await user.click(
-      screen.getByRole("button", { name: `Edit ${model.modelId}` }),
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("0.25");
@@ -299,6 +318,7 @@ describe("ModelsPage", () => {
             grants: [],
             inheritedGrants: [],
             effectiveActions: ["read", "update", "manage-permissions"],
+            canShareOrganizationWide: true,
             actorSubjects: [],
           } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
       ),
@@ -350,6 +370,10 @@ describe("ModelsPage", () => {
   });
 
   it("reports partial refresh failures and updates the persistent reconnect state", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     keyCreated = true;
     let rejected = false;
     server.use(

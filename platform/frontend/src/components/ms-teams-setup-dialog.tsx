@@ -1,7 +1,14 @@
 "use client";
 
 import JSZip from "jszip";
-import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -13,11 +20,17 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
+import { Textarea } from "@/components/ui/textarea";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops/chatops-config.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  buildChannelFilesRequest,
+  parseSharePointSites,
+} from "@/lib/ms-teams/channel-files-request";
 import { buildTeamsManifest } from "@/lib/ms-teams/teams-manifest";
 
 interface MsTeamsSetupDialogProps {
@@ -86,6 +99,16 @@ export function MsTeamsSetupDialog({
           />
         );
       }
+      if (step.component === "channel-files") {
+        return (
+          <StepChannelFiles
+            key={step.title}
+            stepNumber={index + 1}
+            appId={sharedAppId || savedAppId}
+            appName={configuredAppName}
+          />
+        );
+      }
       if (step.component === "manifest") {
         return (
           <StepManifest
@@ -121,6 +144,7 @@ export function MsTeamsSetupDialog({
     configuredAppName,
     creds?.appSecret,
     creds?.tenantId,
+    savedAppId,
   ]);
 
   const lastStepAction = {
@@ -231,6 +255,10 @@ function buildSteps(appName: string) {
           MS Teams
         </>,
       ],
+    },
+    {
+      title: "Read Files in Channels (Optional)",
+      component: "channel-files" as const,
     },
     {
       title: "Create App Manifest",
@@ -642,6 +670,125 @@ function StepManifest({
         <pre className="min-h-0 flex-1 overflow-auto rounded bg-muted p-3 text-xs font-mono leading-relaxed">
           {manifestJson}
         </pre>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Optional: let the bot read files shared in channels. Teams stores them in
+ * each team's SharePoint site and no Teams app permission reaches them, so the
+ * bot's app needs Graph `Sites.Selected` plus a read grant on each site. Both
+ * are Microsoft 365 admin tasks, usually owned by a different team than the
+ * one running this wizard, so the step builds a request to hand over.
+ */
+function StepChannelFiles({
+  stepNumber,
+  appId,
+  appName,
+}: {
+  stepNumber: number;
+  appId: string;
+  appName: string;
+}) {
+  const [sitesInput, setSitesInput] = useState("");
+  const [copied, setCopied] = useState(false);
+  const sites = parseSharePointSites(sitesInput);
+  const request = buildChannelFilesRequest({
+    appId: appId.trim() || "<Microsoft App ID>",
+    botName: `${appName} Teams bot`,
+    sites,
+  });
+
+  const handleCopy = async () => {
+    await copyToClipboard(request);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      className="grid flex-1 gap-4"
+      style={{ gridTemplateColumns: "1fr 1fr" }}
+    >
+      <StepCard
+        stepNumber={stepNumber}
+        title="Read Files in Channels (Optional)"
+      >
+        <p className="text-sm text-muted-foreground">
+          Lets the bot read PDFs and other files shared in channels. Images and
+          files in direct messages work without this. Your Microsoft 365 admin
+          grants it: the bot gets read access to the teams you list, nothing
+          else.
+        </p>
+        <ol className="space-y-3">
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              1
+            </span>
+            <span className="pt-0.5 flex-1 min-w-0">
+              List the teams' SharePoint sites, one per line. In a channel, open{" "}
+              <strong>Files</strong> → <strong>Open in SharePoint</strong> and
+              copy the address.
+              <Textarea
+                aria-label="Team SharePoint sites"
+                value={sitesInput}
+                onChange={(e) => setSitesInput(e.target.value)}
+                placeholder={
+                  "https://contoso.sharepoint.com/sites/Engineering\nhttps://contoso.sharepoint.com/sites/Support"
+                }
+                className="mt-1.5 min-h-16 font-mono text-xs"
+                rows={3}
+              />
+            </span>
+          </li>
+          <li className="flex gap-3 text-sm leading-relaxed">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              2
+            </span>
+            <span className="pt-0.5 flex-1 min-w-0">
+              Send this request to your Microsoft 365 admin. It has every step
+              and command, filled in.
+              <span className="mt-1.5 flex flex-col gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="self-start"
+                  onClick={handleCopy}
+                >
+                  {copied ? (
+                    <Check className="mr-1.5 h-4 w-4" />
+                  ) : (
+                    <Copy className="mr-1.5 h-4 w-4" />
+                  )}
+                  <span>{copied ? "Copied" : "Copy request for IT"}</span>
+                </Button>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2.5 text-xs font-mono leading-relaxed">
+                  {request}
+                </pre>
+              </span>
+            </span>
+          </li>
+        </ol>
+        <p className="text-xs text-muted-foreground">
+          Files in group chats stay unreadable: each one is stored in its
+          sender's OneDrive.
+        </p>
+      </StepCard>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-xs text-muted-foreground">
+          What your admin does in Microsoft Entra
+        </span>
+        <video
+          src="/ms-teams/sites-selected.mp4"
+          controls
+          muted
+          autoPlay
+          loop
+          playsInline
+          className="rounded-md w-full"
+        />
       </div>
     </div>
   );

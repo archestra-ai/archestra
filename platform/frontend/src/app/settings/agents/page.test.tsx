@@ -12,14 +12,6 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
-let mockAgents: Array<{
-  id: string;
-  name: string;
-  icon?: string | null;
-  agentType: "agent";
-  scope: "personal" | "team" | "org";
-  authorEmail?: string | null;
-}> = [];
 let mockRuntimeBackend: {
   name: "kubernetes";
   available: boolean;
@@ -126,12 +118,6 @@ vi.mock("@/components/ui/select", () => ({
   ),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useOrgScopedAgents: () => ({
-    data: mockAgents,
-  }),
-}));
-
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
     feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
@@ -204,7 +190,6 @@ beforeEach(() => {
       scope: "org",
     },
   ];
-  mockAgents = [];
   mockRuntimeBackend = null;
 
   vi.mocked(useOrganization).mockReturnValue({
@@ -226,6 +211,10 @@ beforeEach(() => {
 describe("AgentSettingsPage", () => {
   it("shows the configured runtime backend as a managed row only when enabled", () => {
     const { rerender } = renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
+    ).toBeVisible();
 
     expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
@@ -330,39 +319,5 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
-  });
-
-  it("uses the shared agent selector for the default agent dropdown", () => {
-    mockAgents = [
-      {
-        id: "agent-1",
-        name: "Agent Builder Agent",
-        icon: "🧰",
-        agentType: "agent",
-        scope: "org",
-      },
-    ];
-
-    renderPage();
-
-    const agentSelectorCall = mockAgentSelector.mock.calls.find(
-      ([props]) =>
-        (props as { searchPlaceholder?: string }).searchPlaceholder ===
-        "Search agents...",
-    );
-    expect(agentSelectorCall).toBeDefined();
-
-    const props = agentSelectorCall?.[0] as unknown as {
-      mode: string;
-      agents: typeof mockAgents;
-      sentinelOption: { value: string; label: string };
-    };
-
-    expect(props.mode).toBe("single");
-    expect(props.agents).toEqual(mockAgents);
-    expect(props.sentinelOption).toMatchObject({
-      value: "__personal__",
-      label: "User's personal agent",
-    });
   });
 });

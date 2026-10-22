@@ -2,7 +2,9 @@ import {
   BatteryCredentialRequestSchema,
   getArchestraToolFullName,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -85,6 +87,9 @@ test("request_battery_credentials resolves each battery's setup for the card", a
   makeOrganization,
   makeUser,
 }) => {
+  // With the sandbox on, a battery's setup is its multi-user target's, so pin
+  // it off to compare against the base declaration.
+  vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(false);
   const organization = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, organization.id, { role: "admin" });
@@ -102,7 +107,7 @@ test("request_battery_credentials resolves each battery's setup for the card", a
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack", "github", "slack"] },
+    { batteries: ["linear", "github", "linear"] },
     context,
   );
 
@@ -111,7 +116,7 @@ test("request_battery_credentials resolves each battery's setup for the card", a
     result.structuredContent,
   );
   expect(batteries.map(({ name, title }) => [name, title])).toEqual([
-    ["slack", "Slack"],
+    ["linear", "Linear"],
     ["github", "GitHub"],
   ]);
   for (const battery of batteries) {
@@ -134,7 +139,7 @@ test("request_battery_credentials names a battery it does not know", async ({
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack", "no-such-battery"] },
+    { batteries: ["linear", "no-such-battery"] },
     {
       agent: { id: "agent", name: "Agent" },
       organizationId: organization.id,
@@ -158,7 +163,7 @@ test("request_battery_credentials needs permission to create credentials", async
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack"] },
+    { batteries: ["linear"] },
     {
       agent: { id: "agent", name: "Agent" },
       organizationId: organization.id,

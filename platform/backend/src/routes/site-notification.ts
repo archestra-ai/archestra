@@ -84,11 +84,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         operationId: RouteId.CreateSiteNotification,
-        description: "Create a new site notification",
+        description:
+          "Replace the organization site notification, optionally keeping it inactive.",
         tags: ["Site Notification"],
         body: z.object({
           content: z.string().min(1),
           expiresAt: z.string().datetime().optional(),
+          isActive: z.boolean().optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -104,15 +106,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const organizationId = request.organizationId;
 
-      await SiteNotificationModel.deactivateAll(organizationId);
-
-      const notification = await SiteNotificationModel.create({
+      const notification = await SiteNotificationModel.replaceCurrent({
         organizationId,
         content: request.body.content,
         expiresAt: request.body.expiresAt
           ? new Date(request.body.expiresAt)
           : undefined,
-        isActive: true,
+        isActive: request.body.isActive ?? true,
       });
 
       return reply.send(serializeNotification(notification));

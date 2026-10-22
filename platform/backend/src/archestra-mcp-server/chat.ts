@@ -13,10 +13,11 @@ import {
 import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
+  peekHitlDecision,
   recordHitlRuling,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
-import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
@@ -76,9 +77,7 @@ const AskUserOutputSchema = z.object({
   text: z
     .string()
     .optional()
-    .describe(
-      "What the user typed, when allowText offered a free-text answer.",
-    ),
+    .describe("What the user typed instead of picking an option."),
   timedOut: z
     .boolean()
     .optional()
@@ -90,7 +89,9 @@ const AskUserSchema = z.object({
     .string()
     .min(1)
     .max(2000)
-    .describe("The question shown above the options."),
+    .describe(
+      "The question shown above the options, as plain text. Put links and commands in your reply text.",
+    ),
   header: z
     .string()
     .trim()
@@ -111,12 +112,6 @@ const AskUserSchema = z.object({
     .describe(
       "When true, the user may select more than one option. Defaults to false (exactly one).",
     ),
-  allowText: z
-    .boolean()
-    .optional()
-    .describe(
-      "When true, the user may type an answer of their own instead of picking, returned as `text`. Defaults to false. Not for secrets: never use it to collect a password, token, or key.",
-    ),
   remedy_offer_ids: z
     .array(z.string().min(1).max(128))
     .max(12)
@@ -127,6 +122,13 @@ const AskUserSchema = z.object({
 });
 
 const AskUserExecutionSchema = AskUserSchema.extend({
+  // Earlier proxy versions rewrote a staged review's ask_user call with option
+  // previews for Claude Code. They are not advertised to models, and the
+  // handler uses the server-held review, so a preview is ignored here.
+  options: z
+    .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
+    .min(2)
+    .max(12),
   trajectory: CurrentTrajectorySchema.optional(),
 });
 
@@ -176,7 +178,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Set allowText when the user may type their own answer, such as a name; the form then adds its own "Other" choice, so do not add one to the options. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For guardrail reviews, use this tool with the offer IDs: the platform shows the review in the client's own question card or form. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect to show the complete review in the conversation. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -190,40 +192,6 @@ const registry = defineArchestraTools([
             offerIds: liveOffers,
           })
         : undefined;
-      if (session && liveOffers.length === 1) {
-        const ruling = await awaitRuntimeHitlReview({
-          session,
-          offerId: liveOffers[0],
-          userId: context.userId,
-          signal: context.abortSignal,
-        });
-        if (ruling !== "not-runtime") {
-          if (ruling === "no-reviewer") {
-            return errorResult(
-              "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
-            );
-          }
-          if (ruling === "review-unavailable") {
-            return errorResult(
-              "The staged runtime review expired or became unavailable, including after loss of shared cache state. Keep the call blocked. A fresh exact-offer review is required before proceeding; missing state is not approval.",
-            );
-          }
-          if (ruling === "unavailable" || ruling === "none") {
-            return errorResult(
-              "The runtime review was not approved. Keep the call blocked. A timeout or disconnection is not approval.",
-            );
-          }
-          return structuredSuccessResult(
-            {
-              action: "accept" as const,
-              selected: [ruling === "approve" ? "Approve" : "Deny"],
-            },
-            ruling === "approve"
-              ? "The authenticated run reviewer approved this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call."
-              : "The authenticated run reviewer denied this offer. The original call remains blocked.",
-          );
-        }
-      }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;
@@ -231,10 +199,32 @@ const registry = defineArchestraTools([
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
       }
-      const allowText = !hitlArgs && args.allowText === true;
+      // A guardrail review is a decision, so only ordinary questions take text.
+      const allowText = !hitlArgs;
 
       const elicitation = context.elicitation;
+      // The live review text is gone once the review is closed. The offer id
+      // still identifies that closure, so do not open another form.
+      if (session && liveOffers.length === 1) {
+        const closed = await peekHitlDecision({
+          session,
+          offerId: liveOffers[0],
+        });
+        if (closed?.ruling === "none" || closed?.ruling === "deny") {
+          return errorResult(
+            "This review is already closed. Keep the call blocked. Do not ask again.",
+          );
+        }
+      }
       if (!elicitation) {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_VIEWER_MESSAGE,
         );
@@ -253,12 +243,16 @@ const registry = defineArchestraTools([
         header: effectiveArgs.header,
       });
 
-      if (
-        outcome.status === "no_viewer" ||
-        (outcome.status === "answered" &&
-          outcome.result.action === "decline" &&
-          outcome.result._meta?.approvals_reviewer === "auto_review")
-      ) {
+      // The gateway also reports a decline no person gave as no viewer.
+      if (outcome.status === "no_viewer") {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );
@@ -271,12 +265,20 @@ const registry = defineArchestraTools([
           : { action: "cancel" as const };
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
+        // A client decline or dismissal is not a human Deny, including when
+        // the form carried a staged review.
         if (hitlArgs && session) {
-          await recordHitlRuling({
+          const stored = await sealOrReturnStoredRuling({
             session,
             offerId: hitlArgs.remedy_offer_ids[0],
-            ruling: action === "decline" ? "deny" : "none",
+            closure:
+              outcome.status === "unanswered"
+                ? "unanswered"
+                : action === "decline"
+                  ? "declined"
+                  : "cancelled",
           });
+          if (stored) return stored;
         }
         return structuredSuccessResult(
           {
@@ -363,6 +365,24 @@ export const toolEntries = registry.toolEntries;
 
 export const tools = registry.tools;
 
+async function sealOrReturnStoredRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  closure: "declined" | "cancelled" | "unanswered" | "unavailable";
+}) {
+  const sealed = await sealHitlClosure(params);
+  if (sealed !== "approve" && sealed !== "deny") return undefined;
+  return structuredSuccessResult(
+    {
+      action: "accept" as const,
+      selected: [sealed === "approve" ? "Approve" : "Deny"],
+    },
+    sealed === "approve"
+      ? "An approval is already recorded for this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call. Do not ask again."
+      : "A denial is already recorded for this offer. The original call remains blocked. Do not ask again and do not call execute_remedy_plan.",
+  );
+}
+
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
 ) {
@@ -384,7 +404,7 @@ function buildSingleChoiceSchema(
 }
 
 /**
- * Adds an optional "Other" text field. The pick turns optional too, so a
+ * Adds an optional "Type something" text field. The pick turns optional too, so a
  * typed answer stands on its own.
  */
 function withTextField(params: {
@@ -401,7 +421,7 @@ function withTextField(params: {
       ...schema.properties,
       [ASK_USER_OTHER_ANSWER_FIELD]: {
         type: "string" as const,
-        title: "Other",
+        title: "Type something",
       },
     },
     required: [],

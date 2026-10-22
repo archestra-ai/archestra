@@ -9,6 +9,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentTypeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -40,6 +41,26 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export { InteractionSourceSchema };
 
+/** Content-bearing list metadata, protected by the same key as the request. */
+export const InteractionSessionPreviewSchema = z.object({
+  hasContent: z.boolean(),
+  isTitleGeneration: z.boolean(),
+  isPromptSuggestion: z.boolean(),
+  isOpenCodeSideTurn: z.boolean(),
+  contentNotStored: z.boolean(),
+  lastUserMessagePreview: z.string().nullable(),
+  claudeCodeTitle: z.string().nullable(),
+  /**
+   * What the request produced: the tools its response asked for, else the
+   * start of its reply. Rows written before these existed have neither.
+   */
+  responseToolNames: z.array(z.string()).optional(),
+  responseTextPreview: z.string().nullable().optional(),
+});
+export type InteractionSessionPreview = z.infer<
+  typeof InteractionSessionPreviewSchema
+>;
+
 export const UserInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -52,6 +73,7 @@ export const InteractionAuthMethodSchema = z.enum([
   "jwks",
   "oauth_client_credentials",
   "oauth_user",
+  "personal_token",
   "internal",
   "unknown",
 ]);
@@ -296,6 +318,8 @@ const DELTA_ENCODING_COLUMNS = {
  * public API surface rather than widening it for nothing.
  */
 const INTERNAL_ENCRYPTION_COLUMNS = {
+  // Derived list content is internal too, and can carry an encrypted envelope.
+  sessionPreview: true,
   encryptedChatConversationId: true,
 } as const;
 
@@ -350,6 +374,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   cacheWriteTokens: true,
   cost: true,
   baselineCost: true,
+  durationMs: true,
   createdAt: true,
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,
@@ -357,6 +382,18 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   requestType: RequestTypeSchema,
   /** Origin of the call (`chat`, `chat:compaction`, …). Used to badge sub-agent rows. */
   source: InteractionSourceSchema.nullable().optional(),
+  /**
+   * The latest user text this request carried, from its stored preview: names
+   * a turn by the prompt it served. Null when none was captured.
+   */
+  userMessagePreview: z.string().nullable().optional(),
+  /**
+   * What this request produced, from its stored preview: the tools its
+   * response asked for, else the start of its reply. One prompt drives many
+   * requests in an agent loop, so this is what tells them apart.
+   */
+  responseToolNames: z.array(z.string()).nullable().optional(),
+  responseTextPreview: z.string().nullable().optional(),
 });
 
 /**
@@ -797,6 +834,13 @@ export const InsertInteractionSchema = createInsertSchema(
   // Override profileId - required for proxy interactions, nullable for system interactions
   // (e.g., knowledge base embeddings/reranking have no associated profile)
   profileId: z.string().uuid().nullable(),
+  /** Accounting metadata is stored separately from encrypted log content. */
+  billingAttribution: z
+    .custom<import("@/utils/billable-usage").BillingAttribution>()
+    .optional(),
+  billingUsage: z
+    .custom<import("@/utils/billable-usage").PricedBillingUsage>()
+    .optional(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
@@ -855,6 +899,8 @@ export const SessionSummarySchema = z.object({
   models: z.array(z.string()),
   profileId: z.string().nullable(), // null when profile was deleted
   profileName: z.string().nullable(),
+  /** The agent's type, so a session run through the LLM Proxy or a gateway can say so. */
+  profileAgentType: AgentTypeSchema.nullable(),
   externalAgentIds: z.array(z.string()),
   externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
   authMethods: z.array(InteractionAuthMethodSchema),
@@ -914,6 +960,12 @@ export const SessionSummarySchema = z.object({
     ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
+  connectorName: z
+    .string()
+    .nullable()
+    .describe(
+      "Name of the knowledge-base connector a knowledge:* session ran for, when exactly one connector owns it.",
+    ),
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;

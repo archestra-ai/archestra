@@ -121,7 +121,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
-    go get github.com/containerd/containerd/v2@v2.2.5 && \
+    # cve-2026-95837: containerd improper privilege management (HIGH) fixed in >= 2.2.7
+    go get github.com/containerd/containerd/v2@v2.2.7 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
@@ -183,7 +184,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # emulation — and the same bytes land in every target arch.
 FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
 WORKDIR /src
-COPY integrations/m-files-vaf-add-on/ ./
+COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
 # archestra-m-files-vaf-add-on-<version>.mfappx (it deletes older ones
 # first); ship it alongside a stable-named copy — the name the installer and
@@ -258,6 +259,7 @@ ENV OPENSSL_NO_VENDOR=1
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
 COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
@@ -294,6 +296,7 @@ COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs
 COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/openappa-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
@@ -448,7 +451,10 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
 
 # Cloud database CA bundle for SSL certificate validation
-# This allows sslmode=require to work with AWS RDS and Google Cloud SQL
+# This allows sslmode=require to work with AWS RDS and Google Cloud SQL.
+# Node reads it through NODE_EXTRA_CA_CERTS. The OpenAPPA runtime connects
+# through OpenSSL, which reads only the system store, so the RUN below also
+# appends the bundle to /etc/ssl/certs/ca-certificates.crt.
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 # Vendor cloud database CA bundles into the repository so image builds do not
@@ -486,6 +492,7 @@ RUN apk --no-cache upgrade && \
         "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
+    cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625
@@ -535,7 +542,9 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
 # supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
 # before python3 is installed and cannot lift it.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" && \
+# CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
+# transitively with python3 here, so it needs the same explicit floor.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
@@ -629,7 +638,7 @@ COPY --from=builder /app/frontend/.next/standalone ./
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions
-COPY prev-static-assets/ ./frontend/.next/static/
+COPY docker/prev-static-assets/ ./frontend/.next/static/
 
 # Copy current build's assets on top
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static

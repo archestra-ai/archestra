@@ -16,7 +16,7 @@ import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-hermes",
+  "../../../../docker_images/agent/bin/archestra-hermes",
 );
 
 describe("Hermes image entrypoint", () => {

@@ -15,6 +15,9 @@ import {
 } from "@/knowledge-base/acl-tokens";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
+  AgentConnectorAssignmentModel,
+  AgentKnowledgeBaseModel,
+  AgentModel,
   ConnectorRunModel,
   GithubAppConfigModel,
   KbChunkModel,
@@ -73,6 +76,55 @@ describe("knowledge base routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("single-resource responses expose persisted labels and label drift", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-bases",
+      payload: {
+        name: "Label drift fixture",
+        labels: [{ key: "stage", value: "initial" }],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    expect(created.json().labels).toEqual([
+      expect.objectContaining({ key: "stage", value: "initial" }),
+    ]);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-bases/${id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().labels).toEqual(created.json().labels);
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { labels: [{ key: "stage", value: "changed" }] },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json().labels).toEqual([
+      expect.objectContaining({ key: "stage", value: "changed" }),
+    ]);
+    const preserved = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { description: "Unrelated update" },
+    });
+    expect(preserved.json().labels).toEqual(updated.json().labels);
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { labels: [] },
+    });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json().labels).toEqual([]);
+    const refreshed = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-bases/${id}`,
+    });
+    expect(refreshed.json().labels).toEqual([]);
   });
 
   // Like the author of every other resource, the creator of a knowledge base
@@ -810,6 +862,82 @@ describe("knowledge base routes", () => {
       expect(await KbDocumentModel.findById(document.id)).toBeNull();
       expect(await KbChunkModel.findByDocument(document.id)).toEqual([]);
     });
+
+    test("updates the connector's document total shown on its page", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          access: "org",
+        },
+      );
+      const documents = await Promise.all(
+        ["first", "second"].map((name) =>
+          KbDocumentModel.create({
+            organizationId,
+            sourceId: `total-${name}`,
+            connectorId: connector.id,
+            title: name,
+            content: name,
+            contentHash: `hash-total-${name}`,
+          }),
+        ),
+      );
+      const totalOnPage = async () =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/connectors/${connector.id}`,
+          })
+        ).json().totalDocsIngested;
+      expect(await totalOnPage()).toBe(2);
+
+      await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/documents/${documents[0].id}`,
+      });
+
+      expect(await totalOnPage()).toBe(1);
+    });
+  });
+
+  describe("POST /api/connectors/:id/force-resync", () => {
+    test("stores zero documents for the connector it empties", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "resync-total",
+        connectorId: connector.id,
+        title: "resync",
+        content: "resync",
+        contentHash: "hash-resync-total",
+      });
+      const totalOnPage = async () =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/connectors/${connector.id}`,
+          })
+        ).json().totalDocsIngested;
+      expect(await totalOnPage()).toBe(1);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/force-resync`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await totalOnPage()).toBe(0);
+    });
   });
 
   describe("GET /api/knowledge-bases", () => {
@@ -917,6 +1045,116 @@ describe("knowledge base routes", () => {
       expect(kbResult.connectors).toHaveLength(1);
       expect(kbResult.connectors[0].name).toBe("Listed Connector");
       expect(kbResult.connectors[0].connectorType).toBe("jira");
+    });
+
+    test("counts each knowledge base's live agents, with or without the agent list", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const used = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Used KB",
+      });
+      const unused = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Unused KB",
+      });
+      const live = [
+        await makeAgent({ organizationId }),
+        await makeAgent({ organizationId }),
+      ];
+      const deleted = await makeAgent({ organizationId });
+      const elsewhere = await makeAgent({
+        organizationId: (await makeOrganization()).id,
+      });
+      for (const agent of [...live, deleted, elsewhere]) {
+        await AgentKnowledgeBaseModel.assign(agent.id, used.id);
+      }
+      await AgentModel.delete(deleted.id);
+
+      type Row = {
+        id: string;
+        assignedAgents: { id: string }[];
+        assignedAgentCount: number;
+      };
+      const rowsOf = async (query: string): Promise<Map<string, Row>> => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/knowledge-bases?limit=50&offset=0${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return new Map(
+          response.json().data.map((kb: Row) => [kb.id, kb] as const),
+        );
+      };
+
+      const full = await rowsOf("");
+      expect(
+        full
+          .get(used.id)
+          ?.assignedAgents.map((agent) => agent.id)
+          .sort(),
+      ).toEqual(live.map((agent) => agent.id).sort());
+      expect(full.get(used.id)?.assignedAgentCount).toBe(2);
+
+      const slim = await rowsOf("&includeAssignedAgents=false");
+      expect(slim.get(used.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 2,
+      });
+      expect(slim.get(unused.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 0,
+      });
+    });
+
+    test("ids returns exactly those knowledge bases and composes with search", async () => {
+      const alpha = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Alpha docs",
+      });
+      const beta = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Beta docs",
+      });
+      await KnowledgeBaseModel.create({ organizationId, name: "Gamma docs" });
+
+      const byIds = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=50&offset=0&ids=${alpha.id},${beta.id}`,
+      });
+      expect(byIds.statusCode).toBe(200);
+      expect(
+        byIds
+          .json()
+          .data.map((kb: { id: string }) => kb.id)
+          .sort(),
+      ).toEqual([alpha.id, beta.id].sort());
+      expect(byIds.json().pagination.total).toBe(2);
+
+      const searched = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=50&offset=0&ids=${alpha.id},${beta.id}&search=Beta`,
+      });
+      expect(searched.json().data.map((kb: { id: string }) => kb.id)).toEqual([
+        beta.id,
+      ]);
+
+      // The requested rows come back together; page size does not split them.
+      const onePage = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=1&offset=1&ids=${alpha.id},${beta.id}`,
+      });
+      expect(onePage.json().data).toHaveLength(2);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
     });
   });
 
@@ -1159,6 +1397,63 @@ describe("knowledge base routes", () => {
   });
 
   describe("POST /api/connectors", () => {
+    test("requires Salesforce OAuth configuration and stores its secret outside the config", async () => {
+      const oauthConfig = {
+        type: "salesforce",
+        authMethod: "oauth_client_credentials",
+        loginUrl: "https://example.my.salesforce.com",
+        clientId: "consumer-key",
+      };
+      for (const invalidConfig of [
+        { type: "salesforce" },
+        { type: "salesforce", authMethod: "soap_legacy" },
+        { ...oauthConfig, clientId: "" },
+        { ...oauthConfig, loginUrl: "https://test.salesforce.com" },
+      ]) {
+        const result = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Salesforce",
+            connectorType: "salesforce",
+            config: invalidConfig,
+            credentials: { apiToken: "consumer-secret" },
+          },
+        });
+        expect(result.statusCode).toBe(400);
+      }
+      const missingSecret = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Salesforce",
+          connectorType: "salesforce",
+          config: oauthConfig,
+          credentials: { apiToken: " " },
+        },
+      });
+      expect(missingSecret.statusCode).toBe(400);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Salesforce",
+          connectorType: "salesforce",
+          config: oauthConfig,
+          credentials: { apiToken: "consumer-secret" },
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().config).toMatchObject(oauthConfig);
+      expect(JSON.stringify(created.json())).not.toContain("consumer-secret");
+      const stored = await KnowledgeBaseConnectorModel.findById(
+        created.json().id,
+      );
+      expect(
+        (await secretManager().getSecret(stored?.secretId ?? ""))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+    });
+
     test("refuses the retired visibility and teamIds fields on create", async () => {
       // Who can reach a new connector is its initial grants alone; the old
       // sharing fields are refused rather than silently dropped.
@@ -1661,6 +1956,124 @@ describe("knowledge base routes", () => {
   });
 
   describe("GET /api/connectors", () => {
+    test("returns each connector's document total", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const withDocuments = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+      );
+      const empty = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      for (const name of ["one", "two", "three"]) {
+        await KbDocumentModel.create({
+          organizationId,
+          sourceId: `list-total-${name}`,
+          connectorId: withDocuments.id,
+          title: name,
+          content: name,
+          contentHash: `hash-list-total-${name}`,
+        });
+      }
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0",
+      });
+
+      expect(list.statusCode).toBe(200);
+      const totals = new Map(
+        list
+          .json()
+          .data.map((c: { id: string; totalDocsIngested: number }) => [
+            c.id,
+            c.totalDocsIngested,
+          ]),
+      );
+      expect(totals.get(withDocuments.id)).toBe(3);
+      expect(totals.get(empty.id)).toBe(0);
+    });
+
+    test("counts each connector's live agents, with or without the agent list", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const used = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const unused = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const live = await makeAgent({ organizationId });
+      const deleted = await makeAgent({ organizationId });
+      await AgentConnectorAssignmentModel.assign(live.id, used.id);
+      await AgentConnectorAssignmentModel.assign(deleted.id, used.id);
+      await AgentModel.delete(deleted.id);
+
+      const rowsOf = async (query: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/connectors?limit=50&offset=0${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return new Map(
+          response
+            .json()
+            .data.map(
+              (connector: {
+                id: string;
+                assignedAgents: { id: string }[];
+                assignedAgentCount: number;
+              }) => [connector.id, connector],
+            ),
+        );
+      };
+
+      const full = await rowsOf("");
+      expect(full.get(used.id)).toMatchObject({
+        assignedAgents: [expect.objectContaining({ id: live.id })],
+        assignedAgentCount: 1,
+      });
+
+      const slim = await rowsOf("&includeAssignedAgents=false");
+      expect(slim.get(used.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 1,
+      });
+      expect(slim.get(unused.id)).toMatchObject({ assignedAgentCount: 0 });
+    });
+
+    test("ids returns exactly those connectors", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const wanted = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await makeKnowledgeBaseConnector(kb.id, organizationId);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors?limit=50&offset=0&ids=${wanted.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response.json().data.map((connector: { id: string }) => connector.id),
+      ).toEqual([wanted.id]);
+      expect(response.json().pagination.total).toBe(1);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
+    });
+
     test("shows permission-sync connectors to members with connector grants", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -1818,6 +2231,135 @@ describe("knowledge base routes", () => {
   });
 
   describe("PUT /api/connectors/:id", () => {
+    test("requires an explicit Salesforce OAuth migration and never reuses a stored password", async () => {
+      const secret = await secretManager().createSecret(
+        { email: "legacy@example.com", apiToken: "old-password" },
+        "salesforce-legacy",
+      );
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Salesforce legacy",
+        connectorType: "salesforce",
+        config: {
+          type: "salesforce",
+          loginUrl: "https://login.salesforce.com",
+          objects: ["Account"],
+        },
+        secretId: secret.id,
+      });
+      const legacyEdit = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: { ...connector.config, authMethod: "soap_legacy" },
+          credentials: { apiToken: "rotated-password" },
+        },
+      });
+      expect(legacyEdit.statusCode).toBe(200);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({
+        email: "legacy@example.com",
+        apiToken: "rotated-password",
+      });
+      const oauthConfig = {
+        type: "salesforce",
+        authMethod: "oauth_client_credentials",
+        loginUrl: "https://example.my.salesforce.com",
+        clientId: "consumer-key",
+        objects: ["Account"],
+      };
+      const missingSecret = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { config: oauthConfig },
+      });
+      expect(missingSecret.statusCode).toBe(400);
+      expect(missingSecret.json().error.message).toContain(
+        "new consumer secret",
+      );
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "rotated-password" });
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.config,
+      ).toHaveProperty("authMethod", "soap_legacy");
+
+      const migrated = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: oauthConfig,
+          credentials: { apiToken: "consumer-secret" },
+        },
+      });
+      expect(migrated.statusCode).toBe(200);
+      expect(migrated.json().config).toMatchObject(oauthConfig);
+      expect(JSON.stringify(migrated.json())).not.toContain("consumer-secret");
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+
+      const edit = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { name: "Renamed Salesforce", config: oauthConfig },
+      });
+      expect(edit.statusCode).toBe(200);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+
+      for (const authMethod of [undefined, "soap_legacy"]) {
+        const downgrade = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            config: { ...oauthConfig, authMethod },
+            credentials: { apiToken: "must-not-be-stored" },
+          },
+        });
+        expect(downgrade.statusCode).toBe(400);
+        expect(downgrade.json().error.message).toContain("cannot switch back");
+      }
+      const invalid = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: { ...oauthConfig, loginUrl: "https://login.salesforce.com" },
+          credentials: { apiToken: "must-not-be-stored" },
+        },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+    });
+
+    test("keeps legacy Salesforce connectors readable and disableable before migration", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Legacy Salesforce",
+        connectorType: "salesforce",
+        config: {
+          type: "salesforce",
+          loginUrl: "https://login.salesforce.com",
+        },
+      });
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+      expect(read.statusCode).toBe(200);
+      const disabled = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { enabled: false },
+      });
+      expect(disabled.statusCode).toBe(200);
+      expect(disabled.json().enabled).toBe(false);
+    });
+
     test("preserves the stored username when rotating only the token", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,

@@ -90,6 +90,56 @@ test("installed connections fetch updated prompts after ticket expiry, and obser
   expect((await fetchInstructions()).statusCode).toBe(403);
 });
 
+test("unedited instructions name the deployment's own Remote Agents, including the earlier default", async ({
+  makeMember,
+  makeAgent,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId);
+  vi.mocked(userHasPermission).mockResolvedValue(true);
+  const gateway = await makeAgent({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    agentType: "mcp_gateway",
+  });
+  const { setup, rawToken } = await ConnectionSetupModel.create({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    clientId: "codex",
+    platform: "linux",
+    baseUrl: "https://example.com/v1",
+    mcpGatewayId: gateway.id,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  await ConnectionSetupModel.claimByToken({ rawToken });
+  const fetchInstructions = async () =>
+    (
+      await ctx.app.inject({
+        method: "GET",
+        url: "/v1/connection-instructions",
+        headers: {
+          authorization: `Bearer ${issueConnectionInstructionsToken({
+            setupId: setup.id,
+            secret: config.auth.secret ?? "",
+          })}`,
+        },
+      })
+    ).json().instructions;
+
+  await OrganizationModel.patch(ctx.organizationId, {
+    appName: "Acme Platform",
+    connectionRuntimeHandoffEnabled: true,
+    connectionRuntimeHandoffInstructions: null,
+  });
+  const unedited = await fetchInstructions();
+  expect(unedited).toContain("'move this to Acme Platform Remote Agents'");
+
+  // The default before it named the runtime, saved verbatim, still follows it.
+  await OrganizationModel.patch(ctx.organizationId, {
+    connectionRuntimeHandoffInstructions: `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`,
+  });
+  expect(await fetchInstructions()).toBe(unedited);
+});
+
 test("unsigned requests and unconsumed installations cannot read managed instructions", async ({
   makeMember,
   makeAgent,

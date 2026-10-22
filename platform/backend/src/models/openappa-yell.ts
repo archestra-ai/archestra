@@ -121,7 +121,13 @@ export default class OpenAppaYellModel {
 
   static async summary(params: { organizationId: string }) {
     const [row] = await db
-      .select({ unresolved: count() })
+      .select({
+        unresolved: count(),
+        superyells:
+          sql<number>`count(*) filter (where ${table.superyell})`.mapWith(
+            Number,
+          ),
+      })
       .from(table)
       .where(
         and(
@@ -129,7 +135,10 @@ export default class OpenAppaYellModel {
           isNull(table.resolvedAt),
         ),
       );
-    return { unresolved: row?.unresolved ?? 0 };
+    return {
+      unresolved: row?.unresolved ?? 0,
+      superyells: row?.superyells ?? 0,
+    };
   }
 
   static async list(
@@ -152,6 +161,11 @@ export default class OpenAppaYellModel {
               ? isNotNull(table.resolvedAt)
               : undefined,
           params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
+          // OpenAPPA's session id is the caller scope, `|`, then the client's
+          // own session id, which is the LLM session id.
+          params.llmSessionId
+            ? sql`substr(${table.sessionId}, strpos(${table.sessionId}, '|') + 1) = ${params.llmSessionId}`
+            : undefined,
           params.search
             ? ilike(
                 table.message,

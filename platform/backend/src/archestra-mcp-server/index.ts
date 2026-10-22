@@ -5,8 +5,10 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isCodeRuntimeArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   SELF_FORK_TOOL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
@@ -16,6 +18,7 @@ import {
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -27,6 +30,7 @@ import config from "@/config";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   verifyRuntimeToolProof,
 } from "@/openappa/runtime-tool-claims";
@@ -249,28 +253,12 @@ function getAllTools(): (typeof identityTools)[number][] {
   return allToolsCache;
 }
 
-let sandboxToolNamesCache: ReadonlySet<string> | undefined;
-function getSandboxToolNames(): ReadonlySet<string> {
-  if (!sandboxToolNamesCache) {
-    sandboxToolNamesCache = new Set(sandboxTools.map((tool) => tool.name));
-  }
-  return sandboxToolNamesCache;
-}
-
 let hookToolNamesCache: ReadonlySet<string> | undefined;
 function getHookToolNames(): ReadonlySet<string> {
   if (!hookToolNamesCache) {
     hookToolNamesCache = new Set(hookTools.map((tool) => tool.name));
   }
   return hookToolNamesCache;
-}
-
-let pluginToolNamesCache: ReadonlySet<string> | undefined;
-function getPluginToolNames(): ReadonlySet<string> {
-  if (!pluginToolNamesCache) {
-    pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
-  }
-  return pluginToolNamesCache;
 }
 
 export function getArchestraMcpTools() {
@@ -338,55 +326,32 @@ export async function executeArchestraTool(
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
+  let proofAccepted = false;
   if (runtimeProof !== undefined) {
-    const action = archestraMcpBranding.getToolShortName(toolName) ?? toolName;
-    const verified = context.organizationId
-      ? verifyRuntimeToolProof({
-          proof: runtimeProof,
-          organizationId: context.organizationId,
-          callerId: authenticatedRuntimeSpender({
-            userId: context.userId,
-            callerId: context.openappaSession?.caller_id,
-          }),
-          action,
-          arguments: args ?? {},
-          secret: config.openappa.offerSigningSecret,
-        })
-      : null;
-    if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
-      return errorResult(
-        "OpenAPPA could not verify this runtime tool's source.",
-      );
-    }
-    const source = await OpenAppaSessionModel.familySession({
-      organizationId: verified.session.organization_id,
-      sessionId: verified.session.session_id,
-      callerId: verified.session.caller_id,
-    });
-    if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
-      return errorResult(
-        "OpenAPPA could not find the recorded source session.",
-      );
-    }
-    const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
-      organizationId: verified.session.organization_id,
-      callerId: verified.session.caller_id,
-      sessionId: verified.session.session_id,
-      toolCallIds: [verified.toolCallId],
-    });
-    if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
-      return errorResult("OpenAPPA has no matching released runtime call.");
-    }
-    context = {
-      ...context,
-      openappaRuntimeCall: verified,
-      currentToolCallId: verified.toolCallId,
-    };
+    // The proof is for the gateway only; the tool runs without it either way.
     const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
+    const admitted = await admitRuntimeProof({
+      proof: runtimeProof,
+      toolName,
+      args: args ?? {},
+      context,
+    });
+    if (admitted.kind === "accepted") {
+      context = {
+        ...context,
+        openappaRuntimeCall: admitted.call,
+        currentToolCallId: admitted.call.toolCallId,
+      };
+      proofAccepted = true;
+    } else if (await isGuardrailsV2Active()) {
+      return errorResult(admitted.reason);
+    }
+    // While Guardrails are off a proof only matters for later crossings, so
+    // one that does not check out must not fail a call that runs without it.
     args = original;
   }
   if (
-    archestraMcpBranding.getToolShortName(toolName) === "yell" &&
+    isYellToolShortName(archestraMcpBranding.getToolShortName(toolName)) &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
     // An unavailable feedback tool is a recoverable tool refusal, not a
@@ -430,7 +395,7 @@ export async function executeArchestraTool(
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
-    if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+    if (proofAccepted && !(await claimRuntimeDispatch(context))) {
       return errorResult(
         "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
       );
@@ -456,7 +421,7 @@ export async function executeArchestraTool(
   const admitted = await admitArchestraToolCall({ toolName, args, context });
   if ("error" in admitted) return admitted.error;
   const { toolEntry, resolvedToolName } = admitted;
-  if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+  if (proofAccepted && !(await claimRuntimeDispatch(context))) {
     return errorResult(
       "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
     );
@@ -546,22 +511,20 @@ export async function preflightArchestraToolCall(params: {
 }
 
 /**
- * Whether a built-in's runtime is configured on this deployment. Sandbox tools
- * materialize a Dagger container and lifecycle hooks execute inside that same
- * sandbox, so both are unusable without the code runtime and advertising them
- * would promise the model a capability the call cannot deliver. Plugin tools
- * follow the plugins beta flag for the same reason: the REST surface they
- * mirror is a 404 while the flag is off.
+ * Whether a built-in's runtime is configured on this deployment. The code
+ * runtime tools (run_command/upload_file/download_file) materialize a Dagger
+ * container and lifecycle hooks execute inside that same sandbox, so both are
+ * unusable without the code runtime and advertising them would promise the
+ * model a capability the call cannot deliver. The persistent-file tools only
+ * touch the file store, so they stay on.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
-  if (archestraMcpBranding.getToolShortName(canonicalName) === "yell")
-    return openappaYellEnabled();
-  if (isOpenappaTool(archestraMcpBranding.getToolShortName(canonicalName)))
-    return openappaEnabled();
-  if (getSandboxToolNames().has(canonicalName))
+  const shortName = archestraMcpBranding.getToolShortName(canonicalName);
+  if (isYellToolShortName(shortName)) return openappaYellEnabled();
+  if (isOpenappaTool(shortName)) return openappaEnabled();
+  if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
-  if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
   return true;
 }
 
@@ -602,6 +565,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
 ]);
 
 // Assignment gate with the dynamic-access relaxation: an unassigned built-in
@@ -627,7 +591,7 @@ async function resolveToolAssignment(
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
       shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
       shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
-      (shortName === "yell" && openappaYellEnabled())) &&
+      (isYellToolShortName(shortName) && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
     return null;
@@ -844,6 +808,8 @@ async function claimRuntimeDispatch(
 ): Promise<boolean> {
   const call = context.openappaRuntimeCall;
   if (!call) return false;
+  // An observed call was claimed when its proof was admitted.
+  if (call.observed) return true;
   return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
     organizationId: call.session.organization_id,
     callerId: call.session.caller_id,
@@ -851,6 +817,91 @@ async function claimRuntimeDispatch(
     toolCallId: call.toolCallId,
     spawn: call.spawn,
   });
+}
+
+/**
+ * Checks a runtime proof against what the proxy recorded. A proof signed while
+ * enforcement was on must match a call the runtime released. One signed while
+ * it was off (`observed`) must match a read the session recorded making, and
+ * is claimed here: nothing ruled it, so it may only read, never launch,
+ * steer, or write.
+ */
+async function admitRuntimeProof(params: {
+  proof: unknown;
+  toolName: string;
+  args: Record<string, unknown>;
+  context: ArchestraContext;
+}): Promise<
+  | {
+      kind: "accepted";
+      call: NonNullable<ArchestraContext["openappaRuntimeCall"]>;
+    }
+  | { kind: "refused"; reason: string }
+> {
+  const { context } = params;
+  const action =
+    archestraMcpBranding.getToolShortName(params.toolName) ?? params.toolName;
+  const verified = context.organizationId
+    ? verifyRuntimeToolProof({
+        proof: params.proof,
+        organizationId: context.organizationId,
+        callerId: authenticatedRuntimeSpender({
+          userId: context.userId,
+          callerId: context.openappaSession?.caller_id,
+        }),
+        action,
+        arguments: params.args,
+        secret: config.openappa.offerSigningSecret,
+      })
+    : null;
+  if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not verify this runtime tool's source.",
+    };
+  }
+  const source = await OpenAppaSessionModel.familySession({
+    organizationId: verified.session.organization_id,
+    sessionId: verified.session.session_id,
+    callerId: verified.session.caller_id,
+  });
+  if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not find the recorded source session.",
+    };
+  }
+  if (verified.observed) {
+    if (
+      verified.spawn ||
+      !isObservedRead({ action, args: params.args }) ||
+      !(await OpenAppaSpawnCorrelationModel.claimObservedRuntimeDispatch({
+        organizationId: verified.session.organization_id,
+        callerId: verified.session.caller_id,
+        sessionId: verified.session.session_id,
+        toolCallId: verified.toolCallId,
+      }))
+    ) {
+      return {
+        kind: "refused",
+        reason: "OpenAPPA has no unclaimed record of this runtime call.",
+      };
+    }
+    return { kind: "accepted", call: verified };
+  }
+  const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+    organizationId: verified.session.organization_id,
+    callerId: verified.session.caller_id,
+    sessionId: verified.session.session_id,
+    toolCallIds: [verified.toolCallId],
+  });
+  if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA has no matching released runtime call.",
+    };
+  }
+  return { kind: "accepted", call: verified };
 }
 
 /**

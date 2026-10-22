@@ -36,6 +36,7 @@ import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
@@ -127,7 +128,7 @@ export const CreateBaseToolArgsSchema = z
         "Optional key-value labels for organization and categorization.",
       ),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. MCP gateways defer skill, file, sandbox, run lifecycle and policy-management capabilities in this mode; questions and guardrails session/peer-message controls remain directly available. search_tools summarizes the caller's available built-in capability groups as well as connected MCP servers. Manual gateways also keep explicitly assigned MCP App UI tools available for client rendering. Internal chat keeps assigned skill discovery/loading, file, sandbox and run lifecycle tools directly available for its skill activation and file guidance. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
     ),
     accessAllTools: z
       .boolean()
@@ -956,6 +957,12 @@ async function resolveRuntimeAndModelForWrite(params: {
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
+  });
+  await assertCanBindRuntimeCredentials({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
+    next: runtime,
   });
 
   const merged = {

@@ -7,10 +7,11 @@ type SlackManifestConnectionMode = "socket" | "webhook";
  * makes Slack show the Stop button; app_home_opened is when a DM opens (for
  * suggested prompts).
  */
-const SLACK_BOT_EVENTS = [
+export const SLACK_BOT_EVENTS = [
   "agent_session_stopped",
   "app_home_opened",
   "app_mention",
+  "reaction_added",
   "message.channels",
   "message.groups",
   "message.im",

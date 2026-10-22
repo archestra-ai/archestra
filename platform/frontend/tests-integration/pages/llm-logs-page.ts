@@ -3,13 +3,17 @@ import type { Locator, Page } from "@playwright/test";
 export class LlmLogsPage {
   readonly page: Page;
   readonly table: Locator;
-  readonly latestConversationHeading: Locator;
+  /** Session detail: the request list at the top of the split. */
+  readonly requestList: Locator;
+  /** Session detail: the conversation column of the details pane. */
+  readonly conversationPane: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.table = page.getByRole("table");
-    this.latestConversationHeading = page.getByRole("heading", {
-      name: "Latest Conversation",
+    this.requestList = page.getByRole("list", { name: "Requests" });
+    this.conversationPane = page.getByRole("tabpanel", {
+      name: "Conversation",
     });
   }
 
@@ -18,7 +22,7 @@ export class LlmLogsPage {
   }
 
   async gotoSession(sessionId: string) {
-    await this.page.goto(`/llm/logs/session/${encodeURIComponent(sessionId)}`);
+    await this.page.goto(`/llm/logs/${encodeURIComponent(sessionId)}`);
   }
 
   // The filter bar renders four SearchableSelect comboboxes in order:

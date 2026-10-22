@@ -5,14 +5,17 @@ import {
   desc,
   eq,
   getTableColumns,
+  ilike,
   inArray,
   isNotNull,
   isNull,
   lt,
+  notInArray,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
+import { actorFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -24,7 +27,10 @@ import type {
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
+import type { ChatOpsProviderType } from "@/types/chatops";
+import { escapeLikePattern } from "@/utils/sql-search";
 import A2AMessageModel from "./a2a/message";
+import AgentRunAttentionNoticeModel from "./agent-run-attention-notice";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -71,7 +77,10 @@ class AgentRunModel {
         organizationId: created.organizationId,
         resource: "agentRun",
         scope: created.taskId,
-        authorId: created.actorUserId,
+        authorId:
+          created.actorKind === "serviceAccount"
+            ? `service-account:${created.actorId}`
+            : created.actorUserId,
         grants: [],
       });
       // SPDX-SnippetEnd
@@ -110,6 +119,7 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const workspaces = schema.agentWorkspacesTable;
     const [workspace] = await db
       .select()
@@ -117,14 +127,14 @@ class AgentRunModel {
       .where(
         and(
           eq(workspaces.organizationId, params.organizationId),
-          eq(workspaces.actorKind, "user"),
-          eq(workspaces.actorId, params.actorUserId),
+          eq(workspaces.actorKind, actor.kind),
+          eq(workspaces.actorId, actor.id),
           or(
             eq(workspaces.id, params.taskId),
             sql`${workspaces.workloadName} IN (
           SELECT workload_name FROM agent_runs WHERE task_id = ${params.taskId}::uuid
           AND organization_id = ${params.organizationId}
-          AND actor_kind = 'user' AND actor_id = ${params.actorUserId}
+          AND actor_kind = ${actor.kind} AND actor_id = ${actor.id}
         )`,
           ),
         ),
@@ -236,13 +246,14 @@ class AgentRunModel {
     run: AgentRunRecord;
     workspace: Pick<
       AgentWorkspace,
-      "state" | "expiresAt" | "activeTaskId"
+      "id" | "state" | "expiresAt" | "activeTaskId"
     > | null;
   } | null> {
     const [result] = await db
       .select({
         run: getTableColumns(schema.agentRunsTable),
         workspace: {
+          id: schema.agentWorkspacesTable.id,
           state: schema.agentWorkspacesTable.state,
           expiresAt: schema.agentWorkspacesTable.expiresAt,
           activeTaskId: schema.agentWorkspacesTable.activeTaskId,
@@ -275,21 +286,74 @@ class AgentRunModel {
     return result ?? null;
   }
 
+  /** Durable turns addressed to one bot in a thread, including other replicas. */
+  static async listCancelableInChatOpsThread(params: {
+    provider: ChatOpsProviderType;
+    channelId: string;
+    threadId: string;
+    pinnedAgentId?: string;
+  }): Promise<AgentRunRecord[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.chatopsChannelBindingsTable,
+        and(
+          sql`${schema.agentRunsTable.completionTarget}->>'bindingId' = ${schema.chatopsChannelBindingsTable.id}::text`,
+          eq(
+            schema.agentRunsTable.organizationId,
+            schema.chatopsChannelBindingsTable.organizationId,
+          ),
+        ),
+      )
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
+          eq(schema.chatopsChannelBindingsTable.channelId, params.channelId),
+          sql`${schema.agentRunsTable.completionTarget}->>'type' = 'chatops'`,
+          sql`${schema.agentRunsTable.completionTarget}->>'threadId' = ${params.threadId}`,
+          params.pinnedAgentId
+            ? sql`${schema.agentRunsTable.completionTarget}->>'pinnedAgentId' = ${params.pinnedAgentId}`
+            : sql`${schema.agentRunsTable.completionTarget}->>'pinnedAgentId' IS NULL`,
+          notInArray(schema.a2aTasksTable.state, [...A2A_TERMINAL_TASK_STATES]),
+        ),
+      );
+  }
+
   static async updateAttentionState(params: {
     taskId: string;
     attentionState: AgentRunRecord["attentionState"];
   }): Promise<boolean> {
-    const updated = await db
-      .update(schema.agentRunsTable)
-      .set({ attentionState: params.attentionState })
-      .where(
-        and(
-          eq(schema.agentRunsTable.taskId, params.taskId),
-          isNull(schema.agentRunsTable.endedAt),
-        ),
-      )
-      .returning({ id: schema.agentRunsTable.id });
-    return updated.length > 0;
+    return db.transaction(async (tx) => {
+      const [run] = await tx
+        .select()
+        .from(schema.agentRunsTable)
+        .where(
+          and(
+            eq(schema.agentRunsTable.taskId, params.taskId),
+            isNull(schema.agentRunsTable.endedAt),
+          ),
+        )
+        .for("update");
+      if (!run) return false;
+      const [task] = await tx
+        .select({ state: schema.a2aTasksTable.state })
+        .from(schema.a2aTasksTable)
+        .where(eq(schema.a2aTasksTable.id, params.taskId));
+      if (!task || A2A_TERMINAL_TASK_STATES.includes(task.state)) return false;
+      if (run.attentionState === params.attentionState) return true;
+      const [updated] = await tx
+        .update(schema.agentRunsTable)
+        .set({ attentionState: params.attentionState })
+        .where(eq(schema.agentRunsTable.id, run.id))
+        .returning();
+      await AgentRunAttentionNoticeModel.recordTransition(updated, tx);
+      return true;
+    });
   }
 
   /** Sessions whose pod should still exist, across every organization. */
@@ -414,6 +478,7 @@ class AgentRunModel {
         actorKind: schema.agentRunsTable.actorKind,
         actorId: schema.agentRunsTable.actorId,
         actorName: schema.usersTable.name,
+        workloadName: schema.agentRunsTable.workloadName,
         startedAt: schema.agentRunsTable.startedAt,
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,
@@ -494,19 +559,39 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
     pagination: PaginationQuery;
+    search?: string;
+    pinned?: boolean;
+    sort?: "started" | "recent" | "pinned";
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     const conditions = [
-      eq(schema.agentRunsTable.actorKind, "user"),
-      eq(schema.agentRunsTable.actorId, params.actorUserId),
+      eq(schema.agentRunsTable.actorKind, actor.kind),
+      eq(schema.agentRunsTable.actorId, actor.id),
       eq(schema.agentRunsTable.organizationId, params.organizationId),
       sql`NOT EXISTS (SELECT 1 FROM agent_workspaces w
         WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
         AND w.last_task_id <> ${schema.agentRunsTable.taskId})`,
     ];
+    if (params.pinned !== undefined) {
+      conditions.push(
+        params.pinned
+          ? isNotNull(schema.agentRunsTable.pinnedAt)
+          : isNull(schema.agentRunsTable.pinnedAt),
+      );
+    }
+    if (params.search?.trim()) {
+      conditions.push(
+        ilike(
+          schema.agentRunsTable.title,
+          `%${escapeLikePattern(params.search.trim())}%`,
+        ),
+      );
+    }
     const [rows, [{ total }]] = await Promise.all([
       AgentRunModel.selectRunSessionsWhere({
         conditions,
         pagination: params.pagination,
+        sort: params.sort,
       }),
       db
         .select({ total: sql<number>`count(*)` })
@@ -594,6 +679,7 @@ class AgentRunModel {
     pinnedAt?: Date | null;
     projectId?: string | null;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const updated = await db
       .update(schema.agentRunsTable)
       .set({
@@ -604,7 +690,8 @@ class AgentRunModel {
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
-          eq(schema.agentRunsTable.actorUserId, params.actorUserId),
+          eq(schema.agentRunsTable.actorKind, actor.kind),
+          eq(schema.agentRunsTable.actorId, actor.id),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
         ),
       )
@@ -618,17 +705,23 @@ class AgentRunModel {
    * caller racing the reconciler can tell whether it owns the teardown.
    */
   static async close(params: { id: string; logs?: string }): Promise<boolean> {
-    const closed = await db
-      .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
-      .where(
-        and(
-          eq(schema.agentRunsTable.id, params.id),
-          isNull(schema.agentRunsTable.endedAt),
-        ),
-      )
-      .returning({ id: schema.agentRunsTable.id });
-    return closed.length > 0;
+    return db.transaction(async (tx) => {
+      const [closed] = await tx
+        .update(schema.agentRunsTable)
+        .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
+        .where(
+          and(
+            eq(schema.agentRunsTable.id, params.id),
+            isNull(schema.agentRunsTable.endedAt),
+          ),
+        )
+        .returning();
+      if (!closed) return false;
+      // Closing already clears attention. Resolve any posted notice as part of
+      // that same write, without changing teardown or task lifecycle decisions.
+      await AgentRunAttentionNoticeModel.recordTransition(closed, tx);
+      return true;
+    });
   }
 
   static async clearVirtualApiKey(id: string): Promise<void> {
@@ -697,10 +790,11 @@ class AgentRunModel {
     organizationId: string;
     taskId?: string;
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     return AgentRunModel.selectRunSessionsWhere({
       conditions: [
-        eq(schema.agentRunsTable.actorKind, "user"),
-        eq(schema.agentRunsTable.actorId, params.actorUserId),
+        eq(schema.agentRunsTable.actorKind, actor.kind),
+        eq(schema.agentRunsTable.actorId, actor.id),
         eq(schema.agentRunsTable.organizationId, params.organizationId),
         ...(params.taskId
           ? [eq(schema.agentRunsTable.taskId, params.taskId)]
@@ -712,6 +806,7 @@ class AgentRunModel {
   private static async selectRunSessionsWhere(params: {
     conditions: SQL[];
     pagination?: PaginationQuery;
+    sort?: "started" | "recent" | "pinned";
   }) {
     const {
       logs: _logs,
@@ -759,7 +854,24 @@ class AgentRunModel {
         eq(schema.agentRunsTable.projectId, schema.projectsTable.id),
       )
       .where(and(...params.conditions))
-      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .orderBy(
+        ...(params.sort === "pinned"
+          ? [
+              desc(schema.agentRunsTable.pinnedAt),
+              desc(schema.agentRunsTable.startedAt),
+              desc(schema.agentRunsTable.taskId),
+            ]
+          : params.sort === "recent"
+            ? [
+                desc(
+                  sql`COALESCE(${schema.a2aTasksTable.stateChangedAt}, ${schema.agentRunsTable.startedAt})`,
+                ),
+                // Match the stable client-side recency sort of started-at rows.
+                desc(schema.agentRunsTable.startedAt),
+                desc(schema.agentRunsTable.taskId),
+              ]
+            : [desc(schema.agentRunsTable.startedAt)]),
+      )
       .$dynamic();
 
     return params.pagination

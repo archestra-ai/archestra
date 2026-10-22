@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getCompactToolState,
   getCurrentEnabledToolIds,
@@ -195,6 +195,42 @@ describe("tool display helpers", () => {
     ).toContain('Expired or invalid authentication for "id-jag test"');
   });
 
+  it("keeps a proposed policy change as a full card", () => {
+    expect(
+      isCompactEligible({
+        toolName: "archestra__preview_guardrails_policy_change",
+        getToolShortName: (name) =>
+          name === "archestra__preview_guardrails_policy_change"
+            ? "preview_guardrails_policy_change"
+            : null,
+        part: {
+          type: "tool-archestra__preview_guardrails_policy_change",
+          state: "output-available",
+          output: { structuredContent: { stage: "preview" } },
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("folds a saved policy change into a circle like other calls", () => {
+    expect(
+      isCompactEligible({
+        toolName: "archestra__update_guardrails_policy",
+        getToolShortName: (name) =>
+          name === "archestra__update_guardrails_policy"
+            ? "update_guardrails_policy"
+            : null,
+        part: {
+          type: "tool-archestra__update_guardrails_policy",
+          state: "output-available",
+          output: { structuredContent: { delivery: "revision" } },
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(true);
+  });
+
   it("marks generic tool failures as compact-eligible", () => {
     expect(
       isCompactEligible({
@@ -387,5 +423,40 @@ describe("reviewed remedy rulings", () => {
 
     expect(getCompactToolState({ part, toolResultPart: null })).toBe("error");
     expect(getHumanRulingDisplay({ part, toolResultPart: null })).toBeNull();
+  });
+});
+
+describe("isCompactEligible auth check", () => {
+  it("parses a part's output once across renders, and again when it changes", () => {
+    const part = {
+      type: "tool-github__search",
+      state: "output-available",
+      output:
+        'Authentication required for "GitHub". To authenticate, visit: https://example.com/connect/github',
+    };
+    const check = () =>
+      isCompactEligible({
+        toolName: "github__search",
+        part: part as never,
+        toolResultPart: null,
+      });
+    // The auth parsers JSON.parse text that carries their marker; count those.
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(check()).toBe(false);
+      const parsesForFirstRender = parse.mock.calls.length;
+      expect(parsesForFirstRender).toBeGreaterThan(0);
+      expect(check()).toBe(false);
+      // Other readers of the output parse it every time; the auth check's
+      // parse is the one the second render no longer pays for.
+      expect(parse.mock.calls.length - parsesForFirstRender).toBe(
+        parsesForFirstRender - 1,
+      );
+
+      part.output = "plain result";
+      expect(check()).toBe(true);
+    } finally {
+      parse.mockRestore();
+    }
   });
 });

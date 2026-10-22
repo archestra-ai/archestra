@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLimits } from "@/lib/limits.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
@@ -97,8 +97,9 @@ export function BudgetFields({
   /**
    * "inline" is the create dialog's: a "Budget" heading over the payer and
    * two labelled cap fields, with no card around the cap.
+   * "plain" keeps the full labels without the cap card.
    */
-  layout?: "card" | "inline";
+  layout?: "card" | "inline" | "plain";
 }) {
   const teams = useBillableTeams(billingTeamId);
   const team = teams.find((option) => option.id === billingTeamId) ?? null;
@@ -265,7 +266,12 @@ export function BudgetFields({
   return (
     <div className="space-y-5">
       {payer}
-      <fieldset className="space-y-3 rounded-lg border p-4">
+      <fieldset
+        className={cn(
+          "min-w-0 space-y-3",
+          layout === "card" && "rounded-lg border p-4",
+        )}
+      >
         <legend className="sr-only">Spend cap for this {subject}</legend>
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium text-sm">
@@ -316,7 +322,10 @@ function TeamUsageBar({
   subject: "key" | "client";
 }) {
   const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
-  const { data: limits } = useLimits({ enabled: !!canReadLimits });
+  const { data: limits } = useLimits({
+    enabled: !!canReadLimits,
+    filters: { entityType: "team", entityId: team.id, limitType: "token_cost" },
+  });
   const teamLimit = useMemo(
     () =>
       (limits ?? []).find(
@@ -476,23 +485,20 @@ function LegendItem({
  */
 function useBillableTeams(currentTeamId: string | null) {
   const { data: isCostManager } = useHasPermissions({ llmLimit: ["update"] });
-  const { data: session } = useSession();
-  const userId = session?.user?.id;
-  const { data: allTeams = [] } = useTeams({ enabled: !!isCostManager });
+  const { data: allTeams = [] } = useTeams({
+    includeRelations: false,
+    enabled: !!isCostManager,
+  });
   const { data: myTeams = [] } = useMyTeams({ enabled: !isCostManager });
   return useMemo(() => {
     const candidates = isCostManager
       ? allTeams
       : myTeams.filter(
           (team) =>
-            team.id === currentTeamId ||
-            !team.members ||
-            team.members.some(
-              (member) => member.userId === userId && member.role === "admin",
-            ),
+            team.id === currentTeamId || team.myRole === ADMIN_ROLE_NAME,
         );
     return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allTeams, currentTeamId, isCostManager, myTeams, userId]);
+  }, [allTeams, currentTeamId, isCostManager, myTeams]);
 }
 
 const CAP_PERIODS: LimitCleanupInterval[] = [

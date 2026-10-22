@@ -471,6 +471,7 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
         name: "apply_patch",
         arguments: { input: "*** Begin Patch" },
         content: "raw patch result",
+        structured: false,
         isError: false,
       },
     ]);
@@ -520,7 +521,9 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);
@@ -2574,6 +2577,58 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
       expect(recordedResponse.output).toContainEqual(compaction);
     } else {
       expect(recordedResponse.output).not.toContainEqual(compaction);
+    }
+  });
+});
+
+describe("OpenAiResponsesRequestAdapter replayed tool-call ids", () => {
+  // A Gemini call id as the model router hands it to a client: the thought
+  // signature rides inside it (encodeSignedToolCallId).
+  const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+
+  test("fits a Gemini call id after the result update looked it up", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        {
+          type: "function_call",
+          id: `fc_${geminiCallId}`,
+          call_id: geminiCallId,
+          name: "read",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: geminiCallId,
+          output: "SECRET",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    for (const factory of [
+      openAiResponsesAdapterFactory,
+      openAiResponsesCompactAdapterFactory,
+    ]) {
+      const adapter = factory.createRequestAdapter(request);
+      adapter.applyToolResultUpdates({ [geminiCallId]: "sanitized" });
+      const [call, output] = adapter.toProviderRequest().input as Array<{
+        id?: string;
+        call_id: string;
+        output?: string;
+      }>;
+
+      expect(call.call_id).toMatch(/^call_[0-9a-f]{32}$/);
+      // OpenAI did not mint the item id and accepts the item without one.
+      expect(call).not.toHaveProperty("id");
+      expect(output).toMatchObject({
+        call_id: call.call_id,
+        output: "sanitized",
+      });
+      // The client's history and the policy view keep the id as sent.
+      expect(adapter.getToolResults()[0].id).toBe(geminiCallId);
+      expect((request.input as Array<{ call_id: string }>)[1].call_id).toBe(
+        geminiCallId,
+      );
     }
   });
 });

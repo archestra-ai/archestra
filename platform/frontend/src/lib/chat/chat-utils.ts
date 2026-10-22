@@ -39,7 +39,6 @@ export function conversationStorageKeys(conversationId: string) {
     rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
-    reviewContext: `archestra-chat-review-context-${conversationId}`,
     encryptedChatKey: `archestra_encrypted_chat_key_${conversationId}`,
     /**
      * Where the encrypted-chat key lived under the feature's former names
@@ -204,9 +203,16 @@ export function getManualCompactionSkippedMessage(
 export function mergePersistedMessageMetadata(params: {
   liveMessages: UIMessage[];
   persistedMessages: UIMessage[];
+  /**
+   * The live thread started from the end of the saved one (a tail read):
+   * saved messages older than the live thread's first are put in front of
+   * it once they arrive.
+   */
+  includeEarlierPersisted?: boolean;
 }): UIMessage[] {
   const remainingPersistedMessages = [...params.persistedMessages];
   let changed = false;
+  let firstMatchedPersistedIndex = -1;
 
   const mergedMessages = params.liveMessages.map((liveMessage) => {
     const liveMetadata = getObjectMetadata(liveMessage);
@@ -238,6 +244,10 @@ export function mergePersistedMessageMetadata(params: {
     if (!persistedMessage) {
       return liveMessage;
     }
+    if (firstMatchedPersistedIndex === -1) {
+      firstMatchedPersistedIndex =
+        params.persistedMessages.indexOf(persistedMessage);
+    }
 
     const parts = mergePersistedHookRunParts({
       liveMessage,
@@ -248,10 +258,16 @@ export function mergePersistedMessageMetadata(params: {
       persistedMessage,
     });
 
-    changed =
-      changed ||
-      parts !== liveMessage.parts ||
-      typeof persistedMessageId !== "string";
+    // A live message loaded from the saved thread already carries the saved
+    // id: there is nothing to stamp, so it stays the same object and the
+    // thread is not rebuilt on load.
+    const alreadyResolved =
+      typeof persistedMessageId === "string" ||
+      liveMessage.id === persistedMessage.id;
+    if (parts === liveMessage.parts && alreadyResolved) {
+      return liveMessage;
+    }
+    changed = true;
     return {
       ...liveMessage,
       parts,
@@ -263,6 +279,15 @@ export function mergePersistedMessageMetadata(params: {
     };
   });
 
+  const earlier =
+    params.includeEarlierPersisted && firstMatchedPersistedIndex > 0
+      ? params.persistedMessages
+          .slice(0, firstMatchedPersistedIndex)
+          .filter((message) => remainingPersistedMessages.includes(message))
+      : [];
+  if (earlier.length > 0) {
+    return [...earlier, ...(changed ? mergedMessages : params.liveMessages)];
+  }
   return changed ? mergedMessages : params.liveMessages;
 }
 

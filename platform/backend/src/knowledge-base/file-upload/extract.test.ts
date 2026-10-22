@@ -99,6 +99,7 @@ describe("scanned PDFs with OCR", () => {
         modelName: "mock-vision",
         provider: "anthropic",
         llmModel: model as never,
+        maxOutputTokens: 16_384,
       },
       connectorId: null,
       deadlineAt: Date.now() + 60_000,

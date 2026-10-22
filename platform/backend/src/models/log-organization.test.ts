@@ -5,7 +5,7 @@ import { drainBackgroundWork } from "@/utils/background-work";
 import InteractionModel from "./interaction";
 import { interactionBelongsToOrganization } from "./log-organization";
 
-test("organization filtering preserves mixed-owner isolation without per-row owner reads", async ({
+test("organization filtering preserves mixed-owner isolation", async ({
   makeOrganization,
   makeAgent,
   makeApp,
@@ -57,10 +57,28 @@ test("organization filtering preserves mixed-owner isolation without per-row own
     .from(schema.interactionsTable)
     .where(interactionBelongsToOrganization(local.id));
   expect((await query).map((row) => row.id).sort()).toEqual(expected.sort());
+});
+
+test("a wide log scan reads each owner table once, not once per row", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const local = await makeOrganization();
+  const agent = await makeAgent({ organizationId: local.id });
+  // A log large enough that probing owners row by row costs more than
+  // hashing them once; bulk-inserted, since the model writes one row a call.
+  await db.execute(sql`
+    INSERT INTO interactions (profile_id, type, request, response)
+    SELECT ${agent.id}::uuid, 'openai:chatCompletions', '{}'::jsonb, '{}'::jsonb
+    FROM generate_series(1, 5000)
+  `);
+  await db.execute(sql`ANALYZE interactions`);
+  const query = db
+    .select({ id: schema.interactionsTable.id })
+    .from(schema.interactionsTable)
+    .where(interactionBelongsToOrganization(local.id));
   const result = await db.execute(sql`EXPLAIN (ANALYZE, FORMAT JSON) ${query}`);
   const plan = (result.rows[0] as Record<string, unknown>)["QUERY PLAN"];
-  // Inspect actual execution rather than elapsed time: owner-table work must
-  // not repeat once for each interaction in a growing log.
   const ownerReads: PlanNode[] = [];
   const collect = (node: PlanNode) => {
     if (

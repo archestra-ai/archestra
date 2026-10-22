@@ -97,6 +97,25 @@ class A2ATaskApprovalRequestModel {
     return req ?? null;
   }
 
+  static async attachChatReviewer(params: {
+    taskId: string;
+    approvalId: string;
+    userId: string;
+    channelId: string;
+  }) {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    await db
+      .update(table)
+      .set({ reviewerUserId: params.userId, chatChannelId: params.channelId })
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+          eq(table.resolved, false),
+        ),
+      );
+  }
+
   /**
    * Links a paused `execute_remedy_plan` call to its OpenAPPA review. Without
    * a reviewer, whoever can answer the task's approvals over A2A decides.
@@ -109,8 +128,8 @@ class A2ATaskApprovalRequestModel {
     remedyArguments: Record<string, unknown>;
     expiresAt: Date;
     reviewerUserId?: string;
-    slackChannelId?: string;
-    slackThreadTs?: string;
+    chatChannelId?: string;
+    chatThreadId?: string;
   }): Promise<A2ATaskApprovalRequest | null> {
     const table = schema.a2aTaskApprovalRequestsTable;
     const [req] = await db
@@ -120,8 +139,8 @@ class A2ATaskApprovalRequestModel {
         openappaReviewText: params.reviewText,
         remedyArguments: params.remedyArguments,
         reviewerUserId: params.reviewerUserId ?? null,
-        slackChannelId: params.slackChannelId ?? null,
-        slackThreadTs: params.slackThreadTs ?? null,
+        chatChannelId: params.chatChannelId ?? null,
+        chatThreadId: params.chatThreadId ?? null,
         expiresAt: params.expiresAt,
       })
       .where(

@@ -19,7 +19,7 @@ import {
   A2A_HITL_REVIEW_TTL_MS,
   attachHitlReviews,
   decideCallerHitlReviews,
-  decideSlackHitlReview,
+  decideChatHitlReview,
   remedyCallNeedsHumanReview,
 } from "./a2a-hitl-review";
 import { consumeHitlRuling, reviewSessionFromTrajectory } from "./hitl-review";
@@ -95,10 +95,10 @@ async function pausedReview(params: {
     taskId: task.id,
     approvalRequests,
     answerer: {
-      kind: "slack",
+      kind: "chat",
       reviewerUserId: params.reviewerUserId,
       channelId: "C123",
-      threadTs: "1700000000.000100",
+      threadId: "1700000000.000100",
     },
     now: params.now ?? NOW,
   });
@@ -155,8 +155,8 @@ test("a paused remedy call is linked to its offer, reviewer, thread and expiry",
     openappaReviewText: "Approve this call?\nsend_email to ceo@example.com",
     remedyArguments: remedyInput("offer-1"),
     reviewerUserId: reviewer.id,
-    slackChannelId: "C123",
-    slackThreadTs: "1700000000.000100",
+    chatChannelId: "C123",
+    chatThreadId: "1700000000.000100",
     expiresAt: new Date(NOW.getTime() + A2A_HITL_REVIEW_TTL_MS),
     ruling: null,
   });
@@ -177,7 +177,7 @@ test("the reviewer's approval reaches the resumed remedy call exactly once", asy
   });
 
   const decide = () =>
-    decideSlackHitlReview({
+    decideChatHitlReview({
       organizationId: org.id,
       taskId: task.id,
       approvalId: "approval-1",
@@ -223,7 +223,7 @@ test("a decline is recorded as a deny ruling for OpenAPPA to close the offer", a
   });
 
   expect(
-    await decideSlackHitlReview({
+    await decideChatHitlReview({
       organizationId: org.id,
       taskId: task.id,
       approvalId: "approval-1",
@@ -259,7 +259,7 @@ test("another user, another channel, or a late click records nothing", async ({
     clickChannelId?: string;
     now?: Date;
   }) =>
-    decideSlackHitlReview({
+    decideChatHitlReview({
       organizationId: org.id,
       taskId: task.id,
       approvalId: "approval-1",
@@ -311,7 +311,7 @@ test("a click on a resumed task's review, or on a plain tool approval, is not an
     offerId: "offer-1",
   });
   const click = (taskId: string, approvalId: string) =>
-    decideSlackHitlReview({
+    decideChatHitlReview({
       organizationId: org.id,
       taskId,
       approvalId,

@@ -55,4 +55,25 @@ describe("AudienceChip", () => {
     const chip = screen.getByRole("button", { name: "Audience: Personal" });
     expect(chip).toHaveTextContent(/^Personal$/);
   });
+
+  test("compact shows the owner and audience, one hover away", async () => {
+    const user = userEvent.setup();
+    render(
+      <AudienceChip
+        compact
+        audience="team"
+        owner={{ id: "u1", name: "Ada Lovelace", email: "ada@x.invalid" }}
+      />,
+    );
+
+    await user.hover(
+      screen.getByRole("button", {
+        name: "Audience: Team-wide, Owner: Ada Lovelace",
+      }),
+    );
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /^Ada LovelaceTeam-wide$/,
+    );
+  });
 });

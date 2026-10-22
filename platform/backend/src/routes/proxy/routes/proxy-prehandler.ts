@@ -11,6 +11,7 @@ import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
+import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
 import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
 const UUID_REGEX =
@@ -39,6 +40,15 @@ export function createProxyPreHandler(params: {
   skipErrorResponse?: Record<string, unknown>;
   rejectUnhandledPaths?: boolean;
   beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>;
+  /**
+   * Platform check that runs before anything else, so a rejected request never
+   * reaches the rewrite or the upstream. Receives the agent UUID from the URL,
+   * if any, because the rewrite strips it.
+   */
+  authenticate?: (params: {
+    request: FastifyRequest;
+    agentId?: string;
+  }) => Promise<void>;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
   const rewritePrefix = params.rewritePrefix ?? "";
@@ -49,11 +59,12 @@ export function createProxyPreHandler(params: {
     },
   };
 
-  return (
+  const rewritePreHandler = (
     request: FastifyRequest,
     reply: FastifyReply,
     next: HookHandlerDoneFunction,
   ) => {
+    captureClientRuntimeEvidence(request);
     const urlPath = request.url.split("?")[0];
     const endpointSuffixes =
       typeof endpointSuffix === "string" ? [endpointSuffix] : endpointSuffix;
@@ -135,10 +146,27 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    cleanForwardedBody(request, params.beforeCleanBody).then(
-      () => next(),
-      next,
-    );
+    // Strip last: the body hooks (e.g. Claude Code's count observer) still
+    // read X-Archestra-* headers such as the agent id.
+    cleanForwardedBody(request, params.beforeCleanBody).then(() => {
+      stripArchestraRequestHeaders(request);
+      next();
+    }, next);
+  };
+
+  const { authenticate } = params;
+  if (!authenticate) return rewritePreHandler;
+  return (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    next: HookHandlerDoneFunction,
+  ) => {
+    const agentId = request.url.replace(apiPrefix, "").match(UUID_REGEX)?.[1];
+    // .catch rather than a second .then argument, so a synchronous throw in
+    // the rewrite reaches Fastify instead of becoming an unhandled rejection.
+    authenticate({ request, agentId })
+      .then(() => rewritePreHandler(request, reply, next))
+      .catch(next);
   };
 }
 
@@ -177,6 +205,25 @@ export async function cleanForwardedBody(
       raw,
       beforeCleanBody && ((body) => beforeCleanBody(request, body)),
     )) ?? Readable.from([raw], { objectMode: false });
+}
+
+/**
+ * Removes every `X-Archestra-*` header before a catch-all proxy forwards the
+ * request. These headers carry Archestra's own credentials and routing hints
+ * (the passthrough key in `X-Archestra-Virtual-Key` above all), which must
+ * never reach a third-party provider. Runs after authentication has read them.
+ */
+export function stripArchestraRequestHeaders(request: FastifyRequest): void {
+  for (const headers of new Set([request.headers, request.raw.headers])) {
+    for (const name of Object.keys(headers)) {
+      if (
+        name.toLowerCase().startsWith("x-archestra-") ||
+        name.toLowerCase() === "provider-api-key-id"
+      ) {
+        delete headers[name];
+      }
+    }
+  }
 }
 
 // === Internal helpers ===

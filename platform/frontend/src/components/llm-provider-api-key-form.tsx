@@ -726,11 +726,15 @@ export function LlmProviderApiKeyForm({
             providerKey === "bedrock" && bedrockIamAuthEnabled;
           const isEmbeddingUnsupported =
             forEmbedding && config.supportsEmbeddings === false;
-          // Why the entry cannot be picked outranks what it covers, so the
-          // embedding notice takes the one subtext line when both apply.
+          // Explain unavailable providers inline, without requiring hover.
+          // The embedding restriction takes precedence when both apply.
           const subtext = isEmbeddingUnsupported
             ? "Not supported for embeddings"
-            : config.optionSubtext;
+            : isGeminiDisabledByVertexAi
+              ? "Uses Vertex AI. No API key needed."
+              : isBedrockDisabledByIamAuth
+                ? "Uses AWS IAM. No API key needed."
+                : config.optionSubtext;
 
           return {
             value: providerKey,

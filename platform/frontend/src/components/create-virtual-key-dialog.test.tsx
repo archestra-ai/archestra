@@ -2,7 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -22,6 +26,8 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: vi.fn(),
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
@@ -34,6 +40,9 @@ const mutateAsync = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "u-self" } },
@@ -45,7 +54,8 @@ beforeEach(() => {
   const platformTeam = {
     id: "team-platform",
     name: "Platform",
-    members: [{ userId: "u-self", role: "admin" }],
+    memberCount: 1,
+    myRole: "admin",
   };
   vi.mocked(useMyTeams).mockReturnValue({
     data: [platformTeam],
@@ -144,12 +154,11 @@ describe("CreateVirtualKeyDialog", () => {
     );
     expect(
       screen.getByRole("region", { name: "Provider keys" }),
-    ).toHaveTextContent("OpenAI · Main OpenAI");
+    ).toHaveTextContent("Main OpenAI");
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Expires")).toHaveTextContent("Never");
-    expect(screen.getByLabelText("Who pays for this key?")).toHaveTextContent(
-      "No team",
-    );
+    expect(screen.getByLabelText("Who pays for this key?")).not.toBeVisible();
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Continue" }),
     ).not.toBeInTheDocument();
@@ -159,6 +168,7 @@ describe("CreateVirtualKeyDialog", () => {
       data: {
         name: "Self Admin's virtual key (2)",
         keyType: "standard",
+        includeFutureProviders: false,
         expiresAt: undefined,
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },
@@ -175,6 +185,18 @@ describe("CreateVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog("standard");
 
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByLabelText("Spend cap in dollars")).not.toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Who can use it", hidden: true }),
+    ).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      screen.getByRole("heading", { name: "Who can use it" }),
+    ).toBeVisible();
     await user.click(screen.getByLabelText("Who pays for this key?"));
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     expect(
@@ -195,6 +217,12 @@ describe("CreateVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog("standard");
 
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByLabelText("Spend cap in dollars")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByLabelText("Cap resets"));
     await user.click(await screen.findByRole("option", { name: "Every week" }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "100");
@@ -217,13 +245,22 @@ describe("CreateVirtualKeyDialog", () => {
       screen.queryByRole("button", { name: "Continue" }),
     ).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Name"), "Regional key");
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByLabelText("Spend cap in dollars")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "250");
+    await user.type(screen.getByLabelText("Label key"), "environment");
+    await user.type(screen.getByLabelText("Label value"), "development");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "Create key" }));
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.objectContaining({
         name: "Regional key",
         keyType: "passthrough",
-        labels: [],
+        labels: [{ key: "environment", value: "development" }],
         spendCap: { limitValue: 250, cleanupInterval: "calendar_month" },
       }),
     });
@@ -235,6 +272,24 @@ describe("CreateVirtualKeyDialog", () => {
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
   });
 
+  it("creates automatic coverage without freezing the currently selected primary keys", async () => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "llmProviderApiKey", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    const user = userEvent.setup();
+    renderDialog("standard");
+    await user.click(
+      screen.getByRole("radio", { name: /Current and future providers/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        includeFutureProviders: true,
+        providerApiKeys: [],
+      }),
+    });
+  });
+
   it("starts with every provider's primary key", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
@@ -243,11 +298,10 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     const section = screen.getByRole("region", { name: "Provider keys" });
-    expect(section).toHaveTextContent("OpenAI · Team key");
-    expect(section).toHaveTextContent("Each provider uses its primary key.");
+    expect(section).toHaveTextContent("Team key");
     expect(
-      within(section).getByRole("button", { name: "Enable all" }),
-    ).toBeDisabled();
+      within(section).queryByRole("button", { name: "Add all" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -267,7 +321,6 @@ describe("CreateVirtualKeyDialog", () => {
       initialProviderApiKeys: null,
     });
 
-    await user.click(screen.getByRole("button", { name: "Change" }));
     await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
     expect(
       screen.getByRole("group", { name: "Providers not used" }),
@@ -295,10 +348,10 @@ describe("CreateVirtualKeyDialog", () => {
     });
 
     expect(
-      screen.getByText("Pick the providers this key can use"),
+      screen.getByText("No providers selected — add one below"),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Create key" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Enable all" }));
+    await user.click(screen.getByRole("button", { name: "Add all" }));
     expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });
 
@@ -409,10 +462,12 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("lets an admin pick the owner, defaulting to themselves", () => {
-    renderDialog("standard", { isVirtualKeyAdmin: true });
-
-    expect(screen.getByLabelText("Owner")).toHaveTextContent("Yourself");
+  it("creates keys for the current user without an owner selector", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard");
+    expect(screen.queryByLabelText("Owner")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync.mock.calls[0]?.[0].data).not.toHaveProperty("ownerId");
   });
 });
 
@@ -469,7 +524,6 @@ function renderDialog(
       provider: "openai" | "zhipuai";
       providerApiKeyId: string;
     }> | null;
-    isVirtualKeyAdmin?: boolean;
   } = {},
 ) {
   // The permissions section reads the role and team catalog through queries.
@@ -496,7 +550,6 @@ function renderDialog(
                 ? [{ provider: "openai", providerApiKeyId: "provider-key-1" }]
                 : undefined))
         }
-        isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
         connectionBaseUrl="https://proxy.example.com"
         defaultExpirationSeconds={null}
         currentUser={{ id: "u-self", name: "Self Admin" }}

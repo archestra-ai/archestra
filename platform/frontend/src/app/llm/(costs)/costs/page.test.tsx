@@ -1,684 +1,586 @@
-import type { StatisticsTimeFrame } from "@archestra/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { delay, HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useRouter, useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import OrganizationCostsPage from "./page";
-
-const mockRouterPush = vi.fn();
-let mockSearchParams = new URLSearchParams();
-const mockSetCostsAction = vi.fn();
-
-const mockUseTeamStatistics = vi.fn();
-const mockUseProfileStatistics = vi.fn();
-const mockUseModelStatistics = vi.fn();
-const mockUseCostSavingsStatistics = vi.fn();
-const mockUseUserStatistics = vi.fn();
-const mockUseAppStatistics = vi.fn();
-const mockUseSkillStatistics = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
-
-vi.mock("@/app/llm/(costs)/layout", () => ({
-  useSetCostsAction: () => mockSetCostsAction,
-}));
-
-type StatisticsHookParams = {
-  timeframe: StatisticsTimeFrame;
-  enabled?: boolean;
-};
-
-vi.mock("@/lib/statistics.query", () => ({
-  useProxyCostStatistics: () => ({ isPending: true }),
-  useTeamStatistics: (params: StatisticsHookParams) =>
-    mockUseTeamStatistics(params),
-  useProfileStatistics: (params: StatisticsHookParams) =>
-    mockUseProfileStatistics(params),
-  useModelStatistics: (params: StatisticsHookParams) =>
-    mockUseModelStatistics(params),
-  useCostSavingsStatistics: (params: StatisticsHookParams) =>
-    mockUseCostSavingsStatistics(params),
-  useUserStatistics: (params: StatisticsHookParams) =>
-    mockUseUserStatistics(params),
-  useAppStatistics: (params: StatisticsHookParams) =>
-    mockUseAppStatistics(params),
-  useSkillStatistics: (params: StatisticsHookParams) =>
-    mockUseSkillStatistics(params),
-}));
-
-vi.mock("recharts", () => ({
-  CartesianGrid: () => null,
-  // Expose what each series was given so tests can check the chart wiring
-  // without rendering SVG.
-  Line: ({ dataKey, stroke }: { dataKey: string; stroke: string }) => (
-    <div data-testid="chart-line" data-key={dataKey} data-stroke={stroke} />
-  ),
-  // The x-axis is a category axis keyed off each point's `label`, so surfacing
-  // the labels is enough to see what the rendered axis would read.
-  LineChart: ({
-    children,
-    data,
-  }: {
-    children: React.ReactNode;
-    data?: { label?: string }[];
-  }) => (
-    <div>
-      <span data-testid="chart-axis-labels">
-        {(data ?? []).map((point) => point.label).join("|")}
-      </span>
-      {children}
-    </div>
-  ),
-  XAxis: () => null,
-  YAxis: () => null,
-}));
-
-vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({
-    config,
-    children,
-  }: {
-    config: Record<string, { label: string }>;
-    children: React.ReactNode;
-  }) => (
-    <div data-testid="chart" data-config={JSON.stringify(config)}>
-      {children}
-    </div>
-  ),
-  ChartLegend: () => null,
-  ChartLegendContent: () => null,
-  ChartTooltip: () => null,
-  ChartTooltipContent: () => null,
-}));
-
-vi.mock("@/components/ui/custom-date-time-range-dialog", () => ({
-  CustomDateTimeRangeDialog: () => null,
-}));
+vi.mock("@/lib/auth/auth.query");
+vi.mock("sonner");
+const origin = "http://localhost:9000";
+const server = setupServer();
+let search = new URLSearchParams();
+let models: Record<string, unknown>[];
+let users: Record<string, unknown>[];
+let teams: Record<string, unknown>[];
+let agents: Record<string, unknown>[];
+let apps: Record<string, unknown>[];
+let skills: Record<string, unknown>[];
+let skillsUsage: Record<string, unknown>[];
+let savings: Record<string, unknown>;
+let requests: URL[];
+let pending = false;
+let client: QueryClient;
+const paginated = (data: unknown[]) => ({
+  data,
+  pagination: {
+    currentPage: 1,
+    limit: 100,
+    total: data.length,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false,
+  },
+});
+const model = (name = "example/model-a", cost = 8.25) => ({
+  model: name,
+  requests: 10,
+  inputTokens: 1000,
+  outputTokens: 200,
+  cacheReadTokens: 4000,
+  cost,
+  percentage: 100,
+  timeSeries: [],
+});
+function show() {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <OrganizationCostsPage />
+    </QueryClientProvider>,
+  );
+}
+async function view(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^View / }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name }));
+}
+async function group(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^by / }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name }));
+}
+async function metric(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^Show / }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name }));
+}
+async function split(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^split by / }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name }));
+}
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  archestraApiClient.setConfig({ baseUrl: origin });
+});
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+afterEach(() => {
+  cleanup();
+  client?.clear();
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
+beforeEach(() => {
+  localStorage.clear();
+  search = new URLSearchParams();
+  pending = false;
+  requests = [];
+  models = [model()];
+  users = [];
+  teams = [];
+  agents = [];
+  apps = [];
+  skills = [];
+  skillsUsage = [];
+  savings = {
+    totalActualCost: 8.25,
+    totalSubscriptionCost: 14.5,
+    timeSeries: [],
+  };
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockImplementation(
+    () => search as unknown as ReturnType<typeof useSearchParams>,
+  );
+  vi.mocked(useAppName).mockReturnValue("Example Platform");
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+    isLoading: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    width: 1000,
+    height: 260,
+    x: 0,
+    y: 0,
+    top: 0,
+    bottom: 260,
+    left: 0,
+    right: 1000,
+    toJSON: () => ({}),
+  });
+  server.use(
+    http.get(`${origin}/api/statistics/:kind`, async ({ request, params }) => {
+      requests.push(new URL(request.url));
+      if (pending) await delay("infinite");
+      switch (params.kind) {
+        case "costs":
+          return HttpResponse.json({
+            models,
+            costSavings: savings,
+            activeUsers: users.length,
+          });
+        case "models":
+          return HttpResponse.json(models);
+        case "teams":
+          return HttpResponse.json(teams);
+        case "agents":
+          return HttpResponse.json(agents);
+        case "users":
+          return HttpResponse.json(paginated(users));
+        case "apps":
+          return HttpResponse.json({
+            ...paginated(apps),
+            chatBaselineCostPerSession: 0.75,
+            chatBaselineSessions: 12,
+          });
+        case "skills":
+          return HttpResponse.json(paginated(skills));
+        case "skill-usage":
+          return HttpResponse.json({
+            ...paginated(skillsUsage),
+            totals: { activations: 5, contextTokens: 6420, users: 3 },
+          });
+        case "app-usage":
+          return HttpResponse.json({
+            ...paginated([]),
+            totals: {
+              runs: 0,
+              toolCalls: 0,
+              llmRequests: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              billedCost: 0,
+              subscriptionCost: 0,
+            },
+          });
+        case "llm-proxy":
+          return HttpResponse.json({
+            totals: { requests: 0 },
+            timeSeries: [],
+            methods: [],
+            credentials: [],
+            pagination: { total: 0, limit: 100, offset: 0 },
+          });
+        case "cost-savings":
+          return HttpResponse.json(savings);
+        default:
+          return HttpResponse.json(
+            { error: { message: "Unexpected endpoint" } },
+            { status: 500 },
+          );
+      }
+    }),
+  );
+});
 
 describe("OrganizationCostsPage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    localStorage.clear();
-    vi.mocked(useRouter).mockReturnValue({
-      push: mockRouterPush,
-    } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(useSearchParams).mockImplementation(
-      () => mockSearchParams as unknown as ReturnType<typeof useSearchParams>,
-    );
-    mockSearchParams = new URLSearchParams();
-    mockUseTeamStatistics.mockReturnValue({ data: [] });
-    mockUseProfileStatistics.mockReturnValue({ data: [] });
-    mockUseModelStatistics.mockReturnValue({ data: [] });
-    mockUseCostSavingsStatistics.mockReturnValue({
-      data: { timeSeries: [] },
-    });
-    mockUseUserStatistics.mockReturnValue({
-      data: { data: [], pagination: { total: 0 } },
-    });
-    mockUseAppStatistics.mockReturnValue({
-      data: {
-        data: [],
-        pagination: { total: 0 },
-        chatBaselineCostPerSession: 0,
-        chatBaselineSessions: 0,
-      },
-    });
-    mockUseSkillStatistics.mockReturnValue({
-      data: { data: [], pagination: { total: 0 } },
-    });
-  });
-
-  it("holds the layout with placeholders instead of reporting zeros before the numbers arrive", async () => {
-    // Every statistics request still in flight — the state the page is in on
-    // its very first paint.
-    for (const hook of [
-      mockUseTeamStatistics,
-      mockUseProfileStatistics,
-      mockUseModelStatistics,
-      mockUseCostSavingsStatistics,
-      mockUseUserStatistics,
-      mockUseAppStatistics,
-      mockUseSkillStatistics,
-    ]) {
-      hook.mockReturnValue({ data: undefined, isPending: true });
-    }
-
-    const { container } = render(<OrganizationCostsPage />);
-
-    await waitFor(() => {
-      expect(
-        container.querySelectorAll('[data-slot="skeleton"]').length,
-      ).toBeGreaterThan(0);
-    });
-
-    // A loading page must not answer questions it cannot answer yet: "$0.00"
-    // and "No data available" are claims about the organization, not about the
-    // request.
+  it("holds placeholders rather than zeros until statistics arrive", async () => {
+    pending = true;
+    const { container } = show();
+    await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
-    expect(screen.queryByText("No data available")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("No team data available for the selected timeframe"),
-    ).not.toBeInTheDocument();
-
-    // The tiles keep their labels so the page reads as itself while it loads.
-    expect(
-      screen.getByText("Metered usage charged at API rates"),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Nothing to tabulate.")).not.toBeInTheDocument();
+    expect(screen.getByText("Metered API-key charges")).toBeInTheDocument();
   });
-
-  it("shows the organization-wide analytics", async () => {
-    render(<OrganizationCostsPage />);
-
-    await waitFor(() => {
-      expect(screen.getAllByText("People").length).toBeGreaterThan(0);
+  it("shows organization analytics and all supported entity choices", async () => {
+    show();
+    await screen.findAllByText("$8.25");
+    fireEvent.keyDown(screen.getByRole("button", { name: "by Model" }), {
+      key: "Enter",
     });
-    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
+    for (const name of ["Team", "Agent", "Model", "Person", "App", "Key"])
+      expect(await screen.findByRole("menuitem", { name })).toBeVisible();
     expect(screen.queryByTestId("my-usage-summary")).not.toBeInTheDocument();
   });
-
-  it("summarizes billed, subscription-covered, request, and token totals", () => {
-    mockUseCostSavingsStatistics.mockReturnValue({
-      data: {
-        totalBaselineCost: 12,
-        totalActualCost: 8.25,
-        totalSavings: 3.75,
-        totalSubscriptionCost: 14.5,
-        totalCacheSavings: 1.75,
-        timeSeries: [],
+  it("summarizes metered, subscription, request, token and active-person totals", async () => {
+    users = [
+      {
+        userId: "one",
+        userName: "Example",
+        userEmail: "one@example.test",
+        requests: 10,
       },
-    });
-    mockUseModelStatistics.mockReturnValue({
-      data: [
-        {
-          model: "example/model-a",
-          requests: 10,
-          inputTokens: 1_000,
-          outputTokens: 200,
-          cacheReadTokens: 4_000,
-          cost: 8.25,
-          percentage: 100,
-          timeSeries: [],
-        },
-      ],
-    });
-
-    render(<OrganizationCostsPage />);
-
-    expect(screen.getAllByText("$8.25")).not.toHaveLength(0);
+    ];
+    show();
+    await screen.findAllByText("$8.25");
     expect(screen.getByText("$14.50")).toBeInTheDocument();
-    expect(screen.getByText("5,200")).toBeInTheDocument();
+    expect(screen.getByText("5.2K")).toBeInTheDocument();
     expect(
-      screen.getByText("Metered usage charged at API rates"),
+      screen.getByText("Usage at API rates, not a bill"),
     ).toBeInTheDocument();
-    expect(screen.getByText("List-price value not billed")).toBeInTheDocument();
+    expect(
+      screen.getByText("Active people").parentElement?.parentElement,
+    ).toHaveTextContent(/^Active people1/);
+    // The totals only summarize; the explorer's controls pick what it shows.
+    expect(
+      screen.queryByRole("button", { name: /API spend/ }),
+    ).not.toBeInTheDocument();
   });
-
-  it("queries statistics with the selected custom timeframe", async () => {
-    const customTimeframe =
+  it("uses the selected custom timeframe for all requested data", async () => {
+    const timeframe =
       "custom:2026-07-01T00:00:00.000Z_2026-07-31T23:59:59.999Z";
-    mockSearchParams = new URLSearchParams([["timeframe", customTimeframe]]);
-
-    render(<OrganizationCostsPage />);
-
-    await waitFor(() => {
-      expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
-        timeframe: customTimeframe,
-        enabled: true,
-      });
-    });
-
-    expect(mockUseProfileStatistics).toHaveBeenLastCalledWith({
-      timeframe: customTimeframe,
-      enabled: true,
-    });
-    expect(mockUseModelStatistics).toHaveBeenLastCalledWith({
-      timeframe: customTimeframe,
-      enabled: true,
-    });
-    expect(mockUseCostSavingsStatistics).toHaveBeenLastCalledWith({
-      timeframe: customTimeframe,
-      enabled: true,
-    });
-    expect(
-      mockUseTeamStatistics.mock.calls.some(
-        ([params]) => params.timeframe === "all",
+    search = new URLSearchParams({ timeframe });
+    show();
+    await screen.findAllByText("$8.25");
+    await group("Team");
+    await waitFor(() =>
+      expect(requests.some((url) => url.pathname.endsWith("/teams"))).toBe(
+        true,
       ),
-    ).toBe(false);
-  });
-
-  it("never enables the queries for the default timeframe when a persisted one exists", async () => {
-    localStorage.setItem("cost-statistics-timeframe", "30d");
-
-    render(<OrganizationCostsPage />);
-
-    await waitFor(() => {
-      expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
-        timeframe: "30d",
-        enabled: true,
-      });
-    });
-
-    // A page load must not fire a throwaway round of default-timeframe
-    // requests before the persisted timeframe is resolved.
-    for (const hook of [
-      mockUseTeamStatistics,
-      mockUseProfileStatistics,
-      mockUseModelStatistics,
-      mockUseCostSavingsStatistics,
-    ]) {
-      expect(
-        hook.mock.calls.some(
-          ([params]) => params.enabled && params.timeframe !== "30d",
-        ),
-      ).toBe(false);
-    }
-  });
-
-  it("shows each person's usage and model mix, and does not present subscription usage as spend", async () => {
-    mockUseUserStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            userId: "user-1",
-            userName: "Example User A",
-            userEmail: "user-a@example.test",
-            requests: 42,
-            inputTokens: 900,
-            outputTokens: 100,
-            cacheReadTokens: 0,
-            totalTokens: 1000,
-            // Entirely subscription-fulfilled: heavy usage, nothing billed.
-            billedCost: 0,
-            subscriptionCost: 12.5,
-            activeDays: 4,
-            lastActiveAt: "2026-07-27T10:00:00.000Z",
-            models: [
-              { model: "claude-sonnet-4", requests: 40 },
-              { model: "gpt-5", requests: 2 },
-            ],
-          },
-        ],
-        pagination: { total: 1 },
-      },
-    });
-
-    const { findByText, getByText } = render(<OrganizationCostsPage />);
-
-    expect(await findByText("Example User A")).toBeInTheDocument();
-    // Email is rendered so the row can be reconciled against an external roster.
-    expect(getByText("user-a@example.test")).toBeInTheDocument();
-    expect(getByText("1,000")).toBeInTheDocument();
-    expect(getByText("claude-sonnet-4")).toBeInTheDocument();
-    // Usage is visible even though billed spend is $0.
-    expect(getByText("Subscription")).toBeInTheDocument();
-  });
-
-  it("still renders when the custom timeframe in the URL is malformed", async () => {
-    // Well-formed enough for the schema, but the bounds are not dates — the
-    // selector label must not try to format an Invalid Date.
-    mockSearchParams = new URLSearchParams([
-      ["timeframe", "custom:not-a-date_also-not-a-date"],
-    ]);
-
-    const { findByText } = render(<OrganizationCostsPage />);
-
-    expect(await findByText("Cost Savings")).toBeInTheDocument();
-  });
-
-  it("labels each bucket of a multi-day chart distinctly", async () => {
-    mockSearchParams = new URLSearchParams([["timeframe", "7d"]]);
-    // A 7d chart aggregates into 6-hour buckets, so a single day supplies four
-    // consecutive points that a day-only label would collapse into one tick.
-    mockUseCostSavingsStatistics.mockReturnValue({
-      data: {
-        timeSeries: [
-          "2026-07-01T00:00:00.000Z",
-          "2026-07-01T06:00:00.000Z",
-          "2026-07-01T12:00:00.000Z",
-          "2026-07-01T18:00:00.000Z",
-          "2026-07-02T00:00:00.000Z",
-        ].map((timestamp) => ({
-          timestamp,
-          baselineCost: 2,
-          actualCost: 1,
-          cacheSavings: 0,
-          subscriptionCost: 0,
-        })),
-      },
-    });
-
-    const { findAllByTestId } = render(<OrganizationCostsPage />);
-
-    const [axis] = await findAllByTestId("chart-axis-labels");
-    const labels = (axis.textContent ?? "").split("|");
-
-    expect(labels).toHaveLength(5);
-    expect(new Set(labels).size).toBe(labels.length);
-  });
-
-  it("shows a metered person's cost as money, not a savings percentage", async () => {
-    mockUseUserStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            userId: "user-2",
-            userName: "Example User B",
-            userEmail: "user-b@example.test",
-            requests: 15260,
-            inputTokens: 19000000,
-            outputTokens: 572756,
-            cacheReadTokens: 0,
-            totalTokens: 19572756,
-            // Pay-as-you-go: everything is billed, nothing subscription-covered.
-            billedCost: 41.4405,
-            subscriptionCost: 0,
-            activeDays: 8,
-            lastActiveAt: "2026-08-11T14:41:00.000Z",
-            models: [{ model: "anthropic/claude-opus-4.8", requests: 15260 }],
-          },
-        ],
-        pagination: { total: 1 },
-      },
-    });
-
-    const { findByText, queryByText } = render(<OrganizationCostsPage />);
-
-    // The Cost column must read as spend. It rendered the savings percentage
-    // ("0%") for everyone without subscription usage while `tooltip` was left
-    // at its "never" default.
-    expect(await findByText("$41.44")).toBeInTheDocument();
-    expect(queryByText("0%")).not.toBeInTheDocument();
-  });
-
-  it("reserves width for the People columns that carry badges", async () => {
-    mockUseUserStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            userId: "user-3",
-            userName: "Example User C",
-            userEmail: "user-c@example.test",
-            requests: 118,
-            inputTokens: 3000000,
-            outputTokens: 883994,
-            cacheReadTokens: 0,
-            totalTokens: 3883994,
-            billedCost: 1.5,
-            subscriptionCost: 0,
-            activeDays: 6,
-            lastActiveAt: "2026-08-11T14:38:00.000Z",
-            models: [{ model: "anthropic/claude-opus-4.8", requests: 118 }],
-          },
-        ],
-        pagination: { total: 1 },
-      },
-    });
-
-    const { findByText, container } = render(<OrganizationCostsPage />);
-    await findByText("Example User C");
-
-    // `table-fixed` splits width equally without explicit widths, which left
-    // the Models and Cost columns narrower than their badges — the badges then
-    // overflowed onto the neighbouring column. The same floor is on every
-    // statistics table so phone viewports scroll instead of wrapping cells.
-    const peopleTable = Array.from(
-      container.querySelectorAll("table.min-w-\\[70rem\\]"),
-    ).find((table) => table.textContent?.includes("Example User C"));
-    expect(peopleTable).toBeDefined();
-
-    const headers = Array.from(peopleTable?.querySelectorAll("thead th") ?? []);
-    expect(headers).toHaveLength(7);
-    for (const header of headers) {
-      expect(header.className).toMatch(/w-\[\d+%\]/);
-      expect(header.className).toMatch(/min-w-\[/);
-      expect(header.className).toMatch(/max-w-\[/);
-    }
-  });
-
-  it("charts the five costliest models under CSS-safe series keys", () => {
-    // Six models, deliberately NOT in cost order: the API returns entities in
-    // first-seen order, and the chart used to slice that order while claiming
-    // "top 5 by cost".
-    const model = (name: string, cost: number) => ({
-      model: name,
-      requests: 1,
-      inputTokens: 10,
-      outputTokens: 5,
-      cost,
-      percentage: 0,
-      timeSeries: [{ timestamp: "2026-08-11T00:00:00.000Z", value: cost }],
-    });
-    mockUseModelStatistics.mockReturnValue({
-      data: [
-        model("google/gemini-3-pro-preview", 0.1),
-        model("anthropic/claude-opus-4.8", 46),
-        model("moonshotai/kimi-k2-thinking", 0.64),
-        model("openrouter/auto", 4.21),
-        model("deepseek/deepseek-v3.1-terminus", 5),
-        model("z-ai/glm-4.6", 1.64),
-      ],
-    });
-
-    const { getAllByTestId } = render(<OrganizationCostsPage />);
-
-    // The Models chart is the one whose config labels are model ids.
-    const chart = getAllByTestId("chart").find((el) =>
-      (el.getAttribute("data-config") ?? "").includes("claude-opus-4.8"),
     );
-    expect(chart).toBeDefined();
-    const config = JSON.parse(chart?.getAttribute("data-config") ?? "{}");
-
-    // Top 5 by cost, costliest first — gemini ($0.10) must be the one left out.
     expect(
-      Object.values(config).map((c) => (c as { label: string }).label),
+      requests.every((url) => url.searchParams.get("timeframe") === timeframe),
+    ).toBe(true);
+  });
+  it("never requests a default timeframe before resolving the persisted timeframe", async () => {
+    localStorage.setItem("cost-statistics-timeframe", "30d");
+    show();
+    await screen.findAllByText("$8.25");
+    expect(
+      requests.every((url) => url.searchParams.get("timeframe") === "30d"),
+    ).toBe(true);
+  });
+  it("shows a subscription user's identity, usage and model mix without calling it billed spend", async () => {
+    users = [
+      {
+        userId: "one",
+        userName: "Example User A",
+        userEmail: "user-a@example.test",
+        requests: 42,
+        inputTokens: 900,
+        outputTokens: 100,
+        cacheReadTokens: 0,
+        billedCost: 0,
+        subscriptionCost: 12.5,
+        models: [
+          {
+            model: "claude-sonnet-4",
+            requests: 40,
+            inputTokens: 880,
+            outputTokens: 100,
+          },
+          { model: "gpt-5", requests: 2, inputTokens: 20, outputTokens: 0 },
+        ],
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await view("Who is using it");
+    await within(await screen.findByRole("table")).findByText("Example User A");
+    await split("Model");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Expand by Model" }),
+    );
+    expect(
+      await within(screen.getByRole("table")).findByText("claude-sonnet-4"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("user-a@example.test")).toBeInTheDocument();
+    expect(screen.getByText("Subscription usage")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("table")).getByText("1,000"),
+    ).toBeInTheDocument();
+  });
+  it("renders a malformed custom timeframe without throwing", async () => {
+    search = new URLSearchParams({
+      timeframe: "custom:not-a-date_also-not-a-date",
+    });
+    show();
+    expect((await screen.findAllByText("$8.25")).length).toBeGreaterThan(0);
+  });
+  it("labels subdaily buckets distinctly on a multi-day chart", async () => {
+    search = new URLSearchParams({ timeframe: "7d" });
+    models = [
+      {
+        ...model(),
+        timeSeries: [
+          "2026-07-01T00:00:00Z",
+          "2026-07-01T06:00:00Z",
+          "2026-07-01T12:00:00Z",
+          "2026-07-01T18:00:00Z",
+          "2026-07-02T00:00:00Z",
+        ].map((timestamp) => ({ timestamp, value: 1 })),
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    fireEvent.click(screen.getByRole("button", { name: "Pivot" }));
+    await waitFor(() => {
+      const headers = within(screen.getByRole("table"))
+        .getAllByRole("columnheader")
+        .slice(1, -1)
+        .map((node) => node.textContent);
+      expect(headers).toHaveLength(5);
+      expect(new Set(headers).size).toBe(5);
+    });
+  });
+  it("shows a metered person's spend as money rather than savings percent", async () => {
+    users = [
+      {
+        userId: "one",
+        userName: "Example User B",
+        userEmail: "user-b@example.test",
+        requests: 15260,
+        inputTokens: 19000000,
+        outputTokens: 572756,
+        cacheReadTokens: 0,
+        billedCost: 41.4405,
+        subscriptionCost: 0,
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await group("Person");
+    expect(
+      await within(await screen.findByRole("table")).findByText("$41.44"),
+    ).toBeInTheDocument();
+    const row = within(screen.getByRole("table"))
+      .getByText("Example User B")
+      .closest("tr");
+    expect(
+      within(row as HTMLElement).queryByText("0%", { exact: true }),
+    ).not.toBeInTheDocument();
+  });
+  it("keeps full person identities and subscription badges in the summary row", async () => {
+    users = [
+      {
+        userId: "one",
+        userName: "Example User C with a long identity",
+        userEmail: "long-identity@example.test",
+        requests: 118,
+        inputTokens: 3000000,
+        outputTokens: 883994,
+        billedCost: 0,
+        subscriptionCost: 4,
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await view("Who is using it");
+    const identity = await within(await screen.findByRole("table")).findByText(
+      "Example User C with a long identity",
+    );
+    expect(identity.closest("tr")).toHaveTextContent(
+      "long-identity@example.test",
+    );
+    expect(identity.closest("tr")).toHaveTextContent("Subscription usage");
+  });
+  it("ranks costliest model series and uses CSS-safe chart keys", async () => {
+    models = [
+      model("google/gemini-3-pro-preview", 0.1),
+      model("anthropic/claude-opus-4.8", 46),
+      model("moonshotai/kimi-k2-thinking", 0.64),
+      model("openrouter/auto", 4.21),
+      model("deepseek/deepseek-v3.1-terminus", 5),
+      model("z-ai/glm-4.6", 1.64),
+    ].map((row) => ({
+      ...row,
+      timeSeries: [{ timestamp: "2026-01-01T00:00:00Z", value: row.cost }],
+    }));
+    const { container } = show();
+    const legend = await screen.findByRole("list", {
+      name: "Usage chart legend",
+    });
+    expect(
+      within(legend)
+        .getAllByRole("listitem")
+        .map((node) => node.textContent),
     ).toEqual([
       "anthropic/claude-opus-4.8",
       "deepseek/deepseek-v3.1-terminus",
       "openrouter/auto",
       "z-ai/glm-4.6",
       "moonshotai/kimi-k2-thinking",
+      "google/gemini-3-pro-preview",
     ]);
-
-    // Series keys become CSS custom-property names (`--color-<key>`). Model
-    // ids contain `/` and `.`, which are not valid there, so keying by the raw
-    // id gave every line an unresolvable stroke and no colour anywhere.
-    const lines = Array.from(
-      chart?.querySelectorAll("[data-testid='chart-line']") ?? [],
+    const css = [...container.querySelectorAll("style")]
+      .map((node) => node.textContent)
+      .join(" ");
+    const keys = [...css.matchAll(/--color-([^:]+):/g)].map(
+      (match) => match[1],
     );
-    expect(lines).toHaveLength(5);
-    for (const line of lines) {
-      const key = line.getAttribute("data-key") ?? "";
-      expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
-      expect(config[key]).toBeDefined();
-      expect(line.getAttribute("data-stroke")).toBe(`var(--color-${key})`);
-    }
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.every((key) => /^[A-Za-z0-9_-]+$/.test(key))).toBe(true);
   });
-
-  it("renders a statistics table per entity, but none for the LLM proxy", () => {
-    mockUseTeamStatistics.mockReturnValue({
-      data: [
-        {
-          teamId: "team-1",
-          teamName: "Platform",
-          members: 3,
-          agents: 2,
-          requests: 12,
-          inputTokens: 100,
-          outputTokens: 50,
-          cost: 42,
-          timeSeries: [],
-        },
-      ],
-    });
-    mockUseProfileStatistics.mockReturnValue({
-      data: [
-        {
-          agentId: "agent-1",
-          agentName: "My Assistant",
-          teamName: "Platform",
-          agentType: "agent",
-          requests: 9,
-          inputTokens: 80,
-          outputTokens: 20,
-          cost: 15,
-          timeSeries: [],
-        },
-        {
-          agentId: "proxy-1",
-          agentName: "Default Proxy",
-          teamName: "Platform",
-          agentType: "llm_proxy",
-          requests: 4,
-          inputTokens: 20,
-          outputTokens: 10,
-          cost: 5,
-          timeSeries: [],
-        },
-      ],
-    });
-    mockUseModelStatistics.mockReturnValue({
-      data: [
-        {
-          model: "gpt-5",
-          requests: 7,
-          inputTokens: 70,
-          outputTokens: 30,
-          cost: 9,
-          percentage: 100,
-          timeSeries: [],
-        },
-      ],
-    });
-
-    render(<OrganizationCostsPage />);
-
-    // Teams, Agents, Models, People, Apps, Skills. The LLM Proxy has no
-    // table: it is one entity, so the card reports totals instead.
-    expect(screen.getAllByRole("table")).toHaveLength(6);
-  });
-  it("splits an app's build and runtime cost and discloses a shared build session", async () => {
-    mockUseAppStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            appId: "app-1",
-            appName: "Sales Dashboard",
-            authorName: "Example User A",
-            createdAt: "2026-07-20T10:00:00.000Z",
-            buildRequests: 6,
-            buildInputTokens: 20000,
-            buildOutputTokens: 3000,
-            buildCost: 1.5,
-            // The same session built another app, so the build figure is shared.
-            buildSessionAppCount: 2,
-            hasBuildSession: true,
-            runtimeLlmRequests: 4,
-            runtimeInputTokens: 800,
-            runtimeOutputTokens: 200,
-            runtimeCost: 0.25,
-            runs: 30,
-            toolCalls: 90,
-            estimatedChatEquivalentCost: 22.5,
-            estimatedNetSavings: 20.75,
-          },
-        ],
-        pagination: { total: 1 },
-        chatBaselineCostPerSession: 0.75,
-        chatBaselineSessions: 12,
+  it("renders each selected entity in one reusable table", async () => {
+    teams = [
+      {
+        teamId: "team",
+        teamName: "Platform",
+        members: 3,
+        agents: 2,
+        requests: 12,
+        inputTokens: 100,
+        outputTokens: 50,
+        cost: 42,
+        timeSeries: [],
       },
-    });
-
-    const { container, findByText, getByText } = render(
-      <OrganizationCostsPage />,
-    );
-
-    expect(await findByText("Sales Dashboard")).toBeInTheDocument();
-    // Build and runtime spend are reported separately: an app is not LLM-free
-    // once built, so collapsing them would hide its recurring cost.
-    expect(getByText("$1.50")).toBeInTheDocument();
-    expect(getByText("$0.25")).toBeInTheDocument();
-    expect(getByText("$20.75")).toBeInTheDocument();
-    // The counterfactual states its own basis rather than being a bare number.
-    // The sentence spans sibling elements, so it is asserted on the container.
-    const appsDescription = Array.from(
-      container.querySelectorAll('[data-slot="card-description"]'),
-    ).find((node) => node.textContent?.includes("chat-equivalent estimate"));
-    expect(appsDescription).toHaveTextContent(
-      "measured average of $0.75 across 12 chat sessions",
-    );
-    // A shared build session is flagged, not silently divided.
-    expect(getByText("$1.50").className).toContain("decoration-dotted");
-  });
-
-  it("reports no build cost for an app with no authoring session", async () => {
-    mockUseAppStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            appId: "app-2",
-            appName: "Made In The UI",
-            authorName: null,
-            createdAt: "2026-07-20T10:00:00.000Z",
-            buildRequests: 0,
-            buildInputTokens: 0,
-            buildOutputTokens: 0,
-            buildCost: 0,
-            buildSessionAppCount: 0,
-            hasBuildSession: false,
-            runtimeLlmRequests: 0,
-            runtimeInputTokens: 0,
-            runtimeOutputTokens: 0,
-            runtimeCost: 0,
-            runs: 2,
-            toolCalls: 5,
-            estimatedChatEquivalentCost: 1.5,
-            estimatedNetSavings: 1.5,
-          },
-        ],
-        pagination: { total: 1 },
-        chatBaselineCostPerSession: 0.75,
-        chatBaselineSessions: 12,
+    ];
+    agents = [
+      {
+        agentId: "agent",
+        agentName: "My Assistant",
+        teamName: "Platform",
+        requests: 9,
+        inputTokens: 80,
+        outputTokens: 20,
+        cost: 15,
+        timeSeries: [],
       },
-    });
-
-    const { findByText, getByText } = render(<OrganizationCostsPage />);
-
-    expect(await findByText("Made In The UI")).toBeInTheDocument();
-    // An em dash, not $0.00: nothing was spent building it *that we know of*.
-    expect(getByText("—")).toBeInTheDocument();
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await group("Team");
+    expect(
+      await within(await screen.findByRole("table")).findByText("Platform"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("table")).toHaveLength(1);
+    await group("Agent");
+    expect(
+      await within(await screen.findByRole("table")).findByText("My Assistant"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("table")).toHaveLength(1);
   });
-
-  it("shows a skill's own context footprint next to the spend it rode", async () => {
-    mockUseSkillStatistics.mockReturnValue({
-      data: {
-        data: [
-          {
-            skillId: "skill-1",
-            skillName: "PDF Extraction",
-            activations: 5,
-            distinctUsers: 3,
-            contextTokens: 6420,
-            // Two older activations predate the measurement.
-            measuredActivations: 3,
-            attributedSessions: 4,
-            attributedRequests: 12,
-            attributedInputTokens: 90000,
-            attributedOutputTokens: 7000,
-            attributedCost: 1.68,
-            lastActivatedAt: "2026-07-27T10:00:00.000Z",
-          },
-        ],
-        pagination: { total: 1 },
+  it("splits app build/runtime spend and discloses a shared build session and baseline", async () => {
+    apps = [
+      {
+        appId: "app",
+        appName: "Sales Dashboard",
+        authorName: "Example",
+        buildCost: 1.5,
+        runtimeCost: 0.25,
+        hasBuildSession: true,
+        buildSessionAppCount: 2,
+        estimatedChatEquivalentCost: 22.5,
+        estimatedNetSavings: 20.75,
       },
-    });
-
-    const { findByText, getByText } = render(<OrganizationCostsPage />);
-
-    expect(await findByText("PDF Extraction")).toBeInTheDocument();
-    expect(getByText("6,420")).toBeInTheDocument();
-    expect(getByText("$1.68")).toBeInTheDocument();
-    // A partially-measured total is flagged rather than read as the full one.
-    expect(getByText("6,420").className).toContain("decoration-dotted");
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await group("App");
+    expect(
+      await within(await screen.findByRole("table")).findByText(
+        "Sales Dashboard",
+      ),
+    ).toBeInTheDocument();
+    for (const value of ["$1.50", "$0.25", "$20.75"])
+      expect(screen.getByText(value)).toBeInTheDocument();
+    expect(
+      screen.getByText("Shared build session · 2 apps"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/measured average of \$0.75 across 12 chat sessions/),
+    ).toBeInTheDocument();
+  });
+  it("reports missing app build attribution as unknown rather than zero", async () => {
+    apps = [
+      {
+        appId: "app",
+        appName: "Made In The UI",
+        authorName: null,
+        buildCost: 0,
+        runtimeCost: 0,
+        hasBuildSession: false,
+        buildSessionAppCount: 0,
+        estimatedChatEquivalentCost: 1.5,
+        estimatedNetSavings: 1.5,
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await group("App");
+    const row = (
+      await within(await screen.findByRole("table")).findByText(
+        "Made In The UI",
+      )
+    ).closest("tr");
+    expect(row).toHaveTextContent("No recorded build session");
+    const buildIndex = within(screen.getByRole("table"))
+      .getAllByRole("columnheader")
+      .findIndex((header) => header.textContent === "Build spend");
+    expect(
+      within(row as HTMLElement).getAllByRole("cell")[buildIndex],
+    ).toHaveTextContent(/^—$/);
+  });
+  it("shows skill context footprint alongside overlapping turn spend and measurement coverage", async () => {
+    skillsUsage = [
+      {
+        skillId: "skill",
+        skillName: "PDF Extraction",
+        activations: 5,
+        contextTokens: 6420,
+        users: 3,
+      },
+    ];
+    skills = [
+      {
+        skillId: "skill",
+        skillName: "PDF Extraction",
+        activations: 5,
+        measuredActivations: 3,
+        attributedCost: 1.68,
+        attributedRequests: 12,
+      },
+    ];
+    show();
+    await screen.findAllByText("$8.25");
+    await view("Skills by reach");
+    expect(
+      await within(await screen.findByRole("table")).findByText(
+        "PDF Extraction",
+      ),
+    ).toBeInTheDocument();
+    await metric("Tokens");
+    expect(
+      await within(await screen.findByRole("table")).findByText("6,420"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("$1.68")).toBeInTheDocument();
+    expect(screen.getByText("3 of 5 context measurements")).toBeInTheDocument();
+    expect(screen.getByText(/not an exclusive skill cost/)).toBeInTheDocument();
   });
 });

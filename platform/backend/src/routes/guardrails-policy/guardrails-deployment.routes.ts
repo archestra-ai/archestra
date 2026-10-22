@@ -11,6 +11,9 @@ import { UnsupportedAppaClientActionSchema } from "@/types/guardrails-policy";
 const status = z.object({
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
+  breakTheGlassEnabled: z.boolean(),
+  annotatorModelId: z.string().uuid().nullable(),
+  annotatorLlmApiKeyId: z.string().uuid().nullable(),
   featureEnabled: z.boolean(),
   active: z.boolean(),
 });
@@ -33,22 +36,31 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.UpdateGuardrailsDeployment,
         tags: ["Guardrails"],
         body: z
-          .object({
+          .strictObject({
             enabled: z.boolean().optional(),
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
+            breakTheGlassEnabled: z.boolean().optional(),
+            annotatorModelId: z.string().uuid().nullable().optional(),
+            annotatorLlmApiKeyId: z.string().uuid().nullable().optional(),
           })
           .refine(
             (body) =>
               body.enabled !== undefined ||
-              body.unsupportedClientAction !== undefined,
+              body.unsupportedClientAction !== undefined ||
+              body.breakTheGlassEnabled !== undefined ||
+              body.annotatorModelId !== undefined ||
+              body.annotatorLlmApiKeyId !== undefined,
             "Set at least one guardrails deployment setting",
           ),
         response: constructResponseSchema(status),
       },
     },
     async (request) => {
-      return setGuardrailsDeployment(request.body);
+      return setGuardrailsDeployment(request.body, {
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
     },
   );
 };

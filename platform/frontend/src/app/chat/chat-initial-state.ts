@@ -53,6 +53,8 @@ export type CreateConversationInput = {
  */
 export type InitialAgentSelection<TAgent> = {
   agent: TAgent;
+  /** The rule that chose the agent, in the order they are tried below. */
+  source: "project" | "member" | "organization" | "saved" | "fallback";
   fromProjectDefault: boolean;
 };
 
@@ -76,7 +78,11 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     (agent) => agent.id === params.projectDefaultAgentId,
   );
   if (projectDefaultAgent) {
-    return { agent: projectDefaultAgent, fromProjectDefault: true };
+    return {
+      agent: projectDefaultAgent,
+      source: "project",
+      fromProjectDefault: true,
+    };
   }
 
   // The member's own personal default beats the org-wide default: it is set
@@ -88,25 +94,34 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     (agent) => agent.id === params.memberDefaultAgentId,
   );
   if (memberDefaultAgent) {
-    return { agent: memberDefaultAgent, fromProjectDefault: false };
+    return {
+      agent: memberDefaultAgent,
+      source: "member",
+      fromProjectDefault: false,
+    };
   }
 
   const organizationDefaultAgent = agents.find(
     (agent) => agent.id === params.organizationDefaultAgentId,
   );
   if (organizationDefaultAgent) {
-    return { agent: organizationDefaultAgent, fromProjectDefault: false };
+    return {
+      agent: organizationDefaultAgent,
+      source: "organization",
+      fromProjectDefault: false,
+    };
   }
 
   if (params.canUseSavedAgent) {
     const savedAgent = agents.find((agent) => agent.id === params.savedAgentId);
     if (savedAgent) {
-      return { agent: savedAgent, fromProjectDefault: false };
+      return { agent: savedAgent, source: "saved", fromProjectDefault: false };
     }
   }
 
   return {
     agent: agents.find((agent) => agent.scope === "personal") ?? agents[0],
+    source: "fallback",
     fromProjectDefault: false,
   };
 }

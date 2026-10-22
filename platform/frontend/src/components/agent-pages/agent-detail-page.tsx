@@ -340,7 +340,9 @@ function AgentDetails({
               ...(steps.some((step) => step.id === "tools")
                 ? (["tools"] as const)
                 : []),
-              ...(runtimeEnabled && kind === "agent" && !isBuiltIn
+              ...((runtimeEnabled || agent.runtime != null) &&
+              kind === "agent" &&
+              !isBuiltIn
                 ? (["runtime"] as const)
                 : []),
               ...(hasMessagingChannels ? (["messaging"] as const) : []),
@@ -577,18 +579,13 @@ function AgentDetails({
             // The owner rides in the chip: who it reaches and who to ask,
             // read together. A built-in record belongs to nobody.
             <AudienceChip
+              compact={kind === "agent"}
               audience={audience}
               owner={isBuiltIn ? null : agent.createdBy}
             />
           )}
-          {/* Hidden below sm: the header is one clipped line, and the Start
-              run button below already carries the glyph. */}
           {hasAgentRuntime && (
-            <RuntimeCapableIndicator
-              variant="pill"
-              runtime={agent.runtime}
-              className="hidden font-normal sm:inline-flex"
-            />
+            <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
           )}
           {kind === "mcp_gateway" && environmentName && (
             <Badge variant="outline" className="font-normal">
@@ -900,7 +897,7 @@ function AgentDetails({
             if (!open) setDeleteRequested(false);
           }}
           title={`Delete ${config.singular}`}
-          description={`Are you sure you want to delete this ${config.singular}? This action cannot be undone.`}
+          description={`Are you sure you want to delete this ${config.singular}? It moves to Deleted, where it can be restored.`}
           isPending={deleteAgent.isPending}
           // `mutate` with callbacks rather than an awaited `mutateAsync`: the
           // query layer rejects on failure (and toasts), and an unhandled

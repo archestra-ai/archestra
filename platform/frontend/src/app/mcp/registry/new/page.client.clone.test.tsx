@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useCreateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+  type FullCatalogItem,
+  useInternalMcpCatalogItem,
+} from "@/lib/mcp/mcp-registry.query";
 import {
   useDefaultEnvironment,
   useOrganization,
@@ -69,11 +70,19 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => {
     >();
   return {
     ...actual,
-    useInternalMcpCatalog: vi.fn(),
     useCreateInternalMcpCatalogItem: vi.fn(),
     useK8sImagePullSecrets: vi.fn(() => ({ data: [] })),
   };
 });
+
+// The clone source is loaded by id; the online-catalog tab reads registry
+// names from the issue index.
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useInternalMcpCatalogItem: vi.fn(),
+  useMcpRegistryIssueIndex: () => ({
+    data: { catalogItems: [], servers: [] },
+  }),
+}));
 
 vi.mock("@/lib/secrets.query", () => ({
   useGetSecret: vi.fn(() => ({ data: null })),
@@ -117,9 +126,7 @@ const cloneSource = {
   scope: "personal",
   teams: [],
   environmentId: null,
-} as unknown as NonNullable<
-  ReturnType<typeof useInternalMcpCatalog>["data"]
->[number];
+} as unknown as FullCatalogItem;
 
 describe("NewMcpCatalogItemPage clone flow", () => {
   const push = vi.fn();
@@ -135,9 +142,9 @@ describe("NewMcpCatalogItemPage clone flow", () => {
         typeof useSearchParams
       >,
     );
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [cloneSource],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: cloneSource,
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
     vi.mocked(useCreateInternalMcpCatalogItem).mockReturnValue({
       mutate,
       isPending: false,

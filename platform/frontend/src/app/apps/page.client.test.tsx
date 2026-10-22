@@ -57,10 +57,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganizationMembers: () => ({ data: [] }),
-}));
-
 vi.mock("@/lib/apps/use-app-access", () => {
   const access = {
     isAdmin: true,
@@ -187,6 +183,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   icon: null,
+  iconUrl: null,
   latestVersion: 1,
   enabled: true,
   locked: false,
@@ -213,6 +210,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   pinnedAt: null,
   labels: [],
   icon: null,
+  iconUrl: null,
   requiresInput: false,
 };
 

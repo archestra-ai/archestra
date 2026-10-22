@@ -155,8 +155,11 @@ describe("DisconnectLine", () => {
     expect(screen.queryByRole("button", { name: "Manage" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
 
-    expect(screen.getByText("Disconnecting an agent")).toBeInTheDocument();
-    // Opens on the agent picked on the page.
+    // Shows the agent picked on the page, with no picker of its own.
+    expect(
+      screen.getByRole("heading", { name: "Disconnect Claude Code" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(
       screen.getByText(/disconnect\.md\?client=claude-code/),
     ).toBeInTheDocument();
@@ -177,6 +180,17 @@ describe("DisconnectLine", () => {
         "Read http://localhost:3000/disconnect.md and disconnect this agent from Acme.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("gives Kilo Code its own cleanup prompt", () => {
+    render(<DisconnectLine data={data} picked={client("kilo")} agents={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(
+      screen.getByText(
+        "Read http://localhost:3000/disconnect.md?client=kilo and disconnect Kilo Code from Acme.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/MCP Client Tool node/)).toBeNull();
   });
 
   it("lists what gets removed only when asked", () => {
@@ -207,6 +221,8 @@ describe("DisconnectLine", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
     expect(screen.getByText("Manage connected agents")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
-    expect(screen.getByText("Disconnecting an agent")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Disconnect Claude Code" }),
+    ).toBeInTheDocument();
   });
 });

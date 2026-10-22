@@ -322,6 +322,10 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // The MCP registry list is a read sent as a POST body (its ranked ids can
+  // outgrow a URL); it changes nothing.
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search" },
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search/ids" },
   // Read-only embedding/reranker connection tests: probe the provider but mutate
   // no org state. Auditing them recorded a misleading "Success" outcome on failed
   // probes (they return HTTP 200 with `{ success: false }`).
@@ -361,9 +365,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/openai-codex-auth/" },
   // Ephemeral Telegram link code (the account-binding /link IS audited).
   { kind: "exact", value: "/api/chatops/telegram/link-code" },
-  // High-volume / best-effort artifact + recording surfaces.
+  // High-volume / best-effort artifact surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
-  { kind: "prefix", value: "/api/app-recordings" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",

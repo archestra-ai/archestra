@@ -7,6 +7,7 @@ import config from "@/config";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
+  KbConnectorDocumentCountModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
@@ -178,6 +179,27 @@ class ConnectorSyncService {
       });
     } finally {
       clearInterval(heartbeat);
+      await this.refreshDocumentCount(connectorId, runLog);
+    }
+  }
+
+  /**
+   * Store the connector's current document total once a run ends, however it
+   * ended: a failed or interrupted run may still have added or removed
+   * documents. A failure here is logged and does not change the run's result;
+   * the next run or the next reader counts again.
+   */
+  private async refreshDocumentCount(
+    connectorId: string,
+    runLog: pino.Logger,
+  ): Promise<void> {
+    try {
+      await KbConnectorDocumentCountModel.refresh(connectorId);
+    } catch (error) {
+      runLog.warn(
+        { error: extractErrorMessage(error) },
+        "Could not store the connector's document count",
+      );
     }
   }
 

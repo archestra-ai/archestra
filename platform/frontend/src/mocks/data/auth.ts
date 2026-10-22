@@ -83,13 +83,11 @@ export function makeUserPermissions(
     llmProxy: ["read", "update"],
     llmProviderApiKey: [...ALL],
     llmVirtualKey: [...ALL],
-    llmOauthClient: [...ALL],
-    mcpOauthClient: [...ALL],
+    oauthClient: ["read", "create"],
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],
-    openappaPolicy: ["read", "update"],
-    openappaDiagnostics: ["read", "update", "admin"],
+    guardrailsPolicy: ["read", "update"],
     organizationSettings: ["read", "update"],
     knowledgeSource: [...ALL],
     log: ["read", "admin"],
@@ -97,7 +95,6 @@ export function makeUserPermissions(
     accessPolicies: ["read", "update"],
     ac: [...ALL],
     identityProvider: [...ALL],
-    scheduledTask: [...ALL],
     ...overrides,
   };
 }
@@ -128,11 +125,11 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "llmVirtualKey",
     "llmProviderApiKey",
     "externalAgent",
-    "mcpOauthClient",
-    "llmOauthClient",
+    "oauthClient",
+    "oauthClient",
     "environment",
     "serviceAccount",
-    "scheduledTask",
+    "credential",
   ].flatMap((resource) =>
     (["read", "use", "update", "delete", "manage-permissions"] as const).map(
       (action) => ({ resource, scope: "*", action }),

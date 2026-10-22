@@ -8,12 +8,11 @@ export { default as agentRuntimeRoutes } from "./agent-runtime/agent-runtime.rou
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";
-export { default as appGalleryRoutes } from "./app-gallery/app-gallery.routes";
-export { default as appRecordingRoutes } from "./app-recording/app-recording.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as bootstrapRoutes } from "./bootstrap";
+export { default as browserStorageStatesRoutes } from "./browser-storage-state/browser-storage-state.routes";
 export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";
@@ -22,6 +21,7 @@ export { default as connectedClientRoutes } from "./connected-client/connected-c
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as environmentRoutes } from "./environment";
+export { default as gitCredentialRoutes } from "./git-credential/git-credential.routes";
 export { default as githubAppConfigRoutes } from "./github-app-config";
 export { default as githubCopilotAuthRoutes } from "./github-copilot-auth/github-copilot-auth.routes";
 export { default as githubPatRoutes } from "./github-pat/github-pat.routes";
@@ -52,6 +52,7 @@ export { default as memberRoutes } from "./member";
 export { default as mfilesVafAddOnRoutes } from "./mfiles-vaf-add-on/mfiles-vaf-add-on.routes";
 export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilot-auth/microsoft-365-copilot-auth.routes";
 export { default as oauthRoutes } from "./oauth";
+export { default as oauthClientsRoutes } from "./oauth-client/oauth-client.routes";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
 export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
@@ -61,6 +62,7 @@ export { default as openappaCoverageRoutes } from "./openappa-coverage/openappa-
 export { default as openappaExternalConsultsRoutes } from "./openappa-external-consults/openappa-external-consults.routes";
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";
+export { default as openappaLabelChangesRoutes } from "./openappa-label-changes/openappa-label-changes.routes";
 export { default as openappaPolicyTestsRoutes } from "./openappa-policy-tests/openappa-policy-tests.routes";
 export { default as openappaRemediesRoutes } from "./openappa-remedies/openappa-remedies.routes";
 export { default as openappaTrustAudienceRoutes } from "./openappa-trust-audience/openappa-trust-audience.routes";
@@ -109,7 +111,6 @@ export { default as skillSandboxArtifactRoutes } from "./skill-sandbox-artifact"
 export { default as skillShareRoutes } from "./skill-share/skill-share.routes";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
-export { default as tokenRoutes } from "./token";
 export { default as toolRoutes } from "./tool";
 export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";

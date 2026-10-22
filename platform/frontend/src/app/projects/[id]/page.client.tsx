@@ -60,6 +60,7 @@ import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
@@ -613,6 +614,7 @@ function ProjectFilesSidebar({
   const [instructionsTruncated, setInstructionsTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [previewSummary, setPreviewSummary] = useState<string | null>(null);
 
   useEffect(() => {
     const preview = instructionsPreview.current;
@@ -644,8 +646,6 @@ function ProjectFilesSidebar({
       name: f.filename,
       mimeType: f.mimeType,
       contentUrl: sandboxArtifactUrl(f.downloadRef),
-      // The real row id (null for a rowless hand-placed object) — gates editing.
-      rowId: f.id,
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
@@ -653,18 +653,19 @@ function ProjectFilesSidebar({
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
-  // Editable only for a row-backed .md/.txt file when the viewer has real project
-  // access (the admin-oversight view is read-only, so `canEditFiles` is false).
+  // Editable for a .md/.txt file — row-backed or hand-placed — when the viewer has
+  // real project access (the admin-oversight view is read-only, so
+  // `canEditFiles` is false).
   const selectedEditable =
     selected != null &&
     canEditFiles &&
-    selected.rowId != null &&
     isEditableTextFile({
       filename: selected.name,
       mimeType: selected.mimeType,
     });
 
   const openFile = (id: string) => {
+    setPreviewSummary(null);
     setSelectedId(id);
     const file = items.find((item) => item.id === id);
     setEditing(
@@ -672,7 +673,6 @@ function ProjectFilesSidebar({
         ? canManageProject
         : !!file &&
             canEditFiles &&
-            !!file.rowId &&
             isEditableTextFile({
               filename: file.name,
               mimeType: file.mimeType,
@@ -811,7 +811,6 @@ function ProjectFilesSidebar({
                   onEdit={openFile}
                   canEdit={(file) =>
                     canEditFiles &&
-                    !!file.rowId &&
                     isEditableTextFile({
                       filename: file.name,
                       mimeType: file.mimeType,
@@ -839,6 +838,22 @@ function ProjectFilesSidebar({
           }}
           title={instructionsSelected ? "Instructions" : detailName}
           size="large"
+          headerExtra={
+            previewSummary ? (
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {previewSummary}
+              </span>
+            ) : undefined
+          }
+          // Reading a short file should not reserve an editor-sized canvas.
+          className={
+            editing
+              ? undefined
+              : selected &&
+                  getFilePreviewKind(selected.mimeType, selected.name) === "csv"
+                ? "h-auto max-h-[90dvh] max-w-3xl"
+                : "h-auto max-h-[90dvh]"
+          }
         >
           {previewing && instructionsSelected ? (
             <ProjectInstructionsPanel
@@ -852,10 +867,11 @@ function ProjectFilesSidebar({
               // Per-file key: drop any editor state when the previewed file changes.
               key={selected.id}
               file={selected}
+              onPreviewSummaryChange={setPreviewSummary}
               onClose={deselect}
-              // Only row-backed files are editable; a rowless (obj_) object has
-              // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
-              fileId={selected.rowId ?? undefined}
+              // The row id, or the `obj_` ref of a hand-placed object; the
+              // content route edits either in place.
+              fileId={selected.id}
               editing={editing && selectedEditable}
               onExitEdit={deselect}
             />

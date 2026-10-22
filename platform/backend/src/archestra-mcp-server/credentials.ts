@@ -19,8 +19,10 @@ import {
   listRuntimeCredentialDefinitions,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  ApiError,
   InsertRuntimeCredentialDefinitionSchema,
   UpdateRuntimeCredentialDefinitionSchema,
 } from "@/types";
@@ -83,6 +85,12 @@ const TransferCredentialOutputSchema = z.object({
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
+  next_step: z
+    .string()
+    .optional()
+    .describe(
+      "What to do with `url`: hand it over in the reply text, never inside a question form. Only set while a value is still missing.",
+    ),
 });
 
 const registry = defineArchestraTools([
@@ -164,6 +172,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "update",
+        });
         const updated = await updateRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
@@ -175,7 +189,7 @@ const registry = defineArchestraTools([
           name: updated.name,
         });
       } catch (error) {
-        return catchError(error, "updating the credential");
+        return credentialError(error, "updating the credential");
       }
     },
   }),
@@ -188,13 +202,19 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "delete",
+        });
         await deleteRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
         });
         return structuredSuccessResult({ deleted: args.key });
       } catch (error) {
-        return catchError(error, "deleting the credential");
+        return credentialError(error, "deleting the credential");
       }
     },
   }),
@@ -249,7 +269,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
     description:
-      "Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
+      "Give a Remote Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
       "PREFER THE SAFE MODE: omit `value` to declare the credential and get back a link. The person opens it and pastes the value themselves, so the secret never enters your context or this transcript. Use it whenever you would otherwise have to read a secret to pass it on. " +
       "Send a `value` only when the person deliberately handed you one to move. That mode writes the secret into your context and this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. " +
       "Either way the credential is personal to you: it applies to every run YOU start on that Agent, and never to anyone else's runs. " +
@@ -342,6 +362,11 @@ const registry = defineArchestraTools([
           const url = agentCredentialSetupUrl(agent.id, [entry.key]);
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
+          // Question forms show a link as plain text, so the model must hand
+          // it over in its reply. Said in both the text and the structured
+          // result, since a client may show the model only one of them.
+          const nextStep =
+            "Put the url in your reply text, never inside a question form, so the person can paste the value there.";
 
           return structuredSuccessResult(
             {
@@ -351,10 +376,11 @@ const registry = defineArchestraTools([
               valueStored: false,
               url,
               availability,
+              next_step: nextStep,
             },
             [
               `Declared ${entry.key} on "${agent.name}". No value is stored.`,
-              `Ask the person to paste it here: ${url}`,
+              `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
             ].join("\n"),
@@ -413,4 +439,11 @@ function batteryTitle(name: string): string {
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+/** A refusal names its reason; anything else stays a generic failure. */
+function credentialError(error: unknown, action: string) {
+  if (error instanceof ApiError && error.statusCode < 500)
+    return errorResult(error.message);
+  return catchError(error, action);
 }

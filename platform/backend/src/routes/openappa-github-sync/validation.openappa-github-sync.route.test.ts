@@ -146,7 +146,6 @@ describe("informational Git sync validation", () => {
         trigger: "policy_change",
         createdBy: null,
         draft: false,
-        stale: false,
         sourceCommit: commit,
         files: [
           { status: "passed" },
@@ -226,7 +225,7 @@ describe("informational Git sync validation", () => {
       method: "GET",
       url: "/api/openappa/policy-tests/runs",
     });
-    expect(history.json()[0]).toMatchObject({ stale: false });
+    expect(history.json()[0]).toMatchObject({ sourceCommit: commit });
     server.use(
       http.get(
         "https://api.github.com/repos/example/policies/contents/traces",

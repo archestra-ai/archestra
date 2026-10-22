@@ -4,7 +4,7 @@ import type {
   AgentAdoption,
   AgentAdoptionMember,
 } from "@/lib/connected-client.query";
-import { AgentAdoptionOverview } from "./agent-adoption";
+import { AgentAdoptionUsers } from "./agent-adoption";
 
 const WINDOW = {
   startDate: "2026-09-07T00:00:00.000Z",
@@ -107,7 +107,7 @@ const adoption: AgentAdoption = {
   ],
 };
 
-describe("AgentAdoptionOverview", () => {
+describe("AgentAdoptionUsers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearch = new URLSearchParams();
@@ -120,14 +120,14 @@ describe("AgentAdoptionOverview", () => {
   });
 
   it("lists users without an agent first, then inactive, then active", () => {
-    render(<AgentAdoptionOverview window={WINDOW} />);
+    render(<AgentAdoptionUsers window={WINDOW} />);
 
     const table = screen.getByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/Not connected.*Ada Lovelace.*None.*Never/),
-      expect.stringMatching(/Inactive.*Alan Turing/),
-      expect.stringMatching(/Active.*Grace Hopper/),
+      expect.stringMatching(/Ada Lovelace.*None.*Not connected.*Never/),
+      expect.stringMatching(/Alan Turing.*Inactive/),
+      expect.stringMatching(/Grace Hopper.*Active/),
     ]);
     for (const name of ["Last MCP tool call", "Last LLM proxy call"]) {
       expect(
@@ -137,7 +137,7 @@ describe("AgentAdoptionOverview", () => {
   });
 
   it("opens a user's agents with how each got there", () => {
-    render(<AgentAdoptionOverview window={WINDOW} />);
+    render(<AgentAdoptionUsers window={WINDOW} />);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Show Grace Hopper's agents" }),
@@ -149,39 +149,10 @@ describe("AgentAdoptionOverview", () => {
 
   it("filters the table by state from the URL", () => {
     mockSearch = new URLSearchParams("state=inactive");
-    render(<AgentAdoptionOverview window={WINDOW} />);
+    render(<AgentAdoptionUsers window={WINDOW} />);
 
     const rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows).toHaveLength(2);
     expect(rows[1]).toHaveTextContent("Alan Turing");
-  });
-
-  it("puts a state picked on the donut in the URL", () => {
-    render(<AgentAdoptionOverview window={WINDOW} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^Active\s*1/ }));
-
-    expect(mockReplace).toHaveBeenCalledWith("/connections/logs?state=active", {
-      scroll: false,
-    });
-  });
-
-  it("shows adoption, agents in use and agent calls on top", () => {
-    render(<AgentAdoptionOverview window={WINDOW} />);
-
-    expect(
-      screen.getByRole("img", {
-        name: "Active: 1, Inactive: 1, Not connected: 1",
-      }),
-    ).toBeInTheDocument();
-    // Only active agents count, and the pasted-token one is not named.
-    const inUse = screen
-      .getByText(/^Most used agents/)
-      .closest("[data-slot=card]");
-    expect(inUse).toHaveTextContent("Claude Code1");
-    expect(screen.getByText("50")).toBeInTheDocument();
-    expect(
-      screen.getByText("30 tool calls · 20 LLM calls"),
-    ).toBeInTheDocument();
   });
 });

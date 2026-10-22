@@ -1,10 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import McpGatewayLogsPage from "./page.client";
@@ -21,13 +26,58 @@ globalThis.ResizeObserver = class {
   disconnect() {}
 };
 
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+const agentOptions = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const agentRows = () => ({ data: agentOptions.rows as never[] });
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: () => agentRows(),
+  useAgentOptionIds: () => ({
+    data: (agentRows().data ?? []).map((row: { id: string }) => row.id),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = agentRows();
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
+}));
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useInternalMcpCatalog: vi.fn(),
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
+}));
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpRegistryIssueIndex: vi.fn(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));
 vi.mock("@/lib/mcp/mcp-tool-call.query", async (importOriginal) => ({
@@ -54,6 +104,16 @@ const orgGateway = {
 
 const push = vi.fn();
 
+// The registry's issue index as the display hook reads it: install names and
+// their catalog items. Tests set these before rendering.
+let registryServers: Array<{ name: string; catalogId: string }> = [];
+let registryCatalogItems: Array<{
+  id: string;
+  name: string;
+  icon?: string;
+  iconUrl?: string;
+}> = [];
+
 // role="combobox" takes no accessible name from its contents, so the trigger is
 // addressed by the label it renders.
 async function openGatewayFilter(user: ReturnType<typeof userEvent.setup>) {
@@ -71,18 +131,24 @@ describe("McpGatewayLogsPage filters", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/mcp/logs");
-    vi.mocked(useProfiles).mockReturnValue({
-      data: [personalGateway, orgGateway],
-    } as unknown as ReturnType<typeof useProfiles>);
+    agentOptions.rows = [personalGateway, orgGateway];
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useMcpServers>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    registryServers = [];
+    registryCatalogItems = [];
+    vi.mocked(useMcpRegistryIssueIndex).mockImplementation(
+      () =>
+        ({
+          data: {
+            servers: registryServers,
+            catalogItems: registryCatalogItems,
+          },
+        }) as unknown as ReturnType<typeof useMcpRegistryIssueIndex>,
+    );
     vi.mocked(useMcpToolCalls).mockReturnValue({
       data: {
         data: [],
@@ -145,6 +211,31 @@ describe("McpGatewayLogsPage filters", () => {
     );
   });
 
+  it("filters tool calls by the picked user", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        userId: "user-alex",
+      }) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    render(<McpGatewayLogsPage />);
+
+    expect(vi.mocked(useMcpToolCalls)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: "user-alex" }),
+    );
+  });
+
+  // Without log:admin the server scopes the listing to the caller anyway.
+  it("offers no user filter without log:admin", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+
+    render(<McpGatewayLogsPage />);
+
+    expect(screen.queryByText("All Users")).toBeNull();
+  });
+
   it("distinguishes MCP server installations by owner instead of installation id", async () => {
     vi.mocked(useMcpServers).mockReturnValue({
       data: [
@@ -164,15 +255,23 @@ describe("McpGatewayLogsPage filters", () => {
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [
-        {
-          id: "document-search-catalog",
-          name: "Document Search",
-          icon: "📚",
-        },
-      ],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    registryServers = [
+      {
+        name: "document-search-installation-a1b2c3",
+        catalogId: "document-search-catalog",
+      },
+      {
+        name: "document-search-installation-d4e5f6",
+        catalogId: "document-search-catalog",
+      },
+    ];
+    registryCatalogItems = [
+      {
+        id: "document-search-catalog",
+        name: "Document Search",
+        icon: "📚",
+      },
+    ];
     const user = userEvent.setup();
     render(<McpGatewayLogsPage />);
 
@@ -212,6 +311,15 @@ describe("McpGatewayLogsPage filters", () => {
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
+    registryServers = [
+      {
+        name: "shared-search-installation",
+        catalogId: "document-search-catalog",
+      },
+    ];
+    registryCatalogItems = [
+      { id: "document-search-catalog", name: "Document Search", icon: "📚" },
+    ];
     const user = userEvent.setup();
     render(<McpGatewayLogsPage />);
 
@@ -223,70 +331,219 @@ describe("McpGatewayLogsPage filters", () => {
     expect(screen.queryByText("shared-search-installation")).toBeNull();
   });
 
-  it("presents the call context without separate method, server, and arguments columns", () => {
-    vi.mocked(useMcpServers).mockReturnValue({
-      data: [
+  // The install list only labels the filter's options; the page's own rows
+  // read names and icons from the registry's issue index, which every page
+  // already holds.
+  it("loads the install list only once the server filter opens", async () => {
+    const user = userEvent.setup();
+    render(<McpGatewayLogsPage />);
+
+    expect(vi.mocked(useMcpServers)).toHaveBeenLastCalledWith({
+      includeAssignedAgents: false,
+      enabled: false,
+    });
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by MCP server" }),
+    );
+
+    await waitFor(() =>
+      expect(vi.mocked(useMcpServers)).toHaveBeenLastCalledWith({
+        includeAssignedAgents: false,
+        enabled: true,
+      }),
+    );
+  });
+
+  describe("call rows", () => {
+    beforeEach(() => {
+      vi.mocked(useMcpServers).mockReturnValue({
+        data: [
+          {
+            name: "document-search-deployment",
+            catalogName: "Document Search",
+            catalogId: "document-search-catalog",
+          },
+        ],
+      } as unknown as ReturnType<typeof useMcpServers>);
+      registryServers = [
         {
           name: "document-search-deployment",
-          catalogName: "Document Search",
           catalogId: "document-search-catalog",
         },
-      ],
-    } as unknown as ReturnType<typeof useMcpServers>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [
+      ];
+      registryCatalogItems = [
         {
           id: "document-search-catalog",
           name: "Document Search",
           icon: "📚",
         },
-      ],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
-    vi.mocked(useMcpToolCalls).mockReturnValue({
-      data: {
-        data: [
-          {
-            id: "call-1",
-            ownerType: "agent",
-            agentId: orgGateway.id,
-            appId: null,
-            mcpServerName: "document-search-deployment",
-            method: "tools/call",
-            toolCall: {
-              id: "tool-call-1",
-              name: "documents__search_documents",
-              arguments: { query: "raw argument only belongs in details" },
+      ];
+    });
+
+    it("shows the call, its gateway, credential, duration and time", () => {
+      mockCalls([makeCall()]);
+
+      render(<McpGatewayLogsPage />);
+
+      for (const header of [
+        "Call",
+        "Gateway",
+        "Credential",
+        "Status",
+        "Duration",
+        "Time",
+      ]) {
+        expect(
+          screen.getByRole("columnheader", { name: header }),
+        ).toBeInTheDocument();
+      }
+      expect(screen.getByText("search_documents")).toBeVisible();
+      expect(screen.getByText("Document Search")).toBeVisible();
+      expect(screen.getByText("📚")).toBeInTheDocument();
+      expect(screen.getByText("Demo Admin")).toBeVisible();
+      expect(screen.getByText(orgGateway.name)).toBeVisible();
+      expect(screen.getByText("386ms")).toBeVisible();
+      expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
+    });
+
+    it("says the caller's own connection without repeating their name", () => {
+      mockCalls([
+        makeCall({
+          toolResult: {
+            content: [],
+            _meta: {
+              archestraExecutedAs: {
+                kind: "personal",
+                ownerUserId: "user-1",
+                ownerName: "Demo Admin",
+              },
             },
-            toolResult: { isError: false, content: [] },
-            userId: "user-1",
-            authMethod: "session",
-            createdAt: "2026-08-23T16:30:00.000Z",
-            userName: "Demo Admin",
-            appName: null,
           },
-        ],
-        pagination: { limit: 10, nextCursor: null, hasNext: false },
-      },
-      isFetching: false,
-    } as unknown as ReturnType<typeof useMcpToolCalls>);
+        }),
+      ]);
+
+      render(<McpGatewayLogsPage />);
+
+      expect(screen.getByText("Own connection")).toBeVisible();
+      expect(screen.getAllByText("Demo Admin")).toHaveLength(1);
+    });
+
+    it("names whose connection served the call when it is not the caller's", () => {
+      mockCalls([
+        makeCall({
+          toolResult: {
+            content: [],
+            _meta: {
+              archestraExecutedAs: {
+                kind: "personal",
+                ownerUserId: "user-2",
+                ownerName: "Grace Hopper",
+              },
+            },
+          },
+        }),
+      ]);
+
+      render(<McpGatewayLogsPage />);
+
+      expect(screen.getByText("Grace Hopper's connection")).toBeVisible();
+    });
+
+    it("flags a failed call with its error and names the team credential", () => {
+      mockCalls([
+        makeCall({
+          toolResult: {
+            isError: true,
+            content: [{ type: "text", text: "Forbidden: missing scope" }],
+            _meta: {
+              archestraExecutedAs: {
+                kind: "team",
+                teamId: "team-1",
+                teamName: "Support",
+              },
+            },
+          },
+        }),
+      ]);
+
+      render(<McpGatewayLogsPage />);
+
+      // The Status column names the outcome; the reason stays on the row.
+      expect(screen.getByText("Error")).toBeVisible();
+      expect(screen.getByText("Forbidden: missing scope")).toBeVisible();
+      expect(screen.getByText("Support")).toBeVisible();
+    });
+  });
+
+  it("opens a call recorded in an LLM session in that session's trace", async () => {
+    const user = userEvent.setup();
+    mockCalls([makeCall({ id: "call-linked", sessionId: "session-1" })]);
 
     render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
 
-    for (const header of ["Call", "Gateway", "Identity", "Result", "Time"]) {
-      expect(
-        screen.getByRole("columnheader", { name: header }),
-      ).toBeInTheDocument();
-    }
-    expect(screen.queryByRole("button", { name: /Time/ })).toBeNull();
-    expect(screen.getByText("search_documents")).toBeVisible();
-    expect(screen.getByText("Document Search")).toBeVisible();
-    expect(screen.getByText("📚")).toBeInTheDocument();
-    expect(screen.getByText("Demo Admin")).toBeVisible();
-    expect(screen.getByText("Success")).toBeVisible();
-    expect(screen.queryByRole("columnheader", { name: "Method" })).toBeNull();
-    expect(
-      screen.queryByRole("columnheader", { name: "Arguments" }),
-    ).toBeNull();
-    expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/session-1?toolCall=call-linked",
+    );
+  });
+
+  it("opens a call with no session on its own page", async () => {
+    const user = userEvent.setup();
+    mockCalls([makeCall({ id: "call-bare", sessionId: null })]);
+
+    render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
+
+    expect(push).toHaveBeenCalledWith("/mcp/logs/call-bare");
   });
 });
+
+function makeCall(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "call-1",
+    durationMs: 386,
+    ownerType: "agent",
+    agentId: orgGateway.id,
+    appId: null,
+    mcpServerName: "document-search-deployment",
+    method: "tools/call",
+    toolCall: {
+      id: "tool-call-1",
+      name: "documents__search_documents",
+      arguments: { query: "raw argument only belongs in details" },
+    },
+    toolResult: { isError: false, content: [] },
+    userId: "user-1",
+    authMethod: "session",
+    source: "api",
+    sessionId: null,
+    llmToolCallId: null,
+    createdAt: "2026-08-23T16:30:00.000Z",
+    userName: "Demo Admin",
+    appName: null,
+    ...overrides,
+  };
+}
+
+function mockCalls(calls: ReturnType<typeof makeCall>[]) {
+  vi.mocked(useMcpToolCalls).mockReturnValue({
+    data: {
+      data: calls,
+      pagination: { limit: 10, nextCursor: null, hasNext: false },
+    },
+    isFetching: false,
+  } as unknown as ReturnType<typeof useMcpToolCalls>);
+}
+
+function render(element: React.ReactElement) {
+  return rtlRender(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {element}
+    </QueryClientProvider>,
+  );
+}

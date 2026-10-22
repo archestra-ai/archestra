@@ -8,16 +8,16 @@ import { ApiError } from "@/types";
 import { ResourcePermissions } from "./resource-permissions";
 
 /**
- * Lowering every recipient of a policy below Full access leaves nobody able
- * to edit, delete, or share what it covers. A save that would do that is
- * refused instead of locking the organization out.
+ * Removing the last recipient with Manage access leaves nobody able to
+ * change the policy. A save that would do that is refused instead of locking
+ * the organization out.
  */
 describe("a permissions save that would leave nobody managing", () => {
   beforeEach(() => {
     config.enterpriseFeatures.core = true;
   });
 
-  test("lowering every role to Can view on all MCP registry entries is refused", async ({
+  test("lowering every role to Can read on all MCP registry entries is refused", async ({
     makeOrganization,
     makeUser,
     makeMember,

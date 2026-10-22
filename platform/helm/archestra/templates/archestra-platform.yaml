@@ -127,6 +127,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      terminationGracePeriodSeconds: {{ .Values.archestra.terminationGracePeriodSeconds }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
@@ -207,5 +208,13 @@ spec:
       {{- with .Values.archestra.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.selectorLabels" $)) | nindent 8 }}
       {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}

@@ -104,7 +104,7 @@ Users, skills, apps, and client-supplied IDs are not metric labels. Use these so
 
 Every replica reports the same `llm_active_users` value, so aggregate it with `max()`, not `sum()`. [`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`](/docs/reference/configuration#ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS) sets the refresh interval; `0` turns the metric off.
 
-LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability/grafana-dashboards#exemplars).
+LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
 
 ## MCP Metrics
 
@@ -127,9 +127,14 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 | <span id="agent_runtime_provision_duration_seconds"></span>`agent_runtime_provision_duration_seconds` | Histogram | | Startup time, including scheduling and image pulls |
 | <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
 | <span id="agent_runtime_completion_deliveries_total"></span>`agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
+| <span id="agent_runtime_crossing_refusals_total"></span>`agent_runtime_crossing_refusals_total` | Counter | `reason` | Runtime tool calls [Guardrails](/docs/agents/guardrails) refused or held at the runtime boundary |
+| <span id="agent_runtime_pending_exports_total"></span>`agent_runtime_pending_exports_total` | Counter | `outcome` | Protected runtime files pinned while their runtime was mid-call (`pinned`), and how each pin ended (`admitted` or `held`). `discard_failed` counts pins the backend could not release; the runtime removes those within 6 hours |
+| <span id="agent_runtime_observed_reads_total"></span>`agent_runtime_observed_reads_total` | Counter | `outcome` | Runtime reads a governed session made while [Guardrails](/docs/agents/guardrails) enforcement was off: `signed` so they pass once it is back on, or `unsigned` because the call could not be recorded |
 | <span id="agent_runtime_health_tasks"></span>`agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
 | <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
 | <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |
+
+`agent_runtime_crossing_refusals_total` reasons: `proof_missing` (a call to a runtime bound to a session carried no proof of its source), `different_session` (its proof names another session), `unverified_session`, `unparented`, `other_organization`, and `not_a_spawn` (the proof or the runtime's session did not check out), `client_blocked` (an unrecognized client while those are blocked), `unbindable` and `address_refused` (a launch Guardrails could not bind or refused), `held` (Guardrails held a value crossing out of the runtime), `altered` (a pinned file changed after it was admitted), and `withheld` (a run result not admitted to the session).
 
 `agent_runtime_health_tasks` conditions are `working`, `submitted`, `input_required`, `auth_required`, `failed_recent` (the last 15 minutes), and `completion_pending`. Conditions overlap: a task waiting for authentication also counts as `working`. `agent_runtime_health_age_seconds` conditions are `heartbeat`, `submitted`, and `completion_pending`.
 

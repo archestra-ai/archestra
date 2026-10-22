@@ -4,6 +4,8 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
@@ -28,14 +30,34 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction } =
-    await GuardrailsDeploymentModel.get();
+  const {
+    enabled,
+    unsupportedClientAction,
+    breakTheGlassEnabled,
+    annotatorModelId,
+    annotatorLlmApiKeyId,
+  } = await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
+    breakTheGlassEnabled,
+    annotatorModelId,
+    annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
+}
+
+/**
+ * Whether a yell also turns OpenAPPA off for the session that sends it:
+ * enforcement is on and an administrator left break the glass on in
+ * Guardrails settings.
+ */
+export function breakTheGlassActiveIn(deployment: {
+  active: boolean;
+  breakTheGlassEnabled: boolean;
+}): boolean {
+  return deployment.active && deployment.breakTheGlassEnabled;
 }
 
 /**
@@ -46,10 +68,25 @@ export async function getGuardrailsDeployment() {
  * So the switch turns on only while every organization's latest policy passes
  * the same check a save runs. Turning it off is never refused.
  */
-export async function setGuardrailsDeployment(update: {
-  enabled?: boolean;
-  unsupportedClientAction?: UnsupportedAppaClientAction;
-}) {
+export async function setGuardrailsDeployment(
+  update: {
+    enabled?: boolean;
+    unsupportedClientAction?: UnsupportedAppaClientAction;
+    breakTheGlassEnabled?: boolean;
+    annotatorModelId?: string | null;
+    annotatorLlmApiKeyId?: string | null;
+  },
+  actor?: { userId: string; organizationId?: string },
+) {
+  if (
+    update.annotatorModelId !== undefined ||
+    update.annotatorLlmApiKeyId !== undefined
+  )
+    await assertAnnotatorModelSelection({
+      organizationId: actor?.organizationId,
+      modelId: update.annotatorModelId ?? null,
+      apiKeyId: update.annotatorLlmApiKeyId ?? null,
+    });
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
@@ -58,8 +95,36 @@ export async function setGuardrailsDeployment(update: {
         `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
       );
   }
+  const before = await getGuardrailsDeployment();
   await GuardrailsDeploymentModel.set(update);
-  return getGuardrailsDeployment();
+  const after = await getGuardrailsDeployment();
+  // A switch changes what every running session and runtime may do, so the
+  // moment it happened must be findable in the backend log, not only in the
+  // audit log.
+  logger.info(
+    {
+      userId: actor?.userId,
+      before: deploymentSettings(before),
+      after: deploymentSettings(after),
+    },
+    after.enabled !== before.enabled
+      ? `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`
+      : "Guardrails deployment settings changed",
+  );
+  return after;
+}
+
+function deploymentSettings(
+  deployment: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
+) {
+  return {
+    enabled: deployment.enabled,
+    active: deployment.active,
+    unsupportedClientAction: deployment.unsupportedClientAction,
+    breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+    annotatorModelId: deployment.annotatorModelId,
+    annotatorLlmApiKeyId: deployment.annotatorLlmApiKeyId,
+  };
 }
 
 type FirstPolicyEnforcement = {
@@ -121,7 +186,10 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    await setGuardrailsDeployment({ enabled: true });
+    await setGuardrailsDeployment(
+      { enabled: true },
+      { userId, organizationId },
+    );
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };
@@ -156,6 +224,33 @@ export async function turnOnForFirstPolicy(params: {
 }
 
 // ===
+
+/**
+ * The annotator model and its key are a pair: both set, the key the
+ * organization's and the model one it serves, or both null for the
+ * organization's default model.
+ */
+async function assertAnnotatorModelSelection(params: {
+  organizationId: string | undefined;
+  modelId: string | null;
+  apiKeyId: string | null;
+}): Promise<void> {
+  const { organizationId, modelId, apiKeyId } = params;
+  if (!modelId && !apiKeyId) return;
+  if (!modelId || !apiKeyId)
+    throw new ApiError(
+      400,
+      "The annotator model and API key must be set together",
+    );
+  const apiKey = await LlmProviderApiKeyModel.findById(apiKeyId);
+  if (!apiKey || apiKey.organizationId !== organizationId)
+    throw new ApiError(404, "API key not found");
+  const linked = (
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id])
+  ).some(({ model }) => model.id === modelId);
+  if (!linked)
+    throw new ApiError(400, "The annotator model and API key must be linked");
+}
 
 async function refusedPolicies(): Promise<string[]> {
   const refusals: string[] = [];

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { coerceMalformedToolInputs } from "@archestra/shared";
+import { A2A_OAUTH_SCOPE, coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -10,6 +10,8 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
+import { ensureToolCallsHaveResults } from "@/agents/tool-call-results";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
@@ -88,6 +90,10 @@ import {
 } from "./a2a-protocol";
 import { extractProtocolPartsFromUIMessage } from "./a2a-response-parts";
 import { a2aTaskRunService } from "./a2a-task-run-service";
+import {
+  buildStatusReasonMessage,
+  settleFailedA2ATask,
+} from "./a2a-task-settlement";
 
 /** Wire name of the single text artifact carrying a tasked run's answer. */
 const RESPONSE_ARTIFACT_NAME = "agent-response";
@@ -173,12 +179,19 @@ interface A2AManagerConfig {
 export interface A2ASystemParams {
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
+  /** Caller-owned runtime title; bypasses automatic title generation. */
+  runtimeTitle?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
   source?: InteractionSource;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
+  /** Awaited after persistence, before launch: register delivery without awaiting network I/O. */
+  onRuntimeSessionCreated?: (session: {
+    taskId: string;
+    workspaceId: string;
+  }) => Promise<void>;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -526,8 +539,9 @@ export class A2AManager {
       const contextUiMessages = coerceMalformedToolInputs(
         contextDbMessages.map((m) => m.content as UIMessage),
       );
-      const requestMessages: ModelMessage[] =
-        await convertToModelMessages(contextUiMessages);
+      const requestMessages: ModelMessage[] = ensureToolCallsHaveResults(
+        await convertToModelMessages(contextUiMessages),
+      );
 
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the
@@ -676,7 +690,9 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                onRuntimeSessionCreated: systemParams?.onRuntimeSessionCreated,
                 task: executedTurnText,
+                title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",
@@ -695,14 +711,15 @@ export class A2AManager {
                   : undefined,
               messages: requestMessages,
               organizationId: actor.organizationId,
-              userId: executorUserId(actor),
-              actorTeamId: actor.kind === "team" ? actor.id : undefined,
+              userId: a2aActorUserId(actor),
               sessionId,
               source: systemParams?.source,
-              // Slack posts a paused review to the requester (see ChatOps).
+              // A chat posts a paused review to the requester (see ChatOps).
+              // Detached tasks a chat starts report back without a form.
               openappaReviewPause:
                 this.config.callerAnswersOpenappaReviews === true ||
-                systemParams?.source === "chatops:slack",
+                (!fullTaskMode &&
+                  systemParams?.routeCategory === RouteCategory.CHATOPS),
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
               originalUiMessages: contextUiMessages,
               chatOpsBindingId:
@@ -907,7 +924,7 @@ export class A2AManager {
       // it so pollers see a terminal outcome. If the run's own lifecycle
       // already settled it (or a cancel won), this CAS is a no-op.
       if (resumedWorkingTask) {
-        await this.settleFailedRun({
+        await settleFailedA2ATask({
           taskId: resumedWorkingTask.taskId,
           contextId: resumedWorkingTask.contextId,
           statusReason: error instanceof Error ? error.message : String(error),
@@ -1043,7 +1060,7 @@ export class A2AManager {
 
       if (approvalRequests.length > 0) {
         if (this.config.disableApprovalFlow) {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason:
@@ -1181,7 +1198,7 @@ export class A2AManager {
           // subscribers read the cancellation now.
           a2aTaskRunService.wakeSubscribers(taskId);
         } else {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason: reason,
@@ -1198,43 +1215,6 @@ export class A2AManager {
     } finally {
       run.finish();
     }
-  }
-
-  /** CAS the task to FAILED with its terminal event; no-op if already settled. */
-  private async settleFailedRun(params: {
-    taskId: string;
-    contextId: string;
-    statusReason: string;
-  }): Promise<void> {
-    await A2ATaskModel.transitionStateWithEvent({
-      id: params.taskId,
-      to: A2AProtocolTaskState.Failed,
-      allowedFrom: [
-        A2AProtocolTaskState.Submitted,
-        A2AProtocolTaskState.Working,
-      ],
-      statusReason: params.statusReason,
-      eventPayload: {
-        statusUpdate: {
-          taskId: params.taskId,
-          contextId: params.contextId,
-          status: {
-            state: A2AProtocolTaskState.Failed,
-            // Stream followers get the same diagnostics GetTask serves.
-            message: buildStatusReasonMessage({
-              taskId: params.taskId,
-              contextId: params.contextId,
-              reason: params.statusReason,
-            }),
-          },
-        },
-      },
-    });
-
-    // Inside the helper rather than at its call sites: a failure can settle a
-    // task from several escape paths, and a parked subscriber must learn about
-    // every one of them without waiting out its fallback interval.
-    a2aTaskRunService.wakeSubscribers(params.taskId);
   }
 
   /**
@@ -1420,7 +1400,7 @@ export class A2AManager {
         approvalDecisions = await decideCallerHitlReviews({
           organizationId: params.actor.organizationId,
           taskId: task.id,
-          userId: executorUserId(params.actor),
+          userId: a2aActorUserId(params.actor),
           approvalDecisions,
           now: new Date(),
         });
@@ -1516,6 +1496,8 @@ export class A2AManager {
     actor: A2AActor;
     agentId: string;
     request: A2AProtocolCancelTaskRequest;
+    /** Why the task stopped, when the platform rather than the client cancels it. */
+    statusReason?: string;
   }): Promise<A2AProtocolTask> {
     const task = await this.findTaskForAgent({
       taskId: params.request.id,
@@ -1527,6 +1509,8 @@ export class A2AManager {
       throw new A2AError(A2AErrorKind.TaskNotCancelable);
     }
 
+    const statusReason =
+      params.statusReason ?? "The task was canceled by the client.";
     const canceled = await A2ATaskModel.transitionStateWithEvent({
       id: task.id,
       to: A2AProtocolTaskState.Canceled,
@@ -1537,7 +1521,7 @@ export class A2AManager {
         A2AProtocolTaskState.AuthRequired,
         A2AProtocolTaskState.Unspecified,
       ],
-      statusReason: "The task was canceled by the client.",
+      statusReason,
       clearApprovals: true,
       eventPayload: {
         statusUpdate: {
@@ -1548,7 +1532,7 @@ export class A2AManager {
             message: buildStatusReasonMessage({
               taskId: task.id,
               contextId: task.contextId,
-              reason: "The task was canceled by the client.",
+              reason: statusReason,
             }),
           },
         },
@@ -1811,12 +1795,24 @@ export class A2AManager {
     agentId: string,
     token: string,
   ): Promise<A2AActor> {
-    const tokenAuth = await validateMCPGatewayToken(agentId, token);
+    const tokenAuth = await validateMCPGatewayToken(
+      agentId,
+      token,
+      A2A_OAUTH_SCOPE,
+    );
     if (!tokenAuth) {
       throw new A2AError(A2AErrorKind.InvalidToken);
     }
 
     const organizationId = tokenAuth.organizationId;
+
+    if (tokenAuth.serviceAccountId) {
+      return {
+        id: tokenAuth.serviceAccountId,
+        kind: "serviceAccount",
+        organizationId,
+      };
+    }
 
     if (tokenAuth.userId) {
       const user = await UserModel.getById(tokenAuth.userId);
@@ -1829,20 +1825,14 @@ export class A2AManager {
         kind: "user",
         organizationId,
       };
-    } else if (tokenAuth.teamId) {
-      const team = await TeamModel.findById(tokenAuth.teamId);
-      if (!team) {
-        throw new A2AError(A2AErrorKind.TeamNotFound);
-      }
+    }
+
+    if (tokenAuth.oauthClientId) {
+      // Machine credentials authenticate the application itself. Token or
+      // secret rotation must not change the owner of its retained tasks.
       return {
-        id: tokenAuth.teamId,
-        kind: "team",
-        organizationId,
-      };
-    } else if (tokenAuth.isOrganizationToken) {
-      return {
-        id: tokenAuth.organizationId,
-        kind: "organization",
+        id: tokenAuth.oauthClientId,
+        kind: "oauthClient",
         organizationId,
       };
     }
@@ -1852,6 +1842,22 @@ export class A2AManager {
       kind: "system",
       organizationId,
     };
+  }
+}
+
+/**
+ * The principal a turn runs as. A service account acts under its synthetic
+ * user id so the run is authorized against the account's own grants; every
+ * other non-user actor runs as the headless "system" sentinel.
+ */
+function a2aActorUserId(actor: A2AActor): string {
+  switch (actor.kind) {
+    case "user":
+      return actor.id;
+    case "serviceAccount":
+      return serviceAccountUserId(actor.id);
+    default:
+      return "system";
   }
 }
 
@@ -1919,26 +1925,6 @@ function toProtocolPushConfig(config: {
         : {}),
     },
   };
-}
-
-/** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
-function buildStatusReasonMessage(params: {
-  taskId: string;
-  contextId: string;
-  reason: string;
-}): A2AProtocolMessage {
-  return {
-    messageId: `${params.taskId}-status`,
-    contextId: params.contextId,
-    taskId: params.taskId,
-    role: A2AProtocolRole.Agent,
-    parts: [{ text: params.reason }],
-  };
-}
-
-/** The user id a run executes as: team and organization tokens have none. */
-function executorUserId(actor: A2AActor): string {
-  return actor.kind === "user" ? actor.id : "system";
 }
 
 function extractApprovalRequestsFromUiMessage(

@@ -4,11 +4,12 @@
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import config from "@/lib/config/config";
-import { DEFAULT_APP_LOGO, useAppName } from "@/lib/hooks/use-app-name";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrgTheme } from "@/lib/theme.hook";
 
 // white-label-ok: default brand mark, shown only when no white-label logo is configured
 const APP_DISPLAY_NAME = "Archestra.AI";
+const DEFAULT_APP_WORDMARK = "/logo.svg";
 
 export function AppLogo() {
   const appName = useAppName();
@@ -48,20 +49,15 @@ export function AppLogo() {
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="flex items-center gap-2">
-        {/* Decorative: the app name is rendered as visible text right beside it. */}
-        <Image
-          src={DEFAULT_APP_LOGO}
-          alt=""
-          width={28}
-          height={28}
-          className="size-7 shrink-0"
-        />
-        <span className="text-base font-semibold">{APP_DISPLAY_NAME}</span>
-      </div>
-      <p className="text-[10px] text-muted-foreground">
-        Open Source AI Platform
-      </p>
+      {/* The wordmark is drawn in near-black, so invert it for dark mode. */}
+      <Image
+        src={DEFAULT_APP_WORDMARK}
+        alt={APP_DISPLAY_NAME}
+        width={138}
+        height={24}
+        className="h-6 w-auto shrink-0 dark:invert"
+      />
+      <p className="text-[10px] text-muted-foreground">Secure AI Platform</p>
     </div>
   );
 }

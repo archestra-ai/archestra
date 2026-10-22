@@ -41,12 +41,14 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
   isAzureOpenAiFirstPartyModelName,
   normalizeAzureApiKey,
@@ -61,7 +63,10 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -69,6 +74,7 @@ import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
+import UserTokenModel from "@/models/user-token";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -78,6 +84,10 @@ import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import {
+  defaultMaxOutputTokens,
+  resolveModelOutputBudget,
+} from "@/utils/llm-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -165,16 +175,20 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers: providerHeaders(cfg),
-    // Direct OpenRouter models bypass the proxy adapter, so heal the request
-    // body here; the wrapper no-ops for non-healable requests.
-    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
-    direct: true,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers: providerHeaders(cfg),
+      // Direct OpenRouter models bypass the proxy adapter, so heal the request
+      // body here; the wrapper no-ops for non-healable requests.
+      fetch:
+        provider === "openrouter" ? createResponseHealingFetch() : undefined,
+      direct: true,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -229,10 +243,12 @@ export function createLLMModel(params: {
     supportedEndpoints,
   } = params;
 
-  // Build headers for LLM Proxy
+  // Build headers for LLM Proxy. Every model built here dials the proxy from
+  // this process, so every call carries a proof. The guardrail proof also
+  // tells OpenAPPA to skip enforcement, so only its own calls send it.
   const clientHeaders: Record<string, string> = params.internalCall
-    ? internalCallHeader()
-    : {};
+    ? guardrailCallHeader()
+    : internalCallHeader();
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -241,7 +257,10 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
-    if (openappaEnabled()) clientHeaders[APPA_SESSION_HEADER] = sessionId;
+    // A platform guardrail call is filed under the chat's session for logs,
+    // but must not become a turn of that chat's OpenAPPA trajectory.
+    if (openappaEnabled() && !params.internalCall)
+      clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
@@ -253,10 +272,10 @@ export function createLLMModel(params: {
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
   }
-  // Chat sends the raw provider secret to the proxy, so the proxy can't tie
-  // the call to a chat_api_keys row. Forwarding the row ID here lets the
-  // proxy look up per-key configuration (extraHeaders). Loopback-gated on
-  // the proxy side; see CHAT_API_KEY_ID_HEADER.
+  // Names the chat_api_keys row behind this call. With a personal platform
+  // token the proxy resolves the upstream key from it; with a raw provider
+  // secret it only looks up per-key configuration (extraHeaders), and only
+  // when the in-process proof is present. See CHAT_API_KEY_ID_HEADER.
   if (chatApiKeyId) {
     clientHeaders[CHAT_API_KEY_ID_HEADER] = chatApiKeyId;
     logger.info(
@@ -286,14 +305,17 @@ export function createLLMModel(params: {
     ? `${proxyBaseUrl}${cfg.proxiedPathSuffix}`
     : proxyBaseUrl;
 
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers,
-    fetch: createTracedFetch(),
-    supportedEndpoints,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: createTracedFetch(),
+      supportedEndpoints,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -430,9 +452,18 @@ export async function createLLMModelForAgent(params: {
         ?.supportedEndpoints ?? null)
     : null;
 
+  // A real user's call authenticates to the proxy with that user's personal
+  // platform token, so the proxy knows who is calling. The provider key still
+  // comes from the chat key row named by chatApiKeyId. System and service-account
+  // calls have no personal token and keep the key path under the internal proof.
+  const proxyCredential =
+    chatApiKeyId && userId !== "system" && !isServiceAccountUserId(userId)
+      ? await personalTokenValue({ organizationId, userId })
+      : apiKey;
+
   const model = createLLMModel({
     provider,
-    apiKey,
+    apiKey: proxyCredential,
     agentId,
     modelName,
     userId,
@@ -907,6 +938,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
+      const useResponses = isAzureOpenAiFirstPartyModelName(modelName);
 
       // The AI SDK client can't set Azure's api-version as a default query
       // param, so we wrap fetch and inject it on every request — except for
@@ -917,7 +949,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       // the real target.
       const fetchWithVersion = shouldUseAzureOpenAiApiVersion(baseURL)
         ? createAzureFetchWithApiVersion({
-            apiVersion: config.llm.azure.apiVersion,
+            apiVersion: useResponses
+              ? config.llm.azure.responsesApiVersion
+              : config.llm.azure.apiVersion,
             fetch: providedFetch,
           })
         : providedFetch;
@@ -931,35 +965,58 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
 
-      // On the direct path baseURL is the key's own Azure endpoint. Classic
-      // (non-v1) endpoints serve chat completions only under
-      // `/openai/deployments/<deployment>` — posting to `<base>/chat/completions`
-      // 404s — so route through the deployment-scoped URL, the same treatment
-      // the embedding client applies. V1 endpoints pass through unchanged. On
-      // the proxy path baseURL is the local proxy and the adapter builds the
-      // target URL itself.
+      // Classic Responses endpoints are resource-scoped; Chat Completions
+      // endpoints are deployment-scoped. V1 URLs pass through unchanged.
+      // On the proxy path the adapter builds the upstream URL itself.
       const targetBaseURL = direct
-        ? (buildAzureDeploymentBaseUrl({
-            baseUrl: baseURL,
-            deploymentName: modelName,
-          }) ?? baseURL)
+        ? useResponses
+          ? (buildAzureResponsesBaseUrl(baseURL) ?? baseURL)
+          : (buildAzureDeploymentBaseUrl({
+              baseUrl: baseURL,
+              deploymentName: modelName,
+            }) ?? baseURL)
         : baseURL;
 
-      // OpenAI first-party deployments stay on strict @ai-sdk/openai: its name
-      // heuristic converts max_tokens → max_completion_tokens for reasoning
-      // models (which reject max_tokens), and those models never stream
-      // reasoning text over chat completions anyway. Foundry-hosted open models
+      // Azure Chat Completions can reject function tools with reasoning on OpenAI
+      // deployments. Use native Responses, as the model router does, and resend
+      // conversation contents instead of server-stored item references.
+      // Foundry-hosted open models
       // (DeepSeek-R1, gpt-oss, ...) stream thinking in a `reasoning_content`
       // delta field the strict parser drops, so — like the Ollama entry — they
       // go through @ai-sdk/openai-compatible, which parses it into native
       // reasoning parts.
-      if (isAzureOpenAiFirstPartyModelName(modelName)) {
-        return createOpenAI({
-          apiKey: sdkApiKey,
-          baseURL: targetBaseURL,
-          headers: requestHeaders,
-          fetch: fetchWithVersion,
-        }).chat(modelName);
+      if (useResponses) {
+        return wrapLanguageModel({
+          model: createOpenAI({
+            apiKey: sdkApiKey,
+            baseURL: targetBaseURL,
+            headers: requestHeaders,
+            fetch: fetchWithVersion,
+          }).responses(modelName),
+          middleware: {
+            specificationVersion: "v3",
+            transformParams: async ({ params }) => ({
+              ...params,
+              providerOptions: {
+                ...params.providerOptions,
+                openai: {
+                  ...params.providerOptions?.openai,
+                  store: false,
+                  // Request replayable reasoning even for newer model names
+                  // that the SDK's reasoning-family heuristic does not know.
+                  include: [
+                    ...new Set([
+                      ...(Array.isArray(params.providerOptions?.openai?.include)
+                        ? params.providerOptions.openai.include
+                        : []),
+                      "reasoning.encrypted_content",
+                    ]),
+                  ],
+                },
+              },
+            }),
+          },
+        });
       }
 
       return createOpenAICompatible({
@@ -1109,6 +1166,25 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 };
 
 /**
+ * The user's personal platform token value, created on first use. The proxy
+ * resolves it to the user, the same way the MCP gateway resolves it.
+ */
+async function personalTokenValue(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<string> {
+  const token = await UserTokenModel.ensureUserToken(
+    params.userId,
+    params.organizationId,
+  );
+  const value = await UserTokenModel.getTokenValue(token.id);
+  if (!value) {
+    throw new ApiError(500, "The personal platform token has no value.");
+  }
+  return value;
+}
+
+/**
  * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
  * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
  * parent context and create child spans, linking chat → LLM proxy traces together.
@@ -1210,6 +1286,66 @@ function createOllamaNativeFetch(
 
     return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * Default output budget for calls that set no `maxOutputTokens` (see
+ * defaultMaxOutputTokens), so a model that reasons by default never runs into
+ * a small provider or SDK default. Anthropic matters most: its SDK substitutes a per-model
+ * table that lags new model ids and Vertex `@` spellings (4096 for unknown
+ * ids on older SDKs, 128k on newer ones, which older models reject), so it
+ * gets the safe fallback. Explicit per-call values still win.
+ */
+function withCatalogOutputBudget(
+  model: LLMModel,
+  target: { provider: SupportedProvider; modelName: string },
+): LLMModel {
+  // Plain ids and v2 providers (Ollama) keep their provider default.
+  if (typeof model === "string" || model.specificationVersion !== "v3")
+    return model;
+  // OpenAI chat models take the cap as max_completion_tokens: the SDK maps
+  // maxOutputTokens to the legacy max_tokens for names its reasoning
+  // heuristic misses, which newer models reject (see the chat route). Other
+  // providers built on the OpenAI chat client (Perplexity) keep max_tokens.
+  const viaCompletionTokens =
+    target.provider === "openai" && model.provider === "openai.chat";
+  // One lookup per model instance, not per generation step.
+  let resolved: Promise<number | undefined> | undefined;
+  const resolveDefault = () => {
+    resolved ??= resolveModelOutputBudget(target).then((budget) =>
+      defaultMaxOutputTokens(target.provider, budget),
+    );
+    return resolved;
+  };
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: "v3",
+      transformParams: async ({ params }) => {
+        if (!viaCompletionTokens) {
+          if (params.maxOutputTokens !== undefined) return params;
+          const maxOutputTokens = await resolveDefault();
+          return maxOutputTokens === undefined
+            ? params
+            : { ...params, maxOutputTokens };
+        }
+        const openai = params.providerOptions?.openai;
+        const maxCompletionTokens =
+          openai?.maxCompletionTokens ??
+          params.maxOutputTokens ??
+          (await resolveDefault());
+        if (maxCompletionTokens === undefined) return params;
+        return {
+          ...params,
+          maxOutputTokens: undefined,
+          providerOptions: {
+            ...params.providerOptions,
+            openai: { ...openai, maxCompletionTokens },
+          },
+        };
+      },
+    },
+  });
 }
 
 /**

@@ -1,6 +1,11 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
+import {
+  REPLAY_BLOCK_SELECTOR,
+  sanitizeReplaySnapshots,
+  stripTelemetryUrlContent,
+} from "@/lib/telemetry-privacy";
 
 const environment: "development" | "production" =
   (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
@@ -71,18 +76,25 @@ const appendProxySuffix = (baseUrl: string): string => {
  * Returns array of URLs for UI display when multiple URLs are configured.
  */
 export const getExternalProxyUrls = (): string[] => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
-  if (!externalUrl) {
+  const configured = getConfiguredExternalProxyUrls();
+  if (configured.length === 0) {
     return typeof window !== "undefined"
       ? [appendProxySuffix(window.location.origin)]
       : [];
   }
-  return externalUrl
+  return configured;
+};
+
+/**
+ * The external proxy URLs the deployment configures, without the page-origin
+ * fallback. A server render that knows the document's origin adds that itself.
+ */
+export const getConfiguredExternalProxyUrls = (): string[] =>
+  (env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL") ?? "")
     .split(",")
     .map((url) => url.trim())
     .filter((url) => url.length > 0)
     .map(appendProxySuffix);
-};
 
 /**
  * Get the WebSocket URL for general communication.
@@ -247,27 +259,51 @@ export default {
   posthog: {
     config: {
       person_profiles: "identified_only",
+      // Keep interaction analytics without collecting page content.
+      autocapture: false,
+      enable_recording_console_log: false,
+      before_send: (event) => {
+        if (!event) return event;
+        if (
+          event.event === "$snapshot" &&
+          !sanitizeReplaySnapshots(event.properties.$snapshot_data)
+        ) {
+          return null;
+        }
+        for (const properties of [
+          event.properties,
+          event.properties.$set,
+          event.properties.$set_once,
+        ]) {
+          if (!properties || typeof properties !== "object") continue;
+          for (const key of [
+            "$current_url",
+            "$referrer",
+            "$initial_current_url",
+            "$initial_referrer",
+          ]) {
+            const value = properties[key];
+            if (typeof value === "string") {
+              properties[key] = stripTelemetryUrlContent(value);
+            }
+          }
+        }
+        return event;
+      },
       session_recording: {
-        recordHeaders: true,
-        recordBody: true,
-        maskCapturedNetworkRequestFn: (data) => {
-          const sensitiveHeaders = ["authorization", "cookie", "set-cookie"];
-          if (data.requestHeaders) {
-            for (const header of sensitiveHeaders) {
-              if (header in data.requestHeaders) {
-                data.requestHeaders[header] = "***REDACTED***";
-              }
-            }
-          }
-          if (data.responseHeaders) {
-            for (const header of sensitiveHeaders) {
-              if (header in data.responseHeaders) {
-                data.responseHeaders[header] = "***REDACTED***";
-              }
-            }
-          }
-          return data;
-        },
+        // Sanitize raw events in before_send; transport compression still applies.
+        compress_events: false,
+        maskAllInputs: true,
+        maskTextSelector: "*",
+        blockSelector: REPLAY_BLOCK_SELECTOR,
+        captureCanvas: { recordCanvas: false },
+        recordHeaders: false,
+        recordBody: false,
+        // This callback also masks replay page URLs and navigation metadata.
+        maskCapturedNetworkRequestFn: (data) => ({
+          ...data,
+          name: stripTelemetryUrlContent(data.name),
+        }),
       },
     } satisfies Partial<PostHogConfig>,
   },

@@ -318,6 +318,57 @@ describe("getManualCompactionSkippedMessage", () => {
 });
 
 describe("mergePersistedMessageMetadata", () => {
+  const saved = (id: string, role: "user" | "assistant", text: string) =>
+    ({ id, role, parts: [{ type: "text", text }] }) as UIMessage;
+
+  // A thread loaded from the saved one: the merge keeps the same array, so
+  // the transcript is not rendered again for nothing.
+  it("keeps the live thread when it was loaded from the saved one", () => {
+    const persistedMessages = [
+      saved("db-1", "user", "hi"),
+      saved("db-2", "assistant", "hello"),
+    ];
+    const liveMessages = persistedMessages.map((message) => ({ ...message }));
+
+    expect(
+      mergePersistedMessageMetadata({ liveMessages, persistedMessages }),
+    ).toBe(liveMessages);
+  });
+
+  it("puts the saved history in front of a thread that started from its end", () => {
+    const persistedMessages = [
+      saved("db-1", "user", "first"),
+      saved("db-2", "assistant", "second"),
+      saved("db-3", "user", "third"),
+      saved("db-4", "assistant", "fourth"),
+    ];
+    const liveMessages = [
+      saved("db-3", "user", "third"),
+      saved("db-4", "assistant", "fourth"),
+      saved("live-5", "user", "not saved yet"),
+    ];
+
+    const merged = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+      includeEarlierPersisted: true,
+    });
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "db-1",
+      "db-2",
+      "db-3",
+      "db-4",
+      "live-5",
+    ]);
+    expect(merged[2]).toBe(liveMessages[0]);
+    // Without the flag a shorter live thread is never extended backwards: a
+    // cleared or regenerated thread must not regain the saved messages.
+    expect(
+      mergePersistedMessageMetadata({ liveMessages, persistedMessages }),
+    ).toBe(liveMessages);
+  });
+
   it("adds persisted message ids to matching live messages", () => {
     const liveMessages = [
       {

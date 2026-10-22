@@ -149,6 +149,55 @@ describe("DataTable page index clamping", () => {
 // behind the horizontal scroll. Sized columns must therefore get percentage
 // widths (their share of the summed sizes) so they shrink to fit, while the
 // actions column keeps its pixel width because its icon buttons cannot shrink.
+describe("DataTable selection count", () => {
+  const columns: ColumnDef<Row>[] = [
+    { id: "name", accessorKey: "name", header: "Name" },
+  ];
+
+  it("counts a server-paged selection against every matching row", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={[
+          { name: "row-0", files: 0 },
+          { name: "row-1", files: 1 },
+        ]}
+        getRowId={(row) => row.name}
+        manualPagination
+        pagination={{ pageIndex: 1, pageSize: 2, total: 308 }}
+        onPaginationChange={vi.fn()}
+        // One row on this page, one ticked on another page.
+        rowSelection={{ "row-0": true, "row-on-page-1": true }}
+        onRowSelectionChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("2 of 308 row(s) selected.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps counting a client-paged table's own rows", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={[
+          { name: "row-0", files: 0 },
+          { name: "row-1", files: 1 },
+          { name: "row-2", files: 2 },
+        ]}
+        getRowId={(row) => row.name}
+        rowSelection={{ "row-0": true }}
+        onRowSelectionChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("1 of 3 row(s) selected.").length,
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe("DataTable column widths", () => {
   const columns: ColumnDef<Row>[] = [
     { id: "name", accessorKey: "name", header: "Name", size: 700 },

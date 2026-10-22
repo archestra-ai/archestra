@@ -8,16 +8,13 @@ const source = {
   path: "appa.toml",
   interval: "1h" as const,
   githubPatId: null,
+  gitlabTokenId: null,
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: null,
   setupPullRequestNumber: 7,
   lastSyncedAt: null,
   lastSyncError: null,
-  declarationsPendingPublish: false,
-  heldContentHash: null,
-  heldSourceCommit: null,
-  heldReasons: [],
 };
 
 describe("setupPullRequestOutcome", () => {

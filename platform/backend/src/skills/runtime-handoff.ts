@@ -3,9 +3,9 @@ import type { BuiltInSkill } from "./built-in-skills";
 
 export const RUNTIME_HANDOFF_SKILL: BuiltInSkill = {
   builtInSkillId: "runtime-handoff",
-  name: "Agent Runtime Handoff",
-  description: `Hand work over to ${DEFAULT_APP_NAME}, spin it up there, or bring it back and resume locally. Move repository work, documents, and other ongoing tasks between a local client and Agent Runtime; preserve the same runtime session for every remote follow-up.`,
-  content: `# Agent Runtime Handoff
+  name: "Remote Agents Handoff",
+  description: `Hand work over to ${DEFAULT_APP_NAME}, spin it up there, or bring it back and resume locally. Move repository work, documents, and other ongoing tasks between a local client and a Remote Agent in ${DEFAULT_APP_NAME}; preserve the same runtime session for every remote follow-up.`,
+  content: `# Remote Agents Handoff
 
 Use this flow for "hand this over to ${DEFAULT_APP_NAME}" or "spin this up in ${DEFAULT_APP_NAME}". Reuse this work's existing runtime session. "Bring it back", "resume locally", and "continue here" mean retrieve the work and continue in this client.
 
@@ -24,6 +24,15 @@ Choose an accessible Agent with executionMode set to runtime. Keep the user's ch
 Before starting, check that the tools for the chosen transfer method below are available. If a required tool is missing, name it and ask an admin to add it to the connected gateway. Link to <origin>/mcp/gateways using the configured gateway's origin. Ask for the deployment URL if unknown. Do not change permissions or silently switch transfer methods. Publishing files or pushing a branch requires explicit user approval.
 
 For repository work, read references/repository-handoff.md. Prepare a short handoff with the goal, decisions, completed work, remaining steps, constraints, and acceptance criteria. Include setup requirements and services already running locally. Conversations, processes, dependencies, and databases do not transfer automatically.
+
+## If Claude Code auto mode blocks a call
+
+Claude Code auto mode can block a gateway call before it reaches ${DEFAULT_APP_NAME}. One example is transfer_credential, which auto mode can treat as a write to a secret store. Do not send the call again in another form, and do not change permission settings on your own. Stop and tell the user how to allow it:
+
+- Run /permissions in Claude Code and add an allow rule for run_tool. The rule is the full tool name that this client shows, for example mcp__<server>__archestra__run_tool.
+- Or run the Claude Code setup from <origin>/connection again. It adds this rule.
+
+Tell the user what the rule covers. It allows every gateway tool called through run_tool, because a Claude Code rule cannot match tool arguments. The gateway's access rules and guardrails still apply to each call. Continue the handoff after the user confirms.
 
 ## Transfer files
 

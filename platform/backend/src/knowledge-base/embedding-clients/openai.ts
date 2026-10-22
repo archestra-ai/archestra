@@ -26,6 +26,8 @@ export async function callOpenAIEmbedding(params: {
   baseUrl?: string | null;
   dimensions?: number;
   headers?: Record<string, string>;
+  /** Reads the billed cost from the raw `usage` block, for providers that report one. */
+  readReportedCost?: (rawUsage: unknown) => number | undefined;
 }): Promise<EmbeddingApiResponse> {
   const { inputs, model, apiKey, baseUrl, dimensions, headers } = params;
   // OpenAI-compatible APIs are text-only: reject non-text inputs.
@@ -50,6 +52,10 @@ export async function callOpenAIEmbedding(params: {
     const response = await client.embeddings.create({
       model,
       input: texts,
+      // Requested explicitly so the SDK returns the raw payload: its implicit
+      // base64 decode garbles the float arrays that providers ignoring
+      // `encoding_format` send back. `decodeEmbedding` accepts both shapes.
+      encoding_format: "base64",
       // Nomic models do not support the `dimensions` parameter.
       ...(dimensions !== undefined && !isNomicModel(model)
         ? { dimensions }
@@ -61,17 +67,19 @@ export async function callOpenAIEmbedding(params: {
     // `response.data.map` crash) — return what is present and let the dispatcher's
     // central validation raise a typed, actionable error.
     const data = Array.isArray(response.data) ? response.data : [];
+    const reportedCost = params.readReportedCost?.(response.usage);
     return {
       object: response.object ?? "list",
       data: data.map((item) => ({
         object: item.object,
-        embedding: item.embedding,
+        embedding: decodeEmbedding(item.embedding),
         index: item.index,
       })),
       model: response.model ?? model,
       usage: {
         prompt_tokens: response.usage?.prompt_tokens ?? 0,
         total_tokens: response.usage?.total_tokens ?? 0,
+        ...(reportedCost === undefined ? {} : { cost: reportedCost }),
       },
     };
   } catch (err: unknown) {
@@ -80,4 +88,27 @@ export async function callOpenAIEmbedding(params: {
     }
     throw err;
   }
+}
+
+// === Internal helpers
+
+/**
+ * Normalize one embedding to a number array. OpenAI returns little-endian
+ * float32 bytes as base64; some OpenAI-compatible providers ignore
+ * `encoding_format` and return a JSON number array instead. Anything else is
+ * returned as-is for the dispatcher's validation to reject.
+ */
+function decodeEmbedding(embedding: unknown): number[] {
+  if (typeof embedding !== "string") return embedding as number[];
+  const bytes = Buffer.from(embedding, "base64");
+  // Copy into a fresh, aligned buffer: a pooled Buffer can have a byteOffset
+  // that is not a multiple of 4, which a Float32Array view would reject.
+  const aligned = new Uint8Array(bytes).buffer;
+  return Array.from(
+    new Float32Array(
+      aligned,
+      0,
+      Math.floor(aligned.byteLength / Float32Array.BYTES_PER_ELEMENT),
+    ),
+  );
 }

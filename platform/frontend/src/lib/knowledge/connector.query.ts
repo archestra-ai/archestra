@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { fetchInIdChunks } from "@/lib/knowledge/fetch-in-id-chunks";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -83,6 +84,8 @@ export function useConnectors(params?: string | Partial<ConnectorsListParams>) {
           knowledgeBaseId,
           limit: limit ?? 100,
           offset: offset ?? 0,
+          // No caller shows the agents a connector is assigned to.
+          includeAssignedAgents: false,
         },
       });
       throwOnApiError(error);
@@ -98,12 +101,43 @@ export function useConnectors(params?: string | Partial<ConnectorsListParams>) {
   });
 }
 
+/**
+ * Exactly these connectors. With `pollWhileSyncing`, refetches every 3 s while
+ * any of them is syncing.
+ */
+export function useConnectorsByIds(
+  ids: readonly string[],
+  options?: { enabled?: boolean; pollWhileSyncing?: boolean },
+) {
+  const sortedIds = [...new Set(ids)].sort();
+  return useQuery({
+    queryKey: ["connectors", "by-ids", sortedIds],
+    enabled: (options?.enabled ?? true) && sortedIds.length > 0,
+    queryFn: () =>
+      fetchInIdChunks(sortedIds, async (chunk) => {
+        const { data, error } = await getConnectors({
+          query: { ids: chunk, includeAssignedAgents: false },
+        });
+        throwOnApiError(error);
+        return data?.data ?? [];
+      }),
+    placeholderData: (previousData) => previousData,
+    refetchInterval: (query) =>
+      options?.pollWhileSyncing &&
+      query.state.data?.some((c) => c.lastSyncStatus === "running")
+        ? 3000
+        : false,
+  });
+}
+
 export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
   return useQuery({
     queryKey: ["connectors", "paginated", params],
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
-      const { data, error } = await getConnectors({ query: params });
+      const { data, error } = await getConnectors({
+        query: { ...params, includeAssignedAgents: false },
+      });
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
@@ -120,10 +154,49 @@ export function useAllMatchingConnectors(
     enabled: options?.enabled,
     fetchPage: async ({ limit, offset }) => {
       const { data, error } = await getConnectors({
-        query: { ...params, limit, offset },
+        query: { ...params, limit, offset, includeAssignedAgents: false },
       });
       throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];
+    },
+  });
+}
+
+/** Independent of the list filters/page; stops as soon as an affected connector is found. */
+export function useHasLegacySalesforceConnector() {
+  return useQuery({
+    queryKey: ["connectors", "legacy-salesforce-auth"],
+    queryFn: async () => {
+      const limit = 100;
+      for (let offset = 0; ; offset += limit) {
+        const { data, error } = await getConnectors({
+          query: {
+            connectorType: "salesforce",
+            limit,
+            offset,
+            includeAssignedAgents: false,
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        const connectors = data?.data ?? [];
+        if (
+          connectors.some(
+            (connector) =>
+              connector.config.type === "salesforce" &&
+              connector.config.authMethod !== "oauth_client_credentials",
+          )
+        )
+          return true;
+        // The API can omit malformed persisted rows after pagination. A short
+        // response is not necessarily the last database page.
+        const total = data?.pagination.total;
+        if (
+          total !== undefined
+            ? offset + limit >= total
+            : connectors.length < limit
+        )
+          return false;
+      }
     },
   });
 }

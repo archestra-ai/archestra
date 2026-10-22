@@ -22,8 +22,8 @@ import {
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ArchestraCatalogTab } from "../_parts/archestra-catalog-tab";
 import { SetupStepper } from "../_parts/catalog-setup-wizard";
@@ -40,7 +40,6 @@ export default function NewMcpCatalogItemPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const createMutation = useCreateInternalMcpCatalogItem();
-  const { data: catalogItems } = useInternalMcpCatalog();
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
 
@@ -53,9 +52,8 @@ export default function NewMcpCatalogItemPage() {
   // ?clone=<catalogId> seeds the form from an existing item (used by the
   // Clone action on the item detail page) and skips the source step.
   const cloneSourceId = searchParams.get(MCP_CATALOG_CLONE_QUERY_PARAM);
-  const cloneSource = cloneSourceId
-    ? catalogItems?.find((item) => item.id === cloneSourceId)
-    : undefined;
+  const { data: cloneItem } = useInternalMcpCatalogItem(cloneSourceId);
+  const cloneSource = cloneItem ?? undefined;
   // Memoized: the form resets itself whenever its `formValues` prop changes
   // identity, so rebuilding this object on every render (e.g. the re-render
   // from the create mutation entering its pending state) would wipe the
@@ -122,7 +120,7 @@ export default function NewMcpCatalogItemPage() {
       title="Add MCP Server to the Private Registry"
       description="Once you add an MCP server here, it will be available for installation."
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
-      actionButton={<SetupStepper compact activeStep="configuration" />}
+      actionButton={<SetupStepper activeStep="configuration" />}
       maxWidth="wizard"
       contentOverflowX="clip"
     >
@@ -186,10 +184,7 @@ export default function NewMcpCatalogItemPage() {
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </Button>
-                <ArchestraCatalogTab
-                  catalogItems={catalogItems}
-                  onSelectServer={handleSelectFromCatalog}
-                />
+                <ArchestraCatalogTab onSelectServer={handleSelectFromCatalog} />
               </div>
             )}
 

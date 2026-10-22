@@ -2,7 +2,7 @@
  * Typing-performance contract for the chat composer (GH #4256): a keystroke
  * updates the PromptInputProvider text state and rerenders PromptInputContent,
  * but the memoized footer toolbar (ChatPromptInputTools) must not rerender —
- * it hosts the model selector, which is expensive with many models.
+ * it hosts the model button, which is expensive with many models.
  *
  * Unlike prompt-input.test.tsx, this file keeps the real ai-elements
  * prompt-input module (provider, controller context, textarea) so a keystroke
@@ -15,9 +15,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { renderCounts, statusState, deploymentState, layoutState } = vi.hoisted(
   () => ({
-    renderCounts: { modelSelector: 0, apiKeySelector: 0 },
+    renderCounts: { modelButton: 0, apiKeySelector: 0 },
     statusState: {
-      data: null as { trust: string; audience: string } | null,
+      data: null as {
+        trust: string;
+        audience: string;
+        policyRevision: number;
+      } | null,
       isError: false,
     },
     deploymentState: { active: true },
@@ -51,10 +55,10 @@ Object.defineProperty(window, "matchMedia", {
 // Render-counting stubs for the toolbar's expensive children. If the toolbar
 // memo breaks (an unstable prop at the call site, or a dropped memo), these
 // rerender on every keystroke and the counts move.
-vi.mock("@/components/chat/model-selector", () => ({
-  ModelSelector: () => {
-    renderCounts.modelSelector++;
-    return <div data-testid="model-selector" />;
+vi.mock("@/components/chat/chat-model-button", () => ({
+  ChatModelButton: () => {
+    renderCounts.modelButton++;
+    return <div data-testid="chat-model-button" />;
   },
 }));
 
@@ -65,10 +69,9 @@ vi.mock("@/components/chat/llm-provider-api-key-selector", () => ({
   },
 }));
 
-// The Apps Hackathon recorder cluster is a self-contained feature with its own
-// tests; stub it here so the composer test needs no QueryClient/config context.
-vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
-  AppRecordingControls: () => null,
+// The setup menu has its own behavior tests; here it only needs to show up.
+vi.mock("@/components/chat/chat-setup-menu", () => ({
+  ChatSetupMenu: () => <div data-testid="chat-setup-menu" />,
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -121,7 +124,7 @@ describe("chat composer typing performance", () => {
     vi.mocked(useFeature).mockImplementation((flag) =>
       flag === "openappaEnabled" ? true : undefined,
     );
-    renderCounts.modelSelector = 0;
+    renderCounts.modelButton = 0;
     renderCounts.apiKeySelector = 0;
     statusState.data = null;
     statusState.isError = false;
@@ -155,15 +158,15 @@ describe("chat composer typing performance", () => {
         selectedModel="gpt-4"
         onModelChange={vi.fn()}
         agentId="agent-1"
-        conversationId="conv-1"
+        onApiKeyChange={vi.fn()}
       />,
     );
 
     const textarea = screen.getByTestId(E2eTestId.ChatPromptTextarea);
-    expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
     expect(screen.getByTestId("api-key-selector")).toBeInTheDocument();
 
-    const modelSelectorRendersAfterMount = renderCounts.modelSelector;
+    const modelButtonRendersAfterMount = renderCounts.modelButton;
     const apiKeySelectorRendersAfterMount = renderCounts.apiKeySelector;
 
     fireEvent.change(textarea, { target: { value: "h" } });
@@ -174,12 +177,78 @@ describe("chat composer typing performance", () => {
     // textarea is controlled by the provider-owned text state.
     expect(textarea).toHaveValue("hello");
 
-    expect(renderCounts.modelSelector).toBe(modelSelectorRendersAfterMount);
+    expect(renderCounts.modelButton).toBe(modelButtonRendersAfterMount);
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
-  it("shows trust and audience as a static session readout", () => {
-    statusState.data = { trust: "suspicious", audience: "internal" };
+  it.each([
+    "agent",
+    "organization",
+    "user",
+  ] as const)("keeps new-chat controls inline when the model source is %s", (modelSource) => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        onApiKeyChange={vi.fn()}
+        agentId="agent-1"
+        modelSource={modelSource}
+        currentProvider="anthropic"
+      />,
+    );
+    expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
+    expect(screen.getByTestId("api-key-selector")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
+
+  it.each([
+    "agent",
+    "organization",
+    "user",
+  ] as const)("keeps an existing chat's controls inline when the model source is %s", (modelSource) => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        modelSource={modelSource}
+        currentProvider="anthropic"
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
+
+  it.each([
+    ["a new chat", undefined],
+    ["an existing chat", "conv-1"],
+  ])("collapses controls for %s when they no longer fit", (_label, conversationId) => {
+    layoutState.isNarrow = true;
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        onApiKeyChange={vi.fn()}
+        agentId="agent-1"
+        modelSource="agent"
+        currentProvider="anthropic"
+        conversationId={conversationId}
+      />,
+    );
+    expect(screen.queryByTestId("chat-model-button")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    expect(screen.getByTestId("chat-setup-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model-button")).toBeNull();
+  });
+
+  it("puts context usage after the model picker while the pickers are inline", () => {
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -188,20 +257,46 @@ describe("chat composer typing performance", () => {
         onModelChange={vi.fn()}
         agentId="agent-1"
         conversationId="conv-1"
+        tokensUsed={12_000}
+        maxContextLength={200_000}
       />,
     );
-
-    const status = screen.getByRole("status", {
-      name: "Trust: suspicious; audience: internal",
-    });
-    expect(status).toHaveTextContent("suspicious");
-    expect(status).toHaveTextContent("internal");
+    const modelButton = screen.getByTestId("chat-model-button");
+    const contextUsage = screen.getByRole("button", { name: "Context usage" });
+    expect(
+      modelButton.compareDocumentPosition(contextUsage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("preserves policy-defined labels in the status text", () => {
+  it("keeps context usage in the toolbar once a chat moves its setup into More options", () => {
+    layoutState.isNarrow = true;
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        tokensUsed={12_000}
+        maxContextLength={200_000}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Context usage" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "More options" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-setup-menu")).toBeNull();
+  });
+
+  it("names trust and audience on the session status and APPA", () => {
     statusState.data = {
-      trust: "reviewed",
-      audience: "alice ∩ internal,@finance",
+      trust: "suspicious",
+      audience: "internal",
+      policyRevision: 2,
     };
     render(
       <ArchestraPromptInput
@@ -214,15 +309,53 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: reviewed; audience: alice ∩ internal,@finance",
-    });
-    expect(status).toHaveTextContent("reviewed");
-    expect(status).toHaveTextContent("alice ∩ internal,@finance");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: suspicious; audience: internal; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust suspicious, audience internal",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("preserves policy-defined labels in the status text", () => {
+    statusState.data = {
+      trust: "reviewed",
+      audience: "alice ∩ internal,@finance",
+      policyRevision: 2,
+    };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: reviewed; audience: alice ∩ internal,@finance; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust reviewed, audience alice ∩ internal,@finance",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("hides retained labels when the selected session status read failed", () => {
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     const { rerender } = render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -234,7 +367,9 @@ describe("chat composer typing performance", () => {
       />,
     );
     expect(
-      screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
+      screen.getByRole("status", {
+        name: "Trust: trusted; audience: public; policy revision: 2",
+      }),
     ).toBeInTheDocument();
 
     // The hook can expose retained data alongside an error for a session.
@@ -270,7 +405,11 @@ describe("chat composer typing performance", () => {
 
   it("hides the status when guardrails are disabled", () => {
     deploymentState.active = false;
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -288,7 +427,11 @@ describe("chat composer typing performance", () => {
     vi.mocked(useFeature).mockImplementation((flag) =>
       flag === "openappaEnabled" ? false : undefined,
     );
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -303,9 +446,13 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("keeps trust and audience visible above a narrow composer", () => {
+  it("keeps APPA above a narrow composer", () => {
     layoutState.isNarrow = true;
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -317,14 +464,23 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: trusted; audience: public",
-    });
-    expect(status).toHaveTextContent("trust:trusted");
-    expect(status).toHaveTextContent("audience:public");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: trusted; audience: public; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust trusted, audience public",
+      }),
+    ).toBeInTheDocument();
   });
   it("removes the session readout when navigating to a new chat", () => {
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     const props = {
       onSubmit: vi.fn(),
       status: "ready" as const,

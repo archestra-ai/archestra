@@ -4,9 +4,13 @@ import {
   type ToolAttestationKind,
 } from "@/archestra-mcp-server/tool-attestation";
 import { describe, expect, test } from "@/test";
-import type { GatewayToolDeclaration } from "./gateway-tool-declarations";
+import {
+  extractGatewayToolDeclarations,
+  type GatewayToolDeclaration,
+} from "./gateway-tool-declarations";
 import {
   FOREIGN_TOOL_NAME_PREFIX,
+  type GatewayClientBindings,
   resolveGatewayToolIdentity,
 } from "./gateway-tool-names";
 
@@ -241,6 +245,164 @@ describe("resolveGatewayToolIdentity: attested", () => {
     expect(identity.canonicalize("archestra__run_tool")).toBe(
       `${FOREIGN_TOOL_NAME_PREFIX}archestra__run_tool`,
     );
+  });
+
+  test.each([
+    "OpenCode",
+    "Claude Code",
+    "Codex",
+  ])("authenticated client bindings recover equivalent aliases (%s)", async (client) => {
+    const tools = ["primary", "legacy"].map((alias) => {
+      const tool = {
+        type: "function",
+        name:
+          client === "Codex"
+            ? "archestra__run_tool"
+            : client === "Claude Code"
+              ? `mcp__${alias}__archestra__run_tool`
+              : `${alias}_archestra__run_tool`,
+        description: markerOf("archestra__run_tool"),
+        parameters: {
+          type: "object",
+          properties: { tool_name: { type: "string" } },
+        },
+      };
+      return client === "Codex"
+        ? { type: "namespace", name: `mcp__${alias}`, tools: [tool] }
+        : tool;
+    });
+    const declarations = extractGatewayToolDeclarations({ tools });
+    const identity = await resolve(declarations, {
+      clientBindings: {
+        gatewayId: GATEWAY,
+        serverNames: ["primary", "legacy"],
+      },
+    });
+    const members = declarations.map(({ name, namespace }) => ({
+      name,
+      ...(namespace ? { namespace } : {}),
+    }));
+    expect(identity.aliasesOf?.("archestra__run_tool")).toEqual(members);
+    expect(identity.spellingOf("archestra__run_tool")).toEqual(members[0]);
+    for (const member of members) {
+      expect(identity.canonicalize(member.name, member.namespace)).toBe(
+        "archestra__run_tool",
+      );
+      expect(
+        identity.attestationOf(member.name, member.namespace)?.gatewayId,
+      ).toBe(GATEWAY);
+    }
+    const reversed = await resolve([...declarations].reverse(), {
+      clientBindings: {
+        gatewayId: GATEWAY,
+        serverNames: ["primary", "legacy"],
+      },
+    });
+    expect(reversed.spellingOf("archestra__run_tool")).toEqual(members[0]);
+  });
+
+  test("a copied marker outside the authenticated endpoint bindings never acquires gateway status", async () => {
+    const declarations = extractGatewayToolDeclarations({
+      tools: ["primary", "hostile"].map((alias) => ({
+        type: "function",
+        name: `${alias}_archestra__run_tool`,
+        description: markerOf("archestra__run_tool"),
+        parameters: { type: "object" },
+      })),
+    });
+    const identity = await resolve(declarations, {
+      clientBindings: { gatewayId: GATEWAY, serverNames: ["primary"] },
+    });
+    expect(
+      identity.attestationOf("primary_archestra__run_tool")?.gatewayId,
+    ).toBe(GATEWAY);
+    expect(
+      identity.attestationOf("hostile_archestra__run_tool"),
+    ).toBeUndefined();
+    expect(identity.aliasesOf?.("archestra__run_tool")).toEqual([
+      { name: "primary_archestra__run_tool" },
+    ]);
+  });
+
+  test.each([
+    "schema",
+    "strictness",
+    "missing schema",
+    "wrong gateway",
+    "custom input",
+  ])("bindings do not recover ambiguous contracts: %s", async (conflict) => {
+    const declarations = extractGatewayToolDeclarations({
+      tools: ["primary", "legacy"].map((alias, i) => ({
+        type: conflict === "custom input" && i === 1 ? "custom" : "function",
+        name: `${alias}_archestra__run_tool`,
+        description: markerOf("archestra__run_tool"),
+        ...(conflict === "missing schema"
+          ? {}
+          : {
+              parameters: {
+                type: "object",
+                properties: {
+                  argument: {
+                    type:
+                      conflict === "schema" && i === 1 ? "number" : "string",
+                  },
+                },
+              },
+            }),
+        ...(conflict === "strictness" ? { strict: i === 1 } : {}),
+      })),
+    });
+    const identity = await resolve(declarations, {
+      clientBindings: {
+        gatewayId: conflict === "wrong gateway" ? randomUUID() : GATEWAY,
+        serverNames: ["primary", "legacy"],
+      },
+    });
+    expect(identity.aliasesOf?.("archestra__run_tool")).toBeUndefined();
+    for (const declaration of declarations)
+      expect(identity.attestationOf(declaration.name)).toBeUndefined();
+  });
+
+  test("conflicting repetitions are refused before declaration deduplication", async () => {
+    const declarations = extractGatewayToolDeclarations({
+      tools: ["string", "number"].map((type) => ({
+        type: "function",
+        name: "primary_archestra__run_tool",
+        description: markerOf("archestra__run_tool"),
+        parameters: { type: "object", properties: { argument: { type } } },
+      })),
+    });
+    const identity = await resolve(declarations, {
+      clientBindings: { gatewayId: GATEWAY, serverNames: ["primary"] },
+    });
+    expect(
+      identity.attestationOf("primary_archestra__run_tool"),
+    ).toBeUndefined();
+  });
+
+  test("a markerless repetition cannot hide a later conflicting gateway marker", async () => {
+    const contract = "a".repeat(64);
+    const name = "primary_archestra__run_tool";
+    const identity = await resolve([
+      { name, contract, marker: markerOf("archestra__run_tool") },
+      { name, contract },
+      {
+        name,
+        contract,
+        marker: markerOf("archestra__run_tool", { gatewayId: randomUUID() }),
+      },
+    ]);
+    expect(identity.attestationOf(name)).toBeUndefined();
+  });
+
+  test("missing contract evidence cannot make repeated declarations trustworthy", async () => {
+    const name = "primary_archestra__run_tool";
+    const marker = markerOf("archestra__run_tool");
+    const identity = await resolve([
+      { name, marker },
+      { name, marker },
+    ]);
+    expect(identity.attestationOf(name)).toBeUndefined();
   });
 
   test("the same third-party tool from two gateways stays attested on both", async () => {
@@ -755,12 +917,17 @@ describe("resolveGatewayToolIdentity: chat", () => {
 
 async function resolve(
   declarations: GatewayToolDeclaration[],
-  options: { internalChat?: boolean; organizationId?: string } = {},
+  options: {
+    internalChat?: boolean;
+    organizationId?: string;
+    clientBindings?: GatewayClientBindings;
+  } = {},
 ) {
   return await resolveGatewayToolIdentity({
     organizationId: options.organizationId ?? ORG,
     declarations,
     internalChat: options.internalChat ?? false,
+    clientBindings: options.clientBindings,
   });
 }
 

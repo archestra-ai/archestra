@@ -1,3 +1,4 @@
+import { gitHostFromUrl } from "@archestra/shared";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
 import { discoverGithubMarketplace } from "./github-marketplace";
@@ -396,7 +397,10 @@ describe("discoverGithubMarketplace", () => {
 
     await discoverGithubMarketplace({
       repoUrl: "private-owner/private-marketplace",
-      githubToken: "private-token",
+      access: {
+        host: gitHostFromUrl({ provider: "github" }),
+        token: "private-token",
+      },
     });
 
     const authorizationHeaders = fetchMock.mock.calls.map(([input, init]) => {
@@ -406,6 +410,76 @@ describe("discoverGithubMarketplace", () => {
     });
     expect(authorizationHeaders).toContain("token private-token");
     expect(authorizationHeaders).toContain("Bearer private-token");
+  });
+
+  test("lists plugin folders when a github.com repository has no marketplace", async () => {
+    stubGithub([
+      {
+        owner: "folder-owner",
+        repo: "plugins",
+        files: {
+          "README.md": "Plugins\n",
+          "plugins/atlassian/plugin.json": JSON.stringify({
+            name: "atlassian",
+            description: "Jira and Confluence",
+          }),
+          "plugins/atlassian/mcp.json": "{}",
+          "plugins/atlassian/skills/jira/SKILL.md": "# Jira\n",
+          "tools/broken/plugin.json": "not json",
+          "tools/broken/agents/a.md": "A\n",
+          ".github/plugin/plugin.json": "{}",
+        },
+      },
+    ]);
+
+    const discovered = await discoverGithubMarketplace({
+      repoUrl: "folder-owner/plugins",
+    });
+
+    expect(discovered).toMatchObject({
+      marketplacePath: null,
+      commitSha: STUB_COMMIT_SHA,
+      reason: null,
+    });
+    expect(discovered.entries).toEqual([
+      expect.objectContaining({
+        marketplacePath: "plugins/atlassian/plugin.json",
+        name: "atlassian",
+        description: "Jira and Confluence",
+        sourceRepoUrl: "folder-owner/plugins",
+        sourceSubdir: "plugins/atlassian",
+        fileCount: 3,
+        supported: true,
+      }),
+      expect.objectContaining({
+        marketplacePath: "tools/broken/plugin.json",
+        name: "broken",
+        description: "",
+        sourceSubdir: "tools/broken",
+        fileCount: 2,
+        supported: true,
+      }),
+    ]);
+  });
+
+  test("reports a repository with neither a marketplace nor plugin folders", async () => {
+    stubGithub([
+      {
+        owner: "folder-owner",
+        repo: "empty",
+        files: { "README.md": "Nothing here\n" },
+      },
+    ]);
+
+    const discovered = await discoverGithubMarketplace({
+      repoUrl: "folder-owner/empty",
+    });
+
+    expect(discovered).toMatchObject({
+      marketplacePath: null,
+      entries: [],
+      reason: expect.stringContaining("plugin folder"),
+    });
   });
 
   test("falls back to public Git when the anonymous REST quota is exhausted", async () => {

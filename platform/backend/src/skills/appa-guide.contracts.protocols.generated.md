@@ -89,10 +89,11 @@ For the customer request, the service returns this response to classify the resu
 
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
-- `answer` must contain exactly `delta`, `requires`, and `emits`.
+- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards`. No other key is allowed.
+- `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
-- Audience and trust fields inside `delta` and `requires` are optional. An omitted field adds no restriction or requirement.
-- `requires.audience` can contain `contains`, `within`, or both.
+- Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
+- `requires.audience` must contain exactly `contains`.
 - Each history entry is `{"contains":"<effect>"}` or `{"excludes":"<effect>"}`.
 - JSON audience values use `"public"` or a list of permitted audiences. Do not put `public` inside a JSON audience list.
 - A restricted list cannot repeat entries or contain both `self` and `internal`.
@@ -180,7 +181,7 @@ Each component uses these fields differently:
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
 | `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
-| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, `requires`, `emits` |
+| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
 | `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
 

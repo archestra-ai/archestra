@@ -18,7 +18,10 @@ import {
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
 import { AgentRuntimeCredentialPrompt } from "./agent-run-credential-prompt";
-import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
+import {
+  AgentRuntimeCredentialsDeepLink,
+  AgentRuntimeCredentialsDialog,
+} from "./agent-runtime-credentials-dialog";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -326,6 +329,33 @@ describe("credential setup deep links", () => {
     expect(writes.filter(({ key }) => key === "SERVICE_TOKEN")).toHaveLength(2);
   });
 
+  it("asks for one credential alone when its own Set up opened it", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AgentRuntimeCredentialsDialog
+          agentId="agent-1"
+          declarations={declarations}
+          canEditAgent={false}
+          onlyKeys={["SERVICE_TOKEN"]}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Set up Service token" }),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Service token"), "example-secret");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        { key: "SERVICE_TOKEN", value: "example-secret" },
+      ]),
+    );
+  });
+
   it("does not request already configured or optional credentials", async () => {
     configured = ["GITHUB_TOKEN"];
     show();
@@ -544,13 +574,20 @@ describe("credential setup deep links", () => {
         description: instructions,
       })),
     });
+    const user = userEvent.setup();
     await screen.findByLabelText("GitHub token");
-    expect(
-      screen.getByText(githubDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(claudeDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
+    // Each field keeps its instructions one focus away.
+    for (const [label, description] of [
+      ["GitHub token", githubDescription],
+      ["Service token", claudeDescription],
+    ]) {
+      const hint = screen.getByRole("button", { name: `About ${label}` });
+      for (let step = 0; step < 30 && document.activeElement !== hint; step++)
+        await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        description.replace(/\n/g, " "),
+      );
+    }
     expect(screen.queryByText(instructions)).not.toBeInTheDocument();
   });
 

@@ -4,20 +4,25 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Forwards a retired route to its replacement.
- *
- * A server-side `redirect()` streams a NEXT_REDIRECT payload that crashes the
- * client router in this Next version ("Rendered more hooks than during the
- * previous render"), leaving the error boundary's "This page couldn't load"
- * where the redirect should have been — so these forwards run client-side.
- * See `app/knowledge/page.tsx` for the same workaround.
+ * Sends a bare section root to its first destination.
+ * A server-side redirect() here streams a NEXT_REDIRECT payload that crashes
+ * the client router in this Next version, so the redirect stays client-side.
  */
-export function ClientRedirect({ to }: { to: string }) {
+export function ClientRedirect({
+  to,
+  keepQuery = false,
+}: {
+  to: string;
+  /** Carry the current query string and hash over to `to`. */
+  keepQuery?: boolean;
+}) {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(to);
-  }, [router, to]);
+    router.replace(
+      keepQuery ? `${to}${window.location.search}${window.location.hash}` : to,
+    );
+  }, [router, to, keepQuery]);
 
   return null;
 }

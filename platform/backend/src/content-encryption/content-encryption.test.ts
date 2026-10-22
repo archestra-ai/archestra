@@ -58,8 +58,12 @@ async function seedPlaintextInteraction(): Promise<string> {
 }
 
 async function rawInteraction(id: string) {
-  const result = await db.execute<{ request: unknown; response: unknown }>(
-    sql`SELECT request, response FROM interactions WHERE id = ${id}::uuid`,
+  const result = await db.execute<{
+    request: unknown;
+    response: unknown;
+    session_preview: unknown;
+  }>(
+    sql`SELECT request, response, session_preview FROM interactions WHERE id = ${id}::uuid`,
   );
   return result.rows[0];
 }
@@ -150,9 +154,32 @@ describe("content encryption", () => {
       const raw = await rawInteraction(created.id);
       expect(isContentEnvelope(raw.request)).toBe(true);
       expect(isContentEnvelope(raw.response)).toBe(true);
+      expect(isContentEnvelope(raw.session_preview)).toBe(true);
+      expect(
+        decryptContentValue(
+          raw.session_preview,
+          "interactions.session_preview",
+        ),
+      ).toMatchObject({ lastUserMessagePreview: "top secret question" });
+      expect(() =>
+        decryptContentValue(raw.session_preview, "interactions.request"),
+      ).toThrow(/Failed to decrypt/);
 
       const found = await InteractionModel.findById(created.id);
       expect(found?.request).toEqual(request);
+      // A preview is content too: rotation must move it to the new key along
+      // with the payload, rather than stranding list reads on the old key.
+      setKeys(SECRET_B, SECRET_A);
+      await dropTrgmIndex();
+      await runContentEncryptionBackfill({ maxBatchesPerRun: 50 });
+      setKeys(SECRET_B);
+      const rotated = await rawInteraction(created.id);
+      expect(
+        decryptContentValue(
+          rotated.session_preview,
+          "interactions.session_preview",
+        ),
+      ).toMatchObject({ lastUserMessagePreview: "top secret question" });
       // (response equality is not asserted through findById — it normalizes
       // responses against the provider schema, which this minimal fixture
       // does not satisfy; the raw-row assertion above covers decryption.)
@@ -246,31 +273,6 @@ describe("content encryption", () => {
         { search: "email-server" },
       );
       expect(byServer.data).toHaveLength(1);
-    });
-
-    test("first-successful-call scan decrypts results instead of trusting SQL isError", async () => {
-      setKeys(SECRET_A);
-      const { McpToolCallModel } = await import("@/models");
-      // Oldest row is an encrypted ERROR — the plain SQL predicate cannot see
-      // into the envelope and would misread it as the first success.
-      const errorCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult: { ...toolResult, isError: true },
-      });
-      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
-
-      const successCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult,
-      });
-      const firstSuccessAt =
-        await McpToolCallModel.getFirstSuccessfulToolCallAt();
-      expect(firstSuccessAt).toEqual(successCall.createdAt);
-      expect(firstSuccessAt).not.toEqual(errorCall.createdAt);
     });
   });
 

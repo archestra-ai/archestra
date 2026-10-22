@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +19,10 @@ const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
 const mockChatSession = vi.hoisted(() => ({
   current: null as MockChatSession | null,
 }));
+const mockIconSources = vi.hoisted(() => ({
+  agentTools: [] as { name: string; catalogId: string | null }[],
+  catalogItems: [] as { id: string; name: string; icon: string | null }[],
+}));
 
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
@@ -33,7 +37,9 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
+    scrollRef: { current: null },
     scrollToBottom: vi.fn(),
+    stopScroll: vi.fn(),
   }),
 }));
 
@@ -248,8 +254,11 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({ data: { tools: mockIconSources.agentTools } }),
+}));
+
 vi.mock("@/lib/chat/chat.query", () => ({
-  useProfileToolsWithIds: () => ({ data: [] }),
   useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
   // Read once for the whole transcript, to decide whether an attachment chip
   // offers "Save to knowledge". An ordinary (unencrypted) chat here.
@@ -263,15 +272,23 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useInternalMcpCatalog: () => ({ data: [] }),
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
-  useMcpInstallOrchestrator: () => ({
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: () => ({ data: mockIconSources.catalogItems }),
+}));
+
+const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({
+  mockUseMcpInstallOrchestrator: vi.fn((_options?: { enabled?: boolean }) => ({
     triggerInstallByCatalogId: vi.fn(),
     triggerReauthByCatalogIdAndServerId: vi.fn(),
     connectedCatalogIds: new Set<string>(),
-  }),
+  })),
+}));
+
+vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+  useMcpInstallOrchestrator: mockUseMcpInstallOrchestrator,
 }));
 
 vi.mock("@/lib/organization.query");
@@ -279,9 +296,7 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
-  useGlobalChat: () => ({
-    getSession: () => mockChatSession.current,
-  }),
+  useChatSessionSnapshot: () => mockChatSession.current,
 }));
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
@@ -314,6 +329,161 @@ describe("ChatMessages", () => {
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
     mockHasKnowledgeBaseToolCall.mockReturnValue(false);
     mockChatSession.current = null;
+    mockIconSources.agentTools = [];
+    mockIconSources.catalogItems = [];
+  });
+
+  it("shows an assigned tool's catalog icon from the agent's tool list", () => {
+    // The tool's name prefix does not match its catalog's name, so only the
+    // agent's own tool list can link the call to the catalog.
+    mockIconSources.agentTools = [
+      { name: "ledger_tools__sum_rows", catalogId: "catalog-finance" },
+    ];
+    mockIconSources.catalogItems = [
+      { id: "catalog-finance", name: "Finance", icon: "🧾" },
+    ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-ledger_tools__sum_rows",
+                  toolCallId: "call-1",
+                  state: "output-available",
+                  input: {},
+                  output: { total: 3 },
+                },
+              ],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("🧾")).toBeInTheDocument();
+  });
+
+  it("mounts only the end of a long transcript, and earlier messages on request", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+    expect(screen.getByText("Turn 70")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show earlier messages (70 not shown)",
+      }),
+    );
+    expect(await screen.findByText("Turn 40")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 39")).not.toBeInTheDocument();
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+  });
+
+  it("opens the window around a deep-linked message", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState({}, "", "/chat/conv-1#message-m-20");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(await screen.findByText("Turn 20")).toBeInTheDocument();
+      // Ten items of context above it.
+      expect(screen.getByText("Turn 10")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 9")).not.toBeInTheDocument();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("ignores a malformed message fragment without losing the transcript", () => {
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${index}` }],
+    })) as UIMessage[];
+    window.history.replaceState({}, "", "/chat/conv-1#message-%");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(screen.getByText("Turn 99")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Show earlier messages (70 not shown)",
+        }),
+      ).toBeVisible();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("keeps the window's start when new messages arrive", () => {
+    const messages = Array.from({ length: 50 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    const more = [
+      ...messages,
+      {
+        id: "m-50",
+        role: "user",
+        parts: [{ type: "text", text: "Turn 50" }],
+      } as UIMessage,
+    ];
+    rerender(
+      <ChatMessages conversationId="conv-1" messages={more} status="ready" />,
+    );
+
+    expect(screen.getByText("Turn 50")).toBeInTheDocument();
+    // Still mounted: appending does not push the oldest rendered one out.
+    expect(screen.getByText("Turn 20")).toBeInTheDocument();
   });
 
   it("renders external MCP Skill attribution from message metadata", () => {
@@ -1519,6 +1689,46 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText(/To re-authenticate, visit this URL:/),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads the MCP install helper only once the transcript shows an auth prompt", () => {
+    const plain = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Here is the summary you asked for." }],
+      },
+    ] as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages conversationId="conv-1" messages={plain} status="ready" />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+
+    const withPrompt = [
+      ...plain,
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+          },
+        ],
+      },
+    ] as UIMessage[];
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={withPrompt}
+        status="ready"
+      />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
   });
 
   it("renders assistant auth-required text as the inline install tool UI", () => {

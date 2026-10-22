@@ -74,18 +74,12 @@ function mockPermissions({
 }
 
 function renderAgentCreatePage({
-  canAddExternalAgent = true,
   canCreateAgent = true,
 }: {
-  canAddExternalAgent?: boolean;
   canCreateAgent?: boolean;
 } = {}) {
   return render(
-    <AgentCreatePage
-      kind="agent"
-      canAddExternalAgent={canAddExternalAgent}
-      canCreateAgent={canCreateAgent}
-    />,
+    <AgentCreatePage kind="agent" canCreateAgent={canCreateAgent} />,
   );
 }
 
@@ -141,7 +135,7 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Coding agents", "External agents"]);
+    ).toEqual(["Agent Runtimes Beta", "External agents"]);
     expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
     expect(
       screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
@@ -170,54 +164,32 @@ describe("AgentCreatePage", () => {
     ).toBeEnabled();
   });
 
-  it("lets an external-agent manager open the A2A form without Agent create permission", async () => {
+  it("lets an Agent creator open the A2A form", async () => {
     const user = userEvent.setup();
-    renderAgentCreatePage({
-      canAddExternalAgent: true,
-      canCreateAgent: false,
+    renderAgentCreatePage({ canCreateAgent: true });
+
+    const externalAgentChoice = screen.getByRole("button", {
+      name: /connect via a2a/i,
     });
-
-    expect(
-      screen.getByRole("button", { name: /new archestra agent/i }),
-    ).toHaveAccessibleDescription("Requires permission to create agents.");
-
-    await user.click(screen.getByRole("button", { name: /connect via a2a/i }));
+    expect(externalAgentChoice).toBeEnabled();
+    await user.click(externalAgentChoice);
     expect(push).toHaveBeenCalledWith("/agents/a2a/new");
     expect(formProps).not.toHaveBeenCalled();
   });
 
-  it("disables runtime templates for an external-agent manager", () => {
+  it("explains every disabled choice for someone who cannot create agents", () => {
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
     );
-    renderAgentCreatePage({
-      canAddExternalAgent: true,
-      canCreateAgent: false,
-    });
+    renderAgentCreatePage({ canCreateAgent: false });
 
-    const codexTemplate = screen.getByRole("button", { name: /codex/i });
-    expect(codexTemplate).toBeDisabled();
-    expect(codexTemplate).toHaveAccessibleDescription(
-      "Requires permission to create agents.",
-    );
-  });
-
-  it("keeps the external-agent choice disabled for a regular Agent creator", () => {
-    renderAgentCreatePage({
-      canAddExternalAgent: false,
-      canCreateAgent: true,
-    });
-
-    expect(
-      screen.getByRole("button", { name: /new archestra agent/i }),
-    ).toBeEnabled();
-    const externalAgentChoice = screen.getByRole("button", {
-      name: /connect via a2a/i,
-    });
-    expect(externalAgentChoice).toBeDisabled();
-    expect(externalAgentChoice).toHaveAccessibleDescription(
-      "Requires permission to view agents and update agent settings.",
-    );
+    for (const name of [/new archestra agent/i, /codex/i, /connect via a2a/i]) {
+      const choice = screen.getByRole("button", { name });
+      expect(choice).toBeDisabled();
+      expect(choice).toHaveAccessibleDescription(
+        "Requires permission to create agents.",
+      );
+    }
   });
 
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {
@@ -233,13 +205,13 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Coding agents" }),
+      screen.getByRole("heading", { level: 2, name: "Agent Runtimes Beta" }),
     ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Coding agents", "External agents"]);
+    ).toEqual(["Agent Runtimes Beta", "External agents"]);
     for (const name of [
       "Claude Code",
       "Codex",
@@ -253,7 +225,7 @@ describe("AgentCreatePage", () => {
     }
     // The platform's own harness is offered on its own, not as a coding agent.
     const codingAgents = screen
-      .getByRole("heading", { level: 2, name: "Coding agents" })
+      .getByRole("heading", { level: 2, name: "Agent Runtimes Beta" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)
@@ -381,7 +353,7 @@ describe("AgentCreatePage", () => {
           runtime: expect.objectContaining({
             command: ["archestra-claude-code"],
             credentials: [],
-            claudeCode: { authentication: "subscription" },
+            claudeCode: { authentication: "subscription", model: "opus" },
           }),
         }),
       }),
@@ -445,9 +417,7 @@ describe("AgentCreatePage", () => {
     ).toHaveTextContent("Create and chat");
 
     formState.hasRuntime = true;
-    rerender(
-      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
-    );
+    rerender(<AgentCreatePage kind="agent" canCreateAgent />);
     // It opens on its own page rather than in chat, so it promises no run.
     expect(
       screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
@@ -510,7 +480,7 @@ describe("AgentCreatePage", () => {
   it("stays put with a success state when the creator may not read what it made", async () => {
     const user = userEvent.setup();
     mockPermissions({ canRead: false });
-    renderAgentCreatePage({ canAddExternalAgent: false });
+    renderAgentCreatePage();
     await user.click(
       screen.getByRole("button", { name: /new archestra agent/i }),
     );
@@ -547,9 +517,7 @@ describe("AgentCreatePage", () => {
     ).toBeNull();
 
     mockPermissions({ canRead: true });
-    rerender(
-      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
-    );
+    rerender(<AgentCreatePage kind="agent" canCreateAgent />);
     expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
   });
 
@@ -563,9 +531,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
     mockPermissions({ canRead: false });
-    rerender(
-      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
-    );
+    rerender(<AgentCreatePage kind="agent" canCreateAgent />);
     expect(push).not.toHaveBeenCalled();
     expect(
       screen.getByText(/you do not have permission to view it/i),

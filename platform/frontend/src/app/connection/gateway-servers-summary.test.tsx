@@ -8,10 +8,27 @@ import { GatewayServersSummary } from "./gateway-servers-summary";
 
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
   useAllCatalogTools: () => ({ data: undefined }),
   groupCatalogTools: () => new Map(),
 }));
+// A gateway's own catalogs are read by id; answer from the catalog mock.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", async () => {
+  const { useInternalMcpCatalog } = await import(
+    "@/lib/mcp/internal-mcp-catalog.query"
+  );
+  return {
+    useMcpRegistryRowsByIds: (ids: string[]) => ({
+      data: (
+        (useInternalMcpCatalog().data ?? []) as Array<{ id: string }>
+      ).filter((row) => ids.includes(row.id)),
+      isPending: false,
+      hasLoaded: true,
+      isError: false,
+    }),
+  };
+});
 vi.mock("@/lib/auth/use-can-manage-gateway", () => ({
   useCanManageGateway: vi.fn(),
 }));
@@ -229,5 +246,20 @@ describe("GatewayServersSummary", () => {
     const link = screen.getByRole("link", { name: /Edit on gateway/ });
     expect(link).toHaveAttribute("href", "/mcp/gateways/g1?section=settings");
     expect(link).not.toHaveAttribute("target");
+  });
+
+  it("reads only its own tools' catalogs, not the whole registry, for a gateway with a tool list", () => {
+    mockGateway([{ name: "github__list", catalogId: "gh" }]);
+    mockCatalog([{ id: "gh", name: "GitHub" }]);
+
+    render(<GatewayServersSummary gatewayId="g1" />);
+
+    expect(useInternalMcpCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(useInternalMcpCatalog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(screen.getByText(/1 MCP server/)).toBeInTheDocument();
   });
 });

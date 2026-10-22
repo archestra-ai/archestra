@@ -2807,6 +2807,7 @@ async fn write_run_config(
         "backend_branch": backend_branch,
         "backend_commit": backend_commit,
         "temperature": crate::client::BENCH_TEMPERATURE,
+        "max_steps": crate::client::BENCH_MAX_STEPS,
         "pricing": {
             "source": "openrouter",
             "fetched_at": timestamp(),

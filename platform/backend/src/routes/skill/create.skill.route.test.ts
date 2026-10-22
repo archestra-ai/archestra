@@ -383,7 +383,7 @@ describe("POST /api/skills", () => {
       );
     });
 
-    test("creators can share a new skill with any existing team in the organization", async ({
+    test("creators share a new skill with their own teams, not with other teams", async ({
       makeTeam,
       makeTeamMember,
     }) => {
@@ -425,7 +425,12 @@ describe("POST /api/skills", () => {
           ],
         },
       });
-      expect(shared.statusCode).toBe(200);
+      // Every team would reach close to everyone, which takes Full access on
+      // every skill.
+      expect(shared.statusCode).toBe(403);
+      expect(shared.json().error.message).toBe(
+        "Only someone with Full access to every skill can share it with a team they are not in.",
+      );
     });
 
     test("rejects a team-scoped skill with an unknown team id without orphaning it", async () => {

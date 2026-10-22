@@ -1418,6 +1418,98 @@ describe("InteractionModel", () => {
       expect(session.lastUserMessagePreview).toBe(longMessage.slice(0, 200));
       expect(session).not.toHaveProperty("lastInteractionRequest");
     });
+
+    test("previews a guardrail's call only when the session has nothing else", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const baseTime = Date.now();
+      // A consult quotes the call it judges, here a title-generation request.
+      const judged =
+        '{"tool":"Task","prompt":"Please write a 5-10 word title"}';
+      const turn = (params: {
+        sessionId: string;
+        content: string;
+        source: "api" | "guardrail:annotator";
+        seconds: number;
+      }) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          sessionId: params.sessionId,
+          source: params.source,
+          createdAt: new Date(baseTime + params.seconds * 1000),
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: params.content }],
+          },
+          response: {
+            id: "r1",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      // Four turns, then more guardrail calls than even the deep re-read holds.
+      for (const n of [1, 2, 3, 4])
+        await turn({
+          sessionId: "mixed",
+          content: `turn ${n}`,
+          source: "api",
+          seconds: n,
+        });
+      for (let n = 5; n < 30; n++)
+        await turn({
+          sessionId: "mixed",
+          content: `annotate call ${n}`,
+          source: "guardrail:annotator",
+          seconds: n,
+        });
+      await turn({
+        sessionId: "guardrail-only",
+        content: judged,
+        source: "guardrail:annotator",
+        seconds: 8,
+      });
+
+      const preview = async (sessionId: string) => {
+        const sessions = await InteractionModel.getSessions(
+          { limit: 100, offset: 0 },
+          admin.id,
+          true,
+          { sessionId },
+        );
+        return sessions.data.map((s) => s.lastUserMessagePreview);
+      };
+
+      expect(await preview("mixed")).toEqual(["turn 4"]);
+      expect(await preview("guardrail-only")).toEqual([judged]);
+      const detail = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: "mixed" },
+      );
+      expect(
+        new Set(
+          detail.data.map(
+            (i) =>
+              `${i.source} ${(i as unknown as { requestType: string }).requestType}`,
+          ),
+        ),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+      const summaries = await InteractionModel.findSummariesPaginated({
+        pagination: { limit: 100, offset: 0 },
+        filters: { sessionId: "mixed" },
+      });
+      expect(
+        new Set(summaries.data.map((i) => `${i.source} ${i.requestType}`)),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+    });
   });
 
   describe("getSessions delta-encoded previews across many sessions", () => {
@@ -1838,6 +1930,9 @@ describe("InteractionModel", () => {
       // same agent, never the built-in title subagent.
       expect(sessions.data[0].profileId).toBe(chatAgent.id);
       expect(sessions.data[0].profileName).toBe("My Assistant");
+      // The type comes from the same agent, so the header can tell a proxy or
+      // gateway session from an agent's.
+      expect(sessions.data[0].profileAgentType).toBe(chatAgent.agentType);
     });
 
     test("badges the auxiliary chat call as a subagent and the user turn as main in the session detail list", async ({
@@ -1969,6 +2064,45 @@ describe("InteractionModel", () => {
           ["opencode:main", "main"],
           ["opencode:compaction", "subagent"],
           ["opencode:subagent", "subagent"],
+        ]),
+      );
+
+      // Kilo Code frames its turns as OpenCode does, under its own sources.
+      const kiloSessionId = `${sessionId}-kilo`;
+      for (const source of ["kilo:main", "kilo:title"] as const) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: kiloSessionId,
+          sessionSource: "kilo_session",
+          source,
+          type: "openai:responses",
+          request: {
+            model: "responses-model",
+            instructions: "You are a coding agent.",
+            input: [{ role: "user", content: "Do the work" }],
+            tools: [{ type: "function", name: "task" }],
+          } as unknown as InsertInteraction["request"],
+          response: responsesResponse,
+        });
+      }
+      const kiloResult = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: kiloSessionId },
+      );
+      expect(
+        new Map(
+          kiloResult.data.map((interaction) => [
+            interaction.source,
+            (interaction as unknown as { requestType: string }).requestType,
+          ]),
+        ),
+      ).toEqual(
+        new Map([
+          ["kilo:main", "main"],
+          ["kilo:title", "subagent"],
         ]),
       );
 
@@ -3917,7 +4051,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(100);
@@ -3960,7 +4097,10 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // Subscription usage costs the org $0 and must not burn down the limit
-      let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      let usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -3986,7 +4126,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(10);
       expect(usage[0].tokensOut).toBe(20);
@@ -4028,7 +4171,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(50);
@@ -4084,12 +4230,18 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const userUsage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const userUsage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(userUsage).toHaveLength(1);
       expect(userUsage[0].tokensIn).toBe(75);
       expect(userUsage[0].tokensOut).toBe(150);
 
-      const vkUsage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const vkUsage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(vkUsage).toHaveLength(1);
       expect(vkUsage[0].tokensIn).toBe(75);
       expect(vkUsage[0].tokensOut).toBe(150);
@@ -4152,16 +4304,25 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const agentUsage = await LimitModel.getModelUsageBreakdown(agentLimit.id);
+      const agentUsage =
+        (await LimitModel.getModelUsageBreakdowns([agentLimit.id])).get(
+          agentLimit.id,
+        ) ?? [];
       expect(agentUsage).toHaveLength(1);
       expect(agentUsage[0].tokensIn).toBe(80);
       expect(agentUsage[0].tokensOut).toBe(160);
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
 
-      const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const orgUsage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(orgUsage).toHaveLength(1);
       expect(orgUsage[0].tokensIn).toBe(80);
     });
@@ -4208,7 +4369,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
       expect(teamUsage[0].tokensOut).toBe(160);
@@ -4270,13 +4434,19 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // team1 all-models limit should be updated
-      const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+      const team1Usage =
+        (await LimitModel.getModelUsageBreakdowns([team1Limit.id])).get(
+          team1Limit.id,
+        ) ?? [];
       expect(team1Usage).toHaveLength(1);
       expect(team1Usage[0].tokensIn).toBe(100);
       expect(team1Usage[0].tokensOut).toBe(200);
 
       // team2 specific-model limit should also be updated
-      const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+      const team2Usage =
+        (await LimitModel.getModelUsageBreakdowns([team2Limit.id])).get(
+          team2Limit.id,
+        ) ?? [];
       expect(team2Usage).toHaveLength(1);
       expect(team2Usage[0].tokensIn).toBe(100);
       expect(team2Usage[0].tokensOut).toBe(200);
@@ -4340,7 +4510,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -4380,7 +4553,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(60);
@@ -4423,7 +4599,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(40);
@@ -4474,7 +4653,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);

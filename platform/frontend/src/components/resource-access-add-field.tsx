@@ -99,14 +99,12 @@ export function ResourceAccessAddField({
           )}
         >
           <Plus className="size-3.5" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-left">
-            Add access: everyone, a role, a team, a person or a service account…
-          </span>
+          <span className="min-w-0 flex-1 text-left">Add access</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-72 overflow-hidden p-0"
+        className="max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-content-available-width)] overflow-hidden p-0"
       >
         <div className="flex items-center border-b px-3 py-2">
           <Search
@@ -125,6 +123,7 @@ export function ResourceAccessAddField({
         {recipients.isError ? (
           <QueryLoadError
             title="Could not load recipients"
+            error={recipients.error}
             onRetry={() => void recipients.refetch()}
             className="min-h-40"
           />

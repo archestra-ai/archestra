@@ -30,6 +30,21 @@ export type IntegrationOverrideColumns = {
 };
 
 class OrganizationModel {
+  /** Read only when provisioning a new personal assistant or gateway. */
+  static async getDefaultPersonalAgentAccessAllTools(
+    organizationId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({
+        accessAllTools:
+          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return row?.accessAllTools ?? true;
+  }
+
   /**
    * Process-local cache for {@link getAppearanceSettings}. The appearance
    * settings back white-labeling on the unauthenticated login page (and every
@@ -595,6 +610,24 @@ class OrganizationModel {
   }
 
   /**
+   * Whether LLM proxy requests may run without a platform credential. Read
+   * straight from the row: it gates the proxy hot path, so it stays a single
+   * primary-key lookup rather than a cache entry that every patch must evict.
+   */
+  static async allowsUnauthenticatedLlmProxyRequests(
+    id: string,
+  ): Promise<boolean> {
+    const [organization] = await db
+      .select({
+        allowed: schema.organizationsTable.allowUnauthenticatedLlmProxyRequests,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return organization?.allowed ?? false;
+  }
+
+  /**
    * Cached per-request read of the org's auth-enforcement policies
    * (require-2FA, session max age). Same cache key as the other org
    * settings, so any OrganizationModel.patch invalidates it.
@@ -845,6 +878,8 @@ class OrganizationModel {
       defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      defaultPersonalAgentAccessAllTools:
+        org.defaultPersonalAgentAccessAllTools,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -852,7 +887,8 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
-      appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
+      allowUnauthenticatedLlmProxyRequests:
+        org.allowUnauthenticatedLlmProxyRequests,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,

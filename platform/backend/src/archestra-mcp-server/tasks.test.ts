@@ -1,14 +1,30 @@
+import { spawn, spawnSync } from "node:child_process";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_POST_RUN_MESSAGE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import config from "@/config";
+import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -18,10 +34,16 @@ import {
   AgentTeamModel,
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
+  MemberModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { RouteCategory } from "@/observability/tracing";
-import { beforeEach, describe, expect, test } from "@/test";
-import type { Agent } from "@/types";
+import { openappaActor } from "@/openappa/actor";
+import { superyellSession } from "@/openappa/unenforced";
+import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
+import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { type Agent, ApiError } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("run tools", () => {
@@ -134,12 +156,20 @@ describe("run tools", () => {
     // agentDetailHref would otherwise rewrite away along with `setup`.
     expect(text).toContain(`/agents/${target.id}?setup=credentials&keys=`);
     expect(text).toContain("GITHUB_TOKEN%2CCLAUDE_CODE_OAUTH_TOKEN");
+    // A question form shows the link as dead text, so the model is told to
+    // hand it over in its reply.
+    expect(text).toContain(
+      "Put this link in your reply text, never inside a question form",
+    );
     expect(
       await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
     ).toEqual([]);
   });
 
-  test("run controls remain callable without individual assignment", async ({
+  test.for([
+    false,
+    true,
+  ])("run controls remain callable without individual assignment (wrapped=%s)", async (wrapped, {
     makeAgent,
   }) => {
     const unassignedAgent = await makeAgent({
@@ -149,8 +179,13 @@ describe("run tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: crypto.randomUUID() },
+      wrapped ? TOOL_RUN_TOOL_FULL_NAME : TOOL_GET_RUN_FULL_NAME,
+      wrapped
+        ? {
+            tool_name: TOOL_GET_RUN_FULL_NAME,
+            tool_args: { task_id: crypto.randomUUID() },
+          }
+        : { task_id: crypto.randomUUID() },
       {
         ...context,
         agent: { id: unassignedAgent.id, name: unassignedAgent.name },
@@ -532,6 +567,7 @@ describe("run tools", () => {
       runs: [
         {
           task_id: task.id,
+          llm_session_id: null,
           prompt: "Add a character counter.",
           state: "TASK_STATE_WORKING",
           hard_deadline_at: expect.any(String),
@@ -556,6 +592,213 @@ describe("run tools", () => {
         }
       ).runs[0]?.run_url,
     ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
+  });
+
+  test("lists the logged telemetry key shared by continued turns, never a task or workspace handle", async ({
+    makeInteraction,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const first = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const run = await AgentRunModel.findByTaskId(first.id);
+    if (!run) throw new Error("Run fixture missing");
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      state: "idle",
+      lastTaskId: first.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const next = await A2ATaskModel.create({
+      contextId: first.contextId,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: next.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const key = run.workloadName;
+    await makeInteraction(callingAgent.id, { sessionId: key, userId: actorId });
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id] },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const { runs } = result.structuredContent as {
+      runs: { task_id: string; llm_session_id: string | null }[];
+    };
+    expect(runs).toHaveLength(2);
+    expect(runs.map((item) => item.llm_session_id)).toEqual([key, key]);
+    expect(key).not.toBe(first.id);
+    expect(key).not.toBe(next.id);
+    expect(key).not.toBe(workspace.id);
+  });
+
+  test("keeps logged keys after workspace expiry and withholds missing, policy-scoped or unreadable sessions", async ({
+    makeInteraction,
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const other = await makeUser();
+    const foreignOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: foreignOrg.id });
+    let expiredTaskId: string | undefined;
+    let expiredKey: string | undefined;
+    for (const scenario of [
+      "missing-workspace",
+      "policy-session",
+      "no-logs",
+      "other-user",
+      "other-organization",
+    ]) {
+      const task = await seedChatopsTask({
+        actorUserId: actorId,
+        withTarget: false,
+      });
+      const run = await AgentRunModel.findByTaskId(task.id);
+      if (!run) throw new Error("Run fixture missing");
+      const key = run.workloadName;
+      if (scenario === "missing-workspace") {
+        expiredTaskId = task.id;
+        expiredKey = key;
+      }
+      if (scenario !== "missing-workspace") {
+        await AgentWorkspaceModel.create({
+          organizationId,
+          agentId: callingAgent.id,
+          actorKind: "user",
+          actorId,
+          workloadName: run.workloadName,
+          backend: "kubernetes",
+          runtimeScope: "test",
+          lastTaskId: task.id,
+          expiresAt: new Date(Date.now() + 3600_000),
+        });
+      }
+      if (scenario !== "no-logs") {
+        await makeInteraction(
+          scenario === "other-organization" ? foreignAgent.id : callingAgent.id,
+          {
+            sessionId:
+              scenario === "policy-session" ? `user:${actorId}|${key}` : key,
+            userId: scenario === "other-user" ? other.id : actorId,
+          },
+        );
+      }
+      // A logged task ID is not proof of the runtime's telemetry identity.
+      await makeInteraction(callingAgent.id, {
+        sessionId: task.id,
+        userId: actorId,
+      });
+    }
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id] },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const { runs } = result.structuredContent as {
+      runs: { task_id: string; llm_session_id: string | null }[];
+    };
+    expect(runs).toHaveLength(5);
+    expect(
+      runs.find((item) => item.task_id === expiredTaskId)?.llm_session_id,
+    ).toBe(expiredKey);
+    expect(
+      runs
+        .filter((item) => item.task_id !== expiredTaskId)
+        .every((item) => item.llm_session_id === null),
+    ).toBe(true);
+  });
+
+  test("an organization runtime uses its telemetry header and requires log admin for another actor's requests", async ({
+    makeInteraction,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const taskContext = await A2AContextModel.create({
+      actorKind: "organization",
+      actorId: organizationId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: taskContext.id,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: callingAgent.id,
+      actorKind: "organization",
+      actorId: organizationId,
+      actorUserId: null,
+      workloadName: `test-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "organization",
+      actorId: organizationId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const key = run.workloadName;
+    await makeInteraction(callingAgent.id, { sessionId: key });
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    const restricted = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(restricted.id, organizationId, { role: role.role });
+    const adminOnly = await makeUser();
+    const adminOnlyRole = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"], log: ["admin"] },
+    });
+    await makeMember(adminOnly.id, organizationId, {
+      role: adminOnlyRole.role,
+    });
+    for (const [userId, expected] of [
+      [adminOnly.id, null],
+      [actorId, null],
+      [restricted.id, null],
+      [admin.id, key],
+    ] as const) {
+      const result = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [callingAgent.id] },
+        { ...context, userId },
+      );
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({
+        runs: [{ task_id: task.id, llm_session_id: expected }],
+      });
+    }
   });
 
   test("recovers an older run only from the trusted current thread before limiting", async () => {
@@ -716,6 +959,32 @@ describe("run tools", () => {
     upload.mockRestore();
   });
 
+  test("post_run_message refuses another actor's run and a finished turn", async ({
+    makeUser,
+  }) => {
+    const other = await makeUser();
+    const foreign = await seedChatopsTask({
+      actorUserId: other.id,
+      withTarget: true,
+    });
+    const own = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    await A2ATaskModel.updateState(own.id, "TASK_STATE_COMPLETED");
+    for (const task of [foreign, own]) {
+      const result = await executeArchestraTool(
+        TOOL_POST_RUN_MESSAGE_FULL_NAME,
+        { task_id: task.id, message: "Working on it." },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        task === foreign ? "Run not found" : "not active",
+      );
+    }
+  });
+
   test("post_run_file refuses a run with no messaging-channel thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
@@ -771,4 +1040,313 @@ describe("run tools", () => {
     expect(upload).not.toHaveBeenCalled();
     upload.mockRestore();
   });
+
+  describe("post_run_file with a workspace path", () => {
+    let root: string;
+    let upload: ReturnType<typeof vi.spyOn>;
+    let stopServingWorkspace: () => void;
+
+    beforeEach(async () => {
+      root = await mkdtemp(path.join(tmpdir(), "run-file-"));
+      stopServingWorkspace = serveWorkspaceFrom(path.join(root, "workspace"));
+      await mkdir(path.join(root, "workspace"));
+      upload = vi
+        .spyOn(chatOpsManager, "uploadFileToBindingThread")
+        .mockResolvedValue();
+    });
+
+    afterEach(async () => {
+      // This file shares its worker with other files: nothing may outlive it.
+      upload.mockRestore();
+      stopServingWorkspace();
+      await rm(root, { recursive: true, force: true });
+    });
+
+    test("uploads the exact bytes of the file, named after its path", async () => {
+      const task = await seedRuntimeTask();
+      const bytes = Buffer.from([0, 255, 13, 10, 128, 65, 0x66, 0x74, 0x79]);
+      await mkdir(path.join(root, "workspace", "demo"));
+      await writeFile(path.join(root, "workspace", "demo", "demo.mp4"), bytes);
+
+      const result = await postRunFile({
+        task_id: task.id,
+        path: "demo/demo.mp4",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(upload).toHaveBeenCalledOnce();
+      expect(upload.mock.calls[0][0]).toMatchObject({
+        filename: "demo.mp4",
+        data: bytes,
+      });
+      // The pinned copy is released once the bytes are read.
+      expect(
+        await readdir(path.join(root, "workspace", ".archestra-transfers")),
+      ).toEqual([]);
+    });
+
+    test("refuses paths that leave the workspace, directories and oversized files", async () => {
+      const task = await seedRuntimeTask();
+      const workspace = path.join(root, "workspace");
+      await writeFile(path.join(root, "outside.mp4"), "outside bytes");
+      await symlink(root, path.join(workspace, "escape"));
+      await symlink(
+        path.join(root, "outside.mp4"),
+        path.join(workspace, "linked.mp4"),
+      );
+      await mkdir(path.join(workspace, "folder"));
+      // Sparse: one byte over the cap without writing 40 MB.
+      await truncate(
+        await writeFile(path.join(workspace, "big.mp4"), "").then(() =>
+          path.join(workspace, "big.mp4"),
+        ),
+        40 * 1024 * 1024 + 1,
+      );
+
+      for (const [unsafe, reason] of [
+        ["../outside.mp4", "without traversal"],
+        ["escape/outside.mp4", "Could not read"],
+        ["linked.mp4", "Only regular files"],
+        ["folder", "Only regular files"],
+        ["big.mp4", "keep run files under 40MB"],
+        ["/home/node/workspace/", "Pass the path of a file"],
+        ["/home/node/workspace", "Pass the path of a file"],
+        ["././", "Pass the path of a file"],
+        ["/etc/passwd", "without traversal"],
+      ] as const) {
+        const result = await postRunFile({
+          task_id: task.id,
+          path: unsafe,
+          filename: "demo.mp4",
+        });
+        expect(result.isError, unsafe).toBe(true);
+        expect(JSON.stringify(result.content), unsafe).toContain(reason);
+      }
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    test("needs exactly one of path and content_base64", async () => {
+      const task = await seedRuntimeTask();
+      await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+      for (const args of [
+        {
+          path: "demo.mp4",
+          content_base64: Buffer.from("x").toString("base64"),
+        },
+        { filename: "demo.mp4" },
+      ]) {
+        const result = await postRunFile({ task_id: task.id, ...args });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "Pass exactly one of path or content_base64",
+        );
+      }
+      const unnamed = await postRunFile({
+        task_id: task.id,
+        content_base64: Buffer.from("x").toString("base64"),
+      });
+      expect(JSON.stringify(unnamed.content)).toContain(
+        "Pass filename with content_base64",
+      );
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    test("reads an absolute path under the workspace root and a ./ path", async () => {
+      const task = await seedRuntimeTask();
+      await mkdir(path.join(root, "workspace", "demo"));
+      await writeFile(
+        path.join(root, "workspace", "demo", "demo.mp4"),
+        "video",
+      );
+
+      for (const given of [
+        "/home/node/workspace/demo/demo.mp4",
+        "./demo/demo.mp4",
+      ]) {
+        const result = await postRunFile({ task_id: task.id, path: given });
+        expect(result.isError, given).toBeFalsy();
+      }
+      expect(upload).toHaveBeenCalledTimes(2);
+      for (const [call] of upload.mock.calls) {
+        expect(call).toMatchObject({
+          filename: "demo.mp4",
+          data: Buffer.from("video"),
+        });
+      }
+    });
+
+    describe("with Guardrails on", () => {
+      const PARENT = "user:parent|conversation";
+      const originalOpenappa = config.openappa.enabled;
+
+      beforeEach(async () => {
+        config.openappa.enabled = true;
+        await GuardrailsDeploymentModel.setEnabled(true);
+      });
+
+      afterEach(() => {
+        config.openappa.enabled = originalOpenappa;
+      });
+
+      test("a bound run's own proofless call is refused until its session is superyelled", async () => {
+        const task = await seedRuntimeTask();
+        const child = await bindToParent(task.id);
+        await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+        const governed = await postRunFile({
+          task_id: task.id,
+          path: "demo.mp4",
+        });
+        expect(governed.isError).toBe(true);
+        expect(JSON.stringify(governed.content)).toContain(
+          "carried no proof of its source",
+        );
+        expect(upload).not.toHaveBeenCalled();
+
+        await superyellSession(child);
+        const superyelled = await postRunFile({
+          task_id: task.id,
+          path: "demo.mp4",
+        });
+        expect(superyelled.isError).toBeFalsy();
+        expect(upload.mock.calls[0][0]).toMatchObject({
+          filename: "demo.mp4",
+          data: Buffer.from("video"),
+        });
+      });
+
+      test("the parent session still cannot post its child's file", async () => {
+        const task = await seedRuntimeTask();
+        await bindToParent(task.id);
+        await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+        const result = await postRunFile(
+          { task_id: task.id, path: "demo.mp4" },
+          {
+            openappaRuntimeCall: {
+              session: {
+                organization_id: organizationId,
+                caller_id: "user:parent",
+                session_id: PARENT,
+              },
+              toolCallId: "call-1",
+              spawn: false,
+            },
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "cannot be posted from another session",
+        );
+        expect(upload).not.toHaveBeenCalled();
+      });
+
+      /** Records the run's session the way a protected spawn leaves it. */
+      async function bindToParent(taskId: string) {
+        const workspace = await AgentWorkspaceModel.findById(taskId);
+        if (!workspace) throw new Error("workspace not seeded");
+        const child = runtimeOpenAppaSession({
+          organizationId,
+          workspaceId: workspace.id,
+          workloadName: workspace.workloadName,
+          actorKind: "user",
+          actorId,
+        });
+        await db.insert(schema.openappaSessionsTable).values({
+          actor: openappaActor(child.session_id),
+          root: openappaActor(PARENT),
+          organizationId,
+          callerId: child.caller_id,
+          sessionId: child.session_id,
+          parentId: PARENT,
+          startDecision: { decision: "ack" },
+        });
+        return { ...child, parent_id: PARENT };
+      }
+    });
+
+    /** A chatops run with a live workspace, as a delegated run has. */
+    async function seedRuntimeTask() {
+      const task = await seedChatopsTask({
+        actorUserId: actorId,
+        withTarget: true,
+      });
+      await AgentWorkspaceModel.create({
+        id: task.id,
+        organizationId,
+        agentId: callingAgent.id,
+        actorKind: "user",
+        actorId,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        workloadName: `test-${task.id.slice(0, 8)}`,
+        state: "active",
+        activeTaskId: task.id,
+        lastTaskId: task.id,
+        expiresAt: new Date(Date.now() + 3600_000),
+      });
+      return task;
+    }
+
+    function postRunFile(
+      args: Record<string, unknown>,
+      extra: Partial<ArchestraContext> = {},
+    ) {
+      return executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, {
+        ...context,
+        ...extra,
+      });
+    }
+  });
 });
+
+/**
+ * Runs the real in-Pod file helper on this machine against `workspace`, in
+ * place of the exec into the Pod. Its path rules are what the tests exercise.
+ * Returns the function that puts the real exec back.
+ */
+function serveWorkspaceFrom(workspace: string): () => void {
+  const helper = path.resolve(
+    import.meta.dirname,
+    "../static/workspace-files.py",
+  );
+  const env = {
+    ...process.env,
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT: workspace,
+  };
+  const command = vi
+    .spyOn(backend, "runWorkspaceTransferCommand")
+    .mockImplementation(async ({ args }) => {
+      const run = spawnSync("python3", [helper, ...args], {
+        env,
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      const reply = JSON.parse(run.stdout);
+      if (reply.ok !== true) throw new ApiError(400, reply.error);
+      return reply;
+    });
+  const range = vi
+    .spyOn(backend, "readWorkspaceTransferRange")
+    .mockImplementation(async ({ transferId, offset, length }) => {
+      const child = spawn(
+        "python3",
+        [helper, "read-range", transferId, String(offset), String(length)],
+        { env },
+      );
+      return {
+        stdout: child.stdout,
+        completed: new Promise<void>((resolve, reject) =>
+          child.on("close", (code) =>
+            code === 0 ? resolve() : reject(new Error("read-range failed")),
+          ),
+        ),
+      };
+    });
+  return () => {
+    command.mockRestore();
+    range.mockRestore();
+  };
+}

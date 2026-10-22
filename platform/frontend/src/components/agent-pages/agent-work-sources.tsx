@@ -10,8 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
+import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
@@ -27,7 +29,6 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
-import { cn } from "@/lib/utils/tailwind";
 import { agentEditHref } from "./agent-page-config";
 
 /**
@@ -55,23 +56,22 @@ export function AgentWorkSources({
   const { data: canReadChannels } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  // The setup checklist above says what is missing; until it is settled
-  // these routes lead to a run that cannot start, so they read as later.
+  // The setup section above says what is missing. Every route here still
+  // works before then (setting up a channel or a laptop is preparation, and
+  // chat explains what is missing), so they stay at full strength and only
+  // the caption says runs wait.
   const preflight = useAgentRuntimePreflight(agentId, hasRuntime);
   const awaitingSetup = hasRuntime && preflight.data?.ready === false;
   return (
     <div className="space-y-4">
-      <section
-        aria-labelledby="agent-work-sources"
-        className={cn("space-y-3", awaitingSetup && "opacity-60")}
-      >
+      <section aria-labelledby="agent-work-sources" className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="agent-work-sources" className="text-base font-semibold">
             {hasRuntime ? "Give it work" : "Where people use it"}
           </h2>
           {awaitingSetup && (
             <span className="text-[13px] text-muted-foreground">
-              Available once setup above is done.
+              Runs start once setup above is done.
             </span>
           )}
         </div>
@@ -202,8 +202,13 @@ function AgentChannelsCard({
   const slackPerAgent =
     slackOffered && !!slackBots.data && slackBots.data.unassignedApp === null;
   const slackBot = slackBots.data?.bots.find((bot) => bot.agentId === agentId);
+  // Only a bot Archestra named follows the default handle; guessing one for
+  // a converted app shows a name nobody can @mention.
   const slackHandle = slackBot
-    ? (slackBot.handle ?? slackHandleFor(appName, slackBot.agentName))
+    ? (slackBot.handle ??
+      (slackBot.createdByArchestra
+        ? slackHandleFor(appName, slackBot.agentName)
+        : null))
     : null;
   const botChannels = useSlackAgentBotChannels(
     slackBot?.installed ? agentId : undefined,
@@ -223,6 +228,12 @@ function AgentChannelsCard({
     slackPerAgent &&
     !slackBot &&
     assigned.some((binding) => binding.provider === "slack" && !binding.isDm);
+  // Every input that picks the buttons, so they appear once, not one by one
+  // ("Add Slack channel" turning into "Add Slack bot").
+  const loading =
+    bindings.isPending ||
+    providerStatus.isPending ||
+    (slackOffered && slackBots.isPending);
   const manageHref = agentEditHref(agentId, "messaging");
   const addBotHref = `/settings/messaging-channels/slack?addBot=${encodeURIComponent(agentId)}`;
   const reachable = listed.length > 0 || !!slackBot;
@@ -233,7 +244,7 @@ function AgentChannelsCard({
       title="In your channels"
       action={
         <span className="flex flex-wrap gap-2">
-          {!reachable && !bindings.isPending ? (
+          {loading ? null : !reachable ? (
             <EmptyChannelActions
               connectedApps={connectedApps}
               slackPerAgent={slackPerAgent}
@@ -255,7 +266,7 @@ function AgentChannelsCard({
               </Button>
             )
           )}
-          {reachable && (listed.length > 0 || !slackPerAgent) && (
+          {!loading && reachable && (listed.length > 0 || !slackPerAgent) && (
             <Button size="sm" variant="outline" asChild>
               <Link href={manageHref}>
                 {listed.length ? "Manage channels" : "Add a channel"}
@@ -265,7 +276,7 @@ function AgentChannelsCard({
         </span>
       }
     >
-      {bindings.isPending ? (
+      {loading ? (
         <span>Loading channels…</span>
       ) : reachable ? (
         <span className="flex flex-col gap-1.5">
@@ -326,12 +337,12 @@ function AgentChannelsCard({
           {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
       )}
-      {slackBot && slackHandle && (
+      {slackBot && (
         <SlackBotEditDialog
           open={editingBot}
           onOpenChange={setEditingBot}
           agentId={agentId}
-          handle={slackHandle}
+          handle={slackHandle ?? slackBot.agentName}
           appId={slackBot.appId}
           installed={slackBot.installed}
           reinstallUrl={slackBot.reinstallUrl}
@@ -364,7 +375,10 @@ function EmptyChannelActions({
   addBotHref: string;
   manageHref: string;
 }) {
+  // Chat apps and Slack bots are set up in Settings, which not everyone sees.
+  const canSeeSettings = useSettingsAreaAccess() === true;
   if (connectedApps.length === 0) {
+    if (!canSeeSettings) return null;
     return (
       <Button size="sm" variant="outline" asChild>
         <Link href="/settings/messaging-channels">Set up a chat app</Link>
@@ -373,20 +387,25 @@ function EmptyChannelActions({
   }
   return (
     <>
-      {connectedApps.map((provider) => (
-        <Button key={provider} size="sm" variant="outline" asChild>
-          <Link
-            href={
-              provider === "slack" && slackPerAgent ? addBotHref : manageHref
-            }
-          >
-            <ChannelIcon channel={provider} className="size-4" />
-            {provider === "slack" && slackPerAgent
-              ? "Add Slack bot"
-              : `Add ${MESSAGING_CHANNEL_LABELS[provider]} channel`}
-          </Link>
-        </Button>
-      ))}
+      {connectedApps
+        .filter(
+          (provider) =>
+            canSeeSettings || !(provider === "slack" && slackPerAgent),
+        )
+        .map((provider) => (
+          <Button key={provider} size="sm" variant="outline" asChild>
+            <Link
+              href={
+                provider === "slack" && slackPerAgent ? addBotHref : manageHref
+              }
+            >
+              <ChannelIcon channel={provider} className="size-4" />
+              {provider === "slack" && slackPerAgent
+                ? "Add Slack bot"
+                : `Add ${MESSAGING_CHANNEL_LABELS[provider]} channel`}
+            </Link>
+          </Button>
+        ))}
     </>
   );
 }
@@ -402,9 +421,12 @@ function SlackWithoutBotNotice({ href }: { href: string }) {
     <span className="text-amber-800 dark:text-amber-300">
       Some Slack channels are assigned to this agent, but no bot answers as it
       there.{" "}
-      <Link href={href} className="font-medium underline underline-offset-2">
+      <SettingsLink
+        href={href}
+        className="font-medium underline underline-offset-2"
+      >
         Add its Slack bot
-      </Link>
+      </SettingsLink>
     </span>
   );
 }

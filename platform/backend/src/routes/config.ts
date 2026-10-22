@@ -75,6 +75,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default configRoutes;
 
 export const ConfigResponseSchema = z.strictObject({
+  /** The running platform version, as `/health` reports it. */
+  version: z.string(),
   enterpriseFeatures: z.strictObject({
     core: z.boolean(),
     knowledgeBase: z.boolean(),
@@ -191,29 +193,6 @@ export const ConfigResponseSchema = z.strictObject({
      * discovered from installed MCP servers.
      */
     mcpGatewaySkillsEnabled: z.boolean(),
-    /** App session recording (record/replay/download app demos). */
-    hackathonRecorderEnabled: z.boolean(),
-    /**
-     * The offline video export is offered. Off by default: a render
-     * drives a headless browser for as long as the cut runs, and the
-     * gallery submission does not depend on it.
-     */
-    hackathonVideoDownloadEnabled: z.boolean(),
-    /**
-     * The longest final cut this deployment accepts, in ms. Every
-     * length surface reads it from here, so the number the author is
-     * shown is always the number the checks enforce.
-     */
-    hackathonMaxFinalCutMs: z.number().int().positive(),
-    /**
-     * The public App Gallery repository shared recordings are
-     * submitted to, or null when this deployment does not offer
-     * sharing. The frontend files the PR against this repository
-     * directly on api.github.com.
-     */
-    hackathonGalleryRepo: z
-      .object({ owner: z.string(), name: z.string() })
-      .nullable(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -222,6 +201,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
   const tier = enterpriseTier.getState();
 
   return {
+    version: config.api.version,
     enterpriseFeatures: {
       core: tier.coreActive,
       knowledgeBase: tier.knowledgeBaseActive,
@@ -258,7 +238,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         allowPrivileged: config.agentRuntime.allowPrivileged,
         resources: config.agentRuntime.resources,
       },
-      plugins: config.plugins.enabled,
+      plugins: true,
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
       chatAttachmentStorageBytesLimit: config.chat.attachmentStorageBytesLimit,
       apiBodyLimitBytes: config.api.bodyLimit,
@@ -298,14 +278,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         redirectUri: getGoogleDriveOAuthRedirectUri(),
       },
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
-      hackathonRecorderEnabled: config.hackathonRecorder.enabled,
-      hackathonVideoDownloadEnabled:
-        config.hackathonRecorder.videoDownloadEnabled,
-      hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,
-      hackathonGalleryRepo:
-        (config.hackathonRecorder.gallery.githubClientId &&
-          config.hackathonRecorder.gallery.repo) ||
-        null,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,
@@ -337,7 +309,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
   };
 }
 
-const PublicConfigResponseSchema = z.strictObject({
+export const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
   disableImpersonation: z.boolean(),
@@ -352,13 +324,6 @@ const PublicConfigResponseSchema = z.strictObject({
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
   enterpriseCoreActive: z.boolean(),
-  // Dedicated sandbox origin (<hash>.{domain}) for MCP App iframes. Not a
-  // secret — it already appears in every app iframe URL and the sandbox CSP
-  // frame-ancestors header. Exposed pre-auth for the offline app-recording
-  // video renderer, which drives the replay page with no session and must
-  // still frame the sandbox at its real cross-origin rather than falling back
-  // to the frontend origin (which the backend refuses with a 403 host check).
-  mcpSandboxDomain: z.string().nullable(),
   analytics: z.strictObject({
     enabled: z.boolean(),
     instanceId: z.string().uuid().nullable(),
@@ -379,7 +344,7 @@ let cachedAnalyticsInstanceId: string | null = null;
 let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
 let hasLoggedAnalyticsInstanceIdError = false;
 
-async function getPublicConfigResponse(): Promise<
+export async function getPublicConfigResponse(): Promise<
   z.infer<typeof PublicConfigResponseSchema>
 > {
   return {
@@ -390,7 +355,6 @@ async function getPublicConfigResponse(): Promise<
     maintenanceMode: config.maintenanceMode,
     siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
-    mcpSandboxDomain: config.mcpSandbox.domain,
     analytics: {
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),

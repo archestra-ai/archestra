@@ -14,6 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AgentRunChatSession } from "./page.client";
 
 vi.mock("next/navigation");
@@ -52,19 +53,10 @@ const previous = {
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as ReturnType<typeof useHasPermissions>);
   archestraApiClient.setConfig({ baseUrl: origin });
-  server.use(
-    http.get(`${origin}/api/agent-runs/:taskId/openappa-review`, () =>
-      HttpResponse.json({
-        status: "none",
-        canDecide: false,
-        offerId: null,
-        text: null,
-        tool: null,
-        arguments: null,
-      }),
-    ),
-  );
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
@@ -74,6 +66,51 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+
+it.each([
+  "TASK_STATE_FAILED",
+  "TASK_STATE_COMPLETED",
+])("distinguishes suspension from the %s run outcome", async (state) => {
+  server.use(
+    http.get(`${origin}/api/agent-runs/session`, () =>
+      HttpResponse.json({
+        ...previous,
+        state,
+        statusReason:
+          state === "TASK_STATE_FAILED" ? "The run could not be resumed" : null,
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <AgentRunChatSession taskId="session" />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("button", { name: "Resume" });
+  const notice = screen.getByRole(
+    state === "TASK_STATE_FAILED" ? "alert" : "status",
+  );
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED"
+      ? "Saved files are retained"
+      : "Your files are saved",
+  );
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED"
+      ? "The run failed"
+      : "Paused to save resources",
+  );
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED"
+      ? "Resume to try again"
+      : "Resume to continue",
+  );
+  client.clear();
+});
+
 it("leaves the completed turn immediately after resume is accepted, even while session metadata is stale", async () => {
   const user = userEvent.setup();
   let requests = 0;

@@ -1,6 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellReady = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellReady: () => mockShellReady(),
+}));
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 
@@ -10,8 +15,12 @@ const mockSeenQuery: { data?: { items: string[] }; isSuccess: boolean } = {
   isSuccess: true,
 };
 
+const seenQueryOptions = vi.fn();
 vi.mock("@/lib/onboarding/onboarding.query", () => ({
-  useSeenNavItems: () => mockSeenQuery,
+  useSeenNavItems: (options?: { enabled?: boolean }) => {
+    seenQueryOptions(options);
+    return mockSeenQuery;
+  },
   useMarkNavItemsSeen: () => ({ mutate: markMutate }),
 }));
 
@@ -24,10 +33,12 @@ const allPermissions = {
   "/apps": true,
   "/llm/model-providers": true,
   "/mcp/registry": true,
+  "/openappa": true,
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockShellReady.mockReturnValue(true);
   mockSeenQuery.data = { items: [] };
   mockSeenQuery.isSuccess = true;
   vi.mocked(usePathname).mockReturnValue("/chat");
@@ -48,6 +59,7 @@ describe("useNavOnboarding", () => {
         "nav:connect",
         "nav:model-providers",
         "nav:mcp-registry",
+        "nav:guardrails",
       ]),
     );
     expect(result.current.showChatsDot).toBe(true);
@@ -67,12 +79,29 @@ describe("useNavOnboarding", () => {
     expect(markMutate).not.toHaveBeenCalled();
   });
 
+  it("neither reads nor marks anything seen until the page's first data has settled", () => {
+    mockShellReady.mockReturnValue(false);
+    mockSeenQuery.isSuccess = false;
+    mockSeenQuery.data = undefined;
+    // /projects is a dotted route. The hook marks it seen only after the gate
+    // is released.
+    vi.mocked(usePathname).mockReturnValue("/projects");
+
+    const { result } = renderHook(() => useNavOnboarding());
+
+    expect(seenQueryOptions).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.unseenKeys.size).toBe(0);
+    result.current.markSeen("nav:projects");
+    expect(markMutate).not.toHaveBeenCalled();
+  });
+
   it("excludes RBAC-hidden items and does not roll them up into aggregates", () => {
     mockSeenQuery.data = { items: ["nav:projects", "nav:apps", "nav:connect"] };
     vi.mocked(usePermissionMap).mockReturnValue({
       ...allPermissions,
       "/llm/model-providers": false,
       "/mcp/registry": false,
+      "/openappa": false,
     });
 
     const { result } = renderHook(() => useNavOnboarding());
@@ -96,9 +125,33 @@ describe("useNavOnboarding", () => {
     expect(result.current.unseenKeys.has("nav:mcp-registry")).toBe(true);
   });
 
+  it("shows the Guardrails dot when either OpenAPPA page is permitted", () => {
+    vi.mocked(usePermissionMap).mockReturnValue({
+      ...allPermissions,
+      "/openappa": false,
+      "/openappa/yells": true,
+    });
+    expect(
+      renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(
+        "nav:guardrails",
+      ),
+    ).toBe(true);
+
+    vi.mocked(usePermissionMap).mockReturnValue({
+      ...allPermissions,
+      "/openappa": false,
+      "/openappa/yells": false,
+    });
+    expect(
+      renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(
+        "nav:guardrails",
+      ),
+    ).toBe(false);
+  });
+
   it("clears the studio aggregate once all visible studio items are seen", () => {
     mockSeenQuery.data = {
-      items: ["nav:model-providers", "nav:mcp-registry"],
+      items: ["nav:model-providers", "nav:mcp-registry", "nav:guardrails"],
     };
 
     const { result } = renderHook(() => useNavOnboarding());

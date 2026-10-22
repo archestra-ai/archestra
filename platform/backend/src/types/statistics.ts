@@ -2,6 +2,13 @@ import { z } from "zod";
 import { InteractionAuthMethodSchema } from "./interaction";
 
 export const ProxyCostQuerySchema = z.object({
+  serviceAccountId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Limit spend to this authenticated service-account principal across its OAuth clients and virtual keys.",
+    ),
   authMethod: InteractionAuthMethodSchema.optional(),
   credentialId: z.string().min(1).max(256).optional(),
 });
@@ -476,6 +483,14 @@ export const CostSavingsStatisticsSchema = z.object({
     }),
   ),
 });
+
+export const CostStatisticsSchema = z.object({
+  models: z.array(ModelStatisticsSchema),
+  costSavings: CostSavingsStatisticsSchema,
+  /** Active users in the range; self-scoped without member:read. No roster is returned. */
+  activeUsers: z.number(),
+});
+export type CostStatistics = z.infer<typeof CostStatisticsSchema>;
 
 const BaseTimeSeriesDataSchema = z.object({
   timeBucket: z.string(),

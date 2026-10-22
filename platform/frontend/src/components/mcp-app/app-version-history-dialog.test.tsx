@@ -1,6 +1,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppVersions, useRestoreAppVersion } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -10,25 +15,6 @@ const restore = vi.fn();
 
 vi.mock("@/lib/app.query");
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/components/standard-dialog", () => ({
-  StandardDialog: ({
-    open,
-    title,
-    children,
-    footer,
-  }: {
-    open: boolean;
-    title: string;
-    children: ReactNode;
-    footer: ReactNode;
-  }) =>
-    open ? (
-      <div role="dialog" aria-label={title}>
-        {children}
-        {footer}
-      </div>
-    ) : null,
-}));
 vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: ({
     open,
@@ -74,6 +60,7 @@ const app: OwnedApp = {
   pinnedAt: null,
   labels: [],
   icon: null,
+  iconUrl: null,
   createdBy: null,
 };
 
@@ -114,9 +101,13 @@ describe("AppVersionHistoryDialog", () => {
       <AppVersionHistoryDialog app={app} open onOpenChange={onOpenChange} />,
     );
 
-    expect(screen.getByText("Version 2")).toBeInTheDocument();
-    expect(screen.getByText("Current")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    // Opens on the head, which wears the HEAD ref and cannot be restored.
+    expect(screen.getByRole("heading", { name: "Version 2" })).toBeVisible();
+    expect(within(railRow(2)).getByText("HEAD")).toBeInTheDocument();
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.click(railRow(1));
+    fireEvent.click(restoreButton());
     expect(screen.getByText("Restore version 1?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
 
@@ -130,7 +121,7 @@ describe("AppVersionHistoryDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("keeps history browseable but disables restore for a locked app", () => {
+  it("keeps history browseable but refuses restore for a locked app, saying why", () => {
     render(
       <AppVersionHistoryDialog
         app={{ ...app, locked: true }}
@@ -139,11 +130,26 @@ describe("AppVersionHistoryDialog", () => {
       />,
     );
 
-    const restoreButton = screen.getByRole("button", { name: "Restore" });
-    expect(restoreButton).toBeDisabled();
-    expect(restoreButton).toHaveAttribute(
-      "title",
+    fireEvent.click(railRow(1));
+
+    expect(screen.getByRole("heading", { name: "Version 1" })).toBeVisible();
+    expect(restoreButton()).toHaveAttribute("aria-disabled", "true");
+    expect(restoreButton()).toHaveAccessibleDescription(
       "Unlock the app before restoring a version.",
     );
+    fireEvent.click(restoreButton());
+    expect(screen.queryByText("Restore version 1?")).not.toBeInTheDocument();
   });
 });
+
+/** A version's row in the commit-graph rail. */
+function railRow(version: number) {
+  return screen.getByRole("button", {
+    name: new RegExp(`^Version ${version}\\b`),
+  });
+}
+
+/** The pane's restore button, whichever version it is offering. */
+function restoreButton() {
+  return screen.getByRole("button", { name: /^Restore v\d+$/ });
+}

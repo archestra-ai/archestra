@@ -1,5 +1,4 @@
 import {
-  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -52,9 +51,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  parseHackathonGalleryRepo,
-  parseHackathonRecorderEnabled,
-  parseHackathonRecorderMaxFinalCutMs,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -82,7 +78,7 @@ import config, {
   parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
-  resolveRenderBaseUrl,
+  resolveAllowedOrigins,
 } from "./config";
 
 // Mock the logger
@@ -463,21 +459,12 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
     process.env = originalEnv;
   });
 
-  test("should accept all origins when no env vars are set", () => {
+  test("should configure no origins when no env vars are set", () => {
     delete process.env.ARCHESTRA_FRONTEND_URL;
     delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-    const cors = getCorsOrigins();
-    expect(cors).toHaveLength(1);
-    expect(cors[0]).toBeInstanceOf(RegExp);
-
-    const trusted = getTrustedOrigins();
-    expect(trusted).toEqual([
-      "http://*:*",
-      "https://*:*",
-      "http://*",
-      "https://*",
-    ]);
+    expect(getCorsOrigins()).toEqual([]);
+    expect(getTrustedOrigins()).toEqual([]);
   });
 
   test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", () => {
@@ -505,22 +492,6 @@ describe("getTrustedOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all wildcards when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getTrustedOrigins();
-
-      expect(result).toEqual([
-        "http://*:*",
-        "https://*:*",
-        "http://*",
-        "https://*",
-      ]);
-    });
   });
 
   describe("configured origins (enforce)", () => {
@@ -567,6 +538,53 @@ describe("getTrustedOrigins", () => {
 
       expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
+  });
+});
+
+describe("resolveAllowedOrigins", () => {
+  test("allows only configured origins when any are configured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: ["https://app.example.com"],
+        forwardedHost: "evil.example.com",
+        host: "evil.example.com",
+      }),
+    ).toEqual(["https://app.example.com"]);
+  });
+
+  test("falls back to the forwarded host's own origin when unconfigured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: "192.168.1.20:3000, proxy.internal",
+        host: "localhost:9000",
+      }),
+    ).toEqual(["http://192.168.1.20:3000", "https://192.168.1.20:3000"]);
+  });
+
+  test("falls back to the Host header with loopback equivalents", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: undefined,
+        host: "localhost:3000",
+      }),
+    ).toEqual([
+      "http://localhost:3000",
+      "https://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://127.0.0.1:3000",
+    ]);
+  });
+
+  test("allows nothing when unconfigured and the host is unknown", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: null,
+        host: undefined,
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -1689,6 +1707,59 @@ describe("mcp gateway config", () => {
 
     expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
   });
+
+  test("defaults the subscription stream cap to disabled", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("reads the subscription stream cap from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "20000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(20_000);
+  });
+
+  test("accepts zero as no subscription stream expiry", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "0";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("falls back when the subscription stream cap exceeds the timer range", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483648";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("accepts the largest delay a timer can schedule", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483647";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(2_147_483_647);
+  });
+
+  test.each([
+    "-1",
+    "Infinity",
+    "NaN",
+    "1.5",
+  ])("disables subscription stream expiry for invalid value %s", async (value) => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = value;
+    const { default: cfg } = await import("./config");
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
 });
 
 describe("rum export config", () => {
@@ -1755,21 +1826,6 @@ describe("getCorsOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all regex when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getCorsOrigins();
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBeInstanceOf(RegExp);
-      expect((result[0] as RegExp).test("http://anything.example.com")).toBe(
-        true,
-      );
-    });
   });
 
   describe("configured origins (enforce)", () => {
@@ -2067,75 +2123,18 @@ describe("parseProcessType", () => {
     expect(parseProcessType("worker")).toBe("worker");
   });
 
-  test("should return 'renderer' for 'renderer'", () => {
-    expect(parseProcessType("renderer")).toBe("renderer");
-  });
-
   test("should be case insensitive", () => {
     expect(parseProcessType("WEB")).toBe("web");
     expect(parseProcessType("WORKER")).toBe("worker");
-    expect(parseProcessType("RENDERER")).toBe("renderer");
     expect(parseProcessType("Web")).toBe("web");
     expect(parseProcessType("Worker")).toBe("worker");
-    expect(parseProcessType("Renderer")).toBe("renderer");
   });
 
   test("should return 'all' for unknown values", () => {
     expect(parseProcessType("unknown")).toBe("all");
+    expect(parseProcessType("renderer")).toBe("all");
     expect(parseProcessType("both")).toBe("all");
     expect(parseProcessType("api")).toBe("all");
-  });
-
-  test.each([
-    { input: undefined, type: "all", web: true, worker: true, renderer: false },
-    { input: "", type: "all", web: true, worker: true, renderer: false },
-    { input: "all", type: "all", web: true, worker: true, renderer: false },
-    { input: "web", type: "web", web: true, worker: false, renderer: false },
-    { input: "WEB", type: "web", web: true, worker: false, renderer: false },
-    {
-      input: "worker",
-      type: "worker",
-      web: false,
-      worker: true,
-      renderer: false,
-    },
-    {
-      input: "WORKER",
-      type: "worker",
-      web: false,
-      worker: true,
-      renderer: false,
-    },
-    {
-      input: "renderer",
-      type: "renderer",
-      web: false,
-      worker: false,
-      renderer: true,
-    },
-    {
-      input: "RENDERER",
-      type: "renderer",
-      web: false,
-      worker: false,
-      renderer: true,
-    },
-    { input: "unknown", type: "all", web: true, worker: true, renderer: false },
-  ])("input=$input → web=$web worker=$worker renderer=$renderer", ({
-    input,
-    type,
-    web,
-    worker,
-    renderer,
-  }) => {
-    const result = parseProcessType(input);
-    expect(result).toBe(type);
-    // Mirror the derivations in config.ts: only "web"/"all" run the web
-    // server, only "worker"/"all" run the worker, and "renderer" is neither —
-    // it runs only the isolated app-recording render service.
-    expect(result === "web" || result === "all").toBe(web);
-    expect(result === "worker" || result === "all").toBe(worker);
-    expect(result === "renderer").toBe(renderer);
   });
 });
 
@@ -3090,101 +3089,6 @@ describe("parseRetentionDays", () => {
   });
 });
 
-describe("parseHackathonRecorderEnabled", () => {
-  const parse = (
-    enterpriseLicenseActivated: boolean,
-    enterpriseOverride?: string,
-  ) =>
-    parseHackathonRecorderEnabled({
-      enterpriseLicenseActivated,
-      enterpriseOverride,
-    });
-
-  test("on for every community deployment — there is no opt-out flag", () => {
-    // The date window and the org toggle already decide when and whether it
-    // shows, so a community deployment has no switch of its own.
-    expect(parse(false)).toBe(true);
-    expect(parse(false, "true")).toBe(true);
-  });
-
-  test("stays off when the enterprise license is activated", () => {
-    expect(parse(true)).toBe(false);
-  });
-
-  test("the undocumented override is the only enterprise way in", () => {
-    expect(parse(true, "true")).toBe(true);
-  });
-
-  test("the override does nothing unless it is exactly true", () => {
-    expect(parse(true, "yes")).toBe(false);
-    expect(parse(true, "")).toBe(false);
-  });
-});
-
-describe("parseHackathonGalleryRepo", () => {
-  test("unset means sharing is not offered", () => {
-    expect(parseHackathonGalleryRepo(undefined)).toBeUndefined();
-    expect(parseHackathonGalleryRepo("")).toBeUndefined();
-    expect(parseHackathonGalleryRepo("   ")).toBeUndefined();
-  });
-
-  test("splits owner/name, tolerating surrounding whitespace", () => {
-    expect(parseHackathonGalleryRepo("archestra-ai/app-gallery")).toEqual({
-      owner: "archestra-ai",
-      name: "app-gallery",
-    });
-    expect(parseHackathonGalleryRepo(" archestra-ai/app-gallery ")).toEqual({
-      owner: "archestra-ai",
-      name: "app-gallery",
-    });
-  });
-
-  test("refuses anything that is not exactly owner/name", () => {
-    // Fail at boot, not with a broken share button: a URL, a bare owner, or a
-    // nested path are all misconfigurations.
-    expect(() =>
-      parseHackathonGalleryRepo("https://github.com/archestra-ai/app-gallery"),
-    ).toThrow(/owner\/name/);
-    expect(() => parseHackathonGalleryRepo("archestra-ai")).toThrow(
-      /owner\/name/,
-    );
-    expect(() =>
-      parseHackathonGalleryRepo("archestra-ai/app-gallery/main"),
-    ).toThrow(/owner\/name/);
-  });
-});
-
-describe("resolveRenderBaseUrl", () => {
-  test("films the deployment's own first configured origin", () => {
-    // The renderer must reach the frontend at an origin the app sandbox trusts
-    // to be framed by. Reaching it at loopback instead is refused by the
-    // sandbox's frame-ancestors policy, and the export films an empty app pane
-    // rather than failing — so the default has to come from the same set CORS
-    // and auth are built from.
-    expect(
-      resolveRenderBaseUrl({
-        explicit: undefined,
-        configuredOrigins: ["https://apps.example.com", "https://tunnel.test"],
-      }),
-    ).toBe("https://apps.example.com");
-  });
-
-  test("an explicit base URL wins, for a renderer pointed somewhere internal", () => {
-    expect(
-      resolveRenderBaseUrl({
-        explicit: "http://frontend.svc:3000",
-        configuredOrigins: ["https://apps.example.com"],
-      }),
-    ).toBe("http://frontend.svc:3000");
-  });
-
-  test("falls back to loopback only when nothing is configured", () => {
-    expect(
-      resolveRenderBaseUrl({ explicit: "  ", configuredOrigins: [] }),
-    ).toBe("http://localhost:3000");
-  });
-});
-
 describe("betaFeatureEnabled", () => {
   const originalEnv = process.env;
 
@@ -3429,38 +3333,6 @@ describe("deriveOllamaNativeBaseUrl", () => {
         ollamaBaseUrl: undefined,
       }),
     ).toBe("http://proxy.internal/v1/ollama");
-  });
-});
-
-describe("parseHackathonRecorderMaxFinalCutMs", () => {
-  test("defaults to the shared limit when unset", () => {
-    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
-    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
-      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
-    );
-    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
-      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
-    );
-  });
-
-  test("takes a deployment's own limit", () => {
-    expect(parseHackathonRecorderMaxFinalCutMs("30000")).toBe(30_000);
-    expect(parseHackathonRecorderMaxFinalCutMs(" 600000 ")).toBe(600_000);
-  });
-
-  test("refuses a value it cannot honour rather than silently defaulting", () => {
-    // Falling back would read as the platform ignoring the operator's limit —
-    // the one failure mode a length cap must not have.
-    expect(() => parseHackathonRecorderMaxFinalCutMs("abc")).toThrow(
-      /whole number of milliseconds/,
-    );
-    expect(() => parseHackathonRecorderMaxFinalCutMs("60.5")).toThrow();
-    expect(() => parseHackathonRecorderMaxFinalCutMs("-1000")).toThrow();
-  });
-
-  test("refuses a limit so small nothing could ever be submitted", () => {
-    expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
-    expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
   });
 });
 
@@ -3715,5 +3587,79 @@ describe("OpenAPPA feature configuration", () => {
       parseOpenAppaConfig({ postgresMaxConnections: value })
         .postgresMaxConnections,
     ).toBe(expected);
+  });
+
+  describe("review summary model (explicit opt-in)", () => {
+    test.each([
+      { provider: undefined, model: undefined },
+      { provider: "", model: "" },
+      { provider: "  ", model: " " },
+    ])("stays disabled when both variables are blank (%j)", ({
+      provider,
+      model,
+    }) => {
+      const result = parseOpenAppaConfig({
+        reviewSummaryProvider: provider,
+        reviewSummaryModel: model,
+      });
+      expect(result.reviewSummary).toBeUndefined();
+      expect(result).not.toHaveProperty("reviewSummary");
+    });
+
+    test("enables with a supported chat provider and model", () => {
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "kimi",
+          reviewSummaryModel: "kimi-for-coding",
+        }).reviewSummary,
+      ).toEqual({ provider: "kimi", model: "kimi-for-coding" });
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: " anthropic ",
+          reviewSummaryModel: " claude-sonnet-4-5 ",
+        }).reviewSummary,
+      ).toEqual({ provider: "anthropic", model: "claude-sonnet-4-5" });
+    });
+
+    test.each([
+      { provider: "kimi", model: undefined },
+      { provider: "kimi", model: "" },
+      { provider: undefined, model: "kimi-for-coding" },
+      { provider: " ", model: "kimi-for-coding" },
+    ])("rejects a partial configuration (%j)", ({ provider, model }) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: model,
+        }),
+      ).toThrow(
+        "ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER and ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL must be set together",
+      );
+    });
+
+    test("rejects an unsupported provider", () => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "not-a-provider",
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        'ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "not-a-provider" is not a supported provider',
+      );
+    });
+
+    test.each([
+      "voyage",
+      "jev",
+    ])("rejects a non-chat provider (%s)", (provider) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${provider}" does not support chat completions`,
+      );
+    });
   });
 });

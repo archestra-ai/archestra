@@ -1,8 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
+import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { readGuardrailsV2Activation } from "./guardrails-deployment";
+import {
+  readGuardrailsV2Activation,
+  setGuardrailsDeployment,
+} from "./guardrails-deployment";
+
+vi.mock("@/logging");
 
 describe("readGuardrailsV2Activation", () => {
   test("a stored false is inactive, and a thrown read is not that result", async () => {
@@ -37,34 +43,49 @@ describe("readGuardrailsV2Activation", () => {
     }
   });
 
-  test("enforcement turns off at the small-team threshold unless the AI Security licence is set", async () => {
+  test("enforcement turns off at the small-team threshold unless the enterprise licence is set", async () => {
     const previous = config.openappa.enabled;
-    const previousFlags = { ...config.enterpriseFeatures };
-    const setFlag = (key: "core" | "aiSecurity", value: boolean) =>
-      Object.defineProperty(config.enterpriseFeatures, key, {
+    const previousCore = config.enterpriseFeatures.core;
+    const setCore = (value: boolean) =>
+      Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,
       });
     config.openappa.enabled = true;
-    setFlag("core", false);
-    setFlag("aiSecurity", false);
+    setCore(false);
     try {
       await GuardrailsDeploymentModel.setEnabled(true);
       enterpriseTier.setUserCountForTesting(29);
       await expect(readGuardrailsV2Activation()).resolves.toBe("active");
       enterpriseTier.setUserCountForTesting(30);
       await expect(readGuardrailsV2Activation()).resolves.toBe("inactive");
-      // The Platform licence alone does not include AI Security.
-      setFlag("core", true);
-      await expect(readGuardrailsV2Activation()).resolves.toBe("inactive");
-      setFlag("aiSecurity", true);
+      setCore(true);
       await expect(readGuardrailsV2Activation()).resolves.toBe("active");
     } finally {
       config.openappa.enabled = previous;
-      setFlag("core", previousFlags.core);
-      setFlag("aiSecurity", previousFlags.aiSecurity);
+      setCore(previousCore);
       enterpriseTier.setUserCountForTesting(0);
     }
+  });
+});
+
+describe("setGuardrailsDeployment", () => {
+  test("logs who switched enforcement and what it was before and after", async () => {
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const info = vi.mocked(logger.info);
+
+    await setGuardrailsDeployment({ enabled: false }, { userId: "user-1" });
+
+    expect(info).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        before: expect.objectContaining({ enabled: true }),
+        after: expect.objectContaining({ enabled: false }),
+      },
+      expect.stringMatching(
+        /^Guardrails (enforcement switched off|deployment settings changed)$/,
+      ),
+    );
   });
 });

@@ -21,7 +21,11 @@ export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
-  GetAllAgents: "getAllAgents",
+  GetChatAgentRoster: "getChatAgentRoster",
+  GetChatAgentRosterPage: "getChatAgentRosterPage",
+  GetAgentOptions: "getAgentOptions",
+  GetAgentOptionsPage: "getAgentOptionsPage",
+  GetAgentOptionIds: "getAgentOptionIds",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
@@ -92,6 +96,7 @@ export const RouteId = {
   // Agent Delegation Routes (internal agents only)
   GetAgentDelegations: "getAgentDelegations",
   SyncAgentDelegations: "syncAgentDelegations",
+  CreateAgentDelegation: "createAgentDelegation",
   DeleteAgentDelegation: "deleteAgentDelegation",
   GetAgentA2aDelegations: "getAgentA2aDelegations",
   SyncAgentA2aDelegations: "syncAgentA2aDelegations",
@@ -100,6 +105,8 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
+  GetNewChatBootstrap: "getNewChatBootstrap",
+  GetConversationBootstrap: "getConversationBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -112,8 +119,14 @@ export const RouteId = {
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
+  SearchMcpRegistry: "searchMcpRegistry",
+  SearchMcpRegistryIds: "searchMcpRegistryIds",
+  GetMcpRegistryIssueIndex: "getMcpRegistryIssueIndex",
+  GetInternalMcpCatalogIcon: "getInternalMcpCatalogIcon",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogCredentialPreflight:
+    "getInternalMcpCatalogCredentialPreflight",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   GetInternalMcpCatalogToolsBatch: "getInternalMcpCatalogToolsBatch",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
@@ -133,6 +146,7 @@ export const RouteId = {
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
+  GetMcpServerAutoModeAgentPage: "getMcpServerAutoModeAgentPage",
   GetMcpServerAutoModeAgents: "getMcpServerAutoModeAgents",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
@@ -174,6 +188,7 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   BulkDeleteTeams: "bulkDeleteTeams",
   GetTeamMembers: "getTeamMembers",
+  GetTeamMembersPage: "getTeamMembersPage",
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
@@ -525,8 +540,10 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
-  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
-  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
+
+  // Saved browser login routes (Playwright)
+  GetBrowserStorageStates: "getBrowserStorageStates",
+  DeleteBrowserStorageState: "deleteBrowserStorageState",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -538,6 +555,16 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
   BulkDeleteVirtualApiKeys: "bulkDeleteVirtualApiKeys",
+
+  // Unified OAuth Client Routes
+  GetOauthClients: "getOauthClients",
+  GetOauthClientLabelKeys: "oauthClientLabelKeys",
+  GetOauthClientLabelValues: "oauthClientLabelValues",
+  CreateOauthClient: "createOauthClient",
+  UpdateOauthClient: "updateOauthClient",
+  RotateOauthClientSecret: "rotateOauthClientSecret",
+  DeleteOauthClient: "deleteOauthClient",
+  BulkDeleteOauthClients: "bulkDeleteOauthClients",
 
   // LLM OAuth Client Routes
   GetLlmOauthClients: "getLlmOauthClients",
@@ -560,6 +587,8 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  GetLlmModelIdsByKey: "getLlmModelIdsByKey",
+  GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
   BulkUpdateModels: "bulkUpdateModels",
 
@@ -584,13 +613,12 @@ export const RouteId = {
   MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
   GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
   SubmitOnboardingSurvey: "submitOnboardingSurvey",
-  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
 
   // Organization Routes
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
-  GetOrganizationMembers: "getOrganizationMembers",
+  GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",
@@ -622,6 +650,7 @@ export const RouteId = {
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
+  GetEnvironment: "getEnvironment",
   GetEnvironmentLabelValues: "environmentLabelValues",
   GetEnvironmentLabelKeys: "environmentLabelKeys",
   CreateEnvironment: "createEnvironment",
@@ -640,6 +669,10 @@ export const RouteId = {
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Stored GitHub personal access tokens
+  ListGitCredentials: "listGitCredentials",
+  CreateGitlabToken: "createGitlabToken",
+  ListGitCredentialRepositories: "listGitCredentialRepositories",
+  ListGitCredentialNamespaces: "listGitCredentialNamespaces",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",
@@ -676,9 +709,6 @@ export const RouteId = {
   GetImpersonableUsers: "getImpersonableUsers",
 
   // Team Token Routes
-  GetTokens: "getTokens",
-  GetTokenValue: "getTokenValue",
-  RotateToken: "rotateToken",
 
   // User Token Routes (Personal Tokens)
   GetUserToken: "getUserToken",
@@ -696,7 +726,11 @@ export const RouteId = {
   GetAppStatistics: "getAppStatistics",
   GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostStatistics: "getCostStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
+  GetMcpToolCallUsage: "getMcpToolCallUsage",
+  GetAppUsage: "getAppUsage",
+  GetSkillUsage: "getSkillUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
@@ -719,17 +753,23 @@ export const RouteId = {
   ApplyChatOpsBindingPlan: "applyChatOpsBindingPlan",
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  GetMsTeamsChatOpsConfig: "getMsTeamsChatOpsConfig",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  GetSlackChatOpsConfig: "getSlackChatOpsConfig",
   ListSlackAgentBots: "listSlackAgentBots",
   UpdateSlackAgentBot: "updateSlackAgentBot",
   DeleteSlackAgentBot: "deleteSlackAgentBot",
   UpdateSlackAppConfigToken: "updateSlackAppConfigToken",
   CreateSlackAgentBotApp: "createSlackAgentBotApp",
+  CreateSlackRouterBotApp: "createSlackRouterBotApp",
   MigrateSlackApps: "migrateSlackApps",
   ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
   ListSlackAgentBotChannels: "listSlackAgentBotChannels",
   JoinSlackAgentBotChannel: "joinSlackAgentBotChannel",
+  ListSlackRouterBotChannels: "listSlackRouterBotChannels",
+  JoinSlackRouterBotChannel: "joinSlackRouterBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
+  GetTelegramChatOpsConfig: "getTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
@@ -836,11 +876,20 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
+  StartAppaGithubApp: "startAppaGithubApp",
+  CompleteAppaGithubApp: "completeAppaGithubApp",
+  GetPendingAppaGithubApp: "getPendingAppaGithubApp",
+  DiscardAppaGithubApp: "discardAppaGithubApp",
+  InstallAppaGithubApp: "installAppaGithubApp",
+  GetAppaGithubAppAccounts: "getAppaGithubAppAccounts",
+  GetAppaGithubAppRepositories: "getAppaGithubAppRepositories",
+  GetAppaGithubRepositoryStatus: "getAppaGithubRepositoryStatus",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
   GetOpenappaEffectivePolicy: "getOpenappaEffectivePolicy",
   GetOpenappaBatteryMatches: "getOpenappaBatteryMatches",
+  GetOpenappaBatteryInstall: "getOpenappaBatteryInstall",
   CreateOpenappaBatteryInstall: "createOpenappaBatteryInstall",
   UpdateOpenappaBatteryInstall: "updateOpenappaBatteryInstall",
   DeleteOpenappaBatteryInstall: "deleteOpenappaBatteryInstall",
@@ -848,8 +897,9 @@ export const RouteId = {
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
+  GetOpenappaCredentialBindings: "getOpenappaCredentialBindings",
+  GetOpenappaCredentialBinding: "getOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
-  AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
@@ -859,6 +909,8 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaExternalConsult: "getOpenappaExternalConsult",
+  GetOpenappaLabelChanges: "getOpenappaLabelChanges",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
@@ -871,6 +923,7 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillNames: "getSkillNames",
 
   // Plugin Routes
   GetPlugins: "getPlugins",
@@ -926,6 +979,7 @@ export const RouteId = {
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",
+  GetAuditLogResources: "getAuditLogResources",
 
   // Hook File Routes
   GetHooks: "getHooks",
@@ -956,7 +1010,9 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
+  RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
   GetConnectedClientLog: "getConnectedClientLog",
@@ -966,6 +1022,8 @@ export const RouteId = {
   // MCP App Routes
   GetApps: "getApps",
   GetExternalApp: "getExternalApp",
+  GetExternalAppIcon: "getExternalAppIcon",
+  GetAppIcon: "getAppIcon",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",
@@ -993,21 +1051,6 @@ export const RouteId = {
   UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
-  // App session recordings live client-side (IndexedDB); the only server
-  // endpoint forwards a shared recording plugin to the public demo catalog.
-  EnhanceAppRecording: "enhanceAppRecording",
-  RenderAppRecordingVideo: "renderAppRecordingVideo",
-  GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
-  DownloadAppRecordingVideo: "downloadAppRecordingVideo",
-  CancelAppRecordingRender: "cancelAppRecordingRender",
-  // Reviewer-facing: fetch a hackathon submission's recording plugin from
-  // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
-  // read-only review player.
-  ReviewAppRecording: "reviewAppRecording",
-  // Sharing a recording to the public App Gallery: the backend only relays
-  // the GitHub device flow (browser CORS); the PR itself is filed client-side.
-  AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",
-  AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

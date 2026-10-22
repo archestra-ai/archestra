@@ -1,15 +1,26 @@
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared";
+import { defaultRuntimeHandoffInstructions } from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: vi.fn(),
+}));
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/llm-provider-api-keys.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/integration-overrides", () => ({
-  useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
+  useModelProviderCatalog: () => ({
+    label: (provider: string) => provider,
+    visibleIds: [],
+  }),
+}));
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/agent-selector", () => ({
   AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (
@@ -69,16 +80,22 @@ vi.mock("@/components/settings/settings-block", () => ({
   ),
 }));
 
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useAppearanceSettings,
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
 import { ConnectionSettingsForm } from "./connection-settings-form";
 
+// jsdom doesn't implement scrollIntoView, which the Add back command list calls.
+Element.prototype.scrollIntoView = vi.fn();
+
 const mutate = vi.fn();
+const APP_NAME = "Acme";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -88,15 +105,21 @@ beforeEach(() => {
       connectionDefaultClientId: null,
       connectionShownClientIds: null,
       connectionBaseUrls: null,
-      connectionDefaultProviderKeys: null,
+      connectionClientProviderKeys: null,
       connectionSkillsEnabled: true,
       connectionLlmProxyEnabled: true,
       connectionPluginsEnabled: true,
     },
   } as ReturnType<typeof useOrganization>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: { appName: APP_NAME },
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "admin" } },
+  } as ReturnType<typeof useSession>);
+  vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
   vi.mocked(useLlmProviderApiKeys).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
@@ -110,17 +133,12 @@ describe("ConnectionSettingsForm", () => {
   it("reorders with the handle, saves through settings, and restores that order after reload", async () => {
     const user = userEvent.setup();
     const view = render(<ConnectionSettingsForm />);
-    const list = () => screen.getByRole("list", { name: "Available agents" });
-    const originalHandles = within(list()).getAllByRole("button", {
-      name: /^Reorder /,
-    });
-    const firstName = originalHandles[0].getAttribute("aria-label");
-    const secondName = originalHandles[1].getAttribute("aria-label");
-    originalHandles[1].focus();
-    await user.keyboard("{ArrowLeft}");
-    expect(
-      within(list()).getAllByRole("button", { name: /^Reorder / })[0],
-    ).toHaveAttribute("aria-label", secondName);
+    const handles = () =>
+      within(agentList()).getAllByRole("button", { name: /^Reorder / });
+    const [firstName, secondName] = agentOrder();
+    handles()[1].focus();
+    await user.keyboard("{ArrowUp}");
+    expect(agentOrder().slice(0, 2)).toEqual([secondName, firstName]);
     await user.click(screen.getByRole("button", { name: "Save" }));
     const saved = mutate.mock.lastCall?.[0];
     expect(saved.connectionClientOrder.slice(0, 2)).toEqual([
@@ -136,41 +154,42 @@ describe("ConnectionSettingsForm", () => {
       data: { ...organization.data, ...saved },
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
-    expect(
-      within(list())
-        .getAllByRole("button", { name: /^Reorder / })
-        .slice(0, 2)
-        .map((handle) => handle.getAttribute("aria-label")),
-    ).toEqual([secondName, firstName]);
+    expect(agentOrder().slice(0, 2)).toEqual([secondName, firstName]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-    within(list())
-      .getAllByRole("button", { name: /^Reorder / })[0]
-      .focus();
-    await user.keyboard("{ArrowRight}");
+    handles()[0].focus();
+    await user.keyboard("{ArrowDown}");
+    expect(agentOrder().slice(0, 2)).toEqual([firstName, secondName]);
     await user.click(screen.getByRole("button", { name: "Discard" }));
-    expect(
-      within(list()).getAllByRole("button", { name: /^Reorder / })[0],
-    ).toHaveAttribute("aria-label", secondName);
+    expect(agentOrder().slice(0, 2)).toEqual([secondName, firstName]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("disables Add when all agents are chosen and re-enables it after removal", async () => {
+  it("folds a removed agent into the hidden footer and adds it back at the end", async () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
-    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Add an agent back to Connect" }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     );
-    expect(screen.getByRole("button", { name: "Add agent" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Add agent" }));
-    await user.click(screen.getByRole("button", { name: "Codex" }));
-    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
+    expect(agentOrder()).not.toContain("Codex");
+    expect(screen.getByText("1 hidden")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Add an agent back to Connect" }),
+    );
+    await user.click(screen.getByRole("option", { name: /Codex$/ }));
+    expect(agentOrder().at(-1)).toBe("Codex");
     expect(
-      screen.getByRole("button", { name: "Remove Codex from Connect" }),
-    ).toHaveFocus();
+      screen.queryByRole("button", { name: "Add an agent back to Connect" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const saved = mutate.mock.lastCall?.[0];
+    expect(saved.connectionShownClientIds).toBeNull();
+    expect(saved.connectionClientOrder.at(-1)).toBe("codex");
   });
 
-  it("adds an agent through the inline menu at the end, removes it, and discards back to the saved list", async () => {
+  it("adds a hidden agent at the end, removes it, and discards back to the saved list", async () => {
     const user = userEvent.setup();
     const organization = vi.mocked(useOrganization)();
     vi.mocked(useOrganization).mockReturnValue({
@@ -182,13 +201,11 @@ describe("ConnectionSettingsForm", () => {
       },
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
-    await user.click(screen.getByRole("button", { name: "Add agent" }));
-    await user.click(screen.getByRole("button", { name: "Cursor" }));
-    expect(
-      within(screen.getByRole("list", { name: "Available agents" }))
-        .getAllByRole("button", { name: /^Reorder / })
-        .map((handle) => handle.getAttribute("aria-label")),
-    ).toEqual(["Reorder Codex", "Reorder Cursor"]);
+    const addBack = () =>
+      screen.getByRole("button", { name: "Add an agent back to Connect" });
+    await user.click(addBack());
+    await user.click(screen.getByRole("option", { name: /Cursor$/ }));
+    expect(agentOrder()).toEqual(["Codex", "Cursor"]);
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -199,27 +216,16 @@ describe("ConnectionSettingsForm", () => {
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     );
-    expect(
-      screen.queryByRole("button", { name: "Reorder Codex" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Remove Cursor from Connect" }),
-    ).toHaveFocus();
+    expect(agentOrder()).toEqual(["Cursor"]);
     await user.click(screen.getByRole("button", { name: "Discard" }));
-    expect(
-      screen.getByRole("button", { name: "Reorder Codex" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Reorder Cursor" }),
-    ).not.toBeInTheDocument();
+    expect(agentOrder()).toEqual(["Codex"]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     );
     expect(
-      screen.getByText("No agents added. Generic client is still available."),
+      screen.getByText("No agents on Connect. Add one back below."),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add agent" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -227,8 +233,9 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: [],
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Add agent" }));
-    await user.click(screen.getByRole("button", { name: "Codex" }));
+    await user.click(addBack());
+    await user.click(screen.getByRole("option", { name: /Codex$/ }));
+    expect(agentOrder()).toEqual(["Codex"]);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
@@ -240,11 +247,21 @@ describe("ConnectionSettingsForm", () => {
     });
     expect(editor).toBeVisible();
     expect(editor).toBeEnabled();
-    expect(editor).toHaveValue(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS);
+    expect(editor).toHaveValue(defaultRuntimeHandoffInstructions(APP_NAME));
     const toggle = screen.getByRole("switch", {
-      name: "Enable managed instructions",
+      name: "Enable instructions for connected agents",
     });
     expect(toggle).toBeChecked();
+    // The untouched default saves as null, so it keeps following the default.
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connectionRuntimeHandoffEnabled: false,
+        connectionRuntimeHandoffInstructions: null,
+      }),
+    );
+    await user.click(toggle);
     await user.clear(editor);
     await user.type(editor, "Offer overnight work.");
     await user.click(toggle);
@@ -293,7 +310,9 @@ describe("ConnectionSettingsForm", () => {
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
     expect(
-      screen.getByRole("switch", { name: "Enable managed instructions" }),
+      screen.getByRole("switch", {
+        name: "Enable instructions for connected agents",
+      }),
     ).not.toBeChecked();
     expect(
       screen.getByRole("textbox", {
@@ -302,26 +321,18 @@ describe("ConnectionSettingsForm", () => {
     ).toBeDisabled();
   });
 
-  it("omits the plugin setting and its PATCH field when plugins are unavailable", async () => {
+  it("edits plugin delivery while the deployment beta flag is off", async () => {
     const user = userEvent.setup();
-    vi.mocked(useFeature).mockReturnValue(undefined);
-
+    vi.mocked(useFeature).mockReturnValue(false);
     render(<ConnectionSettingsForm />);
-
-    expect(
-      screen.queryByRole("switch", {
-        name: "Offer plugins on the Connect page",
-      }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("switch", { name: "Offer skills on the Connect page" }),
-    );
+    const toggle = screen.getByRole("switch", {
+      name: "Offer plugins on the Connect page",
+    });
+    expect(toggle).toBeVisible();
+    await user.click(toggle);
     await user.click(screen.getByRole("button", { name: "Save" }));
-
     expect(mutate).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        connectionPluginsEnabled: expect.anything(),
-      }),
+      expect.objectContaining({ connectionPluginsEnabled: false }),
     );
   });
 
@@ -357,13 +368,84 @@ describe("ConnectionSettingsForm", () => {
     );
   });
 
+  it("maps provider keys to one client's setup command and leaves the others on users' own keys", async () => {
+    vi.mocked(useLlmProviderApiKeys).mockReturnValue({
+      data: [
+        { id: "anthropic-org", name: "Anthropic org", provider: "anthropic" },
+        { id: "openai-org", name: "OpenAI org", provider: "openai" },
+        { id: "copilot", name: "Copilot", provider: "github-copilot" },
+      ],
+    } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+
+    const row = (label: string) => {
+      const item = within(agentList())
+        .getAllByRole("listitem")
+        .find((li) => within(li).queryByText(label));
+      if (!item) throw new Error(`No agent row for ${label}`);
+      return item;
+    };
+    expect(
+      within(row("Claude Code")).getByText("Users' own keys"),
+    ).toBeVisible();
+    expect(
+      within(row("Cursor")).getByText("Users' primary keys"),
+    ).toBeVisible();
+    expect(within(row("Amp")).getByText("Manual setup")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Amp provider keys" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Cursor provider keys" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Cursor" });
+    await user.click(within(dialog).getByRole("button", { name: /Add all/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(within(row("Cursor")).getByText("Admin keys")).toBeVisible();
+    expect(
+      within(row("Claude Code")).getByText("Users' own keys"),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mutate.mock.lastCall?.[0].connectionClientProviderKeys).toEqual({
+      cursor: [
+        { provider: "anthropic", providerApiKeyId: "anthropic-org" },
+        { provider: "openai", providerApiKeyId: "openai-org" },
+      ],
+    });
+  });
+
+  it("saves automatic provider coverage for one client without pinning primary keys", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+    await user.click(
+      screen.getByRole("button", { name: "Cursor provider keys" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Cursor" });
+    await user.click(
+      within(dialog).getByRole("radio", {
+        name: /Current and future providers/,
+      }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.getByText("Current and future providers")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.lastCall?.[0].connectionClientFutureProviders).toEqual({
+      cursor: true,
+    });
+    expect(mutate.mock.lastCall?.[0].connectionClientProviderKeys).toBeNull();
+  });
+
   it("offers shared gateways as the default but not a member's personal one", () => {
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [
         { id: "shared", name: "Team Gateway", isPersonalGateway: false },
         { id: "personal", name: "My Gateway", isPersonalGateway: true },
       ],
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptionsByIds>);
     render(<ConnectionSettingsForm />);
     const options = screen.getByRole("list", {
       name: "Default MCP Gateway options",
@@ -372,3 +454,22 @@ describe("ConnectionSettingsForm", () => {
     expect(within(options).queryByText("My Gateway")).not.toBeInTheDocument();
   });
 });
+
+// ===================================================================
+// Helpers
+// ===================================================================
+
+function agentList() {
+  return screen.getByRole("list", { name: "Agents users can connect" });
+}
+
+/** Shown agent names, top to bottom, read from their reorder handles. */
+function agentOrder() {
+  return within(agentList())
+    .getAllByRole("button", { name: /^Reorder / })
+    .map((handle) =>
+      handle
+        .getAttribute("aria-label")
+        ?.replace(/^Reorder (.+), position \d+$/, "$1"),
+    );
+}

@@ -3,7 +3,7 @@ title: MCP Server Credentials
 sidebarTitle: Server Credentials
 description: Set how Archestra signs in to each MCP server, and whose account each call uses
 order: 3
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,10 +32,10 @@ OAuth tokens refresh by themselves when the provider allows it. A **stdio** serv
 
 Decide per tool: should it act as the person who asks, or always as one shared account? A Jira tool should file tickets as you, so Jira shows who asked. A deploy tool can run as a bot, so nobody needs their own deploy key.
 
-| You want | Set on the tool | Set on the server's **Connections** |
+| You want | Set on the tool | Set on the server's **Credentials** |
 | --- | --- | --- |
-| Each person acts as themselves | **Resolve at call time** | **Default credential:** **On behalf of the user** |
-| Their own account, or the team's when they have none | **Resolve at call time** | **On behalf of the user**, plus a team install |
+| Each person acts as themselves | **Resolve at call time** | **Agents connect with:** **Each caller's own account** |
+| Their own account, or the team's when they have none | **Resolve at call time** | **Each caller's own account**, plus a team install |
 | Everyone acts as one bot | The bot's shared install | Nothing |
 
 Set the tool's account where you [choose its tools](/docs/mcp/gateway#choose-its-tools), on the gateway or the agent. A tool pinned to a shared install always uses it, whatever the server's default says.
@@ -57,7 +57,7 @@ Give every person their own account in every server, with no installs. On each c
 
 To set it up:
 
-1. Set up your identity provider's **Enterprise-Managed Credentials**. See [Enterprise-Managed Auth](/docs/admin/identity/enterprise-managed-auth).
+1. Set up your identity provider's **Enterprise-Managed Credentials**. See [Identity Providers](/docs/admin/identity).
 2. On the server, pick **IdP token exchange**, or **IdP signed JWT** if the server checks your provider's tokens itself.
 3. Set the server's tools to **Resolve at call time**.
 

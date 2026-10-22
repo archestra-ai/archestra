@@ -1,0 +1,256 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
+import OrganizationModel from "@/models/organization";
+import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
+import { describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
+import agentRoutes from "./agent";
+import agentToolRoutes from "./agent-tool";
+
+describe("agent metadata reads", () => {
+  const ctx = useRouteTestApp(async (app) => {
+    await app.register(agentRoutes);
+    await app.register(agentToolRoutes);
+  });
+
+  test("delegation graph preserves organization, agent type, deletion and exact roster ordering", async ({
+    makeMember,
+    makeOrganization,
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const first = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "First",
+      systemPrompt: "Large configuration",
+    });
+    const second = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Second",
+    });
+    const builtin = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Built in",
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+      })
+      .where(eq(schema.agentsTable.id, builtin.id));
+    const deleted = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Deleted",
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.agentsTable.id, deleted.id));
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "mcp_gateway",
+      name: "Gateway",
+    });
+    const foreign = await makeOrganization();
+    await makeAgent({
+      organizationId: foreign.id,
+      agentType: "agent",
+      name: "Foreign",
+    });
+    for (const agent of [first, second])
+      await db
+        .update(schema.agentsTable)
+        .set({ createdAt: new Date("2025-01-01T00:00:00Z") })
+        .where(eq(schema.agentsTable.id, agent.id));
+    const tool = await makeTool({});
+    await db
+      .update(schema.toolsTable)
+      .set({ delegateToAgentId: second.id })
+      .where(eq(schema.toolsTable.id, tool.id));
+    await makeAgentTool(first.id, tool.id);
+    const expected = (
+      await AgentModel.findByOrganizationId(ctx.organizationId, {
+        agentType: "agent",
+      })
+    ).map(({ id, name, agentType }) => ({ id, name, agentType }));
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agent-delegations",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().agents).toEqual(expected);
+    expect(response.json().agents).toHaveLength(3);
+    expect(response.json().connections).toContainEqual({
+      sourceAgentId: first.id,
+      sourceAgentName: first.name,
+      targetAgentId: second.id,
+      targetAgentName: second.name,
+      toolId: tool.id,
+    });
+  });
+
+  test("credential readiness resolves assigned tools independently of embedded roster tools", async ({
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      missingCredentialBehavior: "warn",
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      missingCredentialBehavior: "allow",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Documentation",
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id);
+    const hydrated = await AgentModel.findAll(ctx.user.id, true, {
+      agentTypes: ["agent"],
+      excludeBuiltIn: true,
+      onlyEnforcingMissingCredentials: true,
+    });
+    expect(
+      hydrated
+        .find((row) => row.id === agent.id)
+        ?.tools.some((row) => row.id === tool.id),
+    ).toBe(true);
+    const expected = await getAgentCredentialReadiness({
+      agents: hydrated,
+      userId: ctx.user.id,
+    });
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/credential-readiness",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual(expected);
+    expect(response.json()).toEqual([
+      {
+        agentId: agent.id,
+        missingCredentialBehavior: "warn",
+        missingConnections: [
+          { catalogId: catalog.id, catalogName: catalog.name },
+        ],
+      },
+    ]);
+  });
+  test("default suggested prompts are offered only on an agent the caller can read", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    const owner = await makeUser();
+    const team = await makeTeam(ctx.organizationId, owner.id, {
+      name: "Other",
+    });
+    const hidden = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      access: { teams: [team.id] },
+    });
+    const own = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      access: "personal",
+    });
+
+    const denied = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${hidden.id}/default-suggested-prompts`,
+    });
+    expect(denied.statusCode).toBe(404);
+
+    const allowed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${own.id}/default-suggested-prompts`,
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toEqual([]);
+  });
+  test("the chat bootstrap includes the default agents the caller can use", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    // Older than the agent the bootstrap would pick on its own.
+    const pinned = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      name: "Pinned",
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ createdAt: new Date("2025-01-01T00:00:00Z") })
+      .where(eq(schema.agentsTable.id, pinned.id));
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      name: "Newest",
+    });
+    // The organization default lives in a team the caller is not in.
+    const owner = await makeUser();
+    const team = await makeTeam(ctx.organizationId, owner.id, {
+      name: "Other",
+    });
+    const organizationDefault = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      name: "Org default",
+      access: { teams: [team.id] },
+    });
+    await OrganizationModel.patch(ctx.organizationId, {
+      defaultAgentId: organizationDefault.id,
+    });
+    const before = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster?bootstrap=true",
+    });
+    expect(
+      before.json().map((agent: { id: string }) => agent.id),
+    ).not.toContain(pinned.id);
+    const pin = await ctx.app.inject({
+      method: "PUT",
+      url: "/api/members/default-agent",
+      payload: { defaultAgentId: pinned.id },
+    });
+    expect(pin.statusCode).toBe(200);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster?bootstrap=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().map((agent: { id: string }) => agent.id);
+    expect(ids).toContain(pinned.id);
+    expect(ids).not.toContain(organizationDefault.id);
+  });
+});

@@ -25,6 +25,7 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { AgentSelector } from "@/components/agent-selector";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -47,6 +48,7 @@ import {
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -61,6 +63,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -71,9 +74,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -92,12 +94,10 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmModelOptions } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
-import {
-  useOrganization,
-  useOrganizationMembers,
-} from "@/lib/organization.query";
+import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOrganization } from "@/lib/organization.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -227,9 +227,13 @@ export default function LimitsPage() {
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
-  const { data: teams = [] } = useTeams();
+  const { data: teams = [] } = useTeams({ includeRelations: false });
   const { data: organization } = useOrganization();
-  const { data: members = [] } = useOrganizationMembers();
+  const { data: members = [] } = useMemberOptionsReferences({
+    ids: limits
+      .filter((limit) => limit.entityType === "user")
+      .map((limit) => limit.entityId),
+  });
   const { data: defaultUserLimits = [] } = useDefaultUserLimits();
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
@@ -239,12 +243,15 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const oauthClients = oauthClientsData?.data ?? [];
-  const { data: agents = [] } = useProfiles({
-    filters: { agentTypes: ["agent"] },
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: limits
+      .filter((limit) => limit.entityType === "agent")
+      .map((limit) => limit.entityId),
+    filters: { agentType: "agent" },
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
@@ -769,13 +776,14 @@ export default function LimitsPage() {
   }
 
   return (
-    <div>
+    <div className="-mt-3">
       <WithPermissions
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <Alert variant="info" className="mb-4">
-          <AlertDescription className="block">
+        <InlineNotice variant="info" className="mb-2">
+          <Info />
+          <InlineNoticeText>
             {defaultUserLimits.length > 0
               ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
               : "No default user limit is set — users are only capped by the custom limits below. Set a default for every user in "}
@@ -786,8 +794,8 @@ export default function LimitsPage() {
               LLM settings
             </Link>
             .
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       </WithPermissions>
 
       {attentionLimits.length > 0 && (
@@ -1035,7 +1043,7 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "user" && (
-                  <UserSearchableSelect
+                  <RemoteUserSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -1043,11 +1051,6 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
-                    users={members.map((member) => ({
-                      userId: member.id,
-                      name: member.name,
-                      email: member.email,
-                    }))}
                     placeholder="Select user"
                     className="w-full sm:flex-1"
                   />
@@ -1069,7 +1072,15 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "agent" && (
-                  <SearchableSelect
+                  <AgentSelector
+                    mode="single"
+                    flat
+                    remote={{
+                      filters: {
+                        agentType: "agent",
+                        searchMode: "name_or_description",
+                      },
+                    }}
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -1078,11 +1089,6 @@ export default function LimitsPage() {
                       }))
                     }
                     placeholder="Select agent"
-                    items={agents.map((agent) => ({
-                      value: agent.id,
-                      label: agent.name,
-                      description: agent.description ?? undefined,
-                    }))}
                     className="w-full sm:flex-1"
                   />
                 )}

@@ -4,7 +4,12 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
@@ -14,6 +19,8 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
+import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
@@ -43,69 +50,82 @@ const {
   uploadProjectFiles,
 } = archestraApiSdk;
 
-type ProjectListFilters = NonNullable<
-  archestraApiTypes.GetProjectsData["query"]
->;
+type ProjectListQuery = NonNullable<archestraApiTypes.GetProjectsData["query"]>;
+type ProjectListFilters = Omit<ProjectListQuery, "limit" | "offset">;
 
 /**
- * Projects list, optionally scoped + searched. The list lives under a
- * `["projects", "list", …]` key so it can be invalidated without touching the
- * per-project detail queries (`["projects", id, …]`). With no filters (the
- * sidebar, and the page's "All" scope) the key is identical, so they share one
- * cache entry.
+ * One page of the projects list, optionally scoped, searched and split by
+ * pins. The list lives under a `["projects", "list", …]` key so it can be
+ * invalidated without touching the per-project detail queries
+ * (`["projects", id, …]`). The previous page stays on screen while the next
+ * one loads.
  */
 export function useProjects(
-  options?: { enabled?: boolean; toastOnError?: boolean } & ProjectListFilters,
+  options?: { enabled?: boolean; toastOnError?: boolean } & ProjectListQuery,
 ) {
-  const scope = options?.scope;
-  const search = options?.search?.trim() || undefined;
-  const teamIds = options?.teamIds;
-  const authorIds = options?.authorIds;
-  const excludeAuthorIds = options?.excludeAuthorIds;
-  const access = options?.access;
-  const sharedWith = options?.sharedWith;
-  const owner = options?.owner;
-  const status = options?.status;
-  const labels = options?.labels;
-  const toastOnError = options?.toastOnError;
+  const { enabled, toastOnError, limit, offset, ...filters } = options ?? {};
+  const query = normalizeProjectFilters(filters);
   // The endpoint requires project:read; skip the request for users whose role
   // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
   const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
   return useQuery({
-    queryKey: [
-      "projects",
-      "list",
-      {
-        scope: scope ?? null,
-        search: search ?? null,
-        teamIds: teamIds ?? null,
-        authorIds: authorIds ?? null,
-        excludeAuthorIds: excludeAuthorIds ?? null,
-        access: access ?? null,
-        sharedWith: sharedWith ?? null,
-        owner: owner ?? null,
-        status: status ?? null,
-        labels: labels ?? null,
-      },
-    ],
-    enabled: (options?.enabled ?? true) && !!canReadProjects,
+    queryKey: projectListQueryKey({ limit, offset, ...filters }),
+    // The sidebar's pinned list comes back on refresh with the rest of it.
+    meta: filters.pinned === true ? PERSISTED_QUERY_META : undefined,
+    enabled: (enabled ?? true) && !!canReadProjects,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await getProjects({
-        query: {
-          scope,
-          search,
-          teamIds,
-          authorIds,
-          excludeAuthorIds,
-          access,
-          sharedWith,
-          owner,
-          status,
-          labels,
-        },
+        query: { ...withoutNulls(query), limit, offset },
       });
       throwOnApiError(error, { toastOnError });
       return data;
+    },
+  });
+}
+
+/**
+ * The sidebar's read of the pinned projects. The server seeds a full page
+ * load of a shell-seeded route with it, under the same key.
+ */
+export const SIDEBAR_PINNED_PROJECTS_QUERY = {
+  pinned: true,
+  limit: 100,
+  offset: 0,
+} as const satisfies ProjectListQuery;
+
+/** The cache key of one page of the projects list. */
+export function projectListQueryKey({
+  limit,
+  offset,
+  ...filters
+}: ProjectListQuery) {
+  return [
+    "projects",
+    "list",
+    {
+      ...normalizeProjectFilters(filters),
+      limit: limit ?? null,
+      offset: offset ?? null,
+    },
+  ] as const;
+}
+
+/** Every project matching the table's filters, not just the page in view. */
+export function useAllMatchingProjects(
+  filters: ProjectListFilters,
+  options?: { enabled?: boolean },
+) {
+  const query = normalizeProjectFilters(filters);
+  return useAllMatching({
+    queryKey: ["projects", "list", "all-matching", query],
+    enabled: options?.enabled,
+    fetchPage: async ({ limit, offset }) => {
+      const { data, error } = await getProjects({
+        query: { ...withoutNulls(query), limit, offset },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
     },
   });
 }
@@ -541,4 +561,31 @@ export function useUploadProjectFiles(projectId: string) {
       queryClient.invalidateQueries({ queryKey: ["conversation-files"] });
     },
   });
+}
+
+// ===== Internal =====
+
+/** Filters with every absent one as `null`, so equal filters share a query key. */
+function normalizeProjectFilters(filters: ProjectListFilters) {
+  return {
+    scope: filters.scope ?? null,
+    search: filters.search?.trim() || null,
+    teamIds: filters.teamIds ?? null,
+    authorIds: filters.authorIds ?? null,
+    excludeAuthorIds: filters.excludeAuthorIds ?? null,
+    access: filters.access ?? null,
+    sharedWith: filters.sharedWith ?? null,
+    owner: filters.owner ?? null,
+    status: filters.status ?? null,
+    labels: filters.labels ?? null,
+    pinned: filters.pinned ?? null,
+  };
+}
+
+function withoutNulls(
+  query: ReturnType<typeof normalizeProjectFilters>,
+): ProjectListFilters {
+  return Object.fromEntries(
+    Object.entries(query).filter(([, value]) => value !== null),
+  ) as ProjectListFilters;
 }

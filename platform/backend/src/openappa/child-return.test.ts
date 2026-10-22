@@ -331,6 +331,48 @@ describe("OpenAPPA child-return markers", () => {
     ).toThrow("OpenAPPA withheld a malformed child completion");
   });
 
+  test("leaves an OpenCode background launch as the client sent it", () => {
+    // Kilo Code 7.8 wraps the launch notice in <task_result>.
+    const launch =
+      '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n<task_result>\nThe task is working in the background. You will be notified automatically when it finishes.\n</task_result>\n</task>';
+    const body = (content: string) => ({
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_task",
+              type: "function",
+              function: { name: "task", arguments: "{}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_task", content },
+      ],
+    });
+    const acknowledged = body(launch);
+    expect(
+      collectAndStripChildReturns(acknowledged, {
+        openCodeBackgroundReturns: true,
+      }).completions,
+    ).toEqual([]);
+    expect(acknowledged.messages[1].content).toBe(launch);
+
+    // A launch that carries a return marker is read as the return it claims.
+    const smuggled = body(
+      launch.replace(
+        "The task is working in the background. You will be notified automatically when it finishes.",
+        carrier(requiredMarker(RETURN)),
+      ),
+    );
+    expect(
+      collectAndStripChildReturns(smuggled, {
+        openCodeBackgroundReturns: true,
+      }).completions,
+    ).toEqual([expect.objectContaining({ childNativeId: "ses_child" })]);
+  });
+
   test("preserves other clients' user text and unrelated OpenCode message parts", () => {
     const output = `<task id="child" state="completed">\n<summary>Text</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
     const otherClient = { messages: [{ role: "user", content: output }] };

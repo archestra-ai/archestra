@@ -13,32 +13,33 @@ export function rememberGitHubConnectionReturn(
 }
 
 export function consumeGitHubConnectionReturn(state: string | null) {
-  if (!state) return personalConnections;
+  if (!state) return personalCredentials;
   try {
     const key = `${storagePrefix}${state}`;
     const destination = window.sessionStorage.getItem(key);
     window.sessionStorage.removeItem(key);
     return validatedDestination(destination);
   } catch {
-    return personalConnections;
+    return personalCredentials;
   }
 }
 
-const personalConnections = "/account#connections";
+const personalCredentials = "/account/credentials";
 const accountPath = "/account";
 const organizationCredentials = "/settings/credentials";
 const storagePrefix = "github-connection-return:";
 
 function validatedDestination(destination: string | null): string {
-  if (!destination?.startsWith("/")) return personalConnections;
+  if (!destination?.startsWith("/")) return personalCredentials;
   try {
     const url = new URL(destination, window.location.origin);
-    if (url.origin !== window.location.origin) return personalConnections;
-    // A connect started from the Connections section records `/account`, the
-    // page it sits on; come back to the section, not the top of the page.
+    if (url.origin !== window.location.origin) return personalCredentials;
+    // Credentials used to be a section of `/account`, so a connect started
+    // before it moved to its own tab recorded that page. Send it to the tab.
     if (url.pathname === accountPath)
-      return `${accountPath}${url.search}${url.hash || "#connections"}`;
+      return `${personalCredentials}${url.search}`;
     if (
+      url.pathname === personalCredentials ||
       url.pathname === organizationCredentials ||
       /^\/agents\/[a-zA-Z0-9-]+$/.test(url.pathname) ||
       url.pathname === "/chat" ||
@@ -46,7 +47,7 @@ function validatedDestination(destination: string | null): string {
     )
       return `${url.pathname}${url.search}${url.hash}`;
   } catch {
-    // Unknown or malformed destinations fall back to personal connections.
+    // Unknown or malformed destinations fall back to personal credentials.
   }
-  return personalConnections;
+  return personalCredentials;
 }

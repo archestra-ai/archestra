@@ -1,7 +1,11 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@archestra/shared";
-import { CheckCircle2, Key, Plus } from "lucide-react";
+import {
+  E2eTestId,
+  EnvironmentVariableSchema,
+  parseVaultReference,
+} from "@archestra/shared";
+import { CheckCircle2, Key, Lock, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
@@ -10,6 +14,7 @@ import {
   type FieldScopeValue,
 } from "@/components/field-scope-select";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { useCredentialsPageHref } from "@/components/settings-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,6 +55,8 @@ export interface CredentialBindingOption {
   sourceLabel?: string;
   defaultKey: string;
   allowedScopes: readonly FieldScopeValue[];
+  /** False when the caller may not use it, so it cannot be newly attached. */
+  canAttach?: boolean;
 }
 
 export type EnvironmentVariableDialogMode = "add" | "edit";
@@ -68,7 +75,6 @@ interface EnvironmentVariableDialogProps {
   staticLabel?: string;
   installationDescription?: string;
   staticDescription?: string;
-  installationCalloutTitle?: string;
   requiredDescription?: string;
   deferStaticSecretValue?: boolean;
   installationOnlyForSecrets?: boolean;
@@ -127,7 +133,6 @@ export function EnvironmentVariableDialog({
   staticLabel = "Static",
   installationDescription,
   staticDescription,
-  installationCalloutTitle = "The user enters this when installing",
   requiredDescription = "Block installation until the user supplies a value.",
   deferStaticSecretValue = false,
   installationOnlyForSecrets = false,
@@ -158,6 +163,11 @@ export function EnvironmentVariableDialog({
     () => existingKeys.includes(trimmedKey) && trimmedKey.length > 0,
     [existingKeys, trimmedKey],
   );
+  const keyError =
+    trimmedKey.length > 0
+      ? EnvironmentVariableSchema.shape.key.safeParse(trimmedKey).error
+          ?.issues[0]?.message
+      : undefined;
 
   const hasStoredSecret =
     mode === "edit" &&
@@ -200,6 +210,7 @@ export function EnvironmentVariableDialog({
   const canSubmit =
     trimmedKey.length > 0 &&
     !duplicate &&
+    !keyError &&
     !credentialIdError &&
     !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
@@ -281,8 +292,8 @@ export function EnvironmentVariableDialog({
         </>
       }
     >
-      <div className="space-y-5">
-        <div className="space-y-2">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="env-var-key">Key</Label>
           <FieldDescription id="env-var-key-hint">
             The environment variable name your application expects, such as
@@ -302,9 +313,10 @@ export function EnvironmentVariableDialog({
               A variable named &quot;{trimmedKey}&quot; already exists.
             </p>
           )}
+          {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="env-var-description">Description</Label>
           {(draft.scope === "installation" ||
             (allowRequiredStaticSecret &&
@@ -325,7 +337,7 @@ export function EnvironmentVariableDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="env-var-type">Type</Label>
             <Select
               value={draft.type}
@@ -346,7 +358,7 @@ export function EnvironmentVariableDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="env-var-scope">Availability</Label>
             <FieldScopeSelect
               id="env-var-scope"
@@ -360,9 +372,6 @@ export function EnvironmentVariableDialog({
               installationDescription={installationDescription}
               staticDescription={staticDescription}
             />
-            {draft.scope === "installation" && (
-              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
-            )}
           </div>
         </div>
 
@@ -435,7 +444,6 @@ function credentialBindingPatch(
   return {
     credentialId: option.id,
     key: draft.key || option.defaultKey,
-    description: draft.description || option.description,
     scope,
     value: "",
   };
@@ -455,17 +463,18 @@ function CredentialBindingEditor({
   onCreate?: () => void;
 }) {
   const reserved = options.find((option) => option.id === draft.credentialId);
+  const credentialsHref = useCredentialsPageHref();
   const selection = reserved?.id ?? "one-off";
   return (
-    <div className="space-y-2">
-      <div className="space-y-1">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="env-var-credential-binding">Secret source</Label>
         <FieldDescription>
           {reserved
             ? "Uses a saved credential. New executions use its current value."
             : "Provide a value for this resource."}{" "}
           <Link
-            href="/settings/credentials"
+            href={credentialsHref}
             className="font-medium text-foreground underline underline-offset-4"
           >
             Manage credentials
@@ -494,28 +503,47 @@ function CredentialBindingEditor({
           position="popper"
           className="w-[var(--radix-select-trigger-width)]"
         >
-          {options.map((option) => (
-            <SelectItem
-              key={option.id}
-              value={option.id}
-              description={
-                <span className="line-clamp-2 whitespace-normal">
-                  <span>
-                    {option.sourceLabel ??
-                      (option.allowedScopes.includes("static")
-                        ? "Organization credential"
-                        : "Personal credential")}
-                  </span>
-                  {option.description && (
-                    <span>{` · ${option.description}`}</span>
-                  )}
-                </span>
-              }
-              icon={<RuntimeCredentialIcon icon={option.icon ?? null} />}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
+          {options.map((option) => {
+            // Keeping a credential already attached is fine; adding one the
+            // caller cannot use is refused on save.
+            const blocked =
+              option.canAttach === false && option.id !== draft.credentialId;
+            return (
+              <SelectItem
+                key={option.id}
+                value={option.id}
+                disabled={blocked}
+                icon={
+                  blocked ? (
+                    <Lock className="size-4" />
+                  ) : (
+                    <RuntimeCredentialIcon icon={option.icon ?? null} />
+                  )
+                }
+                description={
+                  blocked ? (
+                    <span className="line-clamp-2 whitespace-normal">
+                      You don't have access. Ask an admin to share it with you.
+                    </span>
+                  ) : (
+                    <span className="line-clamp-2 whitespace-normal">
+                      <span>
+                        {option.sourceLabel ??
+                          (option.allowedScopes.includes("static")
+                            ? "Organization credential"
+                            : "Personal credential")}
+                      </span>
+                      {option.description && (
+                        <span>{` · ${option.description}`}</span>
+                      )}
+                    </span>
+                  )
+                }
+              >
+                {option.label}
+              </SelectItem>
+            );
+          })}
           <SelectItem
             value="one-off"
             description={
@@ -606,7 +634,7 @@ function StaticValueEditor({
 
   if (useExternalSecretsManager && draft.type === "secret") {
     return (
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <Label>Vault secret</Label>
         {isVaultRef ? (
           <div className="flex items-center gap-2">
@@ -663,7 +691,7 @@ function StaticValueEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <Label htmlFor="env-var-value">Value</Label>
       {hasStoredSecret && (
         <FieldDescription>

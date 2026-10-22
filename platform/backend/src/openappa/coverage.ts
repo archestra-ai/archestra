@@ -1,18 +1,11 @@
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  calculatePaginationMeta,
-  parseFullToolName,
-} from "@archestra/shared";
-import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
-import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
-import { getAgentTypePermissionChecker } from "@/auth";
+import { calculatePaginationMeta, parseFullToolName } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import type { BatteryInstallStatus } from "@/types/openappa-batteries";
+import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
+  CoverageBatteryStatus,
   CoverageEntitiesPage,
   CoverageEntitiesQuery,
   CoverageEntity,
@@ -26,6 +19,13 @@ import type {
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
 import {
+  type DeployedFile,
+  deployedFiles,
+  deployedSource,
+  effectiveToolRules,
+} from "./battery-target";
+import { enforcedBattery } from "./composition-view";
+import {
   asRecord,
   type ToolEntry,
   toolEntries,
@@ -33,18 +33,17 @@ import {
 } from "./policy-text";
 
 /**
- * Which rule of the policy governs each tool reachable through a visible
- * agent, MCP gateway, or MCP server.
+ * Which rule of the policy governs each tool of a visible MCP server.
  *
  * The root text and every resolved battery's policy text are parsed here and
  * joined against the stored tool names: a tool matches a rule whose name,
  * without its argument selector, equals the tool's full name, battery rules
- * reaching it through `[server_aliases]`. Selectors, provider-run rules and
+ * reaching it through `aliases.mcp`. Selectors, provider-run rules and
  * canonical `mcp/…` spellings in the root are not evaluated, so a named rule
  * is not proof that the runtime judges a given call by it.
  *
- * The whole report is computed per request, then filtered, sorted and paged
- * in memory.
+ * Server pages sorted by metadata select their catalog page before the tools
+ * and policy counts are hydrated.
  */
 class OpenAppaCoverageService {
   /** Complete policy rows for one caller-readable catalog, without list facets. */
@@ -57,7 +56,6 @@ class OpenAppaCoverageService {
       {
         ...params,
         visibleCatalogIds: [params.catalogId],
-        includeAutoModeTools: false,
         includeAppCatalogs: true,
       },
       params.catalogId,
@@ -71,19 +69,11 @@ class OpenAppaCoverageService {
     params: { organizationId: string } & CoverageToolsQuery &
       CoverageVisibility,
   ): Promise<CoverageToolsPage> {
-    const { tools } = await buildReport(params.organizationId, {
-      ...params,
-      includeAutoModeTools: params.entityId !== undefined,
-      autoModeEntityId: params.entityId,
-    });
+    const { tools } = await buildReport(params.organizationId, params);
     const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
     const reachable = tools
       .map((row) => row.tool)
-      .filter((tool) =>
-        params.entityId
-          ? tool.agents.some((agent) => agent.id === params.entityId)
-          : visibleCatalogIds.has(tool.catalogId),
-      );
+      .filter((tool) => visibleCatalogIds.has(tool.catalogId));
     const servers = [
       ...new Map(
         reachable.map((tool) => [
@@ -131,30 +121,54 @@ class OpenAppaCoverageService {
     params: { organizationId: string } & CoverageEntitiesQuery &
       CoverageVisibility,
   ): Promise<CoverageEntitiesPage> {
+    // Server names and types do not depend on policy or tool assignments.
+    // Choose that page first, then classify only its catalogs' tools.
+    if (!params.toolId && params.sortBy !== "tools") {
+      const catalogs = await ToolModel.findCoverageCatalogs({
+        organizationId: params.organizationId,
+        catalogIds: params.visibleCatalogIds ?? [],
+      });
+      const search = params.search?.toLowerCase();
+      const candidates = catalogs
+        .map((catalog) => ({ ...catalog, type: "mcp_server" as const }))
+        .filter(
+          (catalog) =>
+            (!params.entityId || catalog.id === params.entityId) &&
+            (!params.type || catalog.type === params.type) &&
+            (!search || catalog.name.toLowerCase().includes(search)),
+        )
+        .sort(compareTargets(params));
+      const selected = page(candidates, params);
+      if (selected.data.length === 0)
+        return { data: [], pagination: selected.pagination };
+      const { entities } = await buildReport(params.organizationId, {
+        ...params,
+        inventoryCatalogIds: selected.data.map((catalog) => catalog.id),
+      });
+      const byId = new Map(entities.map((entity) => [entity.id, entity]));
+      return {
+        data: selected.data.flatMap((catalog) => {
+          const entity = byId.get(catalog.id);
+          return entity ? [entity] : [];
+        }),
+        pagination: selected.pagination,
+      };
+    }
     const { tools, entities } = await buildReport(params.organizationId, {
       ...params,
-      // Server rows count inventory, not which Auto-mode agents can reach it.
-      includeAutoModeTools: params.type !== "mcp_server",
-      // Sorting by a count needs every target's Auto-mode tools, not a page's.
-      autoModePage:
-        params.toolId || params.sortBy === "tools" ? undefined : params,
+      inventoryCatalogIds: params.visibleCatalogIds ?? [],
     });
-    const tool = params.toolId
-      ? tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
+    const toolCatalogId = params.toolId
+      ? (tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
+          .catalogId ?? null)
       : undefined;
-    const reaching = params.toolId
-      ? new Set(
-          tool ? [tool.catalogId, ...tool.agents.map((agent) => agent.id)] : [],
-        )
-      : null;
     const search = params.search?.toLowerCase();
     const matching = entities.filter(
       (entity) =>
-        isListedTarget(entity) &&
         (!params.entityId || entity.id === params.entityId) &&
         (!search || entity.name.toLowerCase().includes(search)) &&
         (!params.type || entity.type === params.type) &&
-        (!reaching || reaching.has(entity.id)),
+        (toolCatalogId === undefined || entity.id === toolCatalogId),
     );
     matching.sort(compareTargets(params));
     return page(matching, params);
@@ -164,7 +178,8 @@ class OpenAppaCoverageService {
   async summary(
     params: { organizationId: string } & CoverageVisibility,
   ): Promise<CoverageSummary> {
-    const { listed, toolsByCatalog, included } = await listedTools(params);
+    const { listed, toolsByCatalog, included, composition, rootRevision } =
+      await listedTools(params);
     const fitting = await openappaBatteriesService.batteriesForCatalogs({
       organizationId: params.organizationId,
       catalogIds: [...toolsByCatalog.keys()],
@@ -175,7 +190,7 @@ class OpenAppaCoverageService {
         (
           battery,
         ): battery is typeof battery & {
-          status: Exclude<BatteryInstallStatus, "active">;
+          status: Exclude<CoverageBatteryStatus, "active">;
         } => battery.status !== "active",
       )
       .map((battery) => ({
@@ -202,7 +217,7 @@ class OpenAppaCoverageService {
     for (const [catalogId, serverTools] of toolsByCatalog) {
       const battery = fitting.get(catalogId);
       if (battery?.status !== "available") continue;
-      const tools = wouldGovern(battery.policy, serverTools);
+      const tools = wouldGovern(battery.files, serverTools);
       if (tools === 0) continue;
       const entry = available.get(battery.battery) ?? {
         name: battery.battery,
@@ -216,12 +231,25 @@ class OpenAppaCoverageService {
 
     const byTools = (a: { name: string; tools: number }, b: typeof a) =>
       b.tools - a.tools || a.name.localeCompare(b.name);
+    const { served, refusal } = composition;
     return {
       totals: { tools: listed.length, ...countRules(listed) },
       batteries: {
         active: active.sort(byTools),
         broken: broken.sort(byTools),
         available: [...available.values()].sort(byTools),
+      },
+      composition: {
+        kind: served.kind,
+        servedRootRevision:
+          served.kind === "root_only" ? null : served.rootRevision,
+        refusedRootRevision: refusal?.rootRevision ?? null,
+        // The rows follow the current text. An earlier composition of
+        // another revision, or of an unknown one, may hold other rules.
+        rulesMayDiffer:
+          served.kind === "previous" &&
+          (served.rootRevision === null ||
+            served.rootRevision !== rootRevision),
       },
     };
   }
@@ -259,8 +287,8 @@ class OpenAppaCoverageService {
         credentials: battery.credentials,
         benefit: battery.benefit,
         setup: battery.setup,
-        newlyCovered: wouldGovern(battery.policy, serverTools),
-        rules: batteryRules(battery.policy, serverTools),
+        newlyCovered: wouldGovern(battery.files, serverTools),
+        rules: batteryRules(battery.files, serverTools),
       });
     }
     return fits.sort(
@@ -269,42 +297,74 @@ class OpenAppaCoverageService {
         a.mcpServerName.localeCompare(b.mcpServerName),
     );
   }
+
+  /**
+   * The rule the organization's current policy applies to each full tool
+   * name, with the rule's own TOML: the first specific rule that names it,
+   * else the catch-all. Null for a tool no rule reaches. A selector rule
+   * (`name(selector)`) depends on the call's arguments, so it is not picked.
+   */
+  async rulesForTools(params: {
+    organizationId: string;
+    toolNames: string[];
+  }): Promise<Map<string, { rule: CoverageRule; text: string | null } | null>> {
+    const rules = new Map<
+      string,
+      { rule: CoverageRule; text: string | null } | null
+    >();
+    if (params.toolNames.length === 0) return rules;
+    const snapshot = await openappaBatteriesService.coverageSnapshot(
+      params.organizationId,
+    );
+    const { fallback, byMatch, rootContent, viewed } = matchRules(snapshot);
+    for (const toolName of new Set(params.toolNames)) {
+      const matched =
+        byMatch.get(toolName)?.find((entry) => entry.rule.selector === null) ??
+        fallback;
+      if (!matched) {
+        rules.set(toolName, null);
+        continue;
+      }
+      const deployed = matched.rule.batteryEntry
+        ? viewed.get(matched.rule.batteryEntry)
+        : undefined;
+      const source =
+        matched.rule.source === "battery"
+          ? deployed
+            ? deployedSource(deployed)
+            : null
+          : rootContent;
+      rules.set(toolName, {
+        rule: matched.rule,
+        text:
+          source !== null && matched.rule.line !== null
+            ? ruleExcerpt(source, matched.rule.line)
+            : null,
+      });
+    }
+    return rules;
+  }
 }
 
 export const openappaCoverageService = new OpenAppaCoverageService();
 
-/**
- * What a user sees of the coverage report: the registry entries they can
- * reach and the agent types they may read.
- */
+/** What a user sees of the coverage report: the registry entries they can reach. */
 export async function coverageVisibility(
   userId: string,
   organizationId: string,
 ) {
   // Registry administration is `update` on every entry, the grant the
   // retired `mcpServerInstallation:admin` role action converted into.
-  const [checker, isCatalogAdmin] = await Promise.all([
-    getAgentTypePermissionChecker({ userId, organizationId }),
-    isMcpInstallationAdmin({ userId, organizationId }),
-  ]);
+  const isCatalogAdmin = await isMcpInstallationAdmin({
+    userId,
+    organizationId,
+  });
   const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds({
     userId,
     isAdmin: isCatalogAdmin,
     organizationId,
   });
-  return {
-    userId,
-    visibleCatalogIds,
-    agentTypes: checker
-      .getAgentTypesWithPermission("read")
-      .filter(
-        (type): type is "agent" | "mcp_gateway" =>
-          type === "agent" || type === "mcp_gateway",
-      ),
-    excludeOtherPersonalTypes: (["agent", "mcp_gateway"] as const).filter(
-      (type) => checker.isAdmin(type),
-    ),
-  };
+  return { visibleCatalogIds };
 }
 
 /**
@@ -314,21 +374,24 @@ export async function coverageVisibility(
 async function listedTools(
   params: { organizationId: string } & CoverageVisibility,
 ) {
-  const { tools, included } = await buildReport(params.organizationId, {
-    ...params,
-    includeAutoModeTools: false,
-  });
+  const { tools, included, composition, rootRevision } = await buildReport(
+    params.organizationId,
+    {
+      ...params,
+      inventoryCatalogIds: params.visibleCatalogIds ?? [],
+    },
+  );
   const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
   const listed = tools
     .filter((row) => row.own && visibleCatalogIds.has(row.tool.catalogId))
     .map((row) => row.tool);
   const toolsByCatalog = new Map<string, CoverageTool[]>();
-  for (const tool of listed)
-    toolsByCatalog.set(tool.catalogId, [
-      ...(toolsByCatalog.get(tool.catalogId) ?? []),
-      tool,
-    ]);
-  return { listed, toolsByCatalog, included };
+  for (const tool of listed) {
+    const catalogTools = toolsByCatalog.get(tool.catalogId);
+    if (catalogTools) catalogTools.push(tool);
+    else toolsByCatalog.set(tool.catalogId, [tool]);
+  }
+  return { listed, toolsByCatalog, included, composition, rootRevision };
 }
 
 /**
@@ -336,9 +399,9 @@ async function listedTools(
  * their server: an install binds every namespace the battery declares to the
  * server, so a rule `mcp/<namespace>/<tool>` names the server's `<tool>`.
  */
-function wouldGovern(policy: string, tools: CoverageTool[]): number {
+function wouldGovern(files: DeployedFile[], tools: CoverageTool[]): number {
   const named = new Set(
-    toolEntries(policy).flatMap((entry) => {
+    effectiveToolRules(files).flatMap(({ entry }) => {
       const spelled = splitSelector(entry.name);
       const canonical =
         spelled.selector === null && CANONICAL_RULE_NAME.exec(spelled.base);
@@ -355,11 +418,11 @@ function wouldGovern(policy: string, tools: CoverageTool[]): number {
  * installed on it, read as the tools table reads it.
  */
 function batteryRules(
-  policy: string,
+  files: DeployedFile[],
   tools: CoverageTool[],
 ): CoverageBatteryFit["rules"] {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  return toolEntries(policy).flatMap((entry) => {
+  return effectiveToolRules(files).flatMap(({ entry }) => {
     const spelled = splitSelector(entry.name);
     const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
     const tool = canonical && byName.get(canonical[2]);
@@ -424,66 +487,47 @@ type Report = {
   /** Every table row, sorted; `own` marks the row a tool is judged by without a selector. */
   tools: Array<{ tool: CoverageTool; own: boolean }>;
   entities: CoverageEntity[];
-  /** The batteries the policy includes, `refused` while its composition fails. */
-  included: Array<{ name: string; status: BatteryInstallStatus }>;
+  /**
+   * The batteries the policy includes, as the enforced composition holds
+   * them: `refused` when only the root text is served, `pending` when an
+   * earlier composition is enforced that did not hold them.
+   */
+  included: Array<{ name: string; status: CoverageBatteryStatus }>;
+  composition: CompositionView;
+  /** The current root revision the rows were classified against. */
+  rootRevision: number;
 };
 
 type CoverageVisibility = {
-  userId?: string;
-  agentTypes?: Array<"agent" | "mcp_gateway">;
-  excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
   /** Registry entries this caller can see directly. */
   visibleCatalogIds?: string[];
-  /** Resolve the current viewer's dynamic Auto-mode tool access. */
-  includeAutoModeTools?: boolean;
-  /** Only resolve Auto-mode access for rows returned by an entities page. */
-  autoModePage?: CoverageEntitiesQuery;
-  /** Only resolve Auto-mode access for the target whose tools are requested. */
-  autoModeEntityId?: string;
   /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
   includeAppCatalogs?: boolean;
-};
-
-/** A rule as it applies to one full tool name, battery rules once per alias target. */
-type Candidate = {
-  rule: CoverageRule;
-  /** The full tool name the rule matches. */
-  match: string;
-  kind: Exclude<CoverageKind, "unlisted">;
+  /** Visible catalogs, narrowed to the selected page when counts do not sort it. */
+  inventoryCatalogIds?: string[];
 };
 
 /**
- * `catalogId` reads only that catalog's tools and assignments. Each tool's row
- * depends on its own catalog, assignments and the policy alone, so the rows
- * for that catalog are the same as an organization-wide report's.
+ * Every tool rule the policy composes, indexed by the full tool name it
+ * matches, plus the catch-all a tool no rule names falls to. Root rules come
+ * first in text order, then each battery's in include order, as the runtime
+ * reads them.
  */
-async function buildReport(
-  organizationId: string,
-  visibility?: CoverageVisibility,
-  catalogId?: string,
-): Promise<Report> {
-  const [snapshot, inventory] = await Promise.all([
-    openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(organizationId, {
-      visibility: visibility?.userId
-        ? {
-            userId: visibility.userId,
-            agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
-            excludeOtherPersonalTypes:
-              visibility.excludeOtherPersonalTypes ?? [],
-          }
-        : undefined,
-      includeAppCatalogs: visibility?.includeAppCatalogs,
-      catalogId,
-    }),
-  ]);
-  const { resolution, rootContent } = snapshot;
-  const refused = snapshot.lastError !== null;
-  const statusOf = new Map<string, BatteryInstallStatus>(
+function matchRules(snapshot: CoverageSnapshot) {
+  const { resolution, rootContent, viewed } = snapshot;
+  const { composition } = snapshot;
+  // Nothing is enforced only when the root text alone is served. A refusal
+  // that keeps an earlier composition keeps its rules enforced, with the
+  // statuses that composition was composed with.
+  const refused = composition.served.kind === "root_only";
+  const enforcedOf = new Map(
     snapshot.batteries.map((battery) => [
       battery.name,
-      refused ? "refused" : battery.status,
+      enforcedBattery(composition, battery),
     ]),
+  );
+  const statusOf = new Map<string, CoverageBatteryStatus>(
+    [...enforcedOf].map(([name, enforced]) => [name, enforced.status]),
   );
 
   // Root rules in text order, then every battery's in include order.
@@ -533,12 +577,18 @@ async function buildReport(
   const targets = new Map(
     resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
   );
+  // A base waiting only on its target's credentials composes, and so enforces.
+  const composed = new Set(
+    [...enforcedOf].flatMap(([name, enforced]) =>
+      enforced.composed ? [name] : [],
+    ),
+  );
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
-    const batteryEntries = toolEntries(included.battery.policy);
-    const batteryHeaderLines = toolHeaderLines(included.battery.policy);
-    for (const [index, entry] of batteryEntries.entries()) {
+    const deployed = viewed.get(included.entry);
+    if (!deployed) continue;
+    for (const { entry, line } of effectiveToolRules(deployedFiles(deployed))) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
       if (!canonical) continue;
@@ -554,84 +604,75 @@ async function buildReport(
               battery: included.name,
               batteryEntry: included.entry,
               batteryStatus: status,
-              line:
-                batteryHeaderLines.length === batteryEntries.length
-                  ? (batteryHeaderLines[index] ?? null)
-                  : null,
+              line,
             },
-            enforced: !refused && status === "active",
+            enforced: !refused && composed.has(included.name),
           }),
         );
     }
   }
   const byMatch = new Map<string, Candidate[]>();
-  for (const entry of candidates)
-    byMatch.set(entry.match, [...(byMatch.get(entry.match) ?? []), entry]);
+  for (const entry of candidates) {
+    const matches = byMatch.get(entry.match);
+    if (matches) matches.push(entry);
+    else byMatch.set(entry.match, [entry]);
+  }
 
-  const agentsByTool = new Map<string, Map<string, string>>();
-  const inCoverage = new Set(inventory.tools.map((tool) => tool.id));
-  const autoAccess = new Map<string, Set<string>>();
-  const autoModeEntityIds =
-    visibility?.includeAutoModeTools && visibility.autoModePage
-      ? autoModePageEntityIds(inventory, visibility, visibility.autoModePage)
-      : visibility?.autoModeEntityId
-        ? new Set([visibility.autoModeEntityId])
-        : null;
-  if (visibility?.includeAutoModeTools && visibility.userId) {
-    await Promise.all(
-      inventory.entities
-        .filter(
-          (entity) =>
-            entity.accessAllTools &&
-            (!autoModeEntityIds || autoModeEntityIds.has(entity.id)),
-        )
-        .map(async (entity) => {
-          const { tools: assigned, exclusionSets } =
-            await agentToolExclusionsService.getFilteredMcpToolsByAgent(
-              entity.id,
-            );
-          const discovered = await getUnassignedDiscoverableTools({
-            assignedToolNames: new Set(assigned.map((tool) => tool.name)),
-            agentId: entity.id,
-            userId: visibility.userId,
-            organizationId,
-            exclusionSets,
-          });
-          const permittedNames = await filterToolNamesByPermission(
-            [...assigned, ...discovered].map((tool) => tool.name),
-            visibility.userId,
-            organizationId,
-          );
-          // Search resolves each name once: assigned rows win, then the
-          // newest discoverable row. Count that same dispatchable set.
-          const seenNames = new Set<string>();
-          const reachableIds = [...assigned, ...discovered].flatMap((tool) => {
-            if (!permittedNames.has(tool.name)) return [];
-            if (seenNames.has(tool.name)) return [];
-            seenNames.add(tool.name);
-            return inCoverage.has(tool.id) ? [tool.id] : [];
-          });
-          autoAccess.set(entity.id, new Set(reachableIds));
-        }),
-    );
+  return { statusOf, fallbackLine, fallback, byMatch, rootContent, viewed };
+}
+
+type CoverageSnapshot = Awaited<
+  ReturnType<typeof openappaBatteriesService.coverageSnapshot>
+>;
+
+/**
+ * The TOML block that starts at 1-based `line`: its header and every line up
+ * to the next table header, without the comments and blank lines that lead
+ * into that next header.
+ */
+function ruleExcerpt(text: string, line: number): string | null {
+  const lines = text.split("\n");
+  if (line < 1 || line > lines.length) return null;
+  const block = [lines[line - 1]];
+  for (let index = line; index < lines.length; index++) {
+    if (/^\s*\[/.test(lines[index])) break;
+    block.push(lines[index]);
   }
-  for (const { toolId, agentId, agentName } of inventory.assignments) {
-    const effective = autoAccess.get(agentId);
-    if (effective && !effective.has(toolId)) continue;
-    agentsByTool.set(
-      toolId,
-      (agentsByTool.get(toolId) ?? new Map()).set(agentId, agentName),
-    );
-  }
-  for (const entity of inventory.entities) {
-    const effective = autoAccess.get(entity.id);
-    if (!effective) continue;
-    for (const toolId of effective)
-      agentsByTool.set(
-        toolId,
-        (agentsByTool.get(toolId) ?? new Map()).set(entity.id, entity.name),
-      );
-  }
+  // Comments and blank lines at the end introduce the next block.
+  while (block.length > 1 && /^\s*(#.*)?$/.test(block[block.length - 1]))
+    block.pop();
+  return block.join("\n");
+}
+
+/** A rule as it applies to one full tool name, battery rules once per alias target. */
+type Candidate = {
+  rule: CoverageRule;
+  /** The full tool name the rule matches. */
+  match: string;
+  kind: Exclude<CoverageKind, "unlisted">;
+};
+
+/**
+ * `catalogId` reads only that catalog's tools. Each tool's row depends on its
+ * own catalog and the policy alone, so the rows for that catalog are the same
+ * as an organization-wide report's.
+ */
+async function buildReport(
+  organizationId: string,
+  visibility?: CoverageVisibility,
+  catalogId?: string,
+): Promise<Report> {
+  const [snapshot, inventory] = await Promise.all([
+    openappaBatteriesService.coverageSnapshot(organizationId),
+    ToolModel.findCoverageInventory(organizationId, {
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+      catalogIds: visibility?.inventoryCatalogIds,
+      catalogId,
+    }),
+  ]);
+  const { composition } = snapshot;
+  const { statusOf, fallbackLine, fallback, byMatch } = matchRules(snapshot);
+
   const catalogById = new Map(
     inventory.catalogs.map((catalog) => [catalog.id, catalog]),
   );
@@ -642,9 +683,6 @@ async function buildReport(
   for (const tool of inventory.tools) {
     const { serverName: prefix, toolName } = parseFullToolName(tool.name);
     if (prefix === null) continue;
-    const agents = [...(agentsByTool.get(tool.id) ?? new Map())]
-      .map(([id, name]) => ({ id, name }))
-      .sort(byName);
     const matched = byMatch.get(tool.name) ?? [];
     const base = {
       toolId: tool.id,
@@ -655,17 +693,17 @@ async function buildReport(
       name: toolName,
       fullName: tool.name,
       readOnly: tool.readOnlyHint,
-      agents,
     };
     const specific = matched.find((entry) => entry.rule.selector === null);
     const primary = specific ?? fallback;
-    // The default noop wildcard deliberately adds no coverage. Origin and
-    // revision do not change this classification.
+    // A noop catch-all adds no coverage: it labels nothing. Any other
+    // catch-all annotator, the default model one included, judges the call.
     const covered =
       primary !== null &&
       primary !== undefined &&
       !(
-        primary.rule.source === "catchall" && primary.rule.annotator === "noop"
+        primary.rule.source === "catchall" &&
+        primary.rule.annotator === NOOP_ANNOTATOR
       );
     const own: CoverageTool = primary
       ? {
@@ -718,43 +756,12 @@ async function buildReport(
       .map((row) => row.tool.toolId),
   );
 
-  const entitiesById = new Map<string, CoverageEntity>(
-    inventory.entities.map((entity) => [
-      entity.id,
-      {
-        id: entity.id,
-        name: entity.name,
-        type: entity.agentType,
-        scope: entity.scope,
-        icon: entity.icon,
-        toolCount: 0,
-        governedCount: 0,
-        fallbackCount: 0,
-        builtInCount: 0,
-        rules: emptyRuleCounts(),
-        autoMode: entity.accessAllTools,
-      },
-    ]),
-  );
-  for (const { tool, own } of rows) {
-    if (!own) continue;
-    for (const agent of tool.agents) {
-      const entity = entitiesById.get(agent.id);
-      if (!entity) continue;
-      entity.toolCount += 1;
-      if (explicitlyGovernedTools.has(tool.toolId)) entity.governedCount += 1;
-      if (tool.rule === null || tool.rule.source === "catchall")
-        entity.fallbackCount += 1;
-      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) entity.builtInCount += 1;
-      entity.rules[ruleBucket(tool)] += 1;
-      entitiesById.set(agent.id, entity);
-    }
-  }
+  const entities: CoverageEntity[] = [];
   const visibleCatalogIds = new Set(visibility?.visibleCatalogIds ?? []);
   for (const catalog of inventory.catalogs) {
     if (!visibleCatalogIds.has(catalog.id)) continue;
     const serverTools = toolsByCatalog.get(catalog.id) ?? [];
-    entitiesById.set(catalog.id, {
+    entities.push({
       id: catalog.id,
       name: catalog.name,
       type: "mcp_server",
@@ -767,69 +774,21 @@ async function buildReport(
       fallbackCount: serverTools.filter(
         (tool) => tool.rule === null || tool.rule.source === "catchall",
       ).length,
-      builtInCount: 0,
       rules: countRules(serverTools),
-      autoMode: false,
     });
   }
-  const entities = [...entitiesById.values()];
 
   return {
     tools: rows,
     entities,
     included: [...statusOf].map(([name, status]) => ({ name, status })),
+    composition,
+    rootRevision: snapshot.rootRevision,
   };
 }
 
-/** Agents are not policy targets; only gateways and registry servers are listed. */
-function isListedTarget(entity: { type: string }): boolean {
-  return entity.type !== "agent";
-}
-
-/** Compute the visible page before resolving each Auto-mode agent's tool access. */
-function autoModePageEntityIds(
-  inventory: Awaited<ReturnType<typeof ToolModel.findCoverageInventory>>,
-  visibility: CoverageVisibility,
-  autoModePage: CoverageEntitiesQuery,
-): Set<string> {
-  const visibleCatalogIds = new Set(visibility.visibleCatalogIds ?? []);
-  const candidates = [
-    ...inventory.entities.map((entity) => ({
-      id: entity.id,
-      name: entity.name,
-      type: entity.agentType,
-    })),
-    ...inventory.catalogs
-      .filter((catalog) => visibleCatalogIds.has(catalog.id))
-      .map((catalog) => ({
-        id: catalog.id,
-        name: catalog.name,
-        type: "mcp_server" as const,
-      })),
-  ];
-  const matching = candidates
-    .filter(
-      (entity) =>
-        isListedTarget(entity) &&
-        (!autoModePage.entityId || entity.id === autoModePage.entityId) &&
-        (!autoModePage.type || entity.type === autoModePage.type) &&
-        (!autoModePage.search ||
-          entity.name
-            .toLowerCase()
-            .includes(autoModePage.search.toLowerCase())),
-    )
-    .sort(compareTargets(autoModePage));
-  return new Set(page(matching, autoModePage).data.map((entity) => entity.id));
-}
-
-const TARGET_TYPE_ORDER: Record<CoverageEntity["type"], number> = {
-  mcp_server: 0,
-  mcp_gateway: 1,
-  agent: 2,
-};
-
 /** A target as far as sorting reads it; a page is sorted before its counts exist. */
-type SortableTarget = Pick<CoverageEntity, "id" | "name" | "type"> &
+type SortableTarget = Pick<CoverageEntity, "id" | "name"> &
   Partial<Pick<CoverageEntity, "toolCount">>;
 
 /** How an entities query orders its targets; see `sortBy`. */
@@ -841,11 +800,8 @@ function compareTargets(
   const alphabetical = (a: SortableTarget, b: SortableTarget) =>
     a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
   if (sortBy === "name") return (a, b) => sign * alphabetical(a, b);
-  const key = (target: SortableTarget) =>
-    sortBy === "type"
-      ? TARGET_TYPE_ORDER[target.type]
-      : (target.toolCount ?? 0);
-  return (a, b) => sign * (key(a) - key(b)) || alphabetical(a, b);
+  return (a, b) =>
+    sign * ((a.toolCount ?? 0) - (b.toolCount ?? 0)) || alphabetical(a, b);
 }
 
 // =============================================================================
@@ -874,6 +830,7 @@ function candidate(params: {
 }): Candidate {
   const { entry, spelled, match, source, enforced } = params;
   const delta = asRecord(entry.delta) ?? {};
+  const forwards = asRecord(entry.forwards) ?? {};
   const requires = asRecord(entry.requires) ?? {};
   const rule: CoverageRule = {
     ...source,
@@ -882,6 +839,10 @@ function candidate(params: {
     delta: {
       ...(typeof delta.trust === "string" ? { trust: delta.trust } : {}),
       ...optionalList("audience", audience(delta.audience)),
+    },
+    forwards: {
+      ...(typeof forwards.trust === "string" ? { trust: forwards.trust } : {}),
+      ...optionalList("audience", audience(forwards.audience)),
     },
     requires: {
       ...(typeof requires.trust === "string" ? { trust: requires.trust } : {}),
@@ -892,10 +853,12 @@ function candidate(params: {
     enforced,
   };
   const attention = rule.requires.attention ?? [];
-  const requiresAnything = Object.entries(requires).some(
-    ([key, value]) =>
-      !(key === "attention" && Array.isArray(value) && value.length === 0),
-  );
+  // `audience.within` is ignored by the runtime, so it requires nothing.
+  const requiresAnything = Object.entries(requires).some(([key, value]) => {
+    if (key === "attention") return !Array.isArray(value) || value.length > 0;
+    if (key === "audience") return (audience(value)?.length ?? 0) > 0;
+    return true;
+  });
   let kind: Candidate["kind"];
   if (attention.length > 0) kind = "approval";
   else if (requiresAnything) kind = "write";
@@ -950,3 +913,6 @@ function page<T>(
 
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
+
+/** The annotator that labels nothing; a catch-all routed to it covers no tool. */
+const NOOP_ANNOTATOR = "noop";

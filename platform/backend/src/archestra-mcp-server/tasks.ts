@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -6,6 +7,7 @@ import {
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -16,8 +18,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
-import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import { userHasPermission } from "@/auth";
 import config, { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -28,22 +30,30 @@ import {
   AgentRunModel,
   AgentTeamModel,
   AgentWorkspaceModel,
+  InteractionModel,
 } from "@/models";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  pendingExports,
+  pendingFileNotice,
+} from "@/services/agent-runtime/pending-exports";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   admitRuntimeSteer,
   classifyRuntimeCaller,
   crossingRefusal,
-  crossRuntimeFile,
   crossRuntimeOutput,
   guardRuntimeCrossing,
+  NOT_A_SPAWN,
   type RuntimeCrossing,
   refuseUnrecognizedCaller,
+  reportCrossingRefusal,
   SPAWN_TARGET_MISMATCH,
+  UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
 import {
   cancelDetachedAgentTask,
@@ -61,8 +71,14 @@ import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
+  ApiError,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
+import {
+  type RuntimeLaunchFailureReason,
+  type RuntimeLaunchOutcome,
+  RuntimeLaunchStateSchema,
+} from "@/types/openappa-runtime-launch";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -84,12 +100,23 @@ export async function startDelegatedTask(params: {
   attachments?: A2AAttachment[];
   context: ArchestraContext;
 }) {
+  const { result, outcome } = await launchDelegatedTask(params);
+  if (outcome) await recordRuntimeLaunch(params.context, outcome);
+  return result;
+}
+
+async function launchDelegatedTask(params: {
+  agentId: string;
+  message: string;
+  attachments?: A2AAttachment[];
+  context: ArchestraContext;
+}): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
   try {
     const actor = requireActor(context);
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
-      return errorResult("Agent not found");
+      return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
     const isAgentAdmin = await ResourcePermissions.allows({
       userId: actor.id,
@@ -107,13 +134,15 @@ export async function startDelegatedTask(params: {
         action: "use",
       }))
     ) {
-      return errorResult("Agent not found");
+      return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
 
     const runtime = resolveAgentRuntime(agent);
     if (runtime) resolveAgentRuntimeBackendDriver(runtime.backend);
     const crossing = await runtimeCrossingForStart(context, Boolean(runtime));
-    if (typeof crossing === "string") return errorResult(crossing);
+    if (typeof crossing === "string") {
+      return failedLaunch("refused", errorResult(crossing));
+    }
 
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
@@ -125,13 +154,16 @@ export async function startDelegatedTask(params: {
         userId: actor.id,
       });
       if (preflight.missing.length > 0) {
-        return credentialsNeededResult(agent.id, preflight.missing);
+        return credentialsNeededLaunch(agent.id, preflight.missing);
       }
       if (preflight.misconfigured.length > 0) {
-        return errorResult(
-          `Agent "${agent.name}" is missing shared Agent Runtime credentials an administrator must configure: ${preflight.misconfigured
-            .map((entry) => entry.label)
-            .join(", ")}`,
+        return failedLaunch(
+          "credentials_misconfigured",
+          errorResult(
+            `Agent "${agent.name}" is missing shared Agent Runtime credentials an administrator must configure: ${preflight.misconfigured
+              .map((entry) => entry.label)
+              .join(", ")}`,
+          ),
         );
       }
     }
@@ -166,13 +198,11 @@ export async function startDelegatedTask(params: {
     // Work started from a chat thread reports back to that thread when it
     // settles. The callback coordinates are also persisted on the Agent run,
     // so the reconciler can recover delivery after a restart.
-    if (context.chatOpsBindingId && context.chatOpsThreadId) {
-      void watchChatOpsTask({
+    if (completionTarget) {
+      void watchTaskCompletion({
         taskId: taskRow.id,
-        bindingId: context.chatOpsBindingId,
-        threadId: context.chatOpsThreadId,
         agentName: agent.name,
-        pinnedAgentId: context.chatOpsPinnedAgentId,
+        target: completionTarget,
       }).catch((error) => {
         logger.warn(
           { error, taskId: taskRow.id },
@@ -181,22 +211,36 @@ export async function startDelegatedTask(params: {
       });
     }
 
-    return structuredSuccessResult({
-      run: runSummary(taskRow),
-      session_id: runtime ? taskRow.id : null,
-      run_url: runtime
-        ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
-        : null,
-      runtime: runtime ? "dedicated" : "foreground",
-    });
+    const run = runSummary(taskRow);
+    const state = RuntimeLaunchStateSchema.safeParse(run.state);
+    return {
+      result: structuredSuccessResult({
+        run,
+        session_id: runtime ? taskRow.id : null,
+        run_url: runtime
+          ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
+          : null,
+        runtime: runtime ? "dedicated" : "foreground",
+      }),
+      // A foreground start opens no runtime session, so it has no outcome.
+      ...(runtime
+        ? {
+            outcome: {
+              kind: "launched" as const,
+              session_id: taskRow.id,
+              ...(state.success ? { state: state.data } : {}),
+            },
+          }
+        : {}),
+    };
   } catch (error) {
     const needed = missingCredentialsFrom(error);
     if (needed) {
-      return credentialsNeededResult(needed.agentId, needed.missing);
+      return credentialsNeededLaunch(needed.agentId, needed.missing);
     }
     const refused = crossingRefusal(error);
-    if (refused) return errorResult(refused);
-    return catchError(error, "starting the run");
+    if (refused) return failedLaunch("refused", errorResult(refused));
+    return failedLaunch("failed", catchError(error, "starting the run"));
   }
 }
 
@@ -314,6 +358,12 @@ const ListAgentRunsOutputSchema = z.object({
   runs: z.array(
     z.object({
       task_id: z.string().uuid(),
+      llm_session_id: z
+        .string()
+        .nullable()
+        .describe(
+          "Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle.",
+        ),
       title: z.string(),
       prompt: z.string(),
       state: z.string(),
@@ -363,6 +413,21 @@ const ListAgentRunsOutputSchema = z.object({
 /** How much artifact text get_run inlines; the tail is the useful end. */
 const MAX_INLINED_OUTPUT_CHARS = 20_000;
 const MAX_LISTED_RUNS = 50;
+// Bounded by the API body limit (a base64 payload plus JSON-RPC envelope must
+// fit in one request) and by what a channel thread can reasonably hold. A file
+// read from the workspace by path is held to the same cap.
+const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+/** Where an Agent Runtime's retained workspace is mounted in its container. */
+const RUN_WORKSPACE_ROOT = "/home/node/workspace";
+const RunFileNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
+    "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+  );
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -393,7 +458,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
     title: "Read Workspace File",
     description:
-      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access.",
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access. A read made while the runtime is in the middle of a tool call can return status \"pending\" with no content: call again with the same arguments after that tool call finishes.",
     schema: z.object({
       task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
@@ -408,30 +473,50 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
-        const result = await accessAgentWorkspaceFile({
+        const read = async () => {
+          const result = await accessAgentWorkspaceFile({
+            actor,
+            taskId: args.task_id,
+            request: { operation: "read", path: args.path },
+          });
+          const { content_base64, ...metadata } = result;
+          const content =
+            args.encoding === "base64"
+              ? (content_base64 ?? "")
+              : new TextDecoder("utf-8", { fatal: true }).decode(
+                  Buffer.from(content_base64 ?? "", "base64"),
+                );
+          return { metadata, content };
+        };
+        if (access.kind !== "parent") {
+          const { metadata, content } = await read();
+          return structuredSuccessResult({
+            ...metadata,
+            encoding: args.encoding,
+            content,
+          });
+        }
+        const crossed = await pendingExports.crossRead({
+          child: access.child,
           actor,
           taskId: args.task_id,
-          request: { operation: "read", path: args.path },
-        });
-        const { content_base64, ...metadata } = result;
-        const decoded =
-          args.encoding === "base64"
-            ? (content_base64 ?? "")
-            : new TextDecoder("utf-8", { fatal: true }).decode(
-                Buffer.from(content_base64 ?? "", "base64"),
-              );
-        const content =
-          access.kind === "parent"
-            ? await crossRuntimeFile({
-                child: access.child,
-                operationId: access.crossing.callId,
-                value: decoded,
-              })
-            : decoded;
-        return structuredSuccessResult({
-          ...metadata,
+          path: args.path,
           encoding: args.encoding,
-          content,
+          operationId: access.crossing.callId,
+          read,
+        });
+        if (crossed.kind === "pending") {
+          // Nothing about the file has crossed yet, not even its size.
+          return structuredSuccessResult({
+            path: args.path,
+            status: "pending",
+            message: pendingFileNotice(TOOL_READ_WORKSPACE_FILE_SHORT_NAME),
+          });
+        }
+        return structuredSuccessResult({
+          ...crossed.metadata,
+          encoding: args.encoding,
+          content: crossed.content,
         });
       } catch (error) {
         const refused = crossingRefusal(error);
@@ -447,7 +532,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
     title: "Transfer Workspace File",
     description:
-      "Copy a file between this machine and an Agent Runtime workspace without reading it. " +
+      "Copy a file between this machine and a Remote Agent's workspace without reading it. " +
       "Use this to move deliverables, archives, and binaries of any size, including small ones: " +
       "the bytes travel directly and never enter the conversation. " +
       "Authorize the transfer here, then run the returned command in a shell. " +
@@ -456,6 +541,7 @@ const registry = defineArchestraTools([
       "The runtime copy is pinned when you authorize a download, so a still-running agent cannot corrupt it. " +
       "An upload refuses rather than overwrite a destination that changed since you authorized it. " +
       "Use read_workspace_file instead only when you need to read a file's contents. " +
+      'A download made while the runtime is in the middle of a tool call can return status "pending" and no command: call again with the same arguments after that tool call finishes. ' +
       "Without a shell, fall back to read_workspace_file and write_workspace_file, which are capped at 4 MiB.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),
@@ -501,20 +587,33 @@ const registry = defineArchestraTools([
             "An upload needs the local file's size and sha256. Compute them first, for example with shasum -a 256.",
           );
         }
+        if (args.direction === "download" && access.kind === "parent") {
+          const crossed = await pendingExports.crossDownload({
+            child: access.child,
+            actor,
+            taskId: args.task_id,
+            path: args.path,
+            operationId: access.crossing.callId,
+          });
+          if (crossed.kind === "pending") {
+            // Nothing about the file has crossed yet, not even its size.
+            return structuredSuccessResult({
+              direction: args.direction,
+              path: args.path,
+              status: "pending",
+              message: pendingFileNotice(
+                TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+              ),
+            });
+          }
+          return transferResult({ args, minted: crossed.minted });
+        }
         const minted =
           args.direction === "download"
             ? await workspaceTransferTickets.mintDownload({
                 actor,
                 taskId: args.task_id,
                 path: args.path,
-                ...(access.kind === "parent"
-                  ? {
-                      crossing: {
-                        child: access.child,
-                        operationId: access.crossing.callId,
-                      },
-                    }
-                  : {}),
               })
             : await workspaceTransferTickets.mintUpload({
                 actor,
@@ -532,26 +631,7 @@ const registry = defineArchestraTools([
                     }
                   : {}),
               });
-        const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
-        // Only metadata and a command cross this boundary. The file itself
-        // moves over HTTP, so its bytes never reach a model context.
-        return structuredSuccessResult({
-          direction: args.direction,
-          path: minted.ticket.path,
-          size: minted.ticket.size,
-          sha256: minted.ticket.sha256,
-          expires_in_seconds: Math.floor(
-            WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000,
-          ),
-          command:
-            args.direction === "download"
-              ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
-              : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
-          next_step:
-            args.direction === "download"
-              ? "Run the command. Re-run the same command to resume an interrupted download."
-              : "Run the command. It reports the stored path, size and checksum on success.",
-        });
+        return transferResult({ args, minted });
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
@@ -616,7 +696,7 @@ const registry = defineArchestraTools([
       `Hand local work over to ${DEFAULT_APP_NAME}, or spin it up there, as a durable agent run and return immediately with its id. ` +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
       "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
-      "For repository handoffs, first load the Agent Runtime Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
+      "For repository handoffs, first load the Remote Agents Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_run. " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
@@ -878,8 +958,27 @@ const registry = defineArchestraTools([
           limit: args.limit,
           thread,
         });
+        const [canReadLogs, canReadAllLogs] = await Promise.all([
+          userHasPermission(actor.id, actor.organizationId, "log", "read"),
+          userHasPermission(actor.id, actor.organizationId, "log", "admin"),
+        ]);
+        // Maintained runtime clients send the persisted workload name as
+        // X-Archestra-Session-Id. The OpenAPPA key adds a caller scope and is
+        // not the key stored on LLM interactions. Never substitute a task ID
+        // or a workspace row's UUID; continued turns keep this header value.
+        const sessionKeys = rows.map((row) => row.workloadName);
+        const logged = canReadLogs
+          ? await InteractionModel.findLoggedSessionIds({
+              organizationId: actor.organizationId,
+              sessionIds: sessionKeys,
+              ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+            })
+          : new Set<string>();
         const hidePrompt = await isGuardrailsV2Active();
-        const runs = rows.map((row) => ({
+        const runs = rows.map((row, index) => ({
+          llm_session_id: logged.has(sessionKeys[index])
+            ? sessionKeys[index]
+            : null,
           task_id: row.taskId,
           title: row.title,
           prompt: hidePrompt ? "" : row.prompt,
@@ -1119,28 +1218,119 @@ const registry = defineArchestraTools([
   }),
 
   defineArchestraTool({
+    shortName: TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+    title: "Post Run Message",
+    description:
+      "Post a brief update to the Slack thread an active Agent Runtime run reports to. " +
+      "Use before the turn ends for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. " +
+      "Posting does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. " +
+      "Read the current task_id from ARCHESTRA_AGENT_RUNTIME_TASK_ID. " +
+      "The final answer is posted automatically; do not repeat it here.",
+    schema: z.object({
+      task_id: z.string().uuid(),
+      message: z.string().trim().min(1).max(2_000),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+        });
+        if ("error" in task) return errorResult(task.error);
+
+        const session = await AgentRunModel.findByTaskId(task.row.id);
+        if (!session || session.actorUserId !== actor.id) {
+          return errorResult(
+            "Only the person the runtime run acts as can post updates for it.",
+          );
+        }
+        if (session.endedAt || task.row.state !== "TASK_STATE_WORKING") {
+          return errorResult(
+            "This runtime run is not active. No message was posted.",
+          );
+        }
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: task.row.id,
+        });
+        if (access.kind === "error") return access.result;
+        if (access.kind === "parent") {
+          return errorResult(
+            "A protected runtime cannot post updates from another session.",
+          );
+        }
+        const target = session.completionTarget;
+        if (!target || target.type !== "chatops") {
+          return errorResult(
+            "This runtime run does not report to a Slack thread.",
+          );
+        }
+        const agent = await AgentModel.findById(session.agentId);
+        const { chatOpsManager } = await import(
+          "@/agents/chatops/chatops-manager"
+        );
+        const sent = await chatOpsManager.notifyBindingThread({
+          taskId: task.row.id,
+          bindingId: target.bindingId,
+          threadId: target.threadId,
+          pinnedAgentId: target.pinnedAgentId,
+          agentName: agent?.name,
+          text: args.message,
+          progress: true,
+          ...(target.originatingTaskId === task.row.id && {
+            muteMarkerAtStart: target.muteMarkerAtStart,
+          }),
+        });
+        return structuredSuccessResult(
+          { sent, task_id: task.row.id },
+          sent
+            ? "Progress update posted to the run's Slack thread."
+            : "No update was posted because the thread is muted or the message requests silence.",
+        );
+      } catch (error) {
+        return catchError(error, "posting the run update");
+      }
+    },
+  }),
+
+  defineArchestraTool({
     shortName: TOOL_POST_RUN_FILE_SHORT_NAME,
     title: "Post Run File",
     description:
       "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread.",
+      "runs delegated from a bound messaging channel have such a thread. " +
+      "From inside the run, pass path: the file is read from the run's own workspace, so its bytes never enter the conversation. " +
+      `Copy a file that is outside ${RUN_WORKSPACE_ROOT} into it first. ` +
+      "Pass content_base64 only for a small file that is not in the workspace. Exactly one of the two is required. " +
+      `Files up to ${MAX_RUN_FILE_BYTES / 1024 / 1024} MB.`,
     schema: z.object({
       task_id: z.string().uuid(),
-      filename: z
+      path: z
         .string()
-        .trim()
         .min(1)
-        .max(120)
-        .regex(
-          /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
-          "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+        .max(4096)
+        .optional()
+        .describe(
+          `The file in the run's own workspace, relative to ${RUN_WORKSPACE_ROOT} (for example demo/demo.mp4) or absolute under it.`,
         ),
-      content_base64: z.string().min(1),
+      filename: RunFileNameSchema.optional().describe(
+        "Name shown in the thread. Defaults to the last part of path; required with content_base64.",
+      ),
+      content_base64: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("The file's bytes, base64-encoded, when there is no path."),
       comment: z.string().trim().max(2_000).optional(),
     }),
     handler: async ({ args, context }) => {
       try {
+        // Malformed arguments are refused before any run or Guardrails lookup.
+        const input = runFileInput(args);
+        if ("error" in input) return errorResult(input.error);
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
           taskId: args.task_id,
@@ -1179,15 +1369,12 @@ const registry = defineArchestraTools([
           );
         }
 
-        const data = Buffer.from(args.content_base64, "base64");
-        if (data.length === 0) {
-          return errorResult("content_base64 decoded to an empty file.");
-        }
-        if (data.length > MAX_RUN_FILE_BYTES) {
-          return errorResult(
-            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`,
-          );
-        }
+        const file =
+          input.kind === "bytes"
+            ? input
+            : await readRunFile({ actor, taskId: task.row.id, input });
+        if ("error" in file) return errorResult(file.error);
+        const { filename, data } = file;
 
         const { chatOpsManager } = await import(
           "@/agents/chatops/chatops-manager"
@@ -1196,7 +1383,7 @@ const registry = defineArchestraTools([
           bindingId: target.bindingId,
           threadId: target.threadId,
           pinnedAgentId: target.pinnedAgentId,
-          filename: args.filename,
+          filename,
           data,
           comment: args.comment,
         });
@@ -1211,10 +1398,6 @@ const registry = defineArchestraTools([
   }),
 ]);
 
-// Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
-// must fit in one request) and by what a channel thread can reasonably hold.
-const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
-
 /** Quote a value for a POSIX shell so a path or token cannot break the command
  * the model is told to run. */
 function shellQuoteArgument(value: string): string {
@@ -1225,6 +1408,127 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 // === Internal helpers ===
+
+type RunFileInput =
+  | { kind: "bytes"; filename: string; data: Buffer }
+  | { kind: "path"; path: string; filename: string };
+
+/**
+ * Checks `post_run_file`'s arguments without touching the run: exactly one of
+ * path and content_base64, a plain file name, and bytes within the cap.
+ */
+function runFileInput(args: {
+  path?: string;
+  filename?: string;
+  content_base64?: string;
+}): RunFileInput | { error: string } {
+  const hasPath = args.path !== undefined;
+  const hasBytes = args.content_base64 !== undefined;
+  if (hasPath === hasBytes) {
+    return {
+      error:
+        "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
+    };
+  }
+  if (args.content_base64 !== undefined) {
+    if (!args.filename) {
+      return { error: "Pass filename with content_base64." };
+    }
+    const data = Buffer.from(args.content_base64, "base64");
+    if (data.length === 0) {
+      return { error: "content_base64 decoded to an empty file." };
+    }
+    if (data.length > MAX_RUN_FILE_BYTES) {
+      return { error: tooLarge(data.length) };
+    }
+    return { kind: "bytes", filename: args.filename, data };
+  }
+  const relative = stripWorkspaceRoot(args.path ?? "");
+  if (relative === "") {
+    return {
+      error: `Pass the path of a file in the run's workspace, for example demo/demo.mp4 or ${RUN_WORKSPACE_ROOT}/demo/demo.mp4.`,
+    };
+  }
+  const filename = RunFileNameSchema.safeParse(
+    args.filename ?? path.posix.basename(relative),
+  );
+  if (!filename.success) {
+    return {
+      error: `The file name ${JSON.stringify(path.posix.basename(relative))} is not a plain file name. Pass filename (letters, digits, dot, dash, underscore, space).`,
+    };
+  }
+  return { kind: "path", path: relative, filename: filename.data };
+}
+
+/**
+ * The model in the run sees its files at absolute paths, so an absolute path
+ * under the workspace root, or one starting with ./, names the same file. The
+ * root itself names no file and comes back empty. Any other value comes back
+ * unchanged, so the result is not always relative: the transfer helper refuses
+ * an absolute path outside the workspace.
+ */
+function stripWorkspaceRoot(value: string): string {
+  if (value === RUN_WORKSPACE_ROOT) return "";
+  const relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
+    ? value.slice(RUN_WORKSPACE_ROOT.length + 1)
+    : value;
+  return relative.replace(/^(\.\/)+/, "");
+}
+
+/**
+ * Reads a file from the run's own workspace through the transfer helper,
+ * which refuses traversal, symlinks and anything that is not a regular file.
+ * The file is pinned first, so its size is checked before any byte is read
+ * and the bytes read are the pinned version's.
+ */
+async function readRunFile(params: {
+  actor: A2AActor;
+  taskId: string;
+  input: Extract<RunFileInput, { kind: "path" }>;
+}): Promise<{ filename: string; data: Buffer } | { error: string }> {
+  const { input } = params;
+  const where = { actor: params.actor, taskId: params.taskId };
+  try {
+    const snapshot = await workspaceTransferTickets.pinFile({
+      ...where,
+      path: input.path,
+    });
+    try {
+      if (snapshot.size === 0) {
+        return { error: `${input.path} is empty in the run's workspace.` };
+      }
+      if (snapshot.size > MAX_RUN_FILE_BYTES) {
+        return { error: tooLarge(snapshot.size) };
+      }
+      const data = await workspaceTransferTickets.readPinned({
+        ...where,
+        snapshot,
+      });
+      return { filename: input.filename, data };
+    } finally {
+      await workspaceTransferTickets
+        .discardExport({ ...where, transferId: snapshot.transferId })
+        .catch((error) =>
+          logger.warn(
+            { err: error, taskId: params.taskId },
+            "Could not release a run file pinned for posting",
+          ),
+        );
+    }
+  } catch (error) {
+    // The helper's refusals name the path rule that failed, never file bytes.
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return {
+        error: `Could not read ${input.path} from the run's workspace: ${error.message}`,
+      };
+    }
+    throw error;
+  }
+}
+
+function tooLarge(bytes: number): string {
+  return `The file is ${Math.round(bytes / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`;
+}
 
 /**
  * The refusal as a prompt: the exact keys still needed, and a deep link into
@@ -1246,7 +1550,7 @@ function credentialsNeededResult(
       )
       .join(
         "\n",
-      )}\n\nAsk the user to add them here, then start the run again: ${url}`,
+      )}\n\nPut this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`,
   );
 }
 
@@ -1367,6 +1671,58 @@ async function requireAccessibleTask({
   return { row };
 }
 
+function failedLaunch(
+  reason: RuntimeLaunchFailureReason,
+  result: CallToolResult,
+  details: { setup_url?: string } = {},
+): { result: CallToolResult; outcome: RuntimeLaunchOutcome } {
+  return { result, outcome: { kind: "failed", reason, ...details } };
+}
+
+function credentialsNeededLaunch(
+  agentId: string,
+  missing: Array<{ key: string; label: string; description?: string }>,
+) {
+  return failedLaunch(
+    "credentials_needed",
+    credentialsNeededResult(agentId, missing),
+    {
+      setup_url: agentCredentialSetupUrl(
+        agentId,
+        missing.map(({ key }) => key),
+      ),
+    },
+  );
+}
+
+/**
+ * Stores the outcome of a launch that OpenAPPA released as a spawn, before the
+ * client gets the result. The proxy tells the model what this record says. A
+ * record that fails to write leaves the model with no handle; it does not
+ * fail a run that already started.
+ */
+async function recordRuntimeLaunch(
+  context: Pick<ArchestraContext, "openappaRuntimeCall">,
+  outcome: RuntimeLaunchOutcome,
+): Promise<void> {
+  const call = context.openappaRuntimeCall;
+  if (!call?.spawn) return;
+  try {
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: call.session.organization_id,
+      callerId: call.session.caller_id,
+      sessionId: call.session.session_id,
+      toolCallId: call.toolCallId,
+      outcome,
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, toolCallId: call.toolCallId },
+      "OpenAPPA could not record the outcome of a runtime launch",
+    );
+  }
+}
+
 async function runtimeCrossingForStart(
   context: Parameters<typeof guardRuntimeCrossing>[0],
   runtime: boolean,
@@ -1384,9 +1740,40 @@ async function runtimeCrossingForStart(
     return undefined;
   }
   if (!gate.crossing.spawn) {
-    return "This start was not classified as a protected spawn. No runtime was started.";
+    return reportCrossingRefusal({
+      reason: "not_a_spawn",
+      message: NOT_A_SPAWN,
+      parentSessionId: gate.crossing.source.session_id,
+    });
   }
   return gate.crossing;
+}
+
+/**
+ * Only metadata and a command cross this boundary. The file itself moves over
+ * HTTP, so its bytes never reach a model context.
+ */
+function transferResult(params: {
+  args: { direction: "download" | "upload"; local_path: string };
+  minted: Awaited<ReturnType<typeof workspaceTransferTickets.mintUpload>>;
+}): ReturnType<typeof structuredSuccessResult> {
+  const { args, minted } = params;
+  const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
+  return structuredSuccessResult({
+    direction: args.direction,
+    path: minted.ticket.path,
+    size: minted.ticket.size,
+    sha256: minted.ticket.sha256,
+    expires_in_seconds: Math.floor(WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000),
+    command:
+      args.direction === "download"
+        ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
+        : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
+    next_step:
+      args.direction === "download"
+        ? "Run the command. Re-run the same command to resume an interrupted download."
+        : "Run the command. It reports the stored path, size and checksum on success.",
+  });
 }
 
 async function parentCrossing(params: {
@@ -1405,7 +1792,11 @@ async function parentCrossing(params: {
   }
   if (gate.kind === "inactive") return undefined;
   if (!workspaceId) {
-    return "This runtime session could not be verified. The request was refused.";
+    return reportCrossingRefusal({
+      reason: "unverified_session",
+      message: UNVERIFIED_RUNTIME_SESSION,
+      parentSessionId: gate.crossing.source.session_id,
+    });
   }
   return gate.crossing;
 }

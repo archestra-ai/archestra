@@ -1,6 +1,13 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -66,6 +73,9 @@ describe("AgentRuns", () => {
     renderRuns();
 
     expect(await screen.findByText("Live terminal")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open full view" }),
+    ).toHaveAttribute("href", `/chat/runs/${state.runs[0].taskId}`);
     expect(screen.queryByRole("link", { name: "Chat" })).toBeNull();
 
     expect(screen.queryByRole("button", { name: "Output" })).toBeNull();
@@ -75,9 +85,76 @@ describe("AgentRuns", () => {
     await act(() => queryClient.invalidateQueries());
 
     expect(await screen.findByText("Retained output")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open full view" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
     expect(screen.queryByText("Live terminal")).toBeNull();
     expect(screen.queryByRole("button", { name: "Output" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+  });
+
+  it("confirms stopping the selected run, blocks duplicate requests, and refreshes its output", async () => {
+    const user = userEvent.setup();
+    let requests = 0;
+    let release!: () => void;
+    const response = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(
+        "http://localhost:9000/api/agent-runs/:taskId/cancel",
+        async ({ params }) => {
+          expect(params.taskId).toBe(state.runs[0].taskId);
+          requests++;
+          await response;
+          state.runs = [
+            {
+              ...createRun("2026-09-03T20:00:05.000Z"),
+              state: "TASK_STATE_CANCELED",
+            },
+          ];
+          return HttpResponse.json({ success: true });
+        },
+      ),
+    );
+    renderRuns();
+    await user.click(await screen.findByRole("button", { name: "Stop" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(requests).toBe(0);
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    await user.click(screen.getByRole("button", { name: "Stop run" }));
+    await waitFor(() => expect(requests).toBe(1));
+    const pending = screen.getByRole("button", { name: "Stopping…" });
+    expect(pending).toBeDisabled();
+    await user.click(pending);
+    expect(requests).toBe(1);
+    release();
+    expect(await screen.findByText("Retained output")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Stop this run?" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("allows a failed Stop request to be retried", async () => {
+    const user = userEvent.setup();
+    let requests = 0;
+    server.use(
+      http.post("http://localhost:9000/api/agent-runs/:taskId/cancel", () => {
+        requests++;
+        return HttpResponse.json(
+          { error: { message: "Workspace is busy", type: "conflict" } },
+          { status: 409 },
+        );
+      }),
+    );
+    renderRuns();
+    await user.click(await screen.findByRole("button", { name: "Stop" }));
+    await user.click(screen.getByRole("button", { name: "Stop run" }));
+    await waitFor(() => expect(requests).toBe(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Stop run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Stop run" }));
+    await waitFor(() => expect(requests).toBe(2));
+    expect(screen.getByText("Live terminal")).toBeVisible();
   });
 
   it("identifies who started the selected run and who can see it", async () => {
@@ -92,17 +169,17 @@ describe("AgentRuns", () => {
 
     renderRuns();
 
+    expect(await screen.findByText("by you")).toBeVisible();
     expect(
-      await screen.findByText("Started by Alex Rivera (you)"),
+      screen.getByRole("button", { name: "More run actions" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
   });
 
   it("explains session access without deriving visibility from retired share fields", async () => {
     renderRuns();
 
     expect(
-      await screen.findByRole("button", { name: "Permissions" }),
+      await screen.findByRole("button", { name: "More run actions" }),
     ).toBeVisible();
     fireEvent.focus(
       screen.getByRole("button", { name: "Who can access this run?" }),
@@ -124,15 +201,17 @@ describe("AgentRuns", () => {
       shareVisibility: "organization",
     });
     renderRuns();
-    expect(
-      await screen.findByText("Started by Alex Rivera (you)"),
-    ).toBeVisible();
+    expect(await screen.findByText("by you")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
-    expect(screen.getByText("Started by Sam Chen")).toBeVisible();
+    expect(screen.getByText("by Sam Chen")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Permissions" }),
+      screen.queryByRole("button", { name: "More run actions" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Retained output")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Open full view" }),
+    ).toHaveAttribute("href", `/chat/runs/${state.runs[1].taskId}`);
     expect(screen.queryByText("Live terminal")).not.toBeInTheDocument();
   });
 
@@ -158,8 +237,43 @@ describe("AgentRuns", () => {
       },
     ];
     renderRuns();
-    expect(await screen.findByText("Started by automation")).toBeVisible();
+    expect(await screen.findByText("by automation")).toBeVisible();
   });
+  it("shows who started each run and narrows the history by search", async () => {
+    state.runs.push({
+      ...createRun(null),
+      id: "run-2",
+      taskId: "22345678-abcd-4000-8000-123456789abc",
+      actorUserId: "user-2",
+      actorId: "user-2",
+      initiatorName: "Sam Chen",
+      title: "Shared review",
+    });
+    renderRuns();
+
+    const own = await screen.findByRole("button", {
+      name: /Native TUI verification/,
+    });
+    expect(own).toHaveTextContent("You");
+    expect(
+      screen.getByRole("button", { name: /Shared review/ }),
+    ).toHaveTextContent("Sam Chen");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search runs" }), {
+      target: { value: "sam" },
+    });
+    expect(screen.getByText("1 of 2")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Native TUI verification/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("by Sam Chen")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search runs" }), {
+      target: { value: "nothing like this" },
+    });
+    expect(screen.getByText("No runs match these filters.")).toBeVisible();
+  });
+
   it("links an empty run history to a new Chat with this Agent selected", async () => {
     state.runs = [];
 
@@ -196,6 +310,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     backend: "kubernetes",
     runtimeScope: "archestra-dev",
     virtualApiKeyId: null,
+    gatewayTokenId: null,
     startedAt: "2026-09-03T20:00:00.000Z",
     hardDeadlineAt: "2026-09-06T20:00:00.000Z",
     lastModelActivityAt: "2026-09-03T20:00:04.000Z",

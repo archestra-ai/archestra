@@ -28,11 +28,18 @@ export type FormDialogProps = {
   title: string | React.ReactNode;
   description?: string | React.ReactNode;
   /**
+   * Shown beside the title, such as a status chip. It sits outside the title
+   * element, so the dialog's accessible name stays the title alone.
+   */
+  titleAdornment?: React.ReactNode;
+  /**
    * An action for the dialog as a whole. It takes the close button's corner,
    * so a dialog that sets one must be closable another way (a footer button
    * and outside-click both still work).
    */
   headerAction?: React.ReactNode;
+  /** Metadata on the right of the title and description, before the close button. */
+  headerExtra?: React.ReactNode;
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
@@ -65,7 +72,9 @@ export function FormDialog({
   onOpenChange,
   title,
   description,
+  titleAdornment,
   headerAction,
+  headerExtra,
   size = "medium",
   children,
   preventCloseOnInteractOutside,
@@ -107,6 +116,45 @@ export function FormDialog({
   });
   const displayedTitle = view?.title ?? title;
   const displayedDescription = view?.description ?? description;
+  // The DialogTitle/DialogDescription elements persist across wizard steps,
+  // so a title that switches between a string and an element would delete a
+  // bare text node in place — which crashes React once Chrome page-translate
+  // has re-parented it into a <font> wrapper (facebook/react#11538). Keying
+  // the wrapper span by the string content swaps a whole element on every
+  // string<->element or string<->string change instead.
+  const titleElement = (
+    <DialogTitle>
+      <span key={typeof displayedTitle === "string" ? displayedTitle : "node"}>
+        {displayedTitle}
+      </span>
+    </DialogTitle>
+  );
+
+  const headerContent = (
+    <>
+      {titleAdornment ? (
+        <div className="flex items-center gap-2">
+          {titleElement}
+          {titleAdornment}
+        </div>
+      ) : (
+        titleElement
+      )}
+      {displayedDescription && (
+        <DialogDescription>
+          <span
+            key={
+              typeof displayedDescription === "string"
+                ? displayedDescription
+                : "node"
+            }
+          >
+            {displayedDescription}
+          </span>
+        </DialogDescription>
+      )}
+    </>
+  );
 
   return (
     <>
@@ -141,34 +189,15 @@ export function FormDialog({
             <DialogHeader
               className={cn(headerAction && "pr-36", headerClassName)}
             >
-              {/* The DialogTitle/DialogDescription elements persist across
-                  wizard steps, so a title that switches between a string and
-                  an element would delete a bare text node in place — which
-                  crashes React once Chrome page-translate has re-parented it
-                  into a <font> wrapper (facebook/react#11538). Keying the
-                  wrapper span by the string content swaps a whole element on
-                  every string<->element or string<->string change instead. */}
-              <DialogTitle>
-                <span
-                  key={
-                    typeof displayedTitle === "string" ? displayedTitle : "node"
-                  }
-                >
-                  {displayedTitle}
-                </span>
-              </DialogTitle>
-              {displayedDescription && (
-                <DialogDescription>
-                  <span
-                    key={
-                      typeof displayedDescription === "string"
-                        ? displayedDescription
-                        : "node"
-                    }
-                  >
-                    {displayedDescription}
-                  </span>
-                </DialogDescription>
+              {!view && headerExtra ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 space-y-1.5">{headerContent}</div>
+                  <div className="min-w-0 shrink-0 sm:mr-6 sm:pt-0.5">
+                    {headerExtra}
+                  </div>
+                </div>
+              ) : (
+                headerContent
               )}
             </DialogHeader>
             <FormDialogViewContext.Provider

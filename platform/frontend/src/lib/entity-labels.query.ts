@@ -190,3 +190,12 @@ export const {
   keysFn: archestraApiSdk.environmentLabelKeys,
   valuesFn: archestraApiSdk.environmentLabelValues,
 });
+
+export const {
+  useLabelKeys: useOauthClientLabelKeys,
+  useLabelValues: useOauthClientLabelValues,
+} = createEntityLabelQueries({
+  queryKey: "oauth-clients",
+  keysFn: archestraApiSdk.oauthClientLabelKeys,
+  valuesFn: archestraApiSdk.oauthClientLabelValues,
+});

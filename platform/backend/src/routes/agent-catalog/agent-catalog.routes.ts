@@ -121,6 +121,15 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.",
               ),
+            includeTools: z
+              .preprocess(
+                (value) => value !== "false" && value !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -186,7 +195,12 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? AgentModel.findAllPaginated(
               { limit: agentIds.length, offset: 0 },
               sorting,
-              { ...filters, ids: agentIds, agentTypes: ["agent"] },
+              {
+                ...filters,
+                ids: agentIds,
+                agentTypes: ["agent"],
+                includeTools: query.includeTools,
+              },
               user.id,
               isAgentAdmin,
             ).then((result) => result.data)

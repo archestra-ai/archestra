@@ -86,7 +86,10 @@ describe("AgentToolModel delegation queries", () => {
   test("excludes soft-deleted delegation targets", async ({ makeAgent }) => {
     const sourceAgent = await makeAgent({ agentType: "agent" });
     const targetAgent = await makeAgent({ agentType: "agent" });
-    await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+    await AgentToolModel.assignDelegation({
+      agentId: sourceAgent.id,
+      targetAgentId: targetAgent.id,
+    });
 
     await AgentModel.delete(targetAgent.id);
 
@@ -117,9 +120,18 @@ describe("AgentToolModel delegation queries", () => {
       agentType: "agent",
     });
 
-    await AgentToolModel.assignDelegation(activeSource.id, activeTarget.id);
-    await AgentToolModel.assignDelegation(deletedSource.id, activeTarget.id);
-    await AgentToolModel.assignDelegation(activeSource.id, deletedTarget.id);
+    await AgentToolModel.assignDelegation({
+      agentId: activeSource.id,
+      targetAgentId: activeTarget.id,
+    });
+    await AgentToolModel.assignDelegation({
+      agentId: deletedSource.id,
+      targetAgentId: activeTarget.id,
+    });
+    await AgentToolModel.assignDelegation({
+      agentId: activeSource.id,
+      targetAgentId: deletedTarget.id,
+    });
     await AgentModel.delete(deletedSource.id);
     await AgentModel.delete(deletedTarget.id);
 
@@ -165,6 +177,74 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
   });
 
+  test("returns each agent's full usage entry once per server, pinned over unpinned, without deleted agents", async ({
+    makeAgent,
+    makeUser,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const idle = await makeMcpServer({ catalogId: catalog.id });
+    const other = await makeMcpServer();
+    const tool = await makeTool({ catalogId: catalog.id });
+    const otherTool = await makeTool({ catalogId: other.catalogId });
+    const author = await makeUser();
+
+    const authored = await makeAgent({
+      name: "Same Name",
+      authorId: author.id,
+    });
+    const twin = await makeAgent({ name: "Same Name" });
+    const both = await makeAgent({ name: "Both Kinds" });
+    const removed = await makeAgent({ name: "Removed" });
+    // Pinned to `server`: counts there only. A dynamic assignment of the same
+    // agent to the same catalog must not add a second, unpinned entry.
+    await makeAgentTool(both.id, tool.id, { mcpServerId: server.id });
+    await makeAgentTool(
+      both.id,
+      (await makeTool({ catalogId: catalog.id })).id,
+    );
+    await makeAgentTool(authored.id, tool.id);
+    await makeAgentTool(twin.id, tool.id);
+    await makeAgentTool(removed.id, tool.id);
+    await makeAgentTool(twin.id, otherTool.id);
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.agentsTable.id, removed.id));
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+      idle.id,
+    ]);
+
+    const entry = (
+      agent: typeof both,
+      pinned: boolean,
+      owner?: { id: string; email: string },
+    ) => ({
+      id: agent.id,
+      name: agent.name,
+      agentType: agent.agentType,
+      accessAllTools: agent.accessAllTools,
+      organizationId: agent.organizationId,
+      // The stored column, which the fixture always writes as "personal".
+      scope: "personal",
+      ownerId: owner?.id ?? null,
+      ownerEmail: owner?.email ?? null,
+      pinned,
+    });
+    const sameName = [entry(authored, false, author), entry(twin, false)].sort(
+      (a, b) => a.id.localeCompare(b.id),
+    );
+    expect([...result.keys()]).toEqual([server.id, idle.id]);
+    expect(result.get(server.id)).toEqual([entry(both, true), ...sameName]);
+    expect(result.get(idle.id)).toEqual([entry(both, false), ...sameName]);
+  });
+
   test("counts pinned assignments only toward the pinned install; unpinned toward every install of the catalog", async ({
     makeAgent,
     makeTool,
@@ -189,12 +269,26 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
       serverTwo.id,
     ]);
 
+    // `pinned` tells the uninstall dialog which agents lose this install for
+    // every caller, rather than only for callers who resolve to it.
     expect(result.get(serverOne.id)).toEqual([
-      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
-      expect.objectContaining({ id: pinnedAgent.id, name: "Pinned Agent" }),
+      expect.objectContaining({
+        id: dynamicAgent.id,
+        name: "Dynamic Agent",
+        pinned: false,
+      }),
+      expect.objectContaining({
+        id: pinnedAgent.id,
+        name: "Pinned Agent",
+        pinned: true,
+      }),
     ]);
     expect(result.get(serverTwo.id)).toEqual([
-      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
+      expect.objectContaining({
+        id: dynamicAgent.id,
+        name: "Dynamic Agent",
+        pinned: false,
+      }),
     ]);
   });
 
@@ -221,7 +315,11 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
 
     expect(result.get(server.id)).toEqual([
-      expect.objectContaining({ id: agent.id, name: "Both Rules Agent" }),
+      expect.objectContaining({
+        id: agent.id,
+        name: "Both Rules Agent",
+        pinned: true,
+      }),
     ]);
   });
 

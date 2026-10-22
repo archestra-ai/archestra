@@ -52,6 +52,32 @@ export const ChatOpsProviderInfoSchema = z.object({
   dmInfo: ChatOpsDmInfoSchema,
 });
 
+/**
+ * Stored chatops config as the config routes read it back: only what is not a
+ * secret.
+ */
+const ChatOpsStoredConfigBaseSchema = z.object({
+  /** Whether the provider would start from this config: enabled, with the credentials its mode needs. */
+  configured: z.boolean(),
+  /** When the stored config last changed; null when none is stored. */
+  updatedAt: z.date().nullable(),
+  enabled: z.boolean(),
+});
+
+export const SlackChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    connectionMode: ChatOpsConnectionModeSchema,
+  });
+
+export const MsTeamsChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    tenantId: z.string().nullable(),
+  });
+
+export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
   providers: z.array(ChatOpsProviderInfoSchema),
@@ -133,6 +159,8 @@ export interface IncomingChatMessage {
  * Options for sending a chat reply
  */
 export interface ChatReplyOptions {
+  /** Use bounded delivery without retries for optional Slack acknowledgments. */
+  bestEffort?: boolean;
   /** The original message to reply to */
   originalMessage: IncomingChatMessage;
   /** The reply text */
@@ -151,6 +179,8 @@ export interface ChatReplyOptions {
    * so the footer stays the reply's last line.
    */
   hint?: string;
+  /** Stable runtime conversation link, rendered separately from the answer. */
+  conversationUrl?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -196,13 +226,15 @@ export interface AddApprovalRequestFormOptions {
    */
   toolName: string;
   /**
-   * The arguments the tool will be invoked with, rendered as a code block in
-   * the approval prompt. Undefined/empty when there is nothing to show.
+   * The arguments the tool will be invoked with. Approval prompts keep them
+   * out of sight until the reviewer asks for them. Undefined/empty when there
+   * is nothing to show.
    */
   toolArgs?: Record<string, unknown>;
   /**
-   * OpenAPPA's review text for a paused `execute_remedy_plan` call. Shown in
-   * place of the tool and its arguments, which only name the remedy.
+   * OpenAPPA's review text for a paused `execute_remedy_plan` call whose review
+   * names no structured tool. Shown in place of the tool and its arguments,
+   * which only name the remedy.
    */
   reviewText?: string;
   originalMessage: IncomingChatMessage;
@@ -213,8 +245,15 @@ export interface UpdateApprovalRequestOptions {
   messageKey: string;
   toolName: string;
   approved: boolean;
-  /** Provider user id of the reviewer, shown as who decided. */
+  /** Provider user id of the reviewer, shown as who decided (Slack). */
   decidedByUserId?: string;
+  /** Display name of the reviewer, shown as who decided (Telegram). */
+  decidedByName?: string;
+  /**
+   * The paused tool call and its thread, so a streamed reply's task card for
+   * it can be settled too (Slack).
+   */
+  pausedToolCall?: { threadId: string; toolCallId: string };
 }
 
 /**
@@ -353,13 +392,6 @@ export interface ChatOpsProvider {
   readonly typingRefreshIntervalMs?: number;
 
   /**
-   * The platform shows its own Stop control while the agent works (Slack
-   * agent sessions), and stopping also mutes the thread. Such providers need
-   * no text "mute" command and no one-time mute hint.
-   */
-  readonly hasNativeStopControl?: boolean;
-
-  /**
    * The agent this connection always answers as (a Slack bot pinned to one
    * agent). Such a connection skips channel agent assignment and inline
    * "Agent >" routing.
@@ -445,7 +477,7 @@ export interface ChatOpsProvider {
   addApprovalRequestForm(options: AddApprovalRequestFormOptions): Promise<void>;
 
   /**
-   * Update the status of an existing approval request to Approved/Declined
+   * Update the status of an existing approval request to Approved/Denied
    */
   updateApprovalRequest(options: UpdateApprovalRequestOptions): Promise<void>;
 
@@ -508,11 +540,14 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
-   * Clear a transient "thinking" indicator without posting a message.
-   * Needed when the agent deliberately stays silent: providers like Slack
-   * only auto-clear the status once a message is posted to the thread.
+   * Explicitly clear processing status or remove an unanswered placeholder.
+   * Metadata carries provider-specific placeholder cleanup state.
    */
-  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+  clearTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
 
   /**
    * Open a reply stream for this message (optional). The stream posts nothing
@@ -657,6 +692,16 @@ export interface ChatOpsProvider {
   downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
 
   /**
+   * Download files of the incoming message that the platform does not put on
+   * the message itself (MS Teams channels and group chats keep them in
+   * SharePoint). Called only for a message the bot is answering.
+   * @returns One outcome per file found on the message
+   */
+  downloadMessageFiles?(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
@@ -728,14 +773,6 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
-}
-
-/**
- * An additional Slack app whose bot always answers as one agent, so people can
- * @mention that agent by its own name (`@archestra_marketing`) in any channel.
- */
-export interface SlackAgentBotConfig extends SlackDbConfig {
-  agentId: string;
   /**
    * OAuth client credentials of an app Archestra created itself (see
    * SlackAppFactory): used to install it, and the mark that Archestra may
@@ -756,6 +793,14 @@ export interface SlackAgentBotConfig extends SlackDbConfig {
    * organization-wide token saved before tokens were per user.
    */
   configTokenUserId?: string;
+}
+
+/**
+ * An additional Slack app whose bot always answers as one agent, so people can
+ * @mention that agent by its own name (`@archestra_marketing`) in any channel.
+ */
+export interface SlackAgentBotConfig extends SlackDbConfig {
+  agentId: string;
   /**
    * The bot's name follows the agent's: renaming the agent renames the bot.
    * Off once someone picks a handle of their own.

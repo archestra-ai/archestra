@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { ThinkingEffort } from "./thinking-effort";
 
+/** Claude Code's stable alias follows the current Opus release. */
+export const DEFAULT_CLAUDE_CODE_MODEL = "opus";
+
 /**
  * Supported LLM providers
  */

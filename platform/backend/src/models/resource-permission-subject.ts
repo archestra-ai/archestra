@@ -5,6 +5,7 @@ import {
   type ResourceAccessRelation,
 } from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import MemberModel from "./member";
@@ -88,10 +89,13 @@ export default class ResourcePermissionSubjectModel {
     userId: string;
     organizationId: string;
   }): Promise<GrantPrincipal> {
-    return {
-      organizationId: params.organizationId,
-      subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
-    };
+    return requestScope.memo(
+      `principal\0${params.organizationId}\0${params.userId}`,
+      async () => ({
+        organizationId: params.organizationId,
+        subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
+      }),
+    );
   }
 
   /**
@@ -343,6 +347,7 @@ export default class ResourcePermissionSubjectModel {
         .select({
           role: schema.serviceAccountsTable.role,
           disabled: schema.serviceAccountsTable.disabled,
+          teamId: schema.serviceAccountsTable.teamId,
         })
         .from(schema.serviceAccountsTable)
         .where(
@@ -357,6 +362,18 @@ export default class ResourcePermissionSubjectModel {
         .limit(1);
       if (!account || account.disabled) return [];
       subjects.push({ type: "serviceAccount", id });
+      // An account acting for a team is reached by that team's grants, and
+      // its ancestors', the same way a member is. The team's roles are not
+      // inherited: the account's own role says what its keys may do.
+      if (account.teamId) {
+        const teams = await RoleCompositionModel.getTeamSources({
+          organizationId: params.organizationId,
+          teamId: account.teamId,
+        });
+        subjects.push(
+          ...teams.map(({ id }) => ({ type: "team" as const, id })),
+        );
+      }
       identifiers = account.role.split(",");
     } else {
       const member = await MemberModel.getByUserId(
@@ -365,7 +382,11 @@ export default class ResourcePermissionSubjectModel {
       );
       if (!member) return [];
       const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
+        requestScope.isMemoizing()
+          ? TeamModel.getUserTeamContext(params).then(
+              (context) => context.subjectTeamIds,
+            )
+          : TeamModel.getUserTeamIds(params.userId),
         RoleCompositionModel.getUserSources(params),
       ]);
       subjects.push(

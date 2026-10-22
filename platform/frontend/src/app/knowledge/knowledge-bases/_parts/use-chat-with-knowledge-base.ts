@@ -1,16 +1,13 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import {
-  fetchInternalAgents,
-  useCreateProfile,
-  useUpdateProfile,
-} from "@/lib/agent.query";
+import { useCreateProfile, useUpdateProfile } from "@/lib/agent.query";
+import { fetchInternalAgentOptionByName } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { throwOnApiError } from "@/lib/utils/api";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -38,20 +35,25 @@ export function useChatWithKnowledgeBase() {
     try {
       // Get or create: check if a personal agent with this name already exists
       // for the current user.
-      const existingAgents = await fetchInternalAgents();
-      const existing = existingAgents?.find(
-        (a) => a.name === agentName && a.authorId === currentUserId,
-      );
+      const existing = await fetchInternalAgentOptionByName({
+        name: agentName,
+        authorId: currentUserId,
+      });
 
-      let agent = existing;
+      let agent: { id: string } | undefined = existing;
       if (existing) {
+        const { data: selectedAgent, error } = await archestraApiSdk.getAgent({
+          path: { id: existing.id },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!selectedAgent) throw new Error("Agent details are unavailable");
         // Reuse the agent, ensuring this knowledge base is assigned to it.
-        if (!existing.knowledgeBaseIds?.includes(knowledgeBase.id)) {
+        if (!selectedAgent.knowledgeBaseIds?.includes(knowledgeBase.id)) {
           agent = await updateAgent.mutateAsync({
             id: existing.id,
             data: {
               knowledgeBaseIds: [
-                ...(existing.knowledgeBaseIds ?? []),
+                ...(selectedAgent.knowledgeBaseIds ?? []),
                 knowledgeBase.id,
               ],
             },

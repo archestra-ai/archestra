@@ -1,32 +1,36 @@
 "use client";
 
-import { Download, Play, Save, Trash2, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Editor } from "@/components/editor";
-import { PageBackLink } from "@/components/page-back-link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import {
   UnsavedChangesDialog,
   useBeforeUnloadWhileDirty,
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
-import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
 import {
   type PolicyTestCollection,
   type PolicyTestPreview,
   usePreviewOpenAppaPolicyTest,
 } from "@/lib/openappa-policy-tests.query";
+import {
+  APPA_EDITOR_THEMES,
+  APPA_LANGUAGE_ID,
+  registerAppaLanguage,
+} from "../../_parts/appa-language";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
+import {
+  latestFileResult,
+  validationFileStates,
+  validationName,
+} from "../../_parts/validation-run-history";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
   useValidation,
@@ -39,12 +43,13 @@ import {
   retainValidationDraft,
 } from "../_parts/validation-draft";
 import {
+  ValidationFileView,
+  type ValidationFileViewProps,
+} from "../_parts/validation-file-view";
+import {
   exportValidationFile,
-  StepResults,
-  statusLabel,
   ValidationNotices,
   ValidationRunDiagnostics,
-  ValidationStatusBadge,
 } from "../_parts/validation-parts";
 
 export default function ValidationFilePage() {
@@ -131,24 +136,24 @@ function ValidationFileEditor({ path }: { path: string }) {
   } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
-  const previewRun = preview?.run;
-  const policy = useGuardrailsPolicy();
-  const effectivePolicy = useEffectivePolicy(Boolean(previewRun), 10000);
-  const result = previewRun?.files[0];
-  const stale = Boolean(
-    previewRun &&
-      (previewRun.stale ||
-        previewRun.sourceVersion !== baseline.version ||
-        sourceChanged ||
-        suite.loadError ||
-        policy.isError ||
-        effectivePolicy.isError ||
-        (policy.data && policy.data.contentHash !== previewRun.policyHash) ||
-        (effectivePolicy.data &&
-          effectivePolicy.data.contentHash !==
-            previewRun.effectivePolicyHash) ||
-        JSON.stringify(preview?.file) !== JSON.stringify(file)),
-  );
+  const editorHandle =
+    useRef<ReturnType<ValidationFileViewProps["getEditor"]>>(null);
+  // An editor test describes the text it tested; editing again drops it.
+  const previewRun =
+    preview && JSON.stringify(preview.file) === JSON.stringify(file)
+      ? preview.run
+      : undefined;
+  // The file shows its last recorded result, also while it is edited, until
+  // it runs again or an editor test of the draft replaces it.
+  const recorded =
+    !previewRun && suite.history.data
+      ? {
+          latest: latestFileResult({ path }, suite.history.data),
+          state: validationFileStates([{ path }], suite.history.data).get(path),
+        }
+      : null;
+  const running = suite.runningPath === path;
+  const result = previewRun?.files[0] ?? recorded?.latest?.result;
   const busy = suite.busy || previewMutation.isPending;
   const runnable = Boolean(
     file &&
@@ -191,9 +196,6 @@ function ValidationFileEditor({ path }: { path: string }) {
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={listHref} labelled>
-        <span>Back to validation</span>
-      </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />
       {summary?.error && (
         <InlineNotice variant="error">
@@ -213,58 +215,40 @@ function ValidationFileEditor({ path }: { path: string }) {
         </InlineNotice>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Input
-                {...form.register("path")}
-                aria-label="Validation filename"
-                className="max-w-xl font-mono"
-                readOnly={suite.github || !suite.canWrite || busy}
-              />
-              <ValidationStatusBadge
-                status={result ? (stale ? "stale" : result.status) : "not_run"}
-              />
-              {fileDirty && <Badge variant="secondary">Unsaved draft</Badge>}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => exportValidationFile(file)}
-              >
-                <Download />
-                <span>Export</span>
-              </Button>
-              {!suite.github && suite.canWrite && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      !fileDirty || !validPaths || busy || sourceChanged
-                    }
-                    onClick={() => {
-                      if (file) suite.save(path, file, baseline.version, saved);
-                    }}
-                  >
-                    <Save />
-                    <span>Save validation</span>
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={`Delete ${file.path}`}
-                    disabled={busy}
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </>
-              )}
-              <Button
-                size="sm"
-                disabled={!runnable}
-                onClick={() => {
+          <ValidationFileView
+            {...{
+              filename: file.path,
+              onRename:
+                suite.github || !suite.canWrite || busy
+                  ? undefined
+                  : (next) =>
+                      form.setValue("path", next, { shouldDirty: true }),
+              name: validationName(file),
+              status: previewRun
+                ? (result?.status ?? "not_run")
+                : (recorded?.state?.status ?? "not_run"),
+              lastRun: recorded?.state?.runAt
+                ? {
+                    at: recorded.state.runAt,
+                    label: recorded.state.runLabel ?? "",
+                    href: "/openappa/validation/history",
+                  }
+                : null,
+              dirty: fileDirty,
+              github: suite.github,
+              canWrite: suite.canWrite,
+              run: {
+                label: fileDirty ? "Test draft" : "Run file",
+                running: running || previewMutation.isPending,
+                disabled: !runnable,
+                onClick: () => {
+                  // A saved file runs for real and lands in run history; a
+                  // draft can only be tried in the editor.
+                  if (!fileDirty) {
+                    setPreview(null);
+                    suite.runFile(path);
+                    return;
+                  }
                   const captured = structuredClone(file);
                   setPreview(null);
                   previewMutation.mutate(
@@ -279,34 +263,79 @@ function ValidationFileEditor({ path }: { path: string }) {
                       },
                     },
                   );
-                }}
-              >
-                <Play />
-                <span>Run file</span>
-              </Button>
-            </div>
-          </div>
-          <Card className="overflow-hidden py-0">
-            <CardContent className="px-0">
-              <Controller
-                control={form.control}
-                name="content"
-                render={({ field }) => (
-                  <Editor
-                    height="55vh"
-                    language="plaintext"
-                    value={field.value}
-                    onChange={(value) => field.onChange(value ?? "")}
-                    options={{
-                      ...POLICY_EDITOR_OPTIONS,
-                      readOnly: !suite.canWrite || busy,
-                      ariaLabel: `Policy validation ${file.path}`,
-                    }}
-                  />
-                )}
-              />
-            </CardContent>
-          </Card>
+                },
+              },
+              save:
+                !suite.github && suite.canWrite
+                  ? {
+                      disabled:
+                        !fileDirty || !validPaths || busy || sourceChanged,
+                      onClick: () =>
+                        suite.save(path, file, baseline.version, saved),
+                    }
+                  : undefined,
+              onExport: () => exportValidationFile(file),
+              onDelete:
+                !suite.github && suite.canWrite && !busy
+                  ? () => setDeleteOpen(true)
+                  : undefined,
+              failure:
+                (result && (recorded ? recorded.state?.error : result.error)) ||
+                null,
+              result,
+              getEditor: () => editorHandle.current,
+              revealLine: (line) => {
+                const handle = editorHandle.current;
+                if (!handle) return;
+                handle.editor.revealLineInCenter(line);
+                handle.editor.setPosition({ lineNumber: line, column: 1 });
+                handle.editor.focus();
+              },
+              fileRuns: (suite.history.data ?? []).flatMap((run) => {
+                const hit = run.files.find((f) => f.path === path);
+                return hit
+                  ? [
+                      {
+                        runId: run.id,
+                        createdAt: run.createdAt,
+                        status: hit.status,
+                        policyRevision: run.policyRevision,
+                        trigger: run.trigger,
+                        partial: Boolean(run.partial),
+                      },
+                    ]
+                  : [];
+              }),
+              editor: (
+                <Card className="overflow-hidden py-0">
+                  <CardContent className="px-0">
+                    <Controller
+                      control={form.control}
+                      name="content"
+                      render={({ field }) => (
+                        <Editor
+                          onMount={(editor, monaco) => {
+                            editorHandle.current = { editor, monaco };
+                          }}
+                          height="55vh"
+                          language={APPA_LANGUAGE_ID}
+                          themes={APPA_EDITOR_THEMES}
+                          beforeMount={registerAppaLanguage}
+                          value={field.value}
+                          onChange={(value) => field.onChange(value ?? "")}
+                          options={{
+                            ...POLICY_EDITOR_OPTIONS,
+                            readOnly: !suite.canWrite || busy,
+                            ariaLabel: `Policy validation ${file.path}`,
+                          }}
+                        />
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              ),
+            }}
+          />
           {previewMutation.isError && (
             <InlineNotice variant="error">
               <TriangleAlert />
@@ -316,43 +345,7 @@ function ValidationFileEditor({ path }: { path: string }) {
               </InlineNoticeText>
             </InlineNotice>
           )}
-          {previewRun && (
-            <InlineNotice variant="neutral">
-              <Play />
-              <span className="font-medium">Editor test</span>
-              <InlineNoticeText>
-                This temporary result does not update the suite or run history.
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
           {previewRun && <ValidationRunDiagnostics run={previewRun} />}
-          {result && (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">{`${result.steps.length} of ${result.assertionCount} assertions evaluated`}</p>
-              {stale && (
-                <InlineNotice>
-                  <TriangleAlert />
-                  <span className="font-medium">Stale inputs</span>
-                  <InlineNoticeText>
-                    These results belong to different policy or validation
-                    inputs. Run again to validate this draft.
-                  </InlineNoticeText>
-                </InlineNotice>
-              )}
-              {result.error && (
-                <InlineNotice
-                  variant={result.status === "cannot_run" ? "warning" : "error"}
-                >
-                  <TriangleAlert />
-                  <span className="font-medium">
-                    {statusLabel(result.status)}
-                  </span>
-                  <InlineNoticeText>{result.error}</InlineNoticeText>
-                </InlineNotice>
-              )}
-              {result.steps.length > 0 && <StepResults steps={result.steps} />}
-            </div>
-          )}
         </>
       )}
       <DeleteConfirmDialog

@@ -12,12 +12,15 @@ describe("parse-only policy test inspection", () => {
     registerRoutePermissions(app);
     await app.register(routes);
   });
-  beforeEach(async ({ makeMember }) => {
+  beforeEach(async ({ makeMember, makeCustomRole }) => {
     config.openappa.enabled = true;
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    const reader = await makeCustomRole(ctx.organizationId, {
+      permission: { guardrailsPolicy: ["read"] },
+    });
+    await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
   });
 
-  test("read-only members can inspect independent of a live model policy without saving checks or runs", async () => {
+  test("read-only policy readers can inspect independent of a live model policy without saving checks or runs", async () => {
     const content = `[policy]\nversion = 2\n[[policy.annotator]]\nname = 'model'\nbuiltin = 'archestra'\n`;
     await GuardrailsPolicyModel.save({
       organizationId: ctx.organizationId,

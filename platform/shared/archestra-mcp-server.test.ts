@@ -134,10 +134,11 @@ describe("archestra MCP tool names", () => {
       sandboxEnabled: false,
     };
 
-    test("all flags off yields the always-on defaults plus the app tools", () => {
+    test("all flags off yields the always-on defaults plus the app and file tools", () => {
       expect(getCreationDefaultArchestraToolShortNames(allOff)).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
 
@@ -151,10 +152,11 @@ describe("archestra MCP tool names", () => {
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
         ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
 
-    test("sandboxEnabled adds the runtime and persistent-files tools", () => {
+    test("sandboxEnabled adds only the runtime tools", () => {
       expect(
         getCreationDefaultArchestraToolShortNames({
           ...allOff,
@@ -163,8 +165,8 @@ describe("archestra MCP tool names", () => {
       ).toEqual([
         ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
         ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
 
@@ -180,8 +182,8 @@ describe("archestra MCP tool names", () => {
         ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
         ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
         ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
         ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
       ]);
     });
   });

@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -207,6 +208,12 @@ interface McpCatalogFormProps {
    * to 0 (no confirm bar — used for create mode and standalone previews).
    */
   affectedServerCount?: number;
+  /**
+   * The editor may describe this server but not change what it runs or where
+   * it connects (a member who owns it). Only its name, icon, description and
+   * labels are shown; the backend refuses the rest.
+   */
+  detailsOnly?: boolean;
 }
 
 export function McpCatalogForm({
@@ -222,6 +229,7 @@ export function McpCatalogForm({
   embedded = false,
   wizardPanel = false,
   affectedServerCount = 0,
+  detailsOnly = false,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
     initialValues?.serverType === "local"
@@ -593,6 +601,7 @@ export function McpCatalogForm({
   const isTransportTypeDirty = deploymentField("transportType");
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
+  const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -680,12 +689,17 @@ export function McpCatalogForm({
       }
     }
   }
-  const hasEnvRuleViolations = envRuleViolations.length > 0;
+  // Stored values the environment rejects are for whoever may change the
+  // configuration; they never block someone editing the details alone.
+  const hasEnvRuleViolations = !detailsOnly && envRuleViolations.length > 0;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary = "Environment and labels";
+  const advancedSummary = detailsOnly ? "Labels" : "Environment and labels";
+  // The configuration stays in the form, so its values and checks are what
+  // they always were; a details-only editor just does not see it.
+  const configurationSectionClass = detailsOnly ? "hidden" : undefined;
   const addHeaderButton = (
     <AddListItemButton
       label="Add Header"
@@ -899,9 +913,19 @@ export function McpCatalogForm({
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
     if (mode === "edit") {
+      const submitted = transformFormToApiData(values);
       const decision = computeCascadeOutcome(
         (initialValues ?? {}) as CascadeSnapshot,
-        transformFormToApiData(values) as CascadeSnapshot,
+        // A details-only editor sends the details alone, so the rest of the
+        // stored config is what the server keeps: only a rename can matter.
+        (detailsOnly
+          ? {
+              ...initialValues,
+              name: submitted.name,
+              description: submitted.description,
+              icon: submitted.icon,
+            }
+          : submitted) as CascadeSnapshot,
         { affectedServerCount },
       );
       if (decision.mode !== "skip") {
@@ -947,7 +971,7 @@ export function McpCatalogForm({
           className={`m-0 flex min-h-0 min-w-0 flex-1 flex-col border-0 p-0 transition-opacity ${pendingSubmit !== null || isConfirming ? "opacity-60" : ""}`}
         >
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "-mx-1 px-1 pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
           >
             {notice}
             {instructions ? (
@@ -1065,6 +1089,7 @@ export function McpCatalogForm({
               )}
 
               <SettingsSection
+                className={configurationSectionClass}
                 title={
                   currentServerType === "local" ? "Deployment" : "Connection"
                 }
@@ -1184,7 +1209,10 @@ export function McpCatalogForm({
                               <FormControl>
                                 <Select
                                   onValueChange={field.onChange}
-                                  value={field.value || "streamable-http"}
+                                  // New servers default to streamable-http
+                                  // explicitly; an unset value on an existing
+                                  // server runs as stdio.
+                                  value={field.value || "stdio"}
                                 >
                                   <SelectTrigger
                                     aria-label="Transport Type"
@@ -1239,6 +1267,54 @@ export function McpCatalogForm({
                         </FieldDescription>
                       </div>
                     </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="localConfig.imagePullPolicy"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Image pull policy
+                              <ReinstallHint show={isImagePullPolicyDirty} />
+                            </FormLabel>
+                            <FormControl>
+                              <Select
+                                onValueChange={field.onChange}
+                                // Unset follows the image: `:latest` and
+                                // untagged images pull on every rollout.
+                                value={
+                                  field.value ||
+                                  getDefaultMcpImagePullPolicy(
+                                    form.watch("localConfig.dockerImage") ||
+                                      mcpServerBaseImage,
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  aria-label="Image pull policy"
+                                  className="w-full"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Always">Always</SelectItem>
+                                  <SelectItem value="IfNotPresent">
+                                    IfNotPresent
+                                  </SelectItem>
+                                  <SelectItem value="Never">Never</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FieldDescription>
+                              Always picks up a new image behind the same tag on
+                              restart. IfNotPresent reuses the node&apos;s copy,
+                              so pods start while the registry is down.
+                            </FieldDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     {form.watch("localConfig.transportType") ===
                       "streamable-http" && (
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -1291,6 +1367,7 @@ export function McpCatalogForm({
 
               {currentServerType === "local" && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Environment variables
@@ -1331,6 +1408,7 @@ export function McpCatalogForm({
 
               {currentServerType === "local" && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title="Image pull secrets"
                   description={
                     <>
@@ -1495,6 +1573,7 @@ export function McpCatalogForm({
               {(currentServerType === "remote" ||
                 (currentServerType === "local" && isMultitenant)) && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Authentication
@@ -2267,6 +2346,7 @@ export function McpCatalogForm({
                 (currentServerType === "local" &&
                   currentTransportType === "streamable-http")) && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Headers
@@ -2344,6 +2424,7 @@ export function McpCatalogForm({
                 <CollapsibleContent>
                   <SettingsSectionGroup className="border-t pt-8">
                     <SettingsSection
+                      className={configurationSectionClass}
                       title="Environment"
                       description="Where this server runs and which resources it can reach."
                     >
@@ -2385,6 +2466,7 @@ export function McpCatalogForm({
             // we honor that decision even if dirty state shifts while
             // the bar is up (e.g., user tweaks labels mid-confirm).
             mode={pendingSubmit.mode}
+            layout={wizardPanel ? "page" : "dialog"}
             renamed={pendingSubmit.renamed}
             newName={pendingSubmit.values.name}
             isMultitenant={isMultitenant}

@@ -20,6 +20,7 @@ import {
 import {
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 import { PROVIDER_MODEL_TIERS } from "@archestra/shared/model-constants";
@@ -50,6 +51,63 @@ const MCP = {
   toolPrefix: "archestra__",
   url: "https://archestra.example.com/v1/mcp/prod-gateway",
 };
+
+const STARTER_PROMPT =
+  "What can you do with my Archestra tools from the prod_gateway MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.";
+
+const CODEX_CONFIG_WITH_TRAILING_TABLE = `model = "gpt-5"
+
+[mcp_servers.docs]
+url = "https://docs.example.com/mcp"
+
+[model_providers.custom_proxy]
+name = "custom_proxy"
+base_url = "http://127.0.0.1:9/v1"
+
+[notice]
+hide_full_access_warning = true
+
+[features]
+shell_tool = true
+`;
+
+function codexMcpStub(homeEnv: "HOME" | "USERPROFILE"): string {
+  return `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.${homeEnv}, ".codex", "config.toml");
+function header(server) {
+  if (/^[A-Za-z0-9_-]+$/.test(server)) return "[mcp_servers." + server + "]";
+  return '[mcp_servers."' + server + '"]';
+}
+function serverBlock(line, server) {
+  const own = header(server);
+  return line === own || line.startsWith("[mcp_servers." + server + ".") || line.startsWith('[mcp_servers."' + server + '".');
+}
+if (command === "mcp" && action === "remove") {
+  let skip = false;
+  const kept = fs.readFileSync(file, "utf8").split(/\\r?\\n/).filter((line) => {
+    if (line.startsWith("[")) skip = serverBlock(line, name);
+    return !skip;
+  });
+  fs.writeFileSync(file, kept.filter((line, index, all) => line !== "" || index !== all.length - 1).join("\\n") + "\\n");
+} else if (command === "mcp" && action === "add") {
+  const lines = fs.readFileSync(file, "utf8").split(/\\r?\\n/);
+  if (lines.at(-1) === "") lines.pop();
+  let insertAt = lines.length;
+  let seen = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith("[mcp_servers.")) seen = true;
+    else if (seen && lines[i].startsWith("[")) { insertAt = i; break; }
+  }
+  lines.splice(insertAt, 0, "", header(name), "url = " + JSON.stringify(url));
+  fs.writeFileSync(file, lines.join("\\n") + "\\n");
+} else if (command === "debug") {
+  process.stdout.write(JSON.stringify({ models: [] }));
+}
+`;
+}
 
 const PROXY = {
   authMode: "virtual-key" as const,
@@ -126,7 +184,8 @@ const SKILLS = {
 
 const AUTHENTICATED_SKILLS = {
   ...SKILLS,
-  cloneUrl: "http://token@stack2.localhost9002/skills/marketplace.git",
+  cloneUrl:
+    "http://token:archestra_mkt_test@stack2.localhost9002/skills/marketplace.git",
 };
 
 function fullContext(
@@ -145,7 +204,7 @@ function fullContext(
             ...PROXY,
             provider: "openai",
             providerLabel: "OpenAI",
-            ...(clientId === "opencode"
+            ...(clientId === "opencode" || clientId === "kilo"
               ? {
                   primaryProviders: [
                     {
@@ -311,6 +370,7 @@ async function runClaudeAppaPermissionsMerge(params: {
 
 describe("Claude Code APPA permission installation", () => {
   const rules = [
+    "run_tool",
     "get_remedy_plans",
     "execute_remedy_plan",
     "list_peer_messages",
@@ -349,6 +409,23 @@ describe("Claude Code APPA permission installation", () => {
     ).toBe(true);
   });
 
+  test("pre-approves the gateway tool runner and leaves a hand-added rule to the user", async () => {
+    const runTool = "mcp__prod_gateway__archestra__run_tool";
+    const fresh = await runClaudeAppaPermissionsMerge({ existing: {} });
+    expect(fresh.settings.permissions.allow).toContain(runTool);
+    expect(fresh.ownership.prod_gateway).toContain(runTool);
+
+    const handAdded = await runClaudeAppaPermissionsMerge({
+      existing: { permissions: { allow: [runTool] } },
+    });
+    expect(
+      handAdded.settings.permissions.allow.filter(
+        (rule: string) => rule === runTool,
+      ),
+    ).toHaveLength(1);
+    expect(handAdded.ownership.prod_gateway).not.toContain(runTool);
+  });
+
   test("migrates owned legacy rules and branded prefixes without removing user or other-gateway rules", async () => {
     const old = "mcp__my_gateway__archestra__get_remedy_plans";
     const userRule = "mcp__my_gateway__archestra__ask_user";
@@ -367,6 +444,7 @@ describe("Claude Code APPA permission installation", () => {
       contexts: [branded],
     });
     const desired = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",
@@ -451,7 +529,7 @@ describe("Claude Code APPA permission installation", () => {
     expect(script).toContain("claude mcp add");
     expect(script).toContain("team_(eu)");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("python3 is required");
     expect(script).not.toContain("mcp__team_(eu)__");
     expect(() =>
@@ -466,7 +544,7 @@ describe("Claude Code APPA permission installation", () => {
     });
     expect(script).toContain("claude mcp add");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("mcp__prod_gateway__");
     expect(script).not.toContain("*get_remedy_plans");
     expect(() =>
@@ -476,6 +554,7 @@ describe("Claude Code APPA permission installation", () => {
 
   test("a failed settings write after the ledger is recovered on retry", async () => {
     const rules = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",
@@ -548,7 +627,9 @@ async function runClaudeMarketplaceRegistration(params?: {
                 url: "http://stack2.localhost9002/skills/marketplace.git",
                 headers: {
                   Authorization: `Basic ${Buffer.from(
-                    `${initialSource === "changed" ? "old-token" : "token"}:`,
+                    initialSource === "changed"
+                      ? "archestra_mkt_old:"
+                      : "token:archestra_mkt_test",
                   ).toString("base64")}`,
                 },
               },
@@ -744,6 +825,7 @@ const ALL_CLIENTS = [
   "copilot-cli",
   "cursor",
   "opencode",
+  "kilo",
 ] as const;
 
 describe("renderSetupScript", () => {
@@ -785,6 +867,16 @@ fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify({ execu
 if (args[0] === "debug") {
   process.stdout.write(JSON.stringify({models:[{slug:'one',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'two',tool_mode:null}]}));
   process.exit(0);
+}
+if (args[0] === "mcp" && args[1] === "add") {
+  const home = process.env.CODEX_HOME || require("node:path").join(process.env.HOME, ".codex");
+  const file = require("node:path").join(home, "config.toml");
+  const header = "[mcp_servers." + args[2] + "]";
+  fs.mkdirSync(home, { recursive: true });
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  if (!current.split(/\\r?\\n/).includes(header)) {
+    fs.appendFileSync(file, (current.endsWith("\\n") || current === "" ? "" : "\\n") + header + "\\nurl = " + JSON.stringify(args[4] || "") + "\\n");
+  }
 }
 process.exit(args[0] === "mcp" ? 0 : 23);
 `,
@@ -1193,7 +1285,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
-      `cli claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
+      `cli_redacted claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
     );
     // The skill plugin is installed by the script, not via a manual browse step.
     expect(script).toContain(
@@ -1224,7 +1316,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
             source: "git",
             url: "http://stack2.localhost9002/skills/marketplace.git",
             headers: {
-              Authorization: "Basic dG9rZW46",
+              Authorization: `Basic ${Buffer.from("token:archestra_mkt_test").toString("base64")}`,
             },
           },
         },
@@ -1287,7 +1379,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         },
         [AUTHENTICATED_SKILLS.marketplaceName]: {
           source: {
-            headers: { Authorization: "Basic dG9rZW46" },
+            headers: {
+              Authorization: `Basic ${Buffer.from("token:archestra_mkt_test").toString("base64")}`,
+            },
           },
         },
       },
@@ -1452,9 +1546,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   ] as const)("opencode (%s): the ending offers sign-in and a launch command", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
     expect(script).toContain(`opencode mcp auth ${MCP.serverName}`);
-    expect(script).toContain(
-      "opencode --prompt 'What can you do with my Archestra tools?'",
-    );
+    expect(script).toContain(`opencode --prompt '${STARTER_PROMPT}'`);
     expect(script).toContain("If OpenCode is already open, close it first");
     // No instructions addressed to an agent.
     expect(script).not.toContain("relay the URL");
@@ -1550,7 +1642,6 @@ esac
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
 
-    expect(script).toContain(".config/opencode");
     expect(script).not.toContain(".opencode/opencode.json");
     expect(script).toContain(EXTERNAL_AGENT_ID_HEADER);
     expect(script).toContain(OPENCODE_CLIENT_ID);
@@ -1631,6 +1722,153 @@ ${script.slice(pluginStart, pluginEnd)}
         "utf8",
       );
       expect(plugin).toContain(expected);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("kilo (%s): sets up Kilo Code in its own folders and never touches OpenCode's", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("kilo", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+      runtimeHandoffInstructions: "Hand runtime work to Archestra.",
+    });
+
+    expect(script).toContain("kilo.json");
+    expect(script).toContain("kilo-routing-plugin-state.json");
+    expect(script).toContain("archestra-llm-proxy.js");
+    expect(script).toContain(KILO_CLIENT_ID);
+    expect(script).toContain("ARCHESTRA_KILO_GUARD");
+    expect(script).toContain("KILO_CONFIG_CONTENT");
+    expect(script).toContain(`kilo mcp auth ${MCP.serverName}`);
+    expect(script).toContain(`kilo --prompt '${STARTER_PROMPT}'`);
+    expect(script).toContain("If Kilo Code is already open, close it first");
+    // The guard removes the handoff plugin it installed when it removes itself.
+    expect(script).toContain(
+      platform === "windows"
+        ? "($GuardPath + '.prompt.md'), ($GuardPath + '.handoff.mjs')"
+        : '"$GUARD_PATH.prompt.md" "$GUARD_PATH.handoff.mjs"',
+    );
+    for (const openCodeOnly of [
+      "opencode.json",
+      "opencode-routing-plugin-state",
+      "opencode-connection-state",
+      "OPENCODE_CONFIG_CONTENT",
+      "ARCHESTRA_OPENCODE_GUARD",
+      "opencode mcp",
+      "opencode --",
+      "/opencode/",
+      "'opencode'",
+    ]) {
+      expect(script).not.toContain(openCodeOnly);
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("kilo: migrates a private JSONC gateway into a private managed config (existing config: %s)", async (existingConfig) => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-setup-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const scriptPath = path.join(root, "setup.sh");
+    const commandLog = path.join(root, "kilo-commands.log");
+    try {
+      await mkdir(home);
+      await mkdir(bin);
+      const siblingPath = path.join(home, ".config/kilo/kilo.jsonc");
+      await mkdir(path.dirname(siblingPath), { recursive: true });
+      await writeFile(
+        siblingPath,
+        JSON.stringify({
+          mcp: {
+            my_gateway: {
+              type: "remote",
+              url: MCP.url,
+              enabled: true,
+              headers: { Authorization: "Bearer example-test-token" },
+            },
+          },
+        }),
+      );
+      await chmod(siblingPath, 0o600);
+      if (existingConfig) {
+        const ownedPath = path.join(home, ".config/kilo/kilo.json");
+        await writeFile(ownedPath, "{}");
+        await chmod(ownedPath, 0o644);
+      }
+      // Kilo numbers its releases 7.x; OpenCode's check would read that as v2.
+      await writeFile(
+        path.join(bin, "kilo"),
+        `#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_KILO_LOG"
+case "$1 $2" in
+  "--version ") printf '7.8.8\n' ;;
+  "mcp list") printf '⚠ prod_gateway needs authentication\n' ;;
+  "debug config") cat "$HOME/.config/kilo/kilo.json" ;;
+  *) exit 1 ;;
+esac
+`,
+      );
+      await chmod(path.join(bin, "kilo"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("kilo", "linux"),
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+          skills: null,
+        }).replace("#!/usr/bin/env bash", "#!/usr/bin/env bash\numask 022"),
+      );
+      const result = await execFileAsync("bash", [scriptPath], {
+        cwd: root,
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+          XDG_DATA_HOME: path.join(home, ".local", "share"),
+          PATH: `${bin}:${process.env.PATH}`,
+          FAKE_KILO_LOG: commandLog,
+        },
+      });
+
+      expect(result.stdout).toContain("prod_gateway needs authentication");
+      expect(result.stdout).toContain("Kilo Code is connected to Archestra.");
+      const config = JSON.parse(
+        await readFile(path.join(home, ".config/kilo/kilo.json"), "utf8"),
+      );
+      expect(config.$schema).toBe("https://app.kilo.ai/config.json");
+      expect(config.mcp[MCP.serverName]).toEqual({
+        type: "remote",
+        url: MCP.url,
+        headers: { Authorization: "Bearer example-test-token" },
+      });
+      const sibling = JSON.parse(await readFile(siblingPath, "utf8"));
+      expect(sibling.mcp.my_gateway.enabled).toBe(false);
+      expect(
+        (await stat(path.join(home, ".config/kilo/kilo.json"))).mode & 0o777,
+      ).toBe(0o600);
+      expect(
+        Object.entries({ ...config.mcp, ...sibling.mcp })
+          .filter(
+            ([, entry]) => (entry as { enabled?: boolean }).enabled !== false,
+          )
+          .map(([name]) => name),
+      ).toEqual([MCP.serverName]);
+      const plugin = await readFile(
+        path.join(home, ".config/kilo/plugins/archestra-llm-proxy.js"),
+        "utf8",
+      );
+      expect(plugin).toContain("export const ArchestraLlmProxy");
+      expect(plugin).toContain('const clientDir = "kilo";');
+      expect(plugin).toContain(`"${EXTERNAL_AGENT_ID_HEADER}":"kilo"`);
+      await expect(
+        readFile(path.join(home, ".config/opencode/opencode.json")),
+      ).rejects.toThrow();
+      // The script never asks Kilo its version: OpenCode 1's API is fixed.
+      expect(await readFile(commandLog, "utf8")).not.toContain("--version");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -2291,6 +2529,280 @@ ${script.slice(start, end)}
     );
   });
 
+  test("codex: keeps the required-entry rewrite private under a permissive umask", async () => {
+    const script = renderSetupScript(fullContext("codex"));
+    const insertion = script.match(
+      /^cli codex mcp add [^\n]+\n([\s\S]*?)\ncat >> "\$CONFIG"/m,
+    )?.[1];
+    expect(insertion).toBeDefined();
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-codex-private-"));
+    const configPath = path.join(root, "config.toml");
+    try {
+      await writeFile(
+        configPath,
+        `[mcp_servers.${MCP.serverName}]\nurl = "${MCP.url}"\n`,
+        { mode: 0o600 },
+      );
+      await execFileAsync("bash", ["-c", `umask 022\n${insertion}`], {
+        env: { ...process.env, CONFIG: configPath },
+      });
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+      expect(parseToml(await readFile(configPath, "utf8"))).toMatchObject({
+        mcp_servers: { [MCP.serverName]: { required: true } },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("codex: approves the guardrail helpers once, under the gateway's own entry", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-approvals-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const codexHome = path.join(home, ".codex");
+    const scriptPath = path.join(root, "setup.sh");
+    try {
+      await Promise.all(
+        [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+      );
+      // A config the person already had, including a table after mcp_servers.
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        CODEX_CONFIG_WITH_TRAILING_TABLE,
+      );
+      await writeFile(path.join(bin, "codex"), codexMcpStub("HOME"));
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex", "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+      // A rerun of setup must not define the tables twice.
+      for (let run = 0; run < 2; run++) {
+        await execFileAsync("bash", [scriptPath], {
+          env: {
+            HOME: home,
+            SHELL: "/bin/bash",
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          cwd: home,
+        });
+      }
+
+      const configPath = path.join(codexHome, "config.toml");
+      expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+      const raw = await readFile(configPath, "utf8");
+      // A rerun removes the server and writes the key again, so it stays once.
+      expect(raw.match(/^required = true$/gm)).toEqual(["required = true"]);
+      const config = parseToml(raw) as {
+        model: string;
+        mcp_servers: Record<
+          string,
+          {
+            url: string;
+            required?: boolean;
+            tools?: Record<string, { approval_mode: string }>;
+          }
+        >;
+        model_providers: Record<string, { name: string; base_url: string }>;
+        notice: { hide_full_access_warning: boolean };
+        features: { shell_tool: boolean };
+      };
+      expect(config.model).toBe("gpt-5");
+      expect(config.mcp_servers.docs).toEqual({
+        url: "https://docs.example.com/mcp",
+      });
+      expect(config.model_providers).toEqual({
+        custom_proxy: {
+          name: "custom_proxy",
+          base_url: "http://127.0.0.1:9/v1",
+        },
+      });
+      expect(config.notice).toEqual({ hide_full_access_warning: true });
+      expect(config.features).toEqual({ shell_tool: true });
+      expect(raw.indexOf("required = true")).toBeGreaterThan(
+        raw.indexOf(`[mcp_servers.${MCP.serverName}]`),
+      );
+      expect(raw.indexOf("required = true")).toBeLessThan(
+        raw.indexOf("[model_providers.custom_proxy]"),
+      );
+      expect(config.mcp_servers[MCP.serverName]).toEqual({
+        url: MCP.url,
+        required: true,
+        // The tool runner and other gateway tools keep Codex's question.
+        tools: Object.fromEntries(
+          [
+            "get_remedy_plans",
+            "execute_remedy_plan",
+            "list_peer_messages",
+            "read_peer_message",
+            "yell",
+            "ask_user",
+          ].map((name) => [
+            `${MCP.toolPrefix}${name}`,
+            { approval_mode: "approve" },
+          ]),
+        ),
+      });
+      await execFileAsync(
+        path.join(bin, "codex"),
+        ["mcp", "remove", MCP.serverName],
+        {
+          env: { HOME: home, PATH: `${bin}:${process.env.PATH}` },
+        },
+      );
+      const removed = await readFile(configPath, "utf8");
+      expect(removed).not.toContain("required = true");
+      expect(removed).not.toContain(`[mcp_servers.${MCP.serverName}]`);
+      expect(removed).toContain("[mcp_servers.docs]");
+      expect(removed).toContain("[model_providers.custom_proxy]");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    "my-gateway",
+    "gw.with.dots",
+  ])("codex: writes required inside the inserted %s table, before a trailing table", async (serverName) => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-required-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const codexHome = path.join(home, ".codex");
+    const scriptPath = path.join(root, "setup.sh");
+    try {
+      await Promise.all(
+        [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+      );
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        CODEX_CONFIG_WITH_TRAILING_TABLE,
+      );
+      await writeFile(path.join(bin, "codex"), codexMcpStub("HOME"));
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex", "linux"),
+          proxy: null,
+          skills: null,
+          mcp: { ...MCP, serverName },
+        }),
+      );
+      for (let run = 0; run < 2; run++) {
+        await execFileAsync("bash", [scriptPath], {
+          env: {
+            HOME: home,
+            SHELL: "/bin/bash",
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          cwd: home,
+        });
+      }
+      const raw = await readFile(path.join(codexHome, "config.toml"), "utf8");
+      const header = /^[A-Za-z0-9_-]+$/.test(serverName)
+        ? `[mcp_servers.${serverName}]`
+        : `[mcp_servers."${serverName}"]`;
+      expect(raw.match(/^required = true$/gm)).toEqual(["required = true"]);
+      expect(raw.indexOf("required = true")).toBeGreaterThan(
+        raw.indexOf(header),
+      );
+      expect(raw.indexOf("required = true")).toBeLessThan(
+        raw.indexOf("[model_providers.custom_proxy]"),
+      );
+      const config = parseToml(raw) as {
+        mcp_servers: Record<string, { required?: boolean }>;
+        model_providers: Record<string, { required?: boolean }>;
+        features: { required?: boolean };
+      };
+      expect(config.mcp_servers[serverName]?.required).toBe(true);
+      expect(config.model_providers.custom_proxy.required).toBeUndefined();
+      expect(config.features.required).toBeUndefined();
+      await execFileAsync(
+        path.join(bin, "codex"),
+        ["mcp", "remove", serverName],
+        {
+          env: { HOME: home, PATH: `${bin}:${process.env.PATH}` },
+        },
+      );
+      const removed = await readFile(
+        path.join(codexHome, "config.toml"),
+        "utf8",
+      );
+      expect(removed).not.toContain("required = true");
+      expect(removed).not.toContain(header);
+      expect(removed).toContain("[model_providers.custom_proxy]");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("codex: aborts when Codex did not write the expected gateway entry", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-required-miss-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const codexHome = path.join(home, ".codex");
+    const scriptPath = path.join(root, "setup.sh");
+    try {
+      await Promise.all(
+        [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+      );
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        CODEX_CONFIG_WITH_TRAILING_TABLE,
+      );
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action] = process.argv.slice(2);
+const file = path.join(process.env.HOME, ".codex", "config.toml");
+if (command === "mcp" && action === "add") {
+  fs.appendFileSync(file, "\\n[mcp_servers.not_the_gateway]\\nurl = \\"http://127.0.0.1:9/mcp\\"\\n");
+}
+`,
+      );
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex", "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+      await expect(
+        execFileAsync("bash", [scriptPath], {
+          env: {
+            HOME: home,
+            SHELL: "/bin/bash",
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          cwd: home,
+        }),
+      ).rejects.toThrow(/Could not mark the gateway required/);
+      const raw = await readFile(path.join(codexHome, "config.toml"), "utf8");
+      expect(raw).not.toContain("required = true");
+      expect(raw).toContain("[model_providers.custom_proxy]");
+      expect(raw).toContain("shell_tool = true");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("codex passthrough: attributes user + client via config.toml http_headers", () => {
     const script = renderSetupScript({
       ...fullContext("codex"),
@@ -2387,6 +2899,62 @@ if (process.argv[2] === 'debug') {
     }
   });
 
+  test("codex rerun keeps a table Codex added inside the provider block", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
+    try {
+      const bin = path.join(home, "bin");
+      const codexHome = path.join(home, ".codex");
+      await mkdir(bin);
+      await mkdir(codexHome);
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+if (process.argv[2] === 'debug') {
+  require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()}));
+  console.log(JSON.stringify({models:[{slug:'gpt-5.5',tool_mode:null,supports_search_tool:true}]}));
+}
+`,
+      );
+      await chmod(path.join(bin, "codex"), 0o755);
+      const configPath = path.join(codexHome, "config.toml");
+      // Codex 0.162 writes a new table before the comments at the end of the
+      // file, so a marketplace added after the provider sits inside its block.
+      await writeFile(
+        configPath,
+        'model_provider = "default_proxy"\nmodel = "gpt-5.5"\n# >>> archestra:default_proxy >>>\n[model_providers.default_proxy]\nname = "default_proxy"\n\n[model_providers.default_proxy.http_headers]\n"X-Archestra-Agent-Id" = "codex"\n\n[marketplaces.team-skills]\nsource_type = "git"\n# <<< archestra:default_proxy <<<\n',
+      );
+      const scriptPath = path.join(home, "setup.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex"),
+          mcp: null,
+          skills: null,
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+        }),
+      );
+      await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          CODEX_HOME: codexHome,
+          PATH: `${bin}:${process.env.PATH}`,
+          SHELL: "/bin/bash",
+          OPENAI_API_KEY: "sk-test-user-key",
+        },
+      });
+      const installed = await readFile(configPath, "utf8");
+      expect(parseToml(installed).marketplaces).toEqual({
+        "team-skills": { source_type: "git" },
+      });
+      expect(installed.split("[model_providers.default_proxy]")).toHaveLength(
+        2,
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("copilot-cli github-copilot passthrough: links GitHub in-script, token never in argv", async () => {
     const script = renderSetupScript({
       ...fullContext("copilot-cli"),
@@ -2471,7 +3039,7 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+  ] as const)("cursor (%s): writes the model settings, with steps to enter them by hand as a fallback", (platform) => {
     const script = renderSetupScript(fullContext("cursor", platform));
     expect(script).toContain(
       platform === "windows"
@@ -2479,6 +3047,7 @@ if (process.argv[2] === 'debug') {
         : "ARCHESTRA_MCP_SERVER_NAME",
     );
     expect(script).not.toContain("Authorization");
+    expect(script).toContain("Cursor/User/globalStorage/state.vscdb");
     expect(script).toContain("Override OpenAI Base URL");
     expect(script).toContain("open Customize > MCPs");
     expect(script).toContain('turn on "Use OpenAI API Key"');
@@ -2492,13 +3061,13 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+  ] as const)("cursor (%s): asks for a new setup when it has no virtual key", (platform) => {
     const script = renderSetupScript({
       ...fullContext("cursor", platform),
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
-    expect(script).toContain("Paste your own OpenAI API key");
-    expect(script).toContain("A Cursor subscription cannot be used");
+    expect(script).toContain("Generate a new setup command");
+    expect(script).not.toContain("state.vscdb");
   });
 
   test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
@@ -2538,6 +3107,16 @@ if (process.argv[2] === 'debug') {
           mcpServers: { existing: { url: "https://example.test/mcp" } },
         }),
       );
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", '{"theme": "dark"}'))`,
+      );
       const scriptPath = path.join(home, "connect.sh");
       const context = fullContext("cursor");
       if (!context.skills) throw new Error("Missing skills");
@@ -2563,8 +3142,29 @@ if (process.argv[2] === 'debug') {
         [MCP.serverName]: { url: MCP.url },
       });
       expect(stdout).toContain("Reload Cursor and open Customize > Skills");
-      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).toContain("settings now point at Archestra");
+      expect(stdout).not.toContain('turn on "Use OpenAI API Key"');
       expect(stdout).not.toContain(source);
+      const rows = JSON.parse(
+        await sqlite(
+          stateDb,
+          `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+        ),
+      );
+      expect(JSON.parse(rows[CURSOR_APPLICATION_USER_KEY])).toEqual({
+        theme: "dark",
+        openAIBaseUrl: context.proxy?.url,
+        useOpenAIKey: true,
+      });
+      expect(rows["cursorAuth/openAIKey"]).toBe(context.proxy?.virtualKey);
+      expect(
+        JSON.parse(
+          await sqlite(
+            `${stateDb}.archestra-backup`,
+            `print(json.dumps(db.execute("SELECT COUNT(*) FROM ItemTable").fetchone()[0]))`,
+          ),
+        ),
+      ).toBe(1);
       expect(
         await readFile(
           path.join(
@@ -2607,6 +3207,123 @@ if (process.argv[2] === 'debug') {
           "utf8",
         ),
       ).toContain("Updated skill");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cursor: the model picker lists only Model Router models, and a re-run replaces them", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-models-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const user = {
+        availableDefaultModels2: [
+          { name: "default" },
+          { name: "grok-4.6" },
+          { name: "claude-sonnet-4-6" },
+        ],
+        aiSettings: {
+          userAddedModels: ["my-own-model"],
+          modelOverrideEnabled: ["grok-4.6", "my-own-model"],
+          modelOverrideDisabled: ["claude-sonnet-4-6"],
+          modelConfig: {
+            composer: {
+              modelName: "grok-4.6",
+              maxMode: false,
+              selectedModels: [{ modelId: "grok-4.6", parameters: [] }],
+            },
+          },
+        },
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify(user))}))`,
+      );
+      const run = async (cursorModels: {
+        ids: string[];
+        defaultId: string | null;
+      }) => {
+        const base = fullContext("cursor");
+        if (!base.proxy) throw new Error("Missing proxy");
+        const scriptPath = path.join(home, "connect.sh");
+        await writeFile(
+          scriptPath,
+          renderSetupScript({
+            ...base,
+            mcp: null,
+            skills: null,
+            proxy: {
+              ...base.proxy,
+              authMode: "primary-providers",
+              cursorModels,
+            },
+          }),
+        );
+        const { stdout } = await execFileAsync("bash", [scriptPath], {
+          env: { ...process.env, HOME: home, NO_COLOR: "1" },
+        });
+        const rows = JSON.parse(
+          await sqlite(
+            stateDb,
+            `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+          ),
+        );
+        return {
+          stdout,
+          settings: JSON.parse(rows[CURSOR_APPLICATION_USER_KEY]).aiSettings,
+        };
+      };
+
+      const first = await run({
+        ids: ["anthropic:claude-sonnet-4-6", "openai:gpt-5.4"],
+        defaultId: "anthropic:claude-sonnet-4-6",
+      });
+      expect(first.stdout).toContain("model picker now lists only Archestra");
+      // Cursor routes every mapped provider, so the banner names none.
+      expect(first.stdout).toContain("Sets up:    LLM proxy\n");
+      expect(first.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideDisabled).toEqual([
+        "default",
+        "grok-4.6",
+        "claude-sonnet-4-6",
+      ]);
+      expect(first.settings.modelConfig.composer).toEqual({
+        modelName: "anthropic:claude-sonnet-4-6",
+        maxMode: false,
+        selectedModels: [
+          { modelId: "anthropic:claude-sonnet-4-6", parameters: [] },
+        ],
+      });
+
+      // The router stopped listing the Anthropic model: it leaves the picker,
+      // the user's own model stays, and a model with no router default keeps
+      // its selection.
+      const second = await run({ ids: ["openai:gpt-5.4"], defaultId: null });
+      expect(second.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelConfig.composer.modelName).toBe(
+        "anthropic:claude-sonnet-4-6",
+      );
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -3126,19 +3843,6 @@ describe("migrating a gateway registered under an older name", () => {
     await expectValidBash(script);
   });
 
-  test("opencode moves the config entry onto the new name", async () => {
-    const script = renderSetupScript({
-      ...fullContext("opencode"),
-      mcp: MCP_WITH_LEGACY_NAME,
-    });
-
-    expect(script).toContain(
-      "ARCHESTRA_OC_MCP_LEGACY_NAMES='[\"my_gateway\"]'",
-    );
-    expect(script).toContain("ARCHESTRA_OC_MCP_NAME='archestra'");
-    await expectValidBash(script);
-  });
-
   test("windows claude-code drops the old entry from both scopes", () => {
     const script = renderSetupScript({
       ...fullContext("claude-code", "windows"),
@@ -3156,18 +3860,12 @@ describe("migrating a gateway registered under an older name", () => {
     );
   });
 
-  test("windows cursor and opencode drop the old config entry", () => {
+  test("windows cursor drops the old config entry", () => {
     const cursor = renderSetupScript({
       ...fullContext("cursor", "windows"),
       mcp: MCP_WITH_LEGACY_NAME,
     });
-    const opencode = renderSetupScript({
-      ...fullContext("opencode", "windows"),
-      mcp: MCP_WITH_LEGACY_NAME,
-    });
-
     expect(cursor).toContain("foreach ($arch_legacy in @('my_gateway'))");
-    expect(opencode).toContain("foreach ($archLegacy in @('my_gateway'))");
   });
 
   test("emits no migration when the gateway keeps its own name", () => {
@@ -3181,7 +3879,7 @@ describe("ending", () => {
   test("ends on the launch command and hands the installer the commands", () => {
     const script = renderSetupScript(fullContext("claude-code"));
     expect(script).toContain(
-      "Next: open a new terminal and run:\n\n  claude 'What can you do with my Archestra tools?'\nARCHESTRA_NEXT",
+      `Next: open a new terminal and run:\n\n  claude '${STARTER_PROMPT}'\nARCHESTRA_NEXT`,
     );
     // Run on its own, the script prints the ending; the installer reads it
     // from the marker instead.
@@ -3195,8 +3893,57 @@ describe("ending", () => {
       MCP.serverName,
     ]);
     expect(ending.launch).toEqual({
-      command: ["claude", "What can you do with my Archestra tools?"],
-      text: "claude 'What can you do with my Archestra tools?'",
+      command: ["claude", STARTER_PROMPT],
+      text: `claude '${STARTER_PROMPT}'`,
     });
   });
 });
+
+describe("starter prompt", () => {
+  test("keeps the agent on the gateway's server, with nothing PowerShell would mangle", () => {
+    const prompt = launchPrompt(fullContext("claude-code", "windows"));
+    expect(prompt).toBe(STARTER_PROMPT);
+    expect(prompt).not.toContain('"');
+  });
+
+  test("names no server whose name a prompt can't carry plainly", () => {
+    const prompt = launchPrompt({
+      ...fullContext("claude-code", "windows"),
+      mcp: { ...MCP, serverName: 'r&d "prod"' },
+    });
+    expect(prompt).toBe(
+      "What can you do with my Archestra tools from the MCP server Archestra added? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.",
+    );
+  });
+
+  test("asks about the setup when there is no gateway", () => {
+    expect(
+      launchPrompt({ ...fullContext("claude-code"), mcp: null, skills: null }),
+    ).toBe("What did Archestra set up for you?");
+  });
+});
+
+/** The prompt the ending's launch command starts the agent with. */
+function launchPrompt(ctx: SetupScriptContext): string | undefined {
+  const marker = renderSetupScript(ctx).match(
+    /^# archestra-ending: (\S+)$/m,
+  )?.[1];
+  return JSON.parse(Buffer.from(marker ?? "", "base64").toString()).launch
+    ?.command[1];
+}
+
+const CURSOR_APPLICATION_USER_KEY =
+  "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
+
+/** Run Python against a SQLite file, as the Cursor step does; returns stdout. */
+async function sqlite(file: string, statements: string): Promise<string> {
+  const { stdout } = await execFileAsync("python3", [
+    "-c",
+    `import json, sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+${statements}
+db.commit()`,
+    file,
+  ]);
+  return stdout;
+}

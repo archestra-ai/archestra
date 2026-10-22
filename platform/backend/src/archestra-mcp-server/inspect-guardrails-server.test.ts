@@ -13,7 +13,10 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
 } from "@/models";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
 import { ApiError } from "@/types";
@@ -123,12 +126,12 @@ describe("inspect_guardrails_server", () => {
           id: expect.any(String),
           name: "inspection__read_54",
           readOnly: null,
-          kind: "unlisted",
+          kind: "read",
           description: "Reads one record.",
           rules: [
             {
-              kind: "unlisted",
-              policySource: "not_covered",
+              kind: "read",
+              policySource: "catchall",
               rule: expect.objectContaining({ source: "catchall", name: "*" }),
             },
           ],
@@ -174,7 +177,7 @@ describe("inspect_guardrails_server", () => {
             {
               rule: expect.objectContaining({
                 source: "catchall",
-                annotator: "noop",
+                annotator: UNDECLARED_TOOL_ANNOTATOR,
                 delta: {},
               }),
             },
@@ -355,10 +358,10 @@ describe("inspect_guardrails_server", () => {
         },
         {
           name: "clock_app__tick",
-          kind: "unlisted",
+          kind: "read",
           rules: [
             {
-              policySource: "not_covered",
+              policySource: "catchall",
               rule: expect.objectContaining({ source: "catchall", name: "*" }),
             },
           ],
@@ -576,7 +579,7 @@ describe("inspect_guardrails_server", () => {
   }) => {
     const viewer = await makeUser();
     const role = await makeCustomRole(context.organizationId as string, {
-      permission: { openappaPolicy: ["read"], mcpRegistry: ["read"] },
+      permission: { guardrailsPolicy: ["read"], mcpRegistry: ["read"] },
     });
     await makeMember(viewer.id, context.organizationId as string, {
       role: role.role,
@@ -667,7 +670,7 @@ describe("inspect_guardrails_server", () => {
     const viewer = await makeUser();
     const owner = await makeUser();
     const role = await makeCustomRole(context.organizationId as string, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(viewer.id, context.organizationId as string, {
       role: role.role,

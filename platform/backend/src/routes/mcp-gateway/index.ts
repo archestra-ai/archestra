@@ -6,13 +6,16 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import { RequestLookups } from "@/auth/request-lookups";
+import { internalCallProvenance } from "@/clients/internal-call";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
+import { setMcpMethodOnRequestSpans } from "@/observability/tracing";
 import {
   APPA_SESSION_HEADER,
   isWellFormedAppaId,
+  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
@@ -45,6 +48,7 @@ import {
   openLegacySseStream,
   wantsLegacySseStream,
 } from "./legacy-sse";
+import { gatewayLlmSessionId, gatewayLlmToolCallId } from "./llm-link";
 import {
   clientSupportsInputRequest,
   deriveStatePrincipal,
@@ -53,9 +57,11 @@ import {
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
-import { pendingInboundRequests } from "./pending-inbound-requests";
+import { PendingInboundRequests } from "./pending-inbound-requests";
+import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
+  buildGatewayInstructions,
   extractTraceContext,
   isDiscoverRequest,
   isMethodRemovedForRevision,
@@ -214,6 +220,7 @@ async function handleMcpPostRequest(
   resolution: ProtocolResolution,
   /** Rounds already spent on this call, from a verified requestState. */
   mrtrRound: number,
+  pendingRequests: PendingInboundRequests,
   lookups?: RequestLookups,
 ): Promise<unknown> {
   const { revision } = resolution;
@@ -245,41 +252,41 @@ async function handleMcpPostRequest(
     "requestId" in cancellationParams
   ) {
     const requestId = (cancellationParams as Record<string, unknown>).requestId;
-    if (typeof requestId === "string" || typeof requestId === "number") {
-      const pending = pendingInboundRequests.consume({
+    if (
+      (typeof requestId === "string" || typeof requestId === "number") &&
+      (await routeClientMessage({
+        pendingRequests,
         wireId: requestId,
         agentId: profileId,
+        organizationId: tokenAuthContext?.organizationId,
         caller: principal,
-      });
-      if (pending) {
-        pending.transport.onmessage?.({
-          ...body,
-          params: { ...cancellationParams, requestId: pending.id },
-        } as unknown as JSONRPCMessage);
-        reply.status(202);
-        return;
-      }
+        message: body,
+      }))
+    ) {
+      reply.status(202);
+      return;
     }
   }
 
   // A JSON-RPC response or error without a method answers a server-initiated
   // request sent during an earlier POST call. Because each POST creates a fresh
-  // server, route the answer back to the active transport waiting for it.
+  // server, route the answer back to the active transport waiting for it, on
+  // this replica or, through the shared cache, on the one that sent it.
   // Unknown IDs or answers from other callers fall through to default handling.
-  if (body.method === undefined && body.id !== undefined && body.id !== null) {
-    const pending = pendingInboundRequests.consume({
-      wireId: body.id as string | number,
+  if (
+    body.method === undefined &&
+    (typeof body.id === "string" || typeof body.id === "number") &&
+    (await routeClientMessage({
+      pendingRequests,
+      wireId: body.id,
       agentId: profileId,
+      organizationId: tokenAuthContext?.organizationId,
       caller: principal,
-    });
-    if (pending) {
-      pending.transport.onmessage?.({
-        ...body,
-        id: pending.id,
-      } as unknown as JSONRPCMessage);
-      reply.status(202);
-      return;
-    }
+      message: body,
+    }))
+  ) {
+    reply.status(202);
+    return;
   }
 
   const runId = readHeader(request, RUN_ID_HEADER);
@@ -410,7 +417,7 @@ async function handleMcpPostRequest(
               scope: `user:${tokenAuthContext.userId}`,
             })
           : undefined;
-    if (runtimeSession.kind === "session") {
+    if (runtimeSession.kind === "session" && openappaEnabled()) {
       const workspace = await resolveRuntimeSessionForWorkspace({
         organizationId: runtimeSession.identity.organizationId,
         workspaceId: runtimeSession.identity.workspaceId,
@@ -489,7 +496,7 @@ async function handleMcpPostRequest(
     // outstanding request loses its live transport as soon as it closes.
     const onTransportClose = transport.onclose;
     transport.onclose = () => {
-      pendingInboundRequests.forgetTransport({ transport });
+      pendingRequests.forgetTransport({ transport });
       onTransportClose?.();
     };
 
@@ -502,15 +509,16 @@ async function handleMcpPostRequest(
       if (isServerInitiatedRequestMessage(message)) {
         let wireId: string | undefined;
         try {
-          wireId = pendingInboundRequests.register({
+          wireId = await pendingRequests.register({
             id: message.id,
             transport,
             agentId: profileId,
+            organizationId: tokenAuthContext?.organizationId,
             caller: principal,
           });
           return await originalSend({ ...message, id: wireId }, options);
         } catch (error) {
-          if (wireId !== undefined) pendingInboundRequests.forget({ wireId });
+          if (wireId !== undefined) await pendingRequests.forget({ wireId });
           throw error;
         }
       }
@@ -518,9 +526,9 @@ async function handleMcpPostRequest(
       const wireId =
         cancelled === undefined
           ? undefined
-          : pendingInboundRequests.wireIdOf({ transport, id: cancelled });
+          : pendingRequests.wireIdOf({ transport, id: cancelled });
       if (wireId !== undefined) {
-        pendingInboundRequests.forget({ wireId });
+        await pendingRequests.forget({ wireId });
         return originalSend(
           {
             ...message,
@@ -618,8 +626,20 @@ async function handleMcpPostRequest(
 // /v1/mcp/<profile_id>
 // Authorization header: Bearer <platform_token>
 // =============================================================================
-const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const mcpGatewayRoutes: FastifyPluginAsyncZod<{
+  /** Tests pass one per app to run several replicas in one process. */
+  pendingRequests?: PendingInboundRequests;
+}> = async (fastify, options) => {
   const { endpoint } = config.mcpGateway;
+
+  // Forms and other requests this replica sends mid-call, and their answers.
+  // The answer may reach another replica; the shared cache brings it here.
+  const pendingRequests =
+    options.pendingRequests ??
+    new PendingInboundRequests({ shared: cachedPendingRequests });
+  fastify.addHook("onClose", async () => {
+    await pendingRequests.close();
+  });
 
   // Legacy HTTP+SSE streams this process holds. Ended from `preClose`, before
   // Fastify drains the HTTP server: a held stream IS one of the in-flight
@@ -999,6 +1019,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
+      const mcpMethod = (request.body as { method?: unknown }).method;
+      if (typeof mcpMethod === "string") {
+        setMcpMethodOnRequestSpans(request.raw, mcpMethod);
+      }
+
       // An MRTR retry carries state the gateway minted. It travels through the
       // client, so it is verified — signature, principal, expiry, and the
       // originating request — before anything acts on it.
@@ -1201,6 +1226,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.serviceAccountId && {
+                serviceAccountId: tokenAuth.serviceAccountId,
+              }),
               ...(tokenAuth.oauthClientId && {
                 oauthClientId: tokenAuth.oauthClientId,
               }),
@@ -1209,18 +1237,23 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             runId: readHeader(request, RUN_ID_HEADER),
           }),
         );
+        // One primary-key read, memoized for the rest of this request.
+        const agent = await lookups.gatewayAgent(profileId);
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({
             agentId: profileId,
             version: config.api.version,
             revision: resolution.revision,
+            instructions: buildGatewayInstructions(agent?.description),
           }),
           id: (request.body as { id?: string | number })?.id ?? null,
         };
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
+      const llmSessionId = gatewayLlmSessionId(request);
+      const llmToolCallId = gatewayLlmToolCallId(request.body);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
@@ -1228,6 +1261,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        // The account, not its team, is who acts: runtime binding and run
+        // ownership checks, call-time credentials, and tool permissions all
+        // read it.
+        ...(tokenAuth.serviceAccountId && {
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(tokenAuth.oauthClientId && {
@@ -1235,6 +1274,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         source: gatewayCallSource(request),
         ...(runId && { runId }),
+        ...(llmSessionId && { llmSessionId }),
+        ...(llmToolCallId && { llmToolCallId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
@@ -1261,6 +1302,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuthContext,
         resolution,
         mrtrRound,
+        pendingRequests,
         lookups,
       );
     },
@@ -1268,11 +1310,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 /**
- * Who sent a gateway request: the built-in chat's loopback client marks
- * itself; everything else is an outside agent.
+ * Only the built-in client can attest that a gateway request came from chat.
  */
 function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
-  return readHeader(request, SOURCE_HEADER) === "chat" ? "chat" : "api";
+  return readHeader(request, SOURCE_HEADER) === "chat" &&
+    internalCallProvenance(request).inProcess
+    ? "chat"
+    : "api";
 }
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {
@@ -1285,6 +1329,23 @@ const SERVER_INITIATED_METHODS = [
   "sampling/createMessage",
   "roots/list",
 ] as const;
+
+/**
+ * Hand a client's answer or cancellation to the Server waiting on it: here,
+ * or parked for the replica that sent the request. False when no request
+ * this caller was asked waits under that wire id.
+ */
+async function routeClientMessage(params: {
+  pendingRequests: PendingInboundRequests;
+  wireId: string | number;
+  agentId: string;
+  organizationId: string | undefined;
+  caller: string;
+  message: Record<string, unknown>;
+}): Promise<boolean> {
+  const { pendingRequests, ...answer } = params;
+  return pendingRequests.acceptAnswer(answer);
+}
 
 function isServerInitiatedRequestMessage(
   message: JSONRPCMessage,
@@ -1329,7 +1390,18 @@ function runtimeTokenMatchesRun(params: {
     case "user":
       return params.tokenAuth.userId === params.run.actorId;
     case "team":
-      return params.tokenAuth.teamId === params.run.actorId;
+      // A service account acting for the team is not the team's token.
+      return (
+        !params.tokenAuth.serviceAccountId &&
+        params.tokenAuth.teamId === params.run.actorId
+      );
+    case "serviceAccount":
+      return params.tokenAuth.serviceAccountId === params.run.actorId;
+    case "oauthClient":
+      return (
+        params.tokenAuth.oauthClientId === params.run.actorId ||
+        params.tokenAuth.isOrganizationToken
+      );
     case "organization":
     case "system":
       return params.tokenAuth.isOrganizationToken;

@@ -10,7 +10,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ResourceVisibilityScope } from "@/types";
+import type {
+  LlmProviderCredentialKind,
+  ResourceVisibilityScope,
+} from "@/types";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { team } from "./team";
@@ -73,6 +76,12 @@ const llmProviderApiKeysTable = pgTable(
     requiresReauthentication: boolean("requires_reauthentication")
       .notNull()
       .default(false),
+    /**
+     * Whether the stored value is an API key or a subscription credential,
+     * recorded when the value is written. Null on rows written before the
+     * column; the first read classifies the value once and stores it.
+     */
+    credentialKind: text("credential_kind").$type<LlmProviderCredentialKind>(),
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,

@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import {
@@ -6,6 +6,7 @@ import {
   getOrCreateLabelValue,
   pruneLabelKeysAndValues,
 } from "./entity-label";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentLabelModel {
   /**
@@ -75,11 +76,11 @@ class AgentLabelModel {
 
       // Get or create keys/values and insert new labels within the same transaction
       if (labels.length > 0) {
-        const labelInserts: {
-          agentId: string;
-          keyId: string;
-          valueId: string;
-        }[] = [];
+        // One value per key: a repeated key keeps its last value.
+        const labelInserts = new Map<
+          string,
+          { agentId: string; keyId: string; valueId: string }
+        >();
 
         for (const label of labels) {
           const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
@@ -87,10 +88,12 @@ class AgentLabelModel {
             label.value,
             tx,
           );
-          labelInserts.push({ agentId, keyId, valueId });
+          labelInserts.set(keyId, { agentId, keyId, valueId });
         }
 
-        await tx.insert(schema.agentLabelsTable).values(labelInserts);
+        await tx
+          .insert(schema.agentLabelsTable)
+          .values([...labelInserts.values()]);
       }
     });
 
@@ -154,7 +157,7 @@ class AgentLabelModel {
         schema.labelValuesTable,
         eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(inArray(schema.agentLabelsTable.agentId, agentIds))
+      .where(idArrayCondition(schema.agentLabelsTable.agentId, agentIds))
       .orderBy(asc(schema.labelKeysTable.key));
 
     const labelsMap = new Map<string, LabelWithDetails[]>();

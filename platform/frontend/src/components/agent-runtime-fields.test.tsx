@@ -16,12 +16,18 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
+  defaultAgentRuntime,
 } from "./agent-runtime-fields";
 
 Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
@@ -34,6 +40,7 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
@@ -45,10 +52,18 @@ afterAll(() => server.close());
 
 describe("AgentRuntimeFields", () => {
   beforeEach(() => {
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(true);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       isPending: false,
     } as ReturnType<typeof useHasPermissions>);
+    // Every saved credential is usable, so each can be attached.
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "credential", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1", name: "Ada", email: "ada@example.com" } },
+    } as unknown as ReturnType<typeof useSession>);
     archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
     server.use(
       http.get("http://localhost:9000/api/credentials", () =>
@@ -240,6 +255,7 @@ describe("AgentRuntimeFields", () => {
     );
     await user.click(githubOption);
     expect(within(dialog).getByLabelText("Key")).toHaveValue("GITHUB_TOKEN");
+    expect(within(dialog).getByLabelText("Description")).toHaveValue("");
     await user.click(
       within(dialog).getByRole("button", { name: "Add variable" }),
     );
@@ -261,11 +277,32 @@ describe("AgentRuntimeFields", () => {
     expect(
       within(screen.getByRole("dialog")).getByLabelText("Secret source"),
     ).toHaveTextContent("Repository access");
+    expect(
+      within(screen.getByRole("dialog")).getByLabelText("Description"),
+    ).toHaveValue("");
+    dialog = screen.getByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Description"),
+      "Use for repository reviews",
+    );
+    await user.click(within(dialog).getByLabelText("Secret source"));
+    await user.click(screen.getByRole("option", { name: "GitLab PAT" }));
+    expect(within(dialog).getByLabelText("Description")).toHaveValue(
+      "Use for repository reviews",
+    );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Cancel",
       }),
     );
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Secret source")).toHaveTextContent(
+      "Repository access",
+    );
+    expect(within(dialog).getByLabelText("Description")).toHaveValue("");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
     await user.click(
       screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
@@ -298,11 +335,68 @@ describe("AgentRuntimeFields", () => {
         scope: "shared",
       }),
     ]);
+    expect(saved.credentials[0].description).toBeUndefined();
+  });
+
+  it("points a reader without Settings at their own credentials", async () => {
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(false);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
+    expect(screen.getByRole("link", { name: "Credentials" })).toHaveAttribute(
+      "href",
+      "/account/credentials",
+    );
   });
 
   // The backend reads an absent value as enabled, so the switch has to show
   // enabled for a config that never set the field, and write an explicit
   // `false` when an administrator turns it off.
+  it("lets a saved runtime be turned off once the deployment has none", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? false : undefined,
+    );
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness initial={defaultAgentRuntime()} />
+      </QueryClientProvider>,
+    );
+    const toggle = screen.getByRole("switch", {
+      name: "Dedicated Agent runtime",
+    });
+    expect(toggle).toBeEnabled();
+    expect(
+      screen.getByText(/Agent Runtime is off on this deployment/),
+    ).toBeVisible();
+
+    await user.click(toggle);
+
+    expect(screen.getByTestId("config")).toHaveTextContent("null");
+    // Nothing to turn it back on with.
+    expect(toggle).toBeDisabled();
+  });
+
   it("shows client-supplied credentials as accepted until turned off", async () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) =>
@@ -419,8 +513,8 @@ describe("AgentRuntimeFields", () => {
   });
 });
 
-function Harness() {
-  const [value, setValue] = useState<AgentRuntimeConfig | null>(null);
+function Harness({ initial = null }: { initial?: AgentRuntimeConfig | null }) {
+  const [value, setValue] = useState<AgentRuntimeConfig | null>(initial);
   return (
     <>
       <AgentRuntimeFields value={value} onChange={setValue} />

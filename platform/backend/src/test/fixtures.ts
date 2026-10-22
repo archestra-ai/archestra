@@ -11,6 +11,7 @@ import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
+import AgentUsageModel from "@/models/agent-usage";
 import AppModel from "@/models/app";
 import AppDataModel from "@/models/app-data";
 import AppToolModel from "@/models/app-tool";
@@ -24,6 +25,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import SecretModel from "@/models/secret";
+import ServiceAccountModel from "@/models/service-account";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
@@ -114,6 +116,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeServiceAccountToken: typeof makeServiceAccountToken;
   makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
   makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
@@ -658,6 +661,7 @@ async function makeServiceAccount(
     name: string;
     role: string;
     disabled: boolean;
+    teamId: string | null;
     createdBy: string | null;
   }> = {},
 ) {
@@ -679,7 +683,7 @@ async function makeServiceAccount(
 async function makeMember(
   userId: string,
   organizationId: string,
-  overrides: Partial<Pick<InsertMember, "role">> = {},
+  overrides: Partial<Pick<InsertMember, "role" | "createdAt">> = {},
 ) {
   const [member] = await db
     .insert(schema.membersTable)
@@ -826,7 +830,10 @@ async function makeInvitation(
   organizationId: string,
   inviterId: string,
   overrides: Partial<
-    Pick<InsertInvitation, "email" | "role" | "status" | "expiresAt">
+    Pick<
+      InsertInvitation,
+      "email" | "role" | "status" | "expiresAt" | "createdAt"
+    >
   > = {},
 ) {
   const [invitation] = await db
@@ -979,10 +986,12 @@ async function makeInteraction(
       | "billingTeamId"
       | "billingMode"
       | "sessionId"
+      | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
       | "externalAgentId"
       | "userId"
+      | "serviceAccountId"
       | "appId"
       | "source"
       | "createdAt"
@@ -1061,6 +1070,13 @@ async function makeInteraction(
       ...overrides,
     })
     .returning();
+  // Inserted directly, so stamp the agent as InteractionModel.create would.
+  if (interaction.profileId) {
+    await AgentUsageModel.recordUse({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
+  }
   return interaction;
 }
 
@@ -1077,6 +1093,32 @@ async function makeSecret(
     },
     ...overrides,
   });
+}
+
+/**
+ * Creates a service account and one key for it, the credential automation
+ * presents at the MCP gateway and A2A. `teamId` makes the account act for a
+ * team; omitted, it reaches what is shared with the whole organization.
+ */
+async function makeServiceAccountToken(params: {
+  organizationId: string;
+  teamId?: string | null;
+  role?: string;
+  name?: string;
+}) {
+  const serviceAccount = await ServiceAccountModel.create({
+    organizationId: params.organizationId,
+    name: params.name ?? `service-account-${crypto.randomUUID().slice(0, 8)}`,
+    role: params.role ?? MEMBER_ROLE_NAME,
+    teamId: params.teamId ?? null,
+    createdBy: null,
+  });
+  const { token, id } = await ServiceAccountModel.createToken({
+    serviceAccountId: serviceAccount.id,
+    organizationId: params.organizationId,
+    name: "test key",
+  });
+  return { serviceAccount, tokenId: id, value: token };
 }
 
 /**
@@ -1616,6 +1658,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeServiceAccountToken: async ({}, use) => {
+    await use(makeServiceAccountToken);
   },
   makeLlmProviderApiKey: async ({}, use) => {
     await use(makeLlmProviderApiKey);

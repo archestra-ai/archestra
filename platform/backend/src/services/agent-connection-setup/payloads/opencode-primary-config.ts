@@ -1,3 +1,4 @@
+import type { ModelInputModality } from "@archestra/shared/chat";
 import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
 import {
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
@@ -34,6 +35,7 @@ export function openCodePrimaryConfig(
           models: entry.models.map((model) => ({
             ...model,
             wireId: routed ? `${entry.provider}:${model.id}` : model.id,
+            ...openCodeModelCapabilities(model.inputModalities),
           })),
         },
       ];
@@ -86,7 +88,7 @@ export interface ManagedRuntimeCatalog {
           name: string;
           id: string;
           limit?: { context: number; output: number };
-        }
+        } & OpenCodeModelCapabilities
       >;
     }
   >;
@@ -134,6 +136,7 @@ export function publicManagedCatalog(params: {
                   name: model.name,
                   id: routed ? `${entry.provider}:${model.id}` : model.id,
                   ...(context || output ? { limit: { context, output } } : {}),
+                  ...openCodeModelCapabilities(model.inputModalities),
                 },
               ];
             }),
@@ -183,6 +186,31 @@ function openCodeProviderTwins(
 function positiveLimit(value: number | null | undefined): number {
   return typeof value === "number" && value > 0 ? value : 0;
 }
+
+/**
+ * What a model reads, in OpenCode V1's model fields; V2 takes
+ * `capabilities.input` from `modalities.input`. OpenCode copies these from
+ * models.dev only when the config model's id matches a models.dev key, and the
+ * catalog's ids never do, so without them V1 treats every model as text-only
+ * and replaces each image with an error. Unknown modalities stay unset, so
+ * each client applies its own default.
+ */
+function openCodeModelCapabilities(
+  inputModalities: ModelInputModality[] | null | undefined,
+): OpenCodeModelCapabilities {
+  if (!inputModalities?.length) return {};
+  return {
+    // V1 needs both lists once `modalities` is set. The catalog lists only
+    // text chat models, so the output list is always text.
+    modalities: { input: [...inputModalities], output: ["text"] },
+    attachment: inputModalities.some((modality) => modality !== "text"),
+  };
+}
+
+type OpenCodeModelCapabilities = {
+  modalities?: { input: ModelInputModality[]; output: ["text"] };
+  attachment?: boolean;
+};
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */
 export const openCodePrimaryConfigScript = (client: OpenCodeFamilyClient) =>
@@ -287,8 +315,11 @@ if (input) {
     const models = Object.fromEntries(provider.models.map(model => {
       // OpenCode requires both limit fields once limit is set; 0 is its value for unknown.
       const context = model.context > 0 ? model.context : 0, output = model.output > 0 ? model.output : 0;
+      // Without its modalities the client treats a model as text-only and drops attached images.
+      const capabilities = !model.modalities ? {} : v2 ? { capabilities: { input: model.modalities.input } }
+        : { modalities: model.modalities, attachment: model.attachment };
       return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
-        ...(context || output ? { limit: { context, output } } : {}) }];
+        ...(context || output ? { limit: { context, output } } : {}), ...capabilities }];
     }));
     const settings = { baseURL: provider.baseURL, apiKey: ${JSON.stringify(`{file:~/.archestra/${client.stateName}-primary.key}`)} };
     config[section][id] = v2

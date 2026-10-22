@@ -22,6 +22,7 @@ import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -491,6 +492,12 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  // A model pool's name is served by the pool's members, LiteLLM style: the
+  // proxy picks a member and its key, so the caller's own keys don't matter.
+  if (await isModelPoolName({ auth, model: body.model })) {
+    applyModelPoolAuthOverride({ request, auth });
+    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
+  }
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
@@ -910,15 +917,27 @@ async function listModels(params: { auth: ModelRouterAuth }) {
           : undefined,
     includeEmbeddings: true,
   });
+  // Pools come first: their names are what clients are meant to ask for.
+  const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
+    (pool) => pool.members.some((member) => member.enabled),
+  );
 
   return {
     object: "list" as const,
-    data: chatModels.map((model) => ({
-      id: buildRoutableModelId(model),
-      object: "model" as const,
-      created: Math.floor(model.createdAt.getTime() / 1000),
-      owned_by: model.provider,
-    })),
+    data: [
+      ...pools.map((pool) => ({
+        id: pool.name,
+        object: "model" as const,
+        created: Math.floor(pool.createdAt.getTime() / 1000),
+        owned_by: "model-pool",
+      })),
+      ...chatModels.map((model) => ({
+        id: buildRoutableModelId(model),
+        object: "model" as const,
+        created: Math.floor(model.createdAt.getTime() / 1000),
+        owned_by: model.provider,
+      })),
+    ],
   };
 }
 
@@ -1076,6 +1095,33 @@ function assertNever(value: never): never {
   throw new ApiError(500, `Unhandled model router provider "${value}".`);
 }
 
+async function isModelPoolName(params: {
+  auth: ModelRouterAuth;
+  model: string;
+}): Promise<boolean> {
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.auth.organizationId,
+    name: params.model.trim(),
+  });
+  return (pool?.members.length ?? 0) > 0;
+}
+
+/** The caller's identity, with no key: each pool member brings its own. */
+function applyModelPoolAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterAuth;
+}): void {
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey: undefined,
+    baseUrl: undefined,
+    ...modelRouterCaller(params.auth),
+  };
+}
+
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
@@ -1131,29 +1177,34 @@ async function applyModelRouterAuthOverride(params: {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
     chatApiKeyId: mappedApiKey.providerApiKeyId,
+    ...modelRouterCaller(params.auth),
+  };
+}
+
+function modelRouterCaller(
+  auth: ModelRouterAuth,
+): Omit<LLMProxyAuthOverride, "apiKey" | "baseUrl" | "chatApiKeyId"> {
+  return {
     authenticated: true,
     source: "model_router",
-    authMethod: params.auth.authMethod,
-    serviceAccountId: params.auth.serviceAccountId,
+    authMethod: auth.authMethod,
+    serviceAccountId: auth.serviceAccountId,
     virtualKeyId:
-      params.auth.authMethod === "virtual_key"
-        ? params.auth.virtualKeyId
-        : undefined,
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
     authenticatedApp:
-      params.auth.authMethod === "oauth_user"
-        ? (params.auth.oauthClient ?? undefined)
-        : params.auth.oauthClient,
+      auth.authMethod === "oauth_user"
+        ? (auth.oauthClient ?? undefined)
+        : auth.oauthClient,
     userId:
-      params.auth.authMethod === "oauth_user"
-        ? params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyIsPersonal
-          ? (params.auth.virtualKeyAuthorId ?? undefined)
+      auth.authMethod === "oauth_user"
+        ? auth.userId
+        : auth.authMethod === "virtual_key" && auth.virtualKeyIsPersonal
+          ? (auth.virtualKeyAuthorId ?? undefined)
           : undefined,
     billingTeamId:
-      params.auth.authMethod === "oauth_user"
+      auth.authMethod === "oauth_user"
         ? undefined
-        : (params.auth.billingTeamId ?? undefined),
+        : (auth.billingTeamId ?? undefined),
   };
 }
 

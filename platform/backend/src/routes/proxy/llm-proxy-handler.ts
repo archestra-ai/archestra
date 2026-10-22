@@ -1639,14 +1639,18 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
-    const client = createUpstreamClient({
-      adapter: provider,
-      apiKey,
-      baseUrl: effectiveBaseUrl,
-      headers: mergedHeaders,
-      providerApiKeyId: perKeyChatApiKeyId,
-      model: requestAdapter.getModel(),
-    });
+    // A pooled request never uses the caller's own key, which a Model Router
+    // pool request doesn't even carry.
+    const client = modelPoolPlan
+      ? undefined
+      : createUpstreamClient({
+          adapter: provider,
+          apiKey,
+          baseUrl: effectiveBaseUrl,
+          headers: mergedHeaders,
+          providerApiKeyId: perKeyChatApiKeyId,
+          model: requestAdapter.getModel(),
+        });
 
     // Each pool member is reached with its own provider's client, its own
     // model id and, when it speaks another wire, a translator.

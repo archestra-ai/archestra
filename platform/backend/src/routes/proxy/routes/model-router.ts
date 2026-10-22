@@ -33,6 +33,7 @@ import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -41,6 +42,7 @@ import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-provid
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
+  Azure,
   constructResponseSchema,
   GithubCopilot,
   OpenAi,
@@ -71,15 +73,26 @@ import {
 } from "../adapters";
 import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai";
 import { openaiToAnthropic } from "../adapters/anthropic-openai-translator";
+import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
+import { azureImagesAdapterFactory } from "../adapters/azure-images";
 import { makeBedrockOpenaiAdapterFactory } from "../adapters/bedrock-openai";
 import { openaiToConverse } from "../adapters/bedrock-openai-translator";
 import { makeCohereOpenaiAdapterFactory } from "../adapters/cohere-openai";
 import { openaiToCohere } from "../adapters/cohere-openai-translator";
+import {
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
+import {
+  geminiImagesAdapterFactory,
+  toGeminiImageRequest,
+} from "../adapters/gemini-images";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
 import {
   decodeSignedToolCallId,
   openaiToGemini,
 } from "../adapters/gemini-openai-translator";
+import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
   type OpenaiResponsesContext,
@@ -309,6 +322,30 @@ const ModelListResponseSchema = z.object({
 const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   logger.debug("[ModelRouterProxy] Registering model router routes");
 
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/generations`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.ModelRouterImagesWithAgent
+            : RouteId.ModelRouterImagesWithDefaultAgent,
+          description:
+            "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.ImageGenerationRequestSchema,
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      routeImageGeneration,
+    );
+  }
+
   fastify.get(
     `${MODEL_ROUTER_PREFIX}/models`,
     {
@@ -402,7 +439,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -424,7 +461,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -479,6 +516,57 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default modelRouterProxyRoutes;
+
+async function routeImageGeneration(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = request.body as z.infer<
+    typeof Azure.API.ImageGenerationRequestSchema
+  >;
+  const params = request.params as { agentId?: string };
+  const auth = await getModelRouterAuth(request);
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  const resolution = await resolveModelRoute({
+    requestedModel: body.model,
+    capability: "media",
+    allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
+  });
+  const routedBody = { ...body, model: resolution.modelId };
+  await applyModelRouterAuthOverride({ request, auth, resolution });
+  switch (resolution.provider) {
+    case "azure":
+      return handleLLMProxy(
+        routedBody,
+        request,
+        reply,
+        azureImagesAdapterFactory,
+      );
+    case "openai":
+      return handleLLMProxy(
+        routedBody,
+        request,
+        reply,
+        openaiImagesAdapterFactory,
+      );
+    case "gemini":
+      return handleLLMProxy(
+        toGeminiImageRequest(routedBody),
+        request,
+        reply,
+        geminiImagesAdapterFactory,
+      );
+    default:
+      throw new ApiError(
+        400,
+        `Provider "${resolution.provider}" does not support the Model Router images endpoint.`,
+      );
+  }
+}
 
 async function routeChatCompletion(
   request: FastifyRequest,
@@ -548,13 +636,16 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   // Preserve native Responses semantics whenever that surface is available.
   // A chat round trip loses reasoning settings, encrypted replay state,
   // assistant phases and tools that are not Chat Completions functions.
-  const nativeResponsesAdapter = getNativeResponsesAdapter(resolution);
+  const selectedKey = await applyModelRouterAuthOverride({
+    request,
+    auth,
+    resolution,
+  });
+  const nativeResponsesAdapter = await getNativeResponsesAdapter({
+    resolution,
+    providerApiKeyId: selectedKey.providerApiKeyId,
+  });
   if (nativeResponsesAdapter) {
-    await applyModelRouterAuthOverride({
-      request,
-      auth,
-      resolution,
-    });
     return handleLLMProxy(
       { ...body, model: resolution.modelId },
       request,
@@ -635,7 +726,12 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     resolution,
   });
 
-  return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
+  return handleLLMProxy(
+    routedBody,
+    request,
+    reply,
+    withEmbeddingEncoding(embeddingsProvider, body.encoding_format),
+  );
 }
 
 /**
@@ -659,6 +755,9 @@ function getModelRouterEmbeddingsProvider(
   }
   if (provider === "openai") {
     return openAiEmbeddingsAdapterFactory;
+  }
+  if (provider === "azure") {
+    return azureEmbeddingsAdapterFactory;
   }
   // Copilot is an OpenAI-wire chat provider but publishes no embeddings models,
   // and the generic OpenAI-compatible embeddings adapter would send the raw
@@ -690,15 +789,30 @@ function getModelRouterEmbeddingsProvider(
  * publish those surfaces, so its known Responses-only model families use the
  * same model-id discriminator as foreground Agent chat.
  */
-function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
+async function getNativeResponsesAdapter({
+  resolution,
+  providerApiKeyId,
+}: {
+  resolution: ModelRouterResolution;
+  providerApiKeyId: string;
+}) {
   if (resolution.provider === "openai") {
     return openAiResponsesAdapterFactory;
   }
-  if (
-    resolution.provider === "azure" &&
-    isAzureOpenAiFirstPartyModelName(resolution.modelId)
-  ) {
-    return azureResponsesAdapterFactory;
+  if (resolution.provider === "azure") {
+    const evidence = await resolveAzureModelCapabilities({
+      providerApiKeyId,
+      modelId: resolution.modelId,
+    });
+    // This is an explicit Responses request. Unknown deployment identities are
+    // sent to that native surface so Azure validates them; aliases never imply
+    // a backing model or permission to translate across APIs.
+    if (
+      evidence.status !== "known" ||
+      (evidence.underlyingModelName &&
+        isAzureOpenAiFirstPartyModelName(evidence.underlyingModelName))
+    )
+      return azureResponsesAdapterFactory;
   }
   if (!modelRequiresResponses(resolution)) {
     return null;
@@ -909,6 +1023,7 @@ async function listModels(params: { auth: ModelRouterAuth }) {
           ? serviceAccountUserId(params.auth.serviceAccountId)
           : undefined,
     includeEmbeddings: true,
+    includeMedia: true,
   });
 
   return {
@@ -1080,7 +1195,7 @@ async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
   resolution: ModelRouterResolution;
-}): Promise<void> {
+}): Promise<ModelRouterMappedProviderKey> {
   const { provider, modelId } = params.resolution;
   const mappedApiKey = await selectMappedProviderKey({
     mappings: params.auth.providerApiKeys,
@@ -1155,6 +1270,7 @@ async function applyModelRouterAuthOverride(params: {
         ? undefined
         : (params.auth.billingTeamId ?? undefined),
   };
+  return mappedApiKey;
 }
 
 async function getModelRouterOAuthClientAuth(

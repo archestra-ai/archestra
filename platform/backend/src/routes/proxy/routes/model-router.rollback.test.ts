@@ -76,6 +76,7 @@ import {
   xaiAdapterFactory,
   zhipuaiAdapterFactory,
 } from "../adapters";
+import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
 import modelRouterProxyRoutes from "./model-router";
 
 setupTestCacheManager();
@@ -643,6 +644,9 @@ describe("model router proxy routes", () => {
       () => createResponsesTestClient() as never,
     );
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
+      () => createAzureTestClient() as never,
+    );
+    vi.spyOn(azureEmbeddingsAdapterFactory, "createClient").mockImplementation(
       () => createAzureTestClient() as never,
     );
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(

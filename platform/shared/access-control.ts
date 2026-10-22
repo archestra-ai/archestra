@@ -488,6 +488,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AzureFileContentWithAgent]: {},
   [RouteId.AzureDeleteFile]: {},
   [RouteId.AzureDeleteFileWithAgent]: {},
+  [RouteId.ModelRouterImagesWithDefaultAgent]: {},
+  [RouteId.ModelRouterImagesWithAgent]: {},
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },

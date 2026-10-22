@@ -281,6 +281,8 @@ export const RouteId = {
   ModelRouterEmbeddingsWithDefaultAgent:
     "modelRouterEmbeddingsWithDefaultAgent",
   ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
+  ModelRouterImagesWithDefaultAgent: "modelRouterImagesWithDefaultAgent",
+  ModelRouterImagesWithAgent: "modelRouterImagesWithAgent",
 
   // Proxy Routes - Gemini
   GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",

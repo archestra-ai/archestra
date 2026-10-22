@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import OpenAI, { toFile } from "openai";
+import type OpenAI from "openai";
+import { toFile } from "openai";
 import { z } from "zod";
 import { isAzureOpenAiV1BaseUrl } from "@/clients/azure-url";
 import config from "@/config";
@@ -23,6 +24,7 @@ import {
 import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { boundedMediaFetch } from "./utils/bounded-media-response";
 import { parseMediaMultipart } from "./utils/media-multipart";
+import { mediaProviderError } from "./utils/media-provider-error";
 
 const ID_PREFIX = "file-archestra-";
 export const ProxyFileIdSchema = z
@@ -327,7 +329,6 @@ function createFileClient(
 ) {
   const azure = azureAdapterFactory.createClient(credential.apiKey, {
     baseUrl: credential.providerAccount.baseUrl,
-    agent: credential.agent,
     source: "api",
     defaultHeaders: credential.defaultHeaders,
     abortSignal: signal,
@@ -373,13 +374,6 @@ async function providerCall<T>(operation: () => PromiseLike<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof OpenAI.APIError)
-      throw new ApiError(
-        error.status && error.status >= 400 && error.status <= 599
-          ? error.status
-          : 502,
-        "Azure file API rejected the request.",
-      );
-    throw new ApiError(502, "Azure file API request failed.");
+    throw mediaProviderError(error, "file");
   }
 }

@@ -6,6 +6,7 @@ import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { PROXY_BODY_LIMIT } from "../common";
 import { boundedMediaFetch } from "../utils/bounded-media-response";
 import type { ValidatedImageEditUploads } from "../utils/image-edit-input";
+import { mediaProviderError } from "../utils/media-provider-error";
 import { azureAdapterFactory, getAzureClientForRequest } from "./azure";
 import { azureImagesAdapterFactory } from "./azure-images";
 
@@ -30,8 +31,14 @@ export function createAzureImageEditAdapter(
   return {
     ...azureImagesAdapterFactory,
     unavailableUsageAccounting: true,
+    recordRequestDurationInHandler: true,
     createClient(apiKey, options) {
-      const client = azureAdapterFactory.createClient(apiKey, options) as {
+      // The generic fetch observer logs raw provider error bodies. Keep media
+      // failures private and let handleLLMProxy record the request duration.
+      const client = azureAdapterFactory.createClient(apiKey, {
+        ...options,
+        agent: undefined,
+      }) as {
         openai: OpenAI;
         fetch?: typeof fetch;
       };
@@ -90,7 +97,7 @@ export function createAzureImageEditAdapter(
             502,
             "Azure returned an invalid image edit response.",
           );
-        throw error;
+        throw mediaProviderError(error, "image edit");
       }
       const result = Azure.API.ImageGenerationResponseSchema.safeParse(raw);
       if (

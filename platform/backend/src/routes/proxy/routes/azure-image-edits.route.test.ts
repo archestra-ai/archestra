@@ -490,20 +490,43 @@ test.for([
     response.end(
       JSON.stringify({
         error: {
-          message: "Fixture upstream rejection",
+          message: `fixture-image-provider-key ${media.image.toString("base64")}`,
           type: "invalid_request_error",
         },
       }),
     );
   });
-  await expect(
-    media.client.images.edit({
-      model: "gpt-image-1",
-      prompt: "A circle.",
-      image: await toFile(media.image, "one.png"),
-    }),
-  ).rejects.toMatchObject({ status });
-  expect(media.requests).toHaveLength(1);
+  {
+    const error = await media.client.images
+      .edit({
+        model: "gpt-image-1",
+        prompt: "A circle.",
+        image: await toFile(media.image, "one.png"),
+      })
+      .catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      status,
+      headers: expect.objectContaining({}),
+    });
+    expect((error as OpenAI.APIError).headers?.get("retry-after")).toBe("3600");
+    const rows = await InteractionModel.getAllInteractionsForProfile(
+      media.agentId,
+    );
+    const evidence = JSON.stringify([error, rows], (_key, value) =>
+      value instanceof Error ? { ...value, message: value.message } : value,
+    );
+    expect(evidence).not.toContain("fixture-image-provider-key");
+    expect(evidence).not.toContain(media.image.toString("base64"));
+    expect(rows.at(-1)).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      cost: null,
+      response: {
+        __mediaUsage: { tokensAvailable: false, costAvailable: false },
+      },
+    });
+    expect(media.requests).toHaveLength(1);
+  }
 });
 
 test.for([

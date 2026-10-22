@@ -285,12 +285,9 @@ describe("createOpenaiToAnthropicStreamTranslator", () => {
     });
   });
 
-  test("closes an empty stream with a well-formed message", () => {
-    const events = createOpenaiToAnthropicStreamTranslator(ctx).finish();
-    expect(events.map((event) => event.type)).toEqual([
-      "message_start",
-      "message_delta",
-      "message_stop",
-    ]);
+  test("refuses to finish a stream that was cut off", () => {
+    const translator = createOpenaiToAnthropicStreamTranslator(ctx);
+    translator.translate(chunk({ content: "Hal" }));
+    expect(() => translator.finish()).toThrow(/ended before it finished/);
   });
 });

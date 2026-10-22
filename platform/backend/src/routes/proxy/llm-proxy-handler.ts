@@ -171,6 +171,7 @@ import {
   withSessionContext,
 } from "./llm-proxy-helpers";
 import {
+  MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
   type ModelPoolPlan,
   openThroughModelPool,
   type PlannedMember,
@@ -289,7 +290,10 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
-  transportFor: (member: PlannedMember) => Promise<MemberTransport>;
+  transportFor: (
+    member: PlannedMember,
+    signal: AbortSignal,
+  ) => Promise<MemberTransport>;
   recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
@@ -1613,11 +1617,16 @@ export async function handleLLMProxy<
       headers: Record<string, string>;
       providerApiKeyId: string | undefined;
       model: string;
+      /** Aborts this call alone, on top of the request's own signal. */
+      attemptSignal?: AbortSignal;
     }) =>
       target.adapter.createClient(target.apiKey, {
         baseUrl: target.baseUrl,
         agent: resolvedAgent,
-        abortSignal,
+        abortSignal:
+          abortSignal && target.attemptSignal
+            ? AbortSignal.any([abortSignal, target.attemptSignal])
+            : (target.attemptSignal ?? abortSignal),
         source,
         model: target.model,
         defaultHeaders:
@@ -1658,7 +1667,7 @@ export async function handleLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            transportFor: async (member) => {
+            transportFor: async (member, signal) => {
               const row = await LlmProviderApiKeyModel.findById(
                 member.providerApiKeyId,
               );
@@ -1690,6 +1699,7 @@ export async function handleLLMProxy<
                   },
                   providerApiKeyId: row.id,
                   model: member.modelId,
+                  attemptSignal: signal,
                 }),
               });
             },
@@ -2472,6 +2482,7 @@ async function handleStreaming<
             withFirstChunk(
               (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
+          firstChunkTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -4086,6 +4097,8 @@ async function openUpstream<TRequest, T>(params: {
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
   open: (transport: MemberTransport) => Promise<T>;
+  /** Moves past a silent pool member; see openThroughModelPool. */
+  firstChunkTimeoutMs?: number;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -4094,7 +4107,7 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, open, ...retry } = params;
+  const { ctx, transport, open, firstChunkTimeoutMs, ...retry } = params;
   const pool = ctx.modelPool;
   if (!pool) {
     return openUpstreamWithRetry({ open: () => open(transport), ...retry });
@@ -4105,6 +4118,7 @@ async function openUpstream<TRequest, T>(params: {
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
       open,
+      firstChunkTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });

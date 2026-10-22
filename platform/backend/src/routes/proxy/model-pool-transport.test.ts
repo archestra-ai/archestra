@@ -176,6 +176,30 @@ describe("memberTransport", () => {
     });
   });
 
+  test("errors on an Anthropic stream that was cut off", async () => {
+    // biome-ignore lint/style/noNonNullAssertion: anthropic is poolable
+    const adapter = memberAdapter("anthropic")!;
+    vi.spyOn(adapter, "executeStream").mockResolvedValue(
+      from([
+        { type: "message_start", message: { usage: { input_tokens: 7 } } },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Hal" },
+        },
+      ]) as never,
+    );
+    const transport = memberTransport({
+      inbound: "openai-chat",
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+      client: "client",
+    });
+    await expect(
+      collect(await transport.executeStream({ model: "haiku", messages: [] })),
+    ).rejects.toThrow(/ended before it finished/);
+  });
+
   test("refuses a member the wire cannot reach", () => {
     expect(() =>
       memberTransport({

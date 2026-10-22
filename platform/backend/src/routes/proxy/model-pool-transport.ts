@@ -373,6 +373,10 @@ function anthropicEventsToOpenAiChunks(ctx: {
       }
     },
     finish() {
+      // Without a stop reason the stream was cut off, not finished.
+      if (finishReason === null) {
+        throw new Error("The upstream stream ended before it finished");
+      }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [
         chunk(

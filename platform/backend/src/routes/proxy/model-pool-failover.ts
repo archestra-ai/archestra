@@ -6,7 +6,9 @@
  * member is a provider key plus the model id that provider knows the model by,
  * reached through its own transport (see `model-pool-transport.ts`). A member
  * that fails before the provider answered (see `poolFailoverReason`) is
- * benched for a while, and the request moves on to the next member. Once
+ * benched for a while, and the request moves on to the next member. So is a
+ * member whose stream sends nothing within `MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS`
+ * while another member is left to try. Once
  * output has reached the client, a failure goes to the client as before,
  * because it cannot accept a second answer in its place.
  */
@@ -23,6 +25,12 @@ import {
   type PoolWire,
 } from "./model-pool-transport";
 import { openUpstreamWithRetry } from "./upstream-connection-retry";
+
+/**
+ * How long a pool member's stream may stay silent before the request moves to
+ * the next member. The last member is waited on: it has nowhere to move to.
+ */
+export const MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS = 30_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
@@ -184,8 +192,14 @@ export function orderPoolMembers(params: {
 export async function openThroughModelPool<T>(params: {
   plan: ModelPoolPlan;
   attempt: UpstreamAttempt;
-  transportFor: (member: PlannedMember) => Promise<MemberTransport>;
+  /** `signal` aborts this member's upstream call when it times out. */
+  transportFor: (
+    member: PlannedMember,
+    signal: AbortSignal,
+  ) => Promise<MemberTransport>;
   open: (transport: MemberTransport) => Promise<T>;
+  /** Set when `open` resolves on the first chunk of a stream. */
+  firstChunkTimeoutMs?: number;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
   onRetry?: (event: {
@@ -203,11 +217,16 @@ export async function openThroughModelPool<T>(params: {
     attempt.modelId = member.modelId;
     attempt.attempt = index + 1;
     attempt.failureReason = undefined;
+    const isLast = index === plan.members.length - 1;
+    const abort = new AbortController();
     try {
-      const transport = await params.transportFor(member);
+      const transport = await params.transportFor(member, abort.signal);
+      const timeoutMs = isLast ? undefined : params.firstChunkTimeoutMs;
       const result = await openUpstreamWithRetry({
-        open: () => params.open(transport),
-        isRetryable: params.isRetryable,
+        open: () => withTimeout(params.open(transport), timeoutMs, abort),
+        // With a sibling left, a dropped connection moves on at once rather
+        // than retrying a member that may be down.
+        isRetryable: isLast ? params.isRetryable : () => false,
         shouldContinue: params.shouldContinue,
         onRetry: params.onRetry,
       });
@@ -224,7 +243,6 @@ export async function openThroughModelPool<T>(params: {
         reason: failover.reason,
         retryAfterMs: failover.retryAfterMs,
       });
-      const isLast = index === plan.members.length - 1;
       if (isLast || !params.shouldContinue()) throw error;
       logger.warn(
         {
@@ -254,6 +272,36 @@ export async function openThroughModelPool<T>(params: {
 }
 
 // === Internal helpers ===
+
+/** A member that sent nothing in time. Its 408 makes it fail over. */
+class MemberTimeoutError extends Error {
+  readonly status = 408;
+  constructor(ms: number) {
+    super(`The model pool member sent nothing within ${ms / 1000} s`);
+  }
+}
+
+/** `opening`, or a MemberTimeoutError and an aborted call after `ms`. */
+async function withTimeout<T>(
+  opening: Promise<T>,
+  ms: number | undefined,
+  abort: AbortController,
+): Promise<T> {
+  if (ms === undefined) return opening;
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new MemberTimeoutError(ms);
+      abort.abort(error);
+      reject(error);
+    }, ms);
+  });
+  try {
+    return await Promise.race([opening, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** How long a failed member sits out without a usable Retry-After. */
 const DEFAULT_BENCH_MS = 30_000;

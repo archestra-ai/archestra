@@ -44,6 +44,28 @@ describe("orderPoolMembers", () => {
     expect(firsts.light).toBeGreaterThan(0);
   });
 
+  test("AC-W1: weights 1:2:7 split first picks within the lab's bounds", () => {
+    const counts = { a: 0, b: 0, c: 0 };
+    const draws = 2000;
+    for (let i = 0; i < draws; i++) {
+      const [first] = orderPoolMembers({
+        members: [member("a", 1, 1), member("b", 1, 2), member("c", 1, 7)],
+        benchedUntil: new Map(),
+        seed: `session-${i}`,
+      });
+      counts[first as keyof typeof counts]++;
+    }
+    const expected = { a: 0.1, b: 0.2, c: 0.7 };
+    let chiSquare = 0;
+    for (const id of ["a", "b", "c"] as const) {
+      const want = expected[id] * draws;
+      chiSquare += (counts[id] - want) ** 2 / want;
+      expect(Math.abs(counts[id] / draws - expected[id])).toBeLessThan(0.05);
+    }
+    // df = 2, p = 0.01
+    expect(chiSquare).toBeLessThan(9.21);
+  });
+
   test("keeps one session on one member", () => {
     const members = [member("a", 1), member("b", 1), member("c", 1)];
     const first = orderPoolMembers({
@@ -327,6 +349,94 @@ describe("openThroughModelPool", () => {
       attempt: 1,
       attemptOutcome: "failed",
     });
+  });
+
+  test("moves past a member that sends nothing in time, and aborts its call", async () => {
+    const attempt: UpstreamAttempt = {};
+    const recorded: UpstreamAttempt[] = [];
+    const signals = new Map<string, AbortSignal>();
+
+    const result = await openThroughModelPool({
+      plan,
+      attempt,
+      transportFor: async (m, signal) => {
+        signals.set(m.providerApiKeyId, signal);
+        return transport(m.providerApiKeyId);
+      },
+      open: async (t) => {
+        const key = (await t.execute({})) as string;
+        if (key === keyA) await new Promise(() => {});
+        return `answer from ${key}`;
+      },
+      firstChunkTimeoutMs: 20,
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      recordFailedAttempt: async (failed) => {
+        recorded.push(failed);
+      },
+    });
+
+    expect(result).toBe(`answer from ${keyB}`);
+    expect(recorded).toMatchObject([
+      { providerApiKeyId: keyA, failureReason: "timeout (408)" },
+    ]);
+    expect(signals.get(keyA)?.aborted).toBe(true);
+    expect(signals.get(keyB)?.aborted).toBe(false);
+  });
+
+  test("waits on the last member however slow, and retries only that one", async () => {
+    const attempt: UpstreamAttempt = {};
+    const opened: string[] = [];
+    const dropped = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+
+    const result = await openThroughModelPool({
+      plan,
+      attempt,
+      ...openKey(() => null),
+      open: async (t) => {
+        const key = (await t.execute({})) as string;
+        opened.push(key);
+        if (key === keyA) throw httpError(503);
+        if (opened.filter((k) => k === keyB).length === 1) throw dropped;
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return `answer from ${key}`;
+      },
+      firstChunkTimeoutMs: 20,
+      isRetryable: (error) => error === dropped,
+      shouldContinue: () => true,
+      recordFailedAttempt: async () => {},
+    });
+
+    expect(result).toBe(`answer from ${keyB}`);
+    expect(opened).toEqual([keyA, keyB, keyB]);
+  });
+
+  test("does not retry a member's dropped connection while a sibling is left", async () => {
+    const attempt: UpstreamAttempt = {};
+    const opened: string[] = [];
+    const dropped = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+
+    await openThroughModelPool({
+      plan,
+      attempt,
+      ...openKey(() => null),
+      open: async (t) => {
+        const key = (await t.execute({})) as string;
+        opened.push(key);
+        if (key === keyA) throw dropped;
+        return `answer from ${key}`;
+      },
+      isRetryable: (error) => error === dropped,
+      shouldContinue: () => true,
+      recordFailedAttempt: async () => {},
+    });
+
+    expect(opened).toEqual([keyA, keyB]);
+    expect(attempt.providerApiKeyId).toBe(keyB);
   });
 
   test("returns the last member's failure when every member fails", async () => {

@@ -173,6 +173,7 @@ export function openaiResponseToAnthropic(
  * `message_start`, a content block per text run or tool call, then
  * `message_delta` with the stop reason and usage, and `message_stop`. OpenAI
  * reports usage on its last chunk, so input tokens arrive in `message_delta`.
+ * `finish` throws when the stream ended without a finish reason.
  */
 export function createOpenaiToAnthropicStreamTranslator(
   ctx: OpenaiAnthropicContext,
@@ -269,6 +270,11 @@ export function createOpenaiToAnthropicStreamTranslator(
     },
 
     finish() {
+      // A stream that ends without a finish reason was cut off; reporting
+      // end_turn would pass a truncated answer off as a whole one.
+      if (finishReason === null) {
+        throw new Error("The upstream stream ended before it finished");
+      }
       const events: AnthropicStreamEvent[] = [];
       start(events);
       closeBlock(events);

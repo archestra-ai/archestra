@@ -497,7 +497,11 @@ export function PoolEditor({
 const RELIABILITY_RULES = [
   {
     label: "Move to the next member on",
-    value: "429, 5xx, timeouts, connection errors",
+    value: "429, 5xx, timeouts, connection errors, without retrying it",
+  },
+  {
+    label: "Move on from a silent stream",
+    value: "No first chunk in 30 s, unless it is the last member",
   },
   {
     label: "Also move on when a key is refused",

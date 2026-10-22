@@ -83,7 +83,10 @@ import {
   openappaEnabled,
 } from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
-import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import {
+  type AzureModelCapabilities,
+  resolveAzureModelCapabilities,
+} from "@/services/azure-model-capabilities";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -466,7 +469,7 @@ export async function createLLMModelForAgent(params: {
       ? await personalTokenValue({ organizationId, userId })
       : apiKey;
 
-  const azureCapabilities =
+  const azureCapabilities: AzureModelCapabilities | undefined =
     provider === "azure"
       ? await resolveAzureModelCapabilities({
           providerApiKeyId: chatApiKeyId,

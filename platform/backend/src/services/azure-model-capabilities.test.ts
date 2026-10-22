@@ -5,6 +5,7 @@ import { modelsDevClient } from "@/clients/models-dev-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import { getAvailableLlmModels } from "@/routes/llm-provider-models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
@@ -36,6 +37,65 @@ beforeEach(() => {
 });
 
 describe("Azure resource capability evidence", () => {
+  test.for([
+    {
+      backing: "dall-e-3",
+      parameters: { response_format: "url", style: "natural", n: 1 },
+      valid: true,
+    },
+    { backing: "dall-e-3", parameters: { n: 2 }, valid: false },
+    { backing: "dall-e-2", parameters: { style: "natural" }, valid: false },
+    {
+      backing: "gpt-image-1",
+      parameters: { response_format: "b64_json" },
+      valid: false,
+    },
+    { backing: "gpt-image-1", parameters: { quality: "xhigh" }, valid: false },
+    { backing: "gpt-image-1", parameters: { size: "1536x864" }, valid: false },
+    { backing: "gpt-image-2", parameters: { quality: "xhigh" }, valid: false },
+    { backing: "gpt-image-2", parameters: { size: "1536x864" }, valid: true },
+    {
+      backing: "gpt-image-2.5-sunburst-2026-09-08",
+      parameters: {
+        quality: "max",
+        size: "1536x864",
+        safety_identifier: "synthetic-user",
+      },
+      valid: true,
+    },
+    {
+      backing: "gpt-image-2.5-flare",
+      parameters: { quality: "xhigh" },
+      valid: true,
+    },
+  ])("validates image fields against backing evidence: %j", async (example, {
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    backing = example.backing;
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "azure",
+      apiKeyValue: "synthetic-key",
+      baseUrl,
+    });
+    const result = validateAzureModelOperation({
+      providerApiKeyId: key.id,
+      modelId: "production",
+      operation: "image-generation",
+      parameters: example.parameters,
+    });
+    if (example.valid)
+      expect(await result).toMatchObject({ status: "known", kind: "image" });
+    else await expect(result).rejects.toMatchObject({ statusCode: 400 });
+  });
   test("explicit deployment flags classify missing backing names without trusting aliases", async ({
     makeOrganization,
     makeSecret,
@@ -131,10 +191,14 @@ describe("Azure resource capability evidence", () => {
 
   test("same alias on different resources remains isolated through refresh and manual metadata", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
     const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
     const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
     const a = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "azure",
@@ -154,6 +218,24 @@ describe("Azure resource capability evidence", () => {
     await sync(a);
     backing = "gpt-audio";
     await sync(b);
+    const list = (apiKeyId?: string) =>
+      getAvailableLlmModels({
+        userId: user.id,
+        organizationId: org.id,
+        query: { provider: "azure", apiKeyId },
+      });
+    expect(
+      (await list(a.id)).find((model) => model.id === "production")
+        ?.capabilities.outputModalities,
+    ).toEqual(["image"]);
+    expect(
+      (await list(b.id)).find((model) => model.id === "production")
+        ?.capabilities.outputModalities,
+    ).toEqual(["text", "audio"]);
+    expect(
+      (await list()).find((model) => model.id === "production")?.capabilities
+        .outputModalities,
+    ).toBeNull();
     expect(
       await resolveAzureModelCapabilities({
         providerApiKeyId: a.id,

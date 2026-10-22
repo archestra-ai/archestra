@@ -703,10 +703,38 @@ export async function getAvailableLlmModels(params: {
     );
   filteredModels = filteredModels.map((entry) => {
     if (entry.model.provider !== "azure") return entry;
-    const evidence = azureLinks
+    const modelLinks = azureLinks
       .filter((link) => link.model.id === entry.model.id)
-      .map(classifyAzureModelCapabilities)
-      .find((evidence) => evidence.status === "known");
+      .map(classifyAzureModelCapabilities);
+    const known = modelLinks.filter((evidence) => evidence.status === "known");
+    const signature = (evidence: (typeof known)[number]) =>
+      JSON.stringify([
+        evidence.kind,
+        evidence.operations,
+        evidence.inputModalities,
+        evidence.outputModalities,
+        evidence.supportsToolCalling,
+      ]);
+    if (
+      known.length > 0 &&
+      (known.length !== modelLinks.length ||
+        known.some((evidence) => signature(evidence) !== signature(known[0])))
+    ) {
+      // One unscoped alias cannot describe conflicting resources. The key-filtered
+      // picker and request resolver retain each resource's exact evidence.
+      return {
+        ...entry,
+        model: {
+          ...entry.model,
+          azureCapabilities: null,
+          inputModalities: null,
+          outputModalities: null,
+          supportsToolCalling: null,
+          embeddingDimensions: null,
+        },
+      };
+    }
+    const evidence = known[0];
     return {
       ...entry,
       model: {

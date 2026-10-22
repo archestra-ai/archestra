@@ -122,7 +122,8 @@ function validateImageParameters(params: {
       if (has(field)) reject(field);
     if (["standard", "hd"].includes(String(body.quality))) reject("quality");
     const newer = /^gpt-image-[2-9](?:[.-]|$)/.test(name);
-    if (!newer && ["xhigh", "max"].includes(String(body.quality)))
+    const extraQuality = /^gpt-image-2\.5-(?:sunburst|flare)(?:-|$)/.test(name);
+    if (!extraQuality && ["xhigh", "max"].includes(String(body.quality)))
       reject("quality");
     if (
       !newer &&

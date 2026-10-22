@@ -280,7 +280,10 @@ describe("Azure resource capability evidence", () => {
     ).toMatchObject({ status: "unknown" });
   });
 
-  test("an in-flight refresh cannot overwrite evidence after a connection change", async ({
+  test.for([
+    true,
+    false,
+  ])("an in-flight refresh cannot overwrite evidence after a connection change (nonempty: %s)", async (nonempty, {
     makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
@@ -312,7 +315,7 @@ describe("Azure resource capability evidence", () => {
         started();
         await barrier;
         return HttpResponse.json({
-          data: [{ id: "production", model: "gpt-audio" }],
+          data: nonempty ? [{ id: "production", model: "gpt-audio" }] : [],
         });
       }),
     );

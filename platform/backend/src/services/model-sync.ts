@@ -104,6 +104,17 @@ class ModelSyncService {
     }
 
     const credentialRow = await LlmProviderApiKeyModel.findById(apiKeyId);
+    const configurationHash = credentialRow
+      ? azureCapabilityConfigurationHash({
+          ...credentialRow,
+          baseUrl: baseUrl || config.llm.azure.baseUrl,
+          extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
+        })
+      : null;
+    const azureConfiguration =
+      provider === "azure" && configurationHash
+        ? { hash: configurationHash, defaultBaseUrl: config.llm.azure.baseUrl }
+        : undefined;
     const isSubscription = credentialRequiresPerUserScope({
       provider,
       apiKey: apiKeyValue,
@@ -133,6 +144,7 @@ class ModelSyncService {
           apiKeyId,
           [],
           provider,
+          { azureConfiguration },
         );
         return 0;
       }
@@ -187,13 +199,6 @@ class ModelSyncService {
       const capabilitiesByModelId = new Map(
         modelsToUpsert.map((m) => [m.modelId, m]),
       );
-      const configurationHash = credentialRow
-        ? azureCapabilityConfigurationHash({
-            ...credentialRow,
-            baseUrl: baseUrl || config.llm.azure.baseUrl,
-            extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
-          })
-        : null;
       const modelsWithIds = upsertedModels.map((m) => {
         const azureEvidence = azureByModelId.get(m.modelId);
         const capabilities = capabilitiesByModelId.get(m.modelId);
@@ -224,14 +229,7 @@ class ModelSyncService {
         // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
         {
           overwriteRecommendedForAgents: forceRefresh === true,
-          ...(provider === "azure" && configurationHash
-            ? {
-                azureConfiguration: {
-                  hash: configurationHash,
-                  defaultBaseUrl: config.llm.azure.baseUrl,
-                },
-              }
-            : {}),
+          azureConfiguration,
         },
       );
 

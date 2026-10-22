@@ -100,6 +100,11 @@ import {
 } from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
+  handleAzureImageEdit,
+  ImageEditMultipartBodySchema,
+  parseAzureImageEditRequest,
+} from "../image-edit-handler";
+import {
   resolveAgent,
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
@@ -114,6 +119,7 @@ import {
   type ModelRouterResolution,
   resolveModelRoute,
 } from "../model-router-resolver";
+import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
 import { registerMediaMultipartParser } from "../utils/media-multipart";
 import {
   AudioMultipartBodySchema,
@@ -333,6 +339,52 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   logger.debug("[ModelRouterProxy] Registering model router routes");
 
   await registerMediaMultipartParser(fastify);
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        onRequest: async (request) => {
+          mediaAuth.set(request, await authenticateMediaRequest(request));
+        },
+        schema: {
+          operationId: withAgent
+            ? RouteId.ModelRouterImageEditsWithAgent
+            : RouteId.ModelRouterImageEditsWithDefaultAgent,
+          description:
+            "Edit images through a mapped Azure deployment using bounded multipart reference images and masks.",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) => {
+        const parsed = await parseAzureImageEditRequest(request);
+        const auth = mediaAuth.get(request);
+        if (!auth)
+          throw new ApiError(401, "Model Router authentication is required.");
+        const resolution = await resolveModelRoute({
+          requestedModel: parsed.body.model,
+          capability: "media",
+          allowedProviders: getMappedProviders(auth),
+          allowedApiKeyIds: getMappedApiKeyIds(auth),
+        });
+        if (resolution.provider !== "azure")
+          throw new ApiError(
+            400,
+            `Provider "${resolution.provider}" does not support the Model Router image edits endpoint.`,
+          );
+        await applyModelRouterAuthOverride({ request, auth, resolution });
+        parsed.body.model = resolution.modelId;
+        return handleAzureImageEdit(parsed, request, reply);
+      },
+    );
+  }
   for (const operation of [
     "speech",
     "transcriptions",
@@ -1301,6 +1353,7 @@ async function applyModelRouterAuthOverride(params: {
   auth: ModelRouterAuth;
   resolution: ModelRouterResolution;
 }): Promise<ModelRouterMappedProviderKey> {
+  rejectUnsupportedProxyFileReferences(params.request.body);
   const { provider, modelId } = params.resolution;
   const mappedApiKey = await selectMappedProviderKey({
     mappings: params.auth.providerApiKeys,

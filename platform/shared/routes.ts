@@ -283,6 +283,9 @@ export const RouteId = {
   ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
   ModelRouterImagesWithDefaultAgent: "modelRouterImagesWithDefaultAgent",
   ModelRouterImagesWithAgent: "modelRouterImagesWithAgent",
+  ModelRouterImageEditsWithDefaultAgent:
+    "modelRouterImageEditsWithDefaultAgent",
+  ModelRouterImageEditsWithAgent: "modelRouterImageEditsWithAgent",
   ModelRouterAudioSpeechWithDefaultAgent:
     "modelRouterAudioSpeechWithDefaultAgent",
   ModelRouterAudioSpeechWithAgent: "modelRouterAudioSpeechWithAgent",

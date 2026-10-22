@@ -36,6 +36,7 @@ import {
 import { cn } from "@/lib/utils/tailwind";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MemberStatus } from "./member-status";
+import { isPoolableModel, poolModelName, suggestModelId } from "./model-name";
 
 type PoolFormValues = {
   name: string;
@@ -97,19 +98,28 @@ export function PoolEditor({
   const { data: models = [] } = useModelsWithApiKeys({
     includeAssignments: false,
   });
+  const chatModels = useMemo(() => models.filter(isPoolableModel), [models]);
   // The model ids each key lists, to suggest and check a member's model id.
   const modelIdsByKey = useMemo(() => {
     const byKey = new Map<string, string[]>();
-    for (const model of models) {
+    for (const model of chatModels) {
       for (const key of model.apiKeys) {
         byKey.set(key.id, [...(byKey.get(key.id) ?? []), model.modelId]);
       }
     }
     return byKey;
-  }, [models]);
+  }, [chatModels]);
+  // Names, not provider ids: Bedrock's `us.zai.glm-5.3` is offered as `glm-5.3`.
   const modelNames = useMemo(
-    () => [...new Set(models.map((model) => model.modelId))].sort(),
-    [models],
+    () =>
+      [
+        ...new Set(
+          chatModels.map((model) =>
+            poolModelName(model.provider, model.modelId),
+          ),
+        ),
+      ].sort(),
+    [chatModels],
   );
 
   // Pass-through keys carry the caller's own provider key, so they can't
@@ -194,6 +204,7 @@ export function PoolEditor({
                             ...member,
                             modelId: suggestModelId(
                               value,
+                              keysById.get(member.providerApiKeyId)?.provider,
                               modelIdsByKey.get(member.providerApiKeyId),
                             ),
                           }
@@ -325,7 +336,11 @@ export function PoolEditor({
                               keyField.onChange(value);
                               form.setValue(
                                 `members.${index}.modelId`,
-                                suggestModelId(name, modelIdsByKey.get(value)),
+                                suggestModelId(
+                                  name,
+                                  keysById.get(value)?.provider,
+                                  modelIdsByKey.get(value),
+                                ),
                               );
                             }}
                             disabled={!canEdit}
@@ -447,7 +462,11 @@ export function PoolEditor({
               nextKey &&
               append({
                 providerApiKeyId: nextKey.id,
-                modelId: suggestModelId(name, modelIdsByKey.get(nextKey.id)),
+                modelId: suggestModelId(
+                  name,
+                  nextKey.provider,
+                  modelIdsByKey.get(nextKey.id),
+                ),
                 priority: nextPriority(members),
                 weight: 1,
                 enabled: true,
@@ -653,21 +672,6 @@ function toFormValues(pool: ModelPool | null): PoolFormValues {
       })) ?? [],
     virtualApiKeyIds: pool?.virtualApiKeyIds ?? [],
   };
-}
-
-/**
- * The model id a key most likely serves `name` under: the name itself, else
- * the one id that ends with it (Bedrock's `zai.glm-5` for `glm-5`).
- */
-function suggestModelId(name: string, keyModels: string[] = []): string {
-  if (!name || keyModels.includes(name)) return name;
-  const endingWithName = keyModels.filter(
-    (modelId) =>
-      modelId.endsWith(`.${name}`) ||
-      modelId.endsWith(`/${name}`) ||
-      modelId.endsWith(`:${name}`),
-  );
-  return endingWithName.length === 1 ? endingWithName[0] : name;
 }
 
 /** A new member goes one priority below the last, as a standby. */

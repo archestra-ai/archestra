@@ -122,7 +122,10 @@ export function buildAzureDeploymentBaseUrl(params: {
   try {
     const url = new URL(params.baseUrl);
     if (isAzureOpenAiV1Url(url)) {
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      const pathname = url.pathname.replace(/\/+$/, "");
+      return params.overrideDeployment
+        ? `${url.origin}${pathname.replace(/\/v1$/, "")}/deployments/${encodeURIComponent(params.deploymentName)}`
+        : `${url.origin}${pathname}`;
     }
 
     if (/\/openai\/deployments\/[^/]+\/?$/.test(url.pathname)) {

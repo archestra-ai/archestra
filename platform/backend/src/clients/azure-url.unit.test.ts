@@ -292,6 +292,18 @@ describe("buildAzureDeploymentBaseUrl", () => {
     ).toBe("https://my-resource.services.ai.azure.com/openai/v1");
   });
 
+  it("uses the classic deployment surface for an explicit native SDK path", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1/",
+        deploymentName: "custom deployment",
+        overrideDeployment: true,
+      }),
+    ).toBe(
+      "https://my-resource.services.ai.azure.com/openai/deployments/custom%20deployment",
+    );
+  });
+
   it("returns null for invalid base URLs", () => {
     expect(
       buildAzureDeploymentBaseUrl({

@@ -313,6 +313,25 @@ describe("Azure SDK ingress over HTTP", () => {
     expect(rows.at(-1)?.model).toBe("sdk-deployment");
   });
 
+  test("native dated SDK requests use the classic surface of a configured v1 resource", async () => {
+    const row = await LlmProviderApiKeyModel.findById(keyId);
+    await LlmProviderApiKeyModel.update(keyId, {
+      baseUrl: `${row?.baseUrl}/v1`,
+    });
+    await clientFor({ apiVersion: "2024-10-21" }).chat.completions.create(
+      payload,
+    );
+    expect(requests[0].url).toBe(
+      "/openai/deployments/sdk-deployment/chat/completions?api-version=2024-10-21",
+    );
+    await new OpenAI({
+      baseURL: `${endpoint}/v1/azure/openai/v1`,
+      apiKey: token,
+      maxRetries: 0,
+    }).chat.completions.create(payload);
+    expect(requests[1].url).toBe("/openai/v1/chat/completions");
+  });
+
   test("wire-encoded deployment names are decoded once before accounting", async () => {
     const response = await app.inject({
       method: "POST",

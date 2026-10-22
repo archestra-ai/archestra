@@ -29,8 +29,8 @@ import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
 import { registerMediaMultipartParser } from "../utils/media-multipart";
-import azureFilesRoutes from "./azure-files";
 import { registerAudioRoutes } from "./audio";
+import azureFilesRoutes from "./azure-files";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {

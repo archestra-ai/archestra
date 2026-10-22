@@ -35,6 +35,7 @@ const test = baseTest.extend<{
       { data: Buffer; filename: string; expires_at?: number }
     >;
     failure: (status: number | null, invalidMetadata?: boolean) => void;
+    suspendUploads: () => { started: Promise<void>; closed: Promise<void> };
   };
 }>({
   files: async ({ makeAgent, makeSecret, makeLlmProviderApiKey }, use) => {
@@ -46,6 +47,7 @@ const test = baseTest.extend<{
     let failure: number | null = null;
     let invalidMetadata = false;
     let nextId = 0;
+    let suspended: { start: () => void; close: () => void } | undefined;
     const upstream = createServer(async (request, response) => {
       const path = request.url?.split("?")[0] ?? "";
       calls.push({ path, method: request.method ?? "" });
@@ -75,6 +77,11 @@ const test = baseTest.extend<{
         const file = form.get("file") as File;
         const data = Buffer.from(await file.arrayBuffer());
         expect(form.get("purpose")).toBe("user_data");
+        if (suspended) {
+          response.once("close", suspended.close);
+          suspended.start();
+          return;
+        }
         const id = `file-native-${++nextId}`;
         const seconds = Number(form.get("expires_after[seconds]"));
         const value = {
@@ -188,6 +195,18 @@ const test = baseTest.extend<{
           failure = status;
           invalidMetadata = bad;
         },
+        suspendUploads: () => {
+          let start: () => void = () => undefined;
+          let close: () => void = () => undefined;
+          const started = new Promise<void>((resolve) => {
+            start = resolve;
+          });
+          const closed = new Promise<void>((resolve) => {
+            close = resolve;
+          });
+          suspended = { start, close };
+          return { started, closed };
+        },
       });
     } finally {
       vi.useRealTimers();
@@ -225,6 +244,34 @@ test("real SDK file lifecycle preserves arbitrary bytes and uses scoped local ha
   expect(
     await InteractionModel.getAllInteractionsForProfile(files.agentId),
   ).toEqual([]);
+});
+
+test("client cancellation aborts a pending upload without dispatch retries or a local file handle", async ({
+  files,
+}) => {
+  const { started, closed } = files.suspendUploads();
+  const controller = new AbortController();
+  const operation = files.client.files
+    .create(
+      {
+        file: await toFile(Buffer.from("fixture"), "fixture.bin"),
+        purpose: "user_data",
+      },
+      { signal: controller.signal },
+    )
+    .catch((error: unknown) => error);
+  await started;
+  controller.abort();
+  expect(await operation).toBeInstanceOf(OpenAI.APIUserAbortError);
+  expect(
+    await Promise.race([
+      closed.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+    ]),
+  ).toBe(true);
+  expect(files.calls).toHaveLength(1);
+  expect(files.remote.size).toBe(0);
+  expect((await files.client.files.list()).data).toEqual([]);
 });
 
 test("same-account callers cannot list, retrieve, download, or delete another principal's file", async ({

@@ -351,7 +351,7 @@ test("native Azure SDK deployment path overrides form model and preserves api-ve
     "image-alias",
   );
   expect(media.requests[0].path).toBe(
-    "/openai/v1/images/edits?api-version=2025-04-01-preview",
+    "/openai/deployments/image-alias/images/edits?api-version=2025-04-01-preview",
   );
   expect(
     (await InteractionModel.getAllInteractionsForProfile(media.agentId)).at(-1)

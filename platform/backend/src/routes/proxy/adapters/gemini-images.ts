@@ -8,8 +8,8 @@ import {
   type LLMResponseAdapter,
 } from "@/types";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { mediaProviderError } from "../utils/media-provider-error";
 import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
-import { safeImageUpstreamError } from "./image-generation";
 
 /** Translate only Images parameters with an exact native Gemini meaning. */
 export function toGeminiImageRequest(
@@ -68,7 +68,7 @@ export const geminiImagesAdapterFactory = {
     try {
       result = await geminiAdapterFactory.execute(client, request);
     } catch (error) {
-      throw safeImageUpstreamError(error);
+      throw mediaProviderError(error, "image generation", "Gemini");
     }
     const adapter = new GeminiImagesResponseAdapter(result);
     if (!adapter.getOriginalResponse().data?.length) {

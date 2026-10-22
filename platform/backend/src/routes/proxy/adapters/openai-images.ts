@@ -2,10 +2,8 @@ import type OpenAI from "openai";
 import type { z } from "zod";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError, Azure, type LLMProvider, type OpenAi } from "@/types";
-import {
-  createImageGenerationAdapters,
-  safeImageUpstreamError,
-} from "./image-generation";
+import { mediaProviderError } from "../utils/media-provider-error";
+import { createImageGenerationAdapters } from "./image-generation";
 import { openaiAdapterFactory } from "./openai";
 
 /** OpenAI's native Images API, using the same governed path as Azure images. */
@@ -45,7 +43,7 @@ export const openaiImagesAdapterFactory: LLMProvider<
         model: request.model,
       });
     } catch (error) {
-      throw safeImageUpstreamError(error);
+      throw mediaProviderError(error, "image generation", "OpenAI");
     }
   },
   async executeStream() {

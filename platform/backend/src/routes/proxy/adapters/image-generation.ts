@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import OpenAI from "openai";
 import type { z } from "zod";
 import type {
   LLMRequestAdapter,
@@ -23,33 +22,6 @@ export function createImageGenerationAdapters(provider: ImageProvider) {
       new ImageResponseAdapter(response, provider),
     createStreamAdapter: () => new ImageStreamAdapter(provider),
   };
-}
-
-/** Provider error bodies can echo credentials, prompts or uploaded media. */
-export function safeImageUpstreamError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  const upstream = error as { status?: number; headers?: Headers } | null;
-  const status =
-    error instanceof Error &&
-    ["AbortError", "APIUserAbortError"].includes(error.name)
-      ? 499
-      : error instanceof OpenAI.APIConnectionTimeoutError
-        ? 504
-        : typeof upstream?.status === "number" &&
-            upstream.status >= 400 &&
-            upstream.status <= 599
-          ? upstream.status
-          : 502;
-  const safe = new ApiError(status, "Image upstream request failed");
-  const retryAfter =
-    upstream?.headers instanceof Headers
-      ? upstream.headers.get("retry-after")
-      : undefined;
-  if (retryAfter && retryAfter.length <= 128)
-    Object.assign(safe, {
-      headers: new Headers({ "retry-after": retryAfter }),
-    });
-  return safe;
 }
 
 class ImageRequestAdapter implements LLMRequestAdapter<ImageRequest, Messages> {

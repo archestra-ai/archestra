@@ -2,11 +2,9 @@ import type OpenAI from "openai";
 import type { z } from "zod";
 import type { LLMProvider, OpenAi } from "@/types";
 import { ApiError, Azure } from "@/types";
+import { mediaProviderError } from "../utils/media-provider-error";
 import { azureAdapterFactory, getAzureClientForRequest } from "./azure";
-import {
-  createImageGenerationAdapters,
-  safeImageUpstreamError,
-} from "./image-generation";
+import { createImageGenerationAdapters } from "./image-generation";
 
 type ImageRequest = z.infer<typeof Azure.API.ImageGenerationRequestSchema>;
 type ImageResponse = z.infer<typeof Azure.API.ImageGenerationResponseSchema>;
@@ -46,7 +44,7 @@ export const azureImagesAdapterFactory: LLMProvider<
         model: request.model,
       });
     } catch (error) {
-      throw safeImageUpstreamError(error);
+      throw mediaProviderError(error, "image generation", "Azure");
     }
   },
   async executeStream() {

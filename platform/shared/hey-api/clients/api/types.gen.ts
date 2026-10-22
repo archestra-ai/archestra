@@ -30142,6 +30142,825 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type AzureListFilesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        'api-version'?: string;
+        limit?: number;
+        after?: string;
+        order?: 'asc' | 'desc';
+        purpose?: 'user_data';
+    };
+    url: '/v1/azure/files';
+};
+
+export type AzureListFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureListFilesError = AzureListFilesErrors[keyof AzureListFilesErrors];
+
+export type AzureListFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'file';
+            bytes: number;
+            created_at: number;
+            filename: string;
+            purpose: 'user_data';
+            expires_at?: number;
+            status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+        }>;
+        first_id: string | null;
+        last_id: string | null;
+        has_more: boolean;
+    };
+};
+
+export type AzureListFilesResponse = AzureListFilesResponses[keyof AzureListFilesResponses];
+
+export type AzureCreateFileData = {
+    body: {
+        file: Blob | File;
+        purpose: 'user_data';
+        'expires_after[anchor]'?: 'created_at';
+        'expires_after[seconds]'?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/files';
+};
+
+export type AzureCreateFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureCreateFileError = AzureCreateFileErrors[keyof AzureCreateFileErrors];
+
+export type AzureCreateFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        bytes: number;
+        created_at: number;
+        filename: string;
+        purpose: 'user_data';
+        expires_at?: number;
+        status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    };
+};
+
+export type AzureCreateFileResponse = AzureCreateFileResponses[keyof AzureCreateFileResponses];
+
+export type AzureDeleteFileData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/files/{fileId}';
+};
+
+export type AzureDeleteFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureDeleteFileError = AzureDeleteFileErrors[keyof AzureDeleteFileErrors];
+
+export type AzureDeleteFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        deleted: true;
+    };
+};
+
+export type AzureDeleteFileResponse = AzureDeleteFileResponses[keyof AzureDeleteFileResponses];
+
+export type AzureRetrieveFileData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/files/{fileId}';
+};
+
+export type AzureRetrieveFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureRetrieveFileError = AzureRetrieveFileErrors[keyof AzureRetrieveFileErrors];
+
+export type AzureRetrieveFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        bytes: number;
+        created_at: number;
+        filename: string;
+        purpose: 'user_data';
+        expires_at?: number;
+        status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    };
+};
+
+export type AzureRetrieveFileResponse = AzureRetrieveFileResponses[keyof AzureRetrieveFileResponses];
+
+export type AzureFileContentData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/files/{fileId}/content';
+};
+
+export type AzureFileContentResponses = {
+    /**
+     * Default Response
+     */
+    200: Blob | File;
+};
+
+export type AzureFileContentResponse = AzureFileContentResponses[keyof AzureFileContentResponses];
+
+export type AzureListFilesWithAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: {
+        'api-version'?: string;
+        limit?: number;
+        after?: string;
+        order?: 'asc' | 'desc';
+        purpose?: 'user_data';
+    };
+    url: '/v1/azure/{agentId}/files';
+};
+
+export type AzureListFilesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureListFilesWithAgentError = AzureListFilesWithAgentErrors[keyof AzureListFilesWithAgentErrors];
+
+export type AzureListFilesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'file';
+            bytes: number;
+            created_at: number;
+            filename: string;
+            purpose: 'user_data';
+            expires_at?: number;
+            status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+        }>;
+        first_id: string | null;
+        last_id: string | null;
+        has_more: boolean;
+    };
+};
+
+export type AzureListFilesWithAgentResponse = AzureListFilesWithAgentResponses[keyof AzureListFilesWithAgentResponses];
+
+export type AzureCreateFileWithAgentData = {
+    body: {
+        file: Blob | File;
+        purpose: 'user_data';
+        'expires_after[anchor]'?: 'created_at';
+        'expires_after[seconds]'?: number;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/files';
+};
+
+export type AzureCreateFileWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureCreateFileWithAgentError = AzureCreateFileWithAgentErrors[keyof AzureCreateFileWithAgentErrors];
+
+export type AzureCreateFileWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        bytes: number;
+        created_at: number;
+        filename: string;
+        purpose: 'user_data';
+        expires_at?: number;
+        status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    };
+};
+
+export type AzureCreateFileWithAgentResponse = AzureCreateFileWithAgentResponses[keyof AzureCreateFileWithAgentResponses];
+
+export type AzureDeleteFileWithAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/files/{fileId}';
+};
+
+export type AzureDeleteFileWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureDeleteFileWithAgentError = AzureDeleteFileWithAgentErrors[keyof AzureDeleteFileWithAgentErrors];
+
+export type AzureDeleteFileWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        deleted: true;
+    };
+};
+
+export type AzureDeleteFileWithAgentResponse = AzureDeleteFileWithAgentResponses[keyof AzureDeleteFileWithAgentResponses];
+
+export type AzureRetrieveFileWithAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/files/{fileId}';
+};
+
+export type AzureRetrieveFileWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureRetrieveFileWithAgentError = AzureRetrieveFileWithAgentErrors[keyof AzureRetrieveFileWithAgentErrors];
+
+export type AzureRetrieveFileWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        object: 'file';
+        bytes: number;
+        created_at: number;
+        filename: string;
+        purpose: 'user_data';
+        expires_at?: number;
+        status?: 'uploaded' | 'processed' | 'error' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    };
+};
+
+export type AzureRetrieveFileWithAgentResponse = AzureRetrieveFileWithAgentResponses[keyof AzureRetrieveFileWithAgentResponses];
+
+export type AzureFileContentWithAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        fileId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/files/{fileId}/content';
+};
+
+export type AzureFileContentWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: Blob | File;
+};
+
+export type AzureFileContentWithAgentResponse = AzureFileContentWithAgentResponses[keyof AzureFileContentWithAgentResponses];
+
 export type AzureAudioSpeechWithDefaultAgentData = {
     body: {
         model: string;
@@ -30341,6 +31160,278 @@ export type AzureAudioTranslationsWithAgentResponses = {
      */
     200: unknown;
 };
+
+export type AzureImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: string | unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/images/edits';
+};
+
+export type AzureImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureImageEditsWithDefaultAgentError = AzureImageEditsWithDefaultAgentErrors[keyof AzureImageEditsWithDefaultAgentErrors];
+
+export type AzureImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureImageEditsWithDefaultAgentResponse = AzureImageEditsWithDefaultAgentResponses[keyof AzureImageEditsWithDefaultAgentResponses];
+
+export type AzureImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: string | unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/images/edits';
+};
+
+export type AzureImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureImageEditsWithAgentError = AzureImageEditsWithAgentErrors[keyof AzureImageEditsWithAgentErrors];
+
+export type AzureImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureImageEditsWithAgentResponse = AzureImageEditsWithAgentResponses[keyof AzureImageEditsWithAgentResponses];
 
 export type AzureRealtimeTurnWithDefaultAgentData = {
     /**

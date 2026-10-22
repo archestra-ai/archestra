@@ -508,7 +508,11 @@ test.for([
       status,
       headers: expect.objectContaining({}),
     });
-    expect((error as OpenAI.APIError).headers?.get("retry-after")).toBe("3600");
+    expect(
+      (error as InstanceType<typeof OpenAI.APIError>).headers?.get(
+        "retry-after",
+      ),
+    ).toBe("3600");
     const rows = await InteractionModel.getAllInteractionsForProfile(
       media.agentId,
     );

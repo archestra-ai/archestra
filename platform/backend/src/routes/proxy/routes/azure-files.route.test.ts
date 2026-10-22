@@ -419,7 +419,11 @@ test.for([
     throw new Error("Expected failure");
   } catch (error) {
     expect(error).toMatchObject({ status });
-    expect((error as OpenAI.APIError).headers?.get("retry-after")).toBe("3600");
+    expect(
+      (error as InstanceType<typeof OpenAI.APIError>).headers?.get(
+        "retry-after",
+      ),
+    ).toBe("3600");
     expect(
       JSON.stringify([error], (_key, value) =>
         value instanceof Error ? { ...value, message: value.message } : value,

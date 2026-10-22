@@ -74,6 +74,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
   "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
   "azure:images": (i) => new AzureImagesInteraction(i),
+  "openai:images": (i) => new AzureImagesInteraction(i),
   "azure:audio": (i) => new AudioInteraction(i),
   "openai:audio": (i) => new AudioInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),

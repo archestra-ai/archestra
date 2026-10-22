@@ -17,6 +17,11 @@ import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
 
+// Copilot endpoints require a recognized VS Code and Copilot Chat identity.
+// An hourly workflow proposes updates from stable upstream releases.
+const GITHUB_COPILOT_VSCODE_VERSION = "1.142.0";
+const GITHUB_COPILOT_CHAT_VERSION = "0.43.0";
+
 /**
  * Editor-identity headers the Copilot endpoints require on every request.
  * Requests without a recognized editor identity and integration id are
@@ -25,9 +30,9 @@ import { ApiError } from "@/types/api";
  */
 const GITHUB_COPILOT_HEADERS: Record<string, string> = {
   "copilot-integration-id": "vscode-chat",
-  "editor-version": "vscode/1.99.0",
-  "editor-plugin-version": "copilot-chat/0.26.7",
-  "user-agent": "GitHubCopilotChat/0.26.7",
+  "editor-version": `vscode/${GITHUB_COPILOT_VSCODE_VERSION}`,
+  "editor-plugin-version": `copilot-chat/${GITHUB_COPILOT_CHAT_VERSION}`,
+  "user-agent": `GitHubCopilotChat/${GITHUB_COPILOT_CHAT_VERSION}`,
   "x-github-api-version": "2025-04-01",
 };
 

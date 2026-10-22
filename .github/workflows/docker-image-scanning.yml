@@ -24,7 +24,7 @@ jobs:
     name: Classify release image scan
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required to checkout scan policy and image sources.
     outputs:
       scan: ${{ steps.policy.outputs.scan }}
     steps:
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: read # Required to checkout scan policy and image sources.
     strategy:
       fail-fast: false
       matrix:
@@ -113,8 +113,8 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read # Required to checkout scan policy and image sources.
+      pull-requests: read # Recheck the current release PR head and base after scanning.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -164,7 +164,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: read # Required to checkout scan policy and image sources.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

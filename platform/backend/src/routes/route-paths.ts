@@ -10,6 +10,13 @@ export const METRICS_PATH = "/metrics";
 export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 /** Public OAuth redirect target; callback state is the authentication proof. */
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
+/**
+ * Where a Teams user starts and finishes signing in to the bot so it can read
+ * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the proof, and the ChatOps webhook prefix is already allowlisted.
+ */
+export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
+export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback`;
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 /**

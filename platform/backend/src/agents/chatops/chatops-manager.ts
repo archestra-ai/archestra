@@ -1143,7 +1143,28 @@ export class ChatOpsManager {
 
     // Files the platform keeps off the message (Teams channel and group-chat
     // files live in SharePoint) are read only now, once per answered message.
+    // As it arrived: a held message reads its platform files again on replay.
+    const arrivedMessage: IncomingChatMessage = { ...message };
     await this.addPlatformMessageFiles({ provider, message });
+    // A file only its sender can open (a Teams group-chat file in their
+    // OneDrive): hold the message and ask them to sign in; it is answered
+    // again, with the file, once they have.
+    const signInFiles =
+      message.skippedAttachments?.filter(
+        (skipped) => skipped.reason === "sign_in_required",
+      ) ?? [];
+    if (
+      signInFiles.length > 0 &&
+      provider.requestFileSignIn &&
+      (await provider.requestFileSignIn({
+        message: arrivedMessage,
+        fileNames: signInFiles.flatMap((file) =>
+          file.name ? [file.name] : [],
+        ),
+      }))
+    ) {
+      return { success: true };
+    }
     // A Teams channel message can look empty until its files are read; one
     // that is still empty has nothing to answer.
     if (

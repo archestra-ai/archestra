@@ -77,6 +77,56 @@ describe("fetchAzureModels", () => {
     vi.unstubAllGlobals();
   });
 
+  test("keeps native media deployments and their modalities when chat completion is unavailable", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: "gpt-image-1", capabilities: { chat_completion: false } },
+          {
+            id: "gpt-realtime-translate",
+            capabilities: { chat_completion: false },
+          },
+          { id: "gpt-audio", capabilities: { chat_completion: true } },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    try {
+      const result = await fetchAzureModels(
+        "test-key",
+        "https://my-resource.openai.azure.com/openai/v1",
+      );
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "gpt-image-1",
+            capabilities: expect.objectContaining({
+              outputModalities: ["image"],
+              supportsToolCalling: false,
+            }),
+          }),
+          expect.objectContaining({
+            id: "gpt-realtime-translate",
+            capabilities: expect.objectContaining({
+              inputModalities: ["audio"],
+              supportsToolCalling: false,
+            }),
+          }),
+          expect.objectContaining({
+            id: "gpt-audio",
+            capabilities: expect.objectContaining({
+              outputModalities: ["text", "audio"],
+              supportsToolCalling: false,
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("captures the backing model name from data-plane deployments for pricing", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

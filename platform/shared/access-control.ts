@@ -460,6 +460,10 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  [RouteId.AzureRealtimeTurnWithDefaultAgent]: {},
+  [RouteId.AzureRealtimeTurnWithAgent]: {},
+  [RouteId.AzureImagesWithDefaultAgent]: {},
+  [RouteId.AzureImagesWithAgent]: {},
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },
@@ -1913,6 +1917,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: {},
+  // Internal UI feedback overlay: any signed-in user, and only on deployments
+  // that turn it on (the handlers 404 otherwise). Picking its Slack bot and
+  // channel is the same permission as configuring chatops Slack itself.
+  [RouteId.GetDevFeedbackSetup]: {},
+  [RouteId.ListDevFeedbackBots]: { organizationSettings: ["update"] },
+  [RouteId.ListDevFeedbackChannels]: { organizationSettings: ["update"] },
+  [RouteId.SaveDevFeedbackSetup]: { organizationSettings: ["update"] },
+  [RouteId.GetDevFeedbackComments]: {},
+  [RouteId.CreateDevFeedbackComment]: {},
+  [RouteId.GetDevFeedbackReplies]: {},
+  [RouteId.CreateDevFeedbackReply]: {},
+  [RouteId.ResolveDevFeedbackComment]: {},
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
   // Bundles the signed-in user's own startup reads; each part is self-scoped.

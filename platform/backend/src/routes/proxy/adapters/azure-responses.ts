@@ -44,7 +44,10 @@ import {
 } from "@/types";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
   namespaceOf,
@@ -82,6 +85,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
   // The Responses parser drops a chat-completions-shaped error frame as an
   // unknown chunk, turning an upstream failure into a blank turn.
   formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+  carriesStreamTerminal: carriesResponsesTerminal,
 
   createRequestAdapter(
     request: AzureResponsesRequest,

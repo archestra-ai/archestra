@@ -2,6 +2,7 @@ import { isEncryptedChatUnavailableContent } from "../encrypted-chat-content";
 import type { SupportedProvider } from "../index";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
+import AzureImagesInteraction from "./llmProviders/azure-images";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
@@ -70,6 +71,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
+  "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
+  "azure:images": (i) => new AzureImagesInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
   "jev:decisions": (i) => new JevDecisionsInteraction(i),
 };

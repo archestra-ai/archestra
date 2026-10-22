@@ -1001,6 +1001,32 @@ describe("MCP registry list routes", () => {
       ).toBe("named-install");
     });
 
+    test("marks an ownerless team install the admin cannot use as unusable", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const item = await makeItem(makeInternalMcpCatalog, "orphaned");
+      // A team-scoped install whose team was deleted keeps no owner or team.
+      const install = await makeMcpServer({
+        catalogId: item.id,
+        scope: "team",
+        ownerId: null,
+        teamId: null,
+      });
+
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/internal_mcp_catalog/registry/issue-index",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .servers.find((server: { id: string }) => server.id === install.id),
+      ).toMatchObject({ canUseCredential: false });
+    });
+
     test("carries every visible item and install without icons or configuration", async ({
       makeInternalMcpCatalog,
       makeMcpServer,

@@ -102,6 +102,17 @@ export const RouteId = {
   SyncAgentA2aDelegations: "syncAgentA2aDelegations",
   GetAllDelegationConnections: "getAllDelegationConnections",
 
+  // Dev Feedback Routes
+  GetDevFeedbackSetup: "getDevFeedbackSetup",
+  ListDevFeedbackBots: "listDevFeedbackBots",
+  ListDevFeedbackChannels: "listDevFeedbackChannels",
+  SaveDevFeedbackSetup: "saveDevFeedbackSetup",
+  GetDevFeedbackComments: "getDevFeedbackComments",
+  CreateDevFeedbackComment: "createDevFeedbackComment",
+  GetDevFeedbackReplies: "getDevFeedbackReplies",
+  CreateDevFeedbackReply: "createDevFeedbackReply",
+  ResolveDevFeedbackComment: "resolveDevFeedbackComment",
+
   // Config Routes
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
@@ -431,6 +442,10 @@ export const RouteId = {
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
+  AzureRealtimeTurnWithDefaultAgent: "azureRealtimeTurnWithDefaultAgent",
+  AzureRealtimeTurnWithAgent: "azureRealtimeTurnWithAgent",
+  AzureImagesWithDefaultAgent: "azureImagesWithDefaultAgent",
+  AzureImagesWithAgent: "azureImagesWithAgent",
   AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
   AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 

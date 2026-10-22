@@ -3,6 +3,7 @@ import OpenAI, { toFile } from "openai";
 import { z } from "zod";
 import { isAzureOpenAiV1BaseUrl } from "@/clients/azure-url";
 import config from "@/config";
+import logger from "@/logging";
 import { LimitValidationService } from "@/models/limit";
 import ProxyProviderFileModel, {
   type ProxyFileScope,
@@ -15,7 +16,10 @@ import {
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { azureAdapterFactory } from "./adapters/azure";
 import { PROXY_BODY_LIMIT } from "./common";
-import { resolveProxyResourceCredential } from "./llm-proxy-resource-auth";
+import {
+  type ProxyResourceCredential,
+  resolveProxyResourceCredential,
+} from "./llm-proxy-resource-auth";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { boundedMediaFetch } from "./utils/bounded-media-response";
 import { parseMediaMultipart } from "./utils/media-multipart";
@@ -127,10 +131,24 @@ export async function createAzureProviderFile(
     });
     return publicFile(row);
   } catch {
-    if (validRemoteId(raw?.id))
-      await context.client.files
-        .delete(raw.id, { timeout: 10_000 })
-        .catch(() => undefined);
+    if (validRemoteId(raw?.id)) {
+      // Cleanup must survive the original caller's cancellation. Reuse only the
+      // already resolved account; never reselect a credential after upload.
+      const cleanupClient = createFileClient(
+        context.credential,
+        AbortSignal.timeout(10_000),
+        context.ingress,
+      );
+      await cleanupClient.files.delete(raw.id).catch(() => {
+        logger.warn(
+          {
+            providerApiKeyId:
+              context.credential.providerAccount.providerApiKeyId,
+          },
+          "Provider file upload rollback failed; remote cleanup may be required.",
+        );
+      });
+    }
     throw new ApiError(
       502,
       "Unable to register the uploaded provider file safely.",
@@ -290,19 +308,8 @@ async function resourceContext(request: FastifyRequest, reply: FastifyReply) {
       422,
       "Provider files require a configured Azure /openai/v1 account endpoint.",
     );
-  const azure = azureAdapterFactory.createClient(credential.apiKey, {
-    baseUrl: credential.providerAccount.baseUrl,
-    agent: credential.agent,
-    source: "api",
-    defaultHeaders: credential.defaultHeaders,
-    abortSignal: signal,
-    azureRequest: getAzureProxyIngress(request),
-  }) as { openai: OpenAI; fetch: typeof fetch };
-  const client = azure.openai.withOptions({
-    fetch: boundedMediaFetch(azure.fetch, PROXY_BODY_LIMIT),
-    timeout: 60_000,
-    maxRetries: 0,
-  });
+  const ingress = getAzureProxyIngress(request);
+  const client = createFileClient(credential, signal, ingress);
   const scope: ProxyFileScope = {
     organizationId: credential.agent.organizationId,
     principalKind: credential.principal.kind,
@@ -310,7 +317,27 @@ async function resourceContext(request: FastifyRequest, reply: FastifyReply) {
     provider: "azure",
     accountBinding: credential.providerAccount.credentialBinding,
   };
-  return { credential, scope, client, signal };
+  return { credential, scope, client, signal, ingress };
+}
+
+function createFileClient(
+  credential: ProxyResourceCredential,
+  signal: AbortSignal,
+  ingress: ReturnType<typeof getAzureProxyIngress>,
+) {
+  const azure = azureAdapterFactory.createClient(credential.apiKey, {
+    baseUrl: credential.providerAccount.baseUrl,
+    agent: credential.agent,
+    source: "api",
+    defaultHeaders: credential.defaultHeaders,
+    abortSignal: signal,
+    azureRequest: ingress,
+  }) as { openai: OpenAI; fetch: typeof fetch };
+  return azure.openai.withOptions({
+    fetch: boundedMediaFetch(azure.fetch, PROXY_BODY_LIMIT),
+    timeout: 60_000,
+    maxRetries: 0,
+  });
 }
 
 async function ownedFile(request: FastifyRequest, scope: ProxyFileScope) {

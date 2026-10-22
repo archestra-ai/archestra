@@ -33,7 +33,7 @@ export const ImageEditMultipartBodySchema = z.unknown().meta({
       items: { type: "string", format: "binary" },
       minItems: 1,
       maxItems: 16,
-      description: "PNG/JPEG reference files, each smaller than 50 MiB.",
+      description: "PNG/JPEG/WebP reference files, each smaller than 50 MiB.",
     },
     mask: {
       type: "string",

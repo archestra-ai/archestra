@@ -80,9 +80,9 @@ describe("image edit uploads", () => {
     ).rejects.toThrow("MIME type");
     await expect(
       validateImageEditUploads([
-        { ...file, data: await sharp(file.data).webp().toBuffer() },
+        { ...file, data: await sharp(file.data).gif().toBuffer() },
       ]),
-    ).rejects.toThrow("PNG or JPEG");
+    ).rejects.toThrow("PNG, JPEG, or WebP");
     await expect(
       validateImageEditUploads([{ ...file, data: file.data.subarray(0, 40) }]),
     ).rejects.toThrow("Invalid or truncated");

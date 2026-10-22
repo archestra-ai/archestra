@@ -148,13 +148,13 @@ const test = baseTest.extend<{
 test("real SDK edits preserve multiple inputs and a mask with governed credential selection and metadata-only audit", async ({
   media,
 }) => {
-  const second = await sharp(media.image).resize(32, 16).png().toBuffer();
+  const second = await sharp(media.image).resize(32, 16).webp().toBuffer();
   const result = await media.client.images.edit({
     model: "gpt-image-1",
     prompt: "Add a blue circle.",
     image: [
       await toFile(media.image, "one.png"),
-      await toFile(second, "two.png"),
+      await toFile(second, "two.webp"),
     ],
     mask: await toFile(media.image, "mask.png"),
     input_fidelity: "high",
@@ -195,7 +195,7 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
     cost: null,
     request: {
       input_files: {
-        images: [{ filename: "one.png" }, { filename: "two.png" }],
+        images: [{ filename: "one.png" }, { filename: "two.webp" }],
         mask: { filename: "mask.png" },
       },
     },

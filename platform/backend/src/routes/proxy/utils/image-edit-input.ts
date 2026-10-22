@@ -62,7 +62,7 @@ export async function validateImageEditUploads(
 
 interface ImageEditFileMetadata {
   filename: string;
-  mime_type: "image/png" | "image/jpeg";
+  mime_type: "image/png" | "image/jpeg" | "image/webp";
   bytes: number;
   width: number;
   height: number;
@@ -93,15 +93,18 @@ async function validateImage(
     .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   const jpeg =
     file.data[0] === 255 && file.data[1] === 216 && file.data[2] === 255;
-  if ((!png && !jpeg) || (mask && !png)) {
+  const webp =
+    file.data.subarray(0, 4).toString("ascii") === "RIFF" &&
+    file.data.subarray(8, 12).toString("ascii") === "WEBP";
+  if ((!png && !jpeg && !webp) || (mask && !png)) {
     throw new ApiError(
       400,
       mask
         ? "The mask must be a PNG image."
-        : "Azure image inputs must be PNG or JPEG images.",
+        : "Image references must be PNG, JPEG, or WebP images.",
     );
   }
-  const mime = png ? "image/png" : "image/jpeg";
+  const mime = png ? "image/png" : jpeg ? "image/jpeg" : "image/webp";
   const declared = file.mimetype.split(";")[0].trim().toLowerCase();
   // SDK uploads created from a byte buffer commonly use application/octet-stream.
   if (
@@ -124,7 +127,7 @@ async function validateImage(
       !info.width ||
       !info.height ||
       (info.pages ?? 1) !== 1 ||
-      (info.format !== "png" && info.format !== "jpeg")
+      !["png", "jpeg", "webp"].includes(info.format ?? "")
     ) {
       throw new Error("Invalid image metadata");
     }

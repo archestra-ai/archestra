@@ -7,7 +7,10 @@ import { InteractionModel, VirtualApiKeyModel } from "@/models";
 import { expect, test } from "@/test";
 import azureRoutes from "./azure";
 
-test("round-trips image SDK parameters through the governed local route", async ({
+test.for([
+  true,
+  false,
+])("round-trips image SDK parameters through the governed local route (usage: %s)", async (hasUsage, {
   makeAgent,
   makeUser,
   makeMember,
@@ -27,7 +30,9 @@ test("round-trips image SDK parameters through the governed local route", async 
     return {
       created: 1,
       data: [{ b64_json: "aW1hZ2U=" }],
-      usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+      ...(hasUsage
+        ? { usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 } }
+        : {}),
     };
   });
   const app = createFastifyInstance();
@@ -115,6 +120,18 @@ test("round-trips image SDK parameters through the governed local route", async 
         return interactions.at(-1)?.type;
       })
       .toBe("azure:images");
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      inputTokens: hasUsage ? 2 : null,
+      outputTokens: hasUsage ? 3 : null,
+      cost: null,
+    });
+    expect(JSON.stringify(interactions)).not.toContain(
+      "synthetic-upstream-key",
+    );
+    expect(JSON.stringify(interactions)).not.toContain(value);
   } finally {
     app.server.closeAllConnections();
     upstream.server.closeAllConnections();

@@ -1,4 +1,4 @@
-import { count } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import { authPlugin } from "@/auth/fastify-plugin";
 import db, { schema } from "@/database";
@@ -8,6 +8,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import ServiceAccountModel from "@/models/service-account";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
 
 // The provider is a process boundary: validating a key would call it.
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
@@ -52,11 +53,6 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
     await app.close();
   });
 
-  async function countSecrets(): Promise<number> {
-    const [row] = await db.select({ n: count() }).from(schema.secretsTable);
-    return row.n;
-  }
-
   function createKey(payload: Record<string, unknown>) {
     return app.inject({
       method: "POST",
@@ -67,7 +63,7 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
   }
 
   test("400s for a key of its own, before the key is tested or stored", async () => {
-    const secretsBefore = await countSecrets();
+    const secretsBefore = await db.$count(schema.secretsTable);
 
     const response = await createKey({
       name: "Terraform OpenAI",
@@ -80,7 +76,7 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
       "A service account cannot own a key. Set shared to true to create a shared key.",
     );
     expect(testProviderApiKey).not.toHaveBeenCalled();
-    expect(await countSecrets()).toBe(secretsBefore);
+    expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
     expect(
       await LlmProviderApiKeyModel.findByOrganizationId(organizationId),
     ).toEqual([]);
@@ -114,5 +110,44 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
       createdBy: { name: "Terraform", type: "service_account" },
     });
     expect(testProviderApiKey).toHaveBeenCalledOnce();
+  });
+});
+
+describe("POST /api/llm-provider-api-keys when the insert fails", () => {
+  test("removes the secret it stored for the key", async ({
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    const organizationId = (await makeOrganization()).id;
+    // A user deleted while the request runs: the key is tested and its secret
+    // stored, then the insert fails on the owner's foreign key to users.
+    const deletedUser = {
+      id: randomUUID(),
+      name: "Deleted user",
+      email: "deleted@example.com",
+    } as User;
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, { user: deletedUser, organizationId });
+    });
+    const { default: llmProviderApiKeyRoutes } = await import(
+      "./llm-provider-api-keys"
+    );
+    try {
+      await app.register(llmProviderApiKeyRoutes);
+      const secretsBefore = await db.$count(schema.secretsTable);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: { name: "My OpenAI", provider: "openai", apiKey: "sk-my-key" },
+      });
+
+      expect(response.statusCode, response.body).toBe(500);
+      expect(testProviderApiKey).toHaveBeenCalledOnce();
+      expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
+    } finally {
+      await app.close();
+    }
   });
 });

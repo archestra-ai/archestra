@@ -374,15 +374,12 @@ describe("provider resource authentication", () => {
     expect((await call(value)).statusCode).toBe(403);
   });
 
-  test("keyless configured Azure accounts keep a stable binding across refresh", async () => {
+  test("keyless resource accounts fail closed until upstream identity can be bound", async () => {
     config.llm.azure.entraIdEnabled = true;
     await LlmProviderApiKeyModel.update(keyId, { secretId: null });
-    const first = await call();
-    expect(first.statusCode, first.body).toBe(200);
-    expect(resolved?.apiKey).toBeUndefined();
-    expect((await call()).json().account.credentialBinding).toBe(
-      first.json().account.credentialBinding,
-    );
+    const response = await call();
+    expect(response.statusCode, response.body).toBe(401);
+    expect(resolved).toBeUndefined();
   });
 
   test("missing stored credential never falls back to an environment key", async () => {

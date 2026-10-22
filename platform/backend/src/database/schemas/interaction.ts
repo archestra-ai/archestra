@@ -22,6 +22,7 @@ import type {
   InteractionResponse,
   ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import type { InteractionSessionPreview } from "@/types/interaction";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
@@ -187,6 +188,8 @@ const interactionsTable = pgTable(
      * history on this write-hot table.
      */
     billingTeamId: text("billing_team_id"),
+    /** Admission-time labels; later edits/deletions must not rewrite showback. */
+    attributionLabels: jsonb("attribution_labels").$type<AttributionLabels>(),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     sessionPreview: jsonb("session_preview").$type<InteractionSessionPreview>(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),

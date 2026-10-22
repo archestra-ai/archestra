@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { LOG_SESSION } from "./dataset";
 import { USAGE_TIMEFRAME } from "./determinism";
 import type { Shot } from "./shot";
 
@@ -10,6 +11,30 @@ import type { Shot } from "./shot";
  * light shot there and its dark twin beside it as `.dark.webp`.
  */
 export const SHOTS: Shot[] = [
+  {
+    asset: "automated_screenshots/admin-logs_session-waterfall",
+    route: () => `/llm/logs/${LOG_SESSION.id}`,
+    fixedTime: true,
+    viewport: { width: 1600, height: 1120 },
+    prepare: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: LOG_SESSION.prompt, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: /^Tool call get_incident on PagerDuty,/,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /^Tool call post_message on Slack,/ }),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByRole("list", { name: "Requests", exact: true })
+          .getByRole("listitem"),
+      ).toHaveCount(9);
+    },
+  },
   {
     asset: "automated_screenshots/platform-environments_overview",
     route: () => "/settings/environments",

@@ -1,6 +1,6 @@
 import {
   type CompleteModelSelection,
-  MODEL_MARKER_PATTERNS,
+  findTierDefault,
   PROVIDER_FAST_MODEL_PATTERNS,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -220,15 +220,8 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect the best model using pattern matching
-        // Patterns are checked in order (first pattern = highest priority)
-        const patterns = MODEL_MARKER_PATTERNS[provider];
-        const sorted = [...uniqueModels].sort((a, b) =>
-          a.modelId.localeCompare(b.modelId),
-        );
-
-        // Find first matching model respecting pattern priority order
-        const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
+        // `is_best` marks the provider's default-trio `normal` model.
+        const bestModel = findTierDefault(uniqueModels, provider, "normal");
 
         // Build values with markers
         const syncedAt = new Date();
@@ -794,14 +787,14 @@ export function selectionKey(selection: CompleteModelSelection): string {
   return `${selection.apiKeyId}:${selection.modelId}`;
 }
 
+/** A `pro` token: the reasoning tier above a fast model of the same name. */
+const PRO_TIER_MODEL_ID = /(?:^|[-/])pro(?:[-/:]|$)/i;
+
 /**
  * Find the first model matching patterns, respecting pattern priority order.
  * Patterns are checked in order (first pattern = highest priority).
  * For each pattern, returns the first alphabetically sorted match.
  */
-/** A `pro` token: the reasoning tier above a fast model of the same name. */
-const PRO_TIER_MODEL_ID = /(?:^|[-/])pro(?:[-/:]|$)/i;
-
 function findFirstMatchByPatternPriority<T extends { modelId: string }>(
   sortedModels: T[],
   patterns: string[],

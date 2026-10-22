@@ -10,6 +10,7 @@ import {
   isSkillTool,
   isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
+  SELF_FORK_TOOL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -64,7 +65,11 @@ import {
   toolEntries as credentialToolEntries,
   tools as credentialTools,
 } from "./credentials";
-import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import {
+  delegationToolArgsSchema,
+  handleDelegation,
+  selfForkToolArgsSchema,
+} from "./delegation";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
@@ -380,7 +385,10 @@ export async function executeArchestraTool(
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
     const parsedArgs = validateToolArgs({
-      schema: delegationToolArgsSchema,
+      schema:
+        toolName === SELF_FORK_TOOL_NAME
+          ? selfForkToolArgsSchema
+          : delegationToolArgsSchema,
       args,
       toolName,
     });

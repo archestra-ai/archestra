@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LabelTags } from "@/components/label-tags";
 import { SourceIcon } from "@/components/source-badge";
 import {
   Tooltip,
@@ -65,14 +66,21 @@ export function SessionCell({ session }: { session: LogSession }) {
         actor={actor}
       />
       <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "truncate text-sm leading-5 font-medium",
-            isPlaceholder && "font-normal italic text-muted-foreground",
-          )}
-          title={isPlaceholder ? undefined : title}
-        >
-          {title}
+        <div className="flex min-w-0 items-center gap-2">
+          <div
+            className={cn(
+              "min-w-0 truncate text-sm leading-5 font-medium",
+              isPlaceholder && "font-normal italic text-muted-foreground",
+            )}
+            title={isPlaceholder ? undefined : title}
+          >
+            {title}
+          </div>
+          <LabelTags
+            labels={Object.entries(session.attributionLabels ?? {}).map(
+              ([key, value]) => ({ key, value }),
+            )}
+          />
         </div>
         {/* One inline run that truncates as a whole: as flex items the
             parts each kept their width, so a narrow column let "via …" run

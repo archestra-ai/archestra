@@ -210,6 +210,11 @@ export function EditManagedOAuthClientDialog({
         />
         {/* SPDX-SnippetEnd */}
         <AdvancedLabelsSection
+          attributionSource={
+            llm && values.grantType === "client_credentials"
+              ? "credential"
+              : undefined
+          }
           collapsible
           ref={labelsRef}
           labels={values.labels ?? []}

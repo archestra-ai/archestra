@@ -24,10 +24,11 @@ crate-type = ["cdylib"]
 # no-remedy refusal feedback (#720), a failed subagent reported as stopped
 # (#722), and plaintext receipts that hold U+0000 stored under the plaintext
 # escape (#724).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1" }
+# Pin #725's atomic remedy claim fix directly until it lands upstream.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

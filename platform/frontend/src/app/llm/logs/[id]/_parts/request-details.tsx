@@ -13,6 +13,7 @@ import {
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
 import { CopyButton } from "@/components/copy-button";
 import { formatCost } from "@/components/cost";
+import { RequestAttributionLabels } from "@/components/request-attribution-labels";
 import { SourceIcon } from "@/components/source-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -333,6 +334,14 @@ function RequestOverview({
               </span>
             </OverviewFact>
           </dl>
+        </OverviewSection>
+
+        <OverviewSection title="Attribution labels">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Captured at request start. Credential labels override billing-team
+            labels.
+          </p>
+          <RequestAttributionLabels labels={row.attributionLabels} />
         </OverviewSection>
 
         <OverviewSection

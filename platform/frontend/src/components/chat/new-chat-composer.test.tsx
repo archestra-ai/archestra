@@ -60,7 +60,6 @@ vi.mock("@/lib/agent.query", () => ({
 }));
 
 vi.mock("@/lib/chat/chat.query", () => ({
-  useMemberDefaultModel: () => ({ data: null }),
   useOpenappaStatus: () => ({ data: null }),
 }));
 

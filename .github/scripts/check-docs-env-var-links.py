@@ -3,10 +3,10 @@
 exact entry in the reference on the Deployment page.
 
 The reference entries are the `- **`ARCHESTRA_X`** - …` bullets in
-docs/pages/reference/configuration.md; the website anchors each one by the
+docs/pages/admin/deployment/configuration.md; the website anchors each one by the
 variable's name. A mention is inline code naming a documented variable, alone or with a
 value (`ARCHESTRA_X` or `ARCHESTRA_X=true`), and it must be written
-[`ARCHESTRA_X`](/docs/reference/configuration#ARCHESTRA_X). A link whose text is the
+[`ARCHESTRA_X`](/docs/admin/deployment/configuration#ARCHESTRA_X). A link whose text is the
 variable but whose target is elsewhere (for example the page top) is also flagged.
 Mentions inside fenced code blocks, headings, HTML comments, and other link text are
 exempt (links do not render there), as are the entries themselves. In frontmatter, only
@@ -23,8 +23,8 @@ import re
 import sys
 
 PAGES_DIR = Path("docs/pages")
-REFERENCE = PAGES_DIR / "reference/configuration.md"
-REFERENCE_URL = "/docs/reference/configuration"
+REFERENCE = PAGES_DIR / "admin/deployment/configuration.md"
+REFERENCE_URL = "/docs/admin/deployment/configuration"
 
 ENTRY = re.compile(r"^\s*[-*] \*\*`(ARCHESTRA_[A-Z0-9_]+)`\*\*", re.MULTILINE)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)

@@ -24,6 +24,6 @@ Proxy clients use `https://<archestra-host>/v1/vllm`. Through the [Model Router]
 
 ## Deployment Configuration
 
-Set [`ARCHESTRA_VLLM_BASE_URL`](/docs/reference/configuration#ARCHESTRA_VLLM_BASE_URL) to configure a default endpoint. A Base URL set on a provider key takes precedence. [`ARCHESTRA_CHAT_VLLM_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_VLLM_API_KEY) supplies its default credential when needed.
+Set [`ARCHESTRA_VLLM_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_VLLM_BASE_URL) to configure a default endpoint. A Base URL set on a provider key takes precedence. [`ARCHESTRA_CHAT_VLLM_API_KEY`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_VLLM_API_KEY) supplies its default credential when needed.
 
 The API key variable alone does not create a provider key at startup: the Base URL variable must also be set. If connection testing fails, check that the backend can reach the server and that `/models` is available under the configured API root.

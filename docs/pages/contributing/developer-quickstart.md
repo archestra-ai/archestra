@@ -37,7 +37,7 @@ When `pnpm-dev-backend` and `pnpm-dev-frontend` are green, open <http://localhos
 
 ## Configure the Environment
 
-Settings live in `platform/.env`. Tilt restarts the backend and frontend when you save it. Every variable is listed in [Configuration](/docs/reference/configuration).
+Settings live in `platform/.env`. Tilt restarts the backend and frontend when you save it. Every variable is listed in [Configuration](/docs/admin/deployment/configuration).
 
 To chat without adding a provider key in the UI, set an Anthropic key. Archestra adds it as the organization's Anthropic key at startup:
 
@@ -45,12 +45,12 @@ To chat without adding a provider key in the UI, set an Anthropic key. Archestra
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-To skip the sign-in screen, set [`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL=admin@example.com`](/docs/reference/configuration#ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL). It has no effect in a production build.
+To skip the sign-in screen, set [`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL=admin@example.com`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL). It has no effect in a production build.
 
 Two features need extra services, which start only when you turn them on:
 
-- [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) turns on the [Code Sandbox](/docs/agents#code-sandbox). Tilt builds its native addon, and the backend starts a Dagger engine in your cluster.
-- [`ARCHESTRA_FILE_STORAGE_PROVIDER=s3`](/docs/reference/configuration#ARCHESTRA_FILE_STORAGE_PROVIDER) deploys MinIO as the file store.
+- [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) turns on the [Code Sandbox](/docs/agents#code-sandbox). Tilt builds its native addon, and the backend starts a Dagger engine in your cluster.
+- [`ARCHESTRA_FILE_STORAGE_PROVIDER=s3`](/docs/admin/deployment/configuration#ARCHESTRA_FILE_STORAGE_PROVIDER) deploys MinIO as the file store.
 
 ## Everyday Commands
 
@@ -119,3 +119,7 @@ pnpm also skips package install scripts in this repository. Both settings are in
 ```bash
 pnpm rebuild <package-name>
 ```
+
+## Benchmark the LLM Proxy
+
+Use the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) for the reproducible mock-upstream workload, setup, and stored results. Run it from a clean checkout; its launcher creates and removes a disposable database.

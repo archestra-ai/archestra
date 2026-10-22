@@ -346,10 +346,10 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
       },
       "target": {
         "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use), which holds the conversation's attachments. Pass \`{ "fresh": true }\` for a new empty sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
         "properties": {
           "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "description": "Set true for a brand-new empty sandbox, without the conversation's attachments or earlier work; its id is returned.",
             "type": "boolean",
           },
           "id": {
@@ -602,10 +602,10 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
       },
       "target": {
         "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use), which holds the conversation's attachments. Pass \`{ "fresh": true }\` for a new empty sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
         "properties": {
           "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "description": "Set true for a brand-new empty sandbox, without the conversation's attachments or earlier work; its id is returned.",
             "type": "boolean",
           },
           "id": {
@@ -892,10 +892,10 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
       },
       "target": {
         "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use), which holds the conversation's attachments. Pass \`{ "fresh": true }\` for a new empty sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
         "properties": {
           "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "description": "Set true for a brand-new empty sandbox, without the conversation's attachments or earlier work; its id is returned.",
             "type": "boolean",
           },
           "id": {

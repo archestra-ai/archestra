@@ -984,6 +984,7 @@ async function makeInteraction(
       | "authenticatedAppId"
       | "authenticatedAppName"
       | "billingTeamId"
+      | "attributionLabels"
       | "billingMode"
       | "sessionId"
       | "runId"

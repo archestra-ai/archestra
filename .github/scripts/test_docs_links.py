@@ -116,12 +116,12 @@ class ToolLinkTest(DocsFixture):
 
 
 class EnvVarLinkTest(DocsFixture):
-    ENTRY = "/docs/reference/configuration#ARCHESTRA_FOO"
+    ENTRY = "/docs/admin/deployment/configuration#ARCHESTRA_FOO"
 
     def setUp(self):
         super().setUp()
         self.write(
-            "reference/configuration.md",
+            "admin/deployment/configuration.md",
             "- **`ARCHESTRA_FOO`** - Turns on foo.\n  - Required when: `ARCHESTRA_BAR=on`\n\n- **`ARCHESTRA_BAR`** - Bar.\n",
         )
 
@@ -131,7 +131,7 @@ class EnvVarLinkTest(DocsFixture):
             "---\ntitle: A\nbeta: \"Set `ARCHESTRA_FOO=true`.\"\ndescription: `ARCHESTRA_FOO`\n---\n"
             "Set `ARCHESTRA_FOO`, not `ARCHESTRA_UNKNOWN`.\n"
             f"Linked: [`ARCHESTRA_FOO`]({self.ENTRY}).\n"
-            "Wrong: [`ARCHESTRA_FOO=1`](/docs/reference/configuration).\n"
+            "Wrong: [`ARCHESTRA_FOO=1`](/docs/admin/deployment/configuration).\n"
             "Inside: [turn on `ARCHESTRA_FOO`](/docs/x).\n"
             "## `ARCHESTRA_FOO`\n\n```\n`ARCHESTRA_FOO`\n```\n",
         )
@@ -145,17 +145,17 @@ class EnvVarLinkTest(DocsFixture):
         self.assertEqual(result.stderr.count("\n- "), 4)
 
     def test_fix_links_to_the_exact_entry_and_keeps_the_value(self):
-        self.write("a/index.md", "Set `ARCHESTRA_FOO=true` or [`ARCHESTRA_BAR`](/docs/reference/configuration).\n")
+        self.write("a/index.md", "Set `ARCHESTRA_FOO=true` or [`ARCHESTRA_BAR`](/docs/admin/deployment/configuration).\n")
         self.assertEqual(self.run_script("check-docs-env-var-links", "--fix").returncode, 0)
         self.assertEqual(
             (self.root / "docs/pages/a/index.md").read_text(),
             f"Set [`ARCHESTRA_FOO=true`]({self.ENTRY}) or "
-            "[`ARCHESTRA_BAR`](/docs/reference/configuration#ARCHESTRA_BAR).\n",
+            "[`ARCHESTRA_BAR`](/docs/admin/deployment/configuration#ARCHESTRA_BAR).\n",
         )
         self.assertEqual(self.run_script("check-docs-env-var-links").returncode, 0)
 
     def test_entries_are_link_targets(self):
-        self.write("a/index.md", f"See [`ARCHESTRA_FOO`]({self.ENTRY}) and [x](/docs/reference/configuration#ARCHESTRA_NOPE).\n")
+        self.write("a/index.md", f"See [`ARCHESTRA_FOO`]({self.ENTRY}) and [x](/docs/admin/deployment/configuration#ARCHESTRA_NOPE).\n")
         result = self.run_script("check-docs-links")
         self.assertEqual(result.returncode, 1)
         self.assertIn("#ARCHESTRA_NOPE", result.stderr)

@@ -1,13 +1,14 @@
 import { request, test as setup } from "@playwright/test";
 import { ArchestraApi } from "../src/api";
+import { backdateKnowledgeFiles, seedDatabaseRows } from "../src/db-seed";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   ARCHESTRA_URL,
+  ONLY,
   PERSONA_AUTH_FILE,
 } from "../src/env";
 import { ensurePersona, PERSONA } from "../src/persona";
-import { backdateKnowledgeFiles, seedDatabaseRows } from "../src/db-seed";
 import { seedDemoData, seedKnowledgeFiles } from "../src/seed";
 
 setup("seed the demo organization", async () => {
@@ -29,10 +30,15 @@ setup("seed the demo organization", async () => {
   if (!(await persona.signIn(PERSONA.email, PERSONA.password))) {
     throw new Error(`Could not sign in as the persona ${PERSONA.email}.`);
   }
-  const state = await seedDemoData(persona);
-  await seedDatabaseRows(state);
-  await seedKnowledgeFiles(persona, state);
-  backdateKnowledgeFiles(state);
+  const onlyModelRouterKey =
+    ONLY.length === 1 &&
+    ONLY[0] === "automated_screenshots/llm-proxy_model-router-key";
+  const state = await seedDemoData(persona, { onlyModelRouterKey });
+  if (!onlyModelRouterKey) {
+    await seedDatabaseRows(state);
+    await seedKnowledgeFiles(persona, state);
+    backdateKnowledgeFiles(state);
+  }
   await personaContext.storageState({ path: PERSONA_AUTH_FILE });
   await personaContext.dispose();
   await anonymous.dispose();

@@ -33,7 +33,10 @@ export type SeedState = Record<string, Record<string, string>>;
  * Seeds the demo organization through the API as an admin. Additive and
  * idempotent: existing records (matched by name) are reused, nothing is deleted.
  */
-export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
+export async function seedDemoData(
+  api: ArchestraApi,
+  options: { onlyModelRouterKey?: boolean } = {},
+): Promise<SeedState> {
   await api.post("/api/organization/complete-onboarding", {
     onboardingComplete: true,
   });
@@ -54,6 +57,14 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
   record("users", "persona", ownerId);
   const own = (path: string) =>
     api.tryPost(`${path}/transfer-ownership`, { ownerId });
+
+  // This dialog needs real provider mappings, but no Kubernetes environments,
+  // knowledge indexing, or unrelated demo records.
+  if (options.onlyModelRouterKey) {
+    await seedProviderKeys(api, record);
+    writeSeedState(state);
+    return state;
+  }
 
   for (const team of TEAMS) {
     const created = await api.ensureNamed({
@@ -144,17 +155,7 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
   await addGuardrailsRules(api);
   await saveValidations(api);
 
-  const existingProviderKeys = items(await api.get<Listed>("/api/llm-provider-api-keys"));
-  for (const providerKey of PROVIDER_KEYS) {
-    const created =
-      existingProviderKeys.find((key) => key.name === providerKey.name) ??
-      (await api.tryPost<Named>("/api/llm-provider-api-keys", providerKey));
-    if (created) {
-      record("providerKeys", providerKey.name, created.id);
-    } else {
-      console.warn(`Skipped provider key "${providerKey.name}": the provider rejected the fake key.`);
-    }
-  }
+  await seedProviderKeys(api, record);
 
   for (const knowledgeBase of KNOWLEDGE_BASES) {
     const created = await api.ensureNamed({
@@ -228,9 +229,31 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
     });
   }
 
+  writeSeedState(state);
+  return state;
+}
+
+function writeSeedState(state: SeedState): void {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.writeFileSync(SEED_STATE_FILE, `${JSON.stringify(state, null, 2)}\n`);
-  return state;
+}
+
+async function seedProviderKeys(
+  api: ArchestraApi,
+  record: (kind: string, name: string, id: string) => void,
+): Promise<void> {
+  const existingProviderKeys = items(await api.get<Listed>("/api/llm-provider-api-keys"));
+  for (const providerKey of PROVIDER_KEYS) {
+    const created =
+      existingProviderKeys.find((key) => key.name === providerKey.name) ??
+      (await api.tryPost<Named>("/api/llm-provider-api-keys", providerKey));
+    if (created) {
+      record("providerKeys", providerKey.name, created.id);
+    } else {
+      console.warn(`Skipped provider key "${providerKey.name}": the provider rejected the fake key.`);
+    }
+  }
+
 }
 
 /**
@@ -280,7 +303,8 @@ export async function seedKnowledgeFiles(api: ArchestraApi, state: SeedState): P
       const row = byName.get(file.filename);
       const baseId = file.knowledgeBase && state.knowledgeBases[file.knowledgeBase];
       if (!row || !baseId || row.knowledgeBases?.some((base) => base.id === baseId)) continue;
-      (toIndex[baseId] ??= []).push(row.id);
+      toIndex[baseId] ??= [];
+      toIndex[baseId].push(row.id);
     }
     if (Object.keys(toIndex).length === 0) return;
     for (const [knowledgeBaseId, fileIds] of Object.entries(toIndex)) {

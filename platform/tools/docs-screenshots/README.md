@@ -2,6 +2,8 @@
 
 Run `pnpm docs:screenshots` from `platform/` against a seeded local stack. See [the screenshot workflow](../../.agents/skills/archestra-docs-writer/references/site-mechanics.md#screenshots) for setup and adding scenes.
 
+The exact `DOCS_SCREENSHOTS_ONLY=automated_screenshots/llm-proxy_model-router-key` selection seeds only the persona and real provider mappings needed by that dialog. Full captures retain the complete demo seed, including Kubernetes environments and knowledge data.
+
 Use an isolated fixture instance: the guardrails overview enables real enforcement through the API and verifies that it is active before capturing. It does not simulate deployment status in the browser.
 
 Keep scene choices explicit: pick a named agent, sort tied lists by name, and wait for the final UI state. The harness waits for the app's accessible loading status to clear; the approval scene also waits for setup-command generation. Usage scenes use `FIXTURE_TIME` with the usage SQL dataset and an exact statistics range, so request buckets and labels do not move with the calendar. Browser timers still run normally. Locale, timezone, fonts, reduced motion, and disabled screenshot animations are handled by the capture harness.

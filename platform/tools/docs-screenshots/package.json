@@ -6,7 +6,7 @@
   "scripts": {
     "capture": "playwright test --project=capture",
     "seed": "playwright test --project=seed",
-    "type-check": "tsc --noEmit"
+    "type-check": "pnpm --dir ../../backend exec tsc --noEmit --project ../tools/docs-screenshots/tsconfig.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

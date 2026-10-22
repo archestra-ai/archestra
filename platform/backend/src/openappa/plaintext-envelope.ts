@@ -70,7 +70,9 @@ function holdsNul(value: unknown): boolean {
     if (typeof current === "string") {
       if (current.includes("\u0000")) return true;
     } else if (Array.isArray(current)) {
-      pending.push(...current);
+      // One push per item: a spread would hit the engine's argument limit on
+      // a very long array.
+      for (const item of current) pending.push(item);
     } else if (typeof current === "object" && current !== null) {
       for (const [key, field] of Object.entries(current)) {
         if (key.includes("\u0000")) return true;

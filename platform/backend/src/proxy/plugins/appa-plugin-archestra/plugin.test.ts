@@ -475,6 +475,9 @@ describe("asking through the client's own question tool", () => {
       pending: boolean;
       /** The newest user turn arrives without content. */
       noContent?: boolean;
+      stringContent?: boolean;
+      assistantTail?: boolean;
+      controlTail?: Record<string, unknown>[];
     }) {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({
@@ -505,24 +508,50 @@ describe("asking through the client's own question tool", () => {
         binding.requiresRemedyContinuation = true;
         binding.requiresQuestionContinuation = true;
       }
-      const system = [{ type: "text", text: "client system" }];
+      const system = [
+        {
+          type: "text",
+          text: "client system",
+          cache_control: { type: "ephemeral" },
+        },
+      ];
       const request = {
         system,
         messages: [
+          { role: "user", content: "historic user" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "signed reasoning",
+                signature: "signature",
+              },
+              { type: "tool_use", id: "toolu_1", name: "tool", input: {} },
+            ],
+          },
           params.noContent
             ? { role: "user" }
-            : {
-                role: "user",
-                content: [
-                  {
-                    type: "tool_result",
-                    tool_use_id: "toolu_1",
-                    content: "done",
-                  },
-                ],
-              },
-        ],
+            : params.stringContent
+              ? { role: "user", content: "latest user" }
+              : {
+                  role: "user",
+                  content: [
+                    {
+                      type: "tool_result",
+                      tool_use_id: "toolu_1",
+                      content: "done",
+                      cache_control: { type: "ephemeral" },
+                    },
+                  ],
+                },
+        ] as Record<string, unknown>[],
       };
+      if (params.assistantTail)
+        request.messages.push({ role: "assistant", content: "prefill" });
+      if (params.controlTail)
+        request.messages.push(...structuredClone(params.controlTail));
+      const beforeMessages = structuredClone(request.messages);
       await plugin.onBeforeModel({ ...context, request });
       await plugin.onCleanup(context);
       return {
@@ -530,6 +559,8 @@ describe("asking through the client's own question tool", () => {
         system: JSON.stringify(request.system),
         turn: JSON.stringify(request.messages.at(-1)),
         systemUntouched: request.system === system && system.length === 1,
+        beforeMessages,
+        messages: request.messages,
       };
     }
 
@@ -591,7 +622,7 @@ describe("asking through the client's own question tool", () => {
       }
     });
 
-    test("a create still puts the guidance in system", async ({
+    test("an Anthropic create keeps fixed guidance in system and puts per-turn guidance after tool results", async ({
       makeOrganization,
     }) => {
       config.openappa.enabled = true;
@@ -606,10 +637,107 @@ describe("asking through the client's own question tool", () => {
       expect(result.binding?.threadContinue).toBe(false);
       expect(result.system).toContain(FIXED);
       for (const text of PER_TURN) {
-        expect(result.system).toContain(text);
-        expect(result.turn).not.toContain(text);
+        expect(result.system).not.toContain(text);
+        expect(result.turn).toContain(text);
+      }
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+      expect((result.messages.at(-1)?.content as unknown[])[0]).toEqual(
+        (result.beforeMessages.at(-1)?.content as unknown[])[0],
+      );
+    });
+
+    test("Anthropic pending state does not change the system cache prefix", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const pending = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+      const idle = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: false,
+      });
+      expect(pending.system).toBe(idle.system);
+      for (const text of PER_TURN) {
+        expect(pending.turn).toContain(text);
+        expect(idle.turn).not.toContain(text);
       }
     });
+
+    for (const assistantTail of [false, true]) {
+      test(`Anthropic guidance preserves native control-frame ordering with assistant tail ${assistantTail}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const controlTail = [
+          {
+            role: "system",
+            content: [{ type: "text", text: "native effort control" }],
+          },
+        ];
+        const result = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          assistantTail,
+          controlTail,
+        });
+        expect(result.messages.slice(-1)).toEqual(controlTail);
+        const userIndex = result.messages.length - 2;
+        expect(result.messages[userIndex].role).toBe("user");
+        for (const text of PER_TURN)
+          expect(JSON.stringify(result.messages[userIndex])).toContain(text);
+        const historyLength = assistantTail
+          ? result.beforeMessages.length - 1
+          : result.beforeMessages.length - 2;
+        expect(result.messages.slice(0, historyLength)).toEqual(
+          result.beforeMessages.slice(0, historyLength),
+        );
+        if (!assistantTail)
+          expect((result.messages[userIndex].content as unknown[])[0]).toEqual(
+            (result.beforeMessages[userIndex].content as unknown[])[0],
+          );
+        expect(result.messages.length).toBe(
+          result.beforeMessages.length + (assistantTail ? 1 : 0),
+        );
+      });
+    }
+
+    for (const shape of [
+      "stringContent",
+      "noContent",
+      "assistantTail",
+    ] as const) {
+      test(`Anthropic tail guidance preserves history with ${shape}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const result = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          [shape]: true,
+        });
+        for (const text of PER_TURN) {
+          expect(result.turn).toContain(text);
+          expect(result.system).not.toContain(text);
+        }
+        const preserved =
+          shape === "assistantTail"
+            ? result.beforeMessages
+            : result.beforeMessages.slice(0, -1);
+        expect(result.messages.slice(0, preserved.length)).toEqual(preserved);
+        if (shape === "stringContent")
+          expect(
+            (result.messages.at(-1)?.content as { text: string }[])[0].text,
+          ).toBe("latest user");
+      });
+    }
   });
 
   test("forces Codex to execute an offered remedy instead of asking in prose", async ({
@@ -1512,10 +1640,12 @@ describe("asking through the client's own question tool", () => {
       });
       await plugin.onBeforeModel({ ...context, request });
 
-      expect(request.system).toContain(
+      expect(JSON.stringify(request.messages)).toContain(
         "Ask the user with the declared ask_user tool, one call for each offer ID below",
       );
-      expect(request.system).toContain('Offer IDs: ["offer-hitl"]');
+      expect(JSON.stringify(request.messages)).toContain(
+        'Offer IDs: [\\"offer-hitl\\"]',
+      );
       // The question goes through the question tool, never plain text.
       expect(request.system).toContain("not in plain text");
       expect(request.system).not.toContain("Immediately");
@@ -2130,13 +2260,13 @@ describe("asking through the client's own question tool", () => {
       });
       const continuationRequest = { system: "Base", messages: [] };
       await plugin.onBeforeModel({ ...context, request: continuationRequest });
-      expect(continuationRequest.system).toContain(
-        'approved OpenAPPA offer IDs ["offer-hitl"]',
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
+        'approved OpenAPPA offer IDs [\\"offer-hitl\\"]',
       );
-      expect(continuationRequest.system).toContain(
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
         "In your next response, call only execute_remedy_plan, once for each approved offer",
       );
-      expect(continuationRequest.system).toContain(
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
         "Retry the blocked call in a later response",
       );
       const resumed = await plugin.onPrepareToolCalls({

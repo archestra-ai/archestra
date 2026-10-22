@@ -99,7 +99,8 @@ RUN --network=none \
 
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/claude-background-agents.py
+    python3 /tmp/agent-image-tests/claude-background-agents.py \
+ && python3 /tmp/agent-image-tests/claude-background-work.py
 
 FROM agent-base AS agent-codex
 USER root

@@ -46,6 +46,7 @@ import {
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
+import { toolEntries } from "@/openappa/policy-text";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -1257,9 +1258,12 @@ export async function evaluateToolCalls(
         options.spawnCallIds?.has(call.id) === true ||
         options.isSpawn?.(call.name, call.namespace) === true;
       // An agent__<slug> spawn starts a subagent like the host's own Agent
-      // tool, so it is ruled as one. The model keeps its own spelling.
+      // tool, so it is ruled as one unless the policy rules it by name. The
+      // model keeps its own spelling.
       const tool =
-        spawn && isAgentTool(shortName ?? canonicalTool)
+        spawn &&
+        isAgentTool(shortName ?? canonicalTool) &&
+        !declaresTool((await policy()).content, canonicalTool)
           ? SUBAGENT_TOOL
           : canonicalTool;
       const spelling =
@@ -2289,8 +2293,15 @@ function spawnRetrySpelling(params: {
     : `${prefix}${params.call.name}`;
 }
 
-/** The host tool every subagent spawn is ruled and recorded under. */
+/** The host tool a subagent spawn is ruled and recorded under, unless the policy names it. */
 export const SUBAGENT_TOOL = "Agent";
+
+/** Whether the policy has a rule of its own for `tool`, selector rules included. */
+function declaresTool(content: string, tool: string): boolean {
+  return toolEntries(content).some(
+    ({ name }) => name === tool || name.startsWith(`${tool}(`),
+  );
+}
 
 function nativePresentation(
   controlToolName?: string,

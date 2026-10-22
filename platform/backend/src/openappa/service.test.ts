@@ -2577,6 +2577,26 @@ describe("APPA feature boundary", () => {
         arguments: { message: "Research" },
       });
     }
+    // A policy that rules the agent__ tool by name keeps ruling it.
+    for (const name of ["agent__research", 'agent__research(message="x")']) {
+      await evaluateToolCalls(
+        session,
+        [{ id: `named-${name}`, name: "agent__research", arguments: {} }],
+        {
+          canonicalize: (toolName) => toolName,
+          spawnCallIds: new Set([`named-${name}`]),
+        },
+        async () => ({
+          content: `[policy]\nversion = 2\n\n[[policy.tool]]\nname = '${name}'\ndelta = {}\n`,
+          credentials: {},
+        }),
+      );
+      const event = JSON.parse(
+        native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}",
+      );
+      expect(event).toMatchObject({ tool: "agent__research", spawn: true });
+      expect(event).not.toHaveProperty("spelling");
+    }
     // An outbound A2A call is no spawn and keeps its own name.
     await evaluateToolCalls(
       session,

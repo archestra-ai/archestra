@@ -226,11 +226,11 @@ describe("Azure resource capability evidence", () => {
       });
     expect(
       (await list(a.id)).find((model) => model.id === "production")
-        ?.capabilities.outputModalities,
+        ?.capabilities?.outputModalities,
     ).toEqual(["image"]);
     expect(
       (await list(b.id)).find((model) => model.id === "production")
-        ?.capabilities.outputModalities,
+        ?.capabilities?.outputModalities,
     ).toEqual(["text", "audio"]);
     expect(
       (await list()).find((model) => model.id === "production")?.capabilities

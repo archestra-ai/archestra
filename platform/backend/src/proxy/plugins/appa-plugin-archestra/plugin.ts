@@ -2813,11 +2813,18 @@ async function approveChildReturnCarriers(params: {
       arrived.set(child, { ...record, spawnCallId });
     }
   }
-  // A child's return always reaches the parent framed or marked, so a spawn
-  // result that no collected return names carries none. It is the client's
-  // own text about a child that failed before it returned, for example on a
-  // provider error before its first request. The runtime closes that spawn
-  // and withholds the text, so the parent can go on and spawn again.
+  // A child's return always reaches the parent framed or marked. So when this
+  // session released a spawn, its child crossed nothing, and no collected
+  // return names the spawn's result, the result is the client's own text
+  // about a child that failed before it returned, for example on a provider
+  // error before its first request. The runtime closes that spawn and
+  // withholds the text, so the parent can go on and spawn again. A spawn this
+  // session never released, or one a fork carries, is still refused below.
+  const released = new Set(
+    (params.binding.request.releasedSpawnCalls ?? []).map(
+      withoutTrajectoryStamp,
+    ),
+  );
   const named = new Set(
     completions.flatMap((completion) =>
       [completion.envelopeId, completion.spawnCallId].flatMap((id) =>
@@ -2828,7 +2835,10 @@ async function approveChildReturnCarriers(params: {
   for (const result of completionResults) {
     const id = withoutTrajectoryStamp(result.id);
     if (
+      !params.binding.session.fork_of &&
       directSpawnResults.has(id) &&
+      released.has(id) &&
+      !crossedSpawns.has(id) &&
       !named.has(id) &&
       !unenforcedReturn({ spawnCallId: id })
     )

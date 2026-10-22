@@ -10829,16 +10829,55 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output_source: "runtime",
         });
       });
-      const body = payload(false, [
+      const send = (messages: unknown[]) => {
+        const body = payload(false, messages);
+        body.tools.push({
+          name: "Agent",
+          description: "Launch a subagent",
+          input_schema: { type: "object", properties: {} },
+        });
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.285 (external, cli)",
+            "x-claude-code-session-id": session,
+          },
+          payload: body,
+        });
+      };
+      // OpenAPPA releases the spawn and marks its prompt.
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { description: "lint", prompt: spawnPrompt },
+        },
+      };
+      const root = await send([{ role: "user", content: "Lint" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const call = noticeFrom(root.body, false);
+      expect(String(call.input.prompt)).toContain(
+        "[appa] delegated trajectory",
+      );
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await send([
         { role: "user", content: "Lint" },
         {
           role: "assistant",
           content: [
             {
               type: "tool_use",
-              id: "toolu_failed",
-              name: "Agent",
-              input: { description: "lint", prompt: spawnPrompt },
+              id: call.id,
+              name: call.name,
+              input: call.input,
             },
           ],
         },
@@ -10849,38 +10888,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           content: [
             {
               type: "tool_result",
-              tool_use_id: "toolu_failed",
+              tool_use_id: call.id,
               ...(isError ? { is_error: true } : {}),
               content: [{ type: "text", text: "API Error: 401 CHILD FAILED" }],
             },
           ],
         },
       ]);
-      body.tools.push({
-        name: "Agent",
-        description: "Launch a subagent",
-        input_schema: { type: "object", properties: {} },
-      });
-      events.length = 0;
-      providerRequests.length = 0;
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: {
-          ...internalCallHeader(),
-          ...externalClientHeaders(),
-          "user-agent": "claude-cli/2.1.285 (external, cli)",
-          "x-claude-code-session-id": session,
-        },
-        payload: body,
-      });
 
       expect(response.statusCode, response.body).toBe(200);
       expect(events).toContainEqual(
         expect.objectContaining({
           event: "tool_result",
-          tool_call_id: expect.stringContaining("toolu_failed"),
           outcome: "failure",
         }),
       );

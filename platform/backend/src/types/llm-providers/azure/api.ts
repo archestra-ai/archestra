@@ -28,6 +28,10 @@ export {
 };
 
 export const ChatCompletionsHeadersSchema = z.object({
+  "api-key": z
+    .string()
+    .optional()
+    .describe("Archestra virtual API key for native Azure SDK clients"),
   "user-agent": z.string().optional().describe("The user agent of the client"),
   authorization: z
     .string()

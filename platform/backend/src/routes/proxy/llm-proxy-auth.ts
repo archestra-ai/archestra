@@ -213,6 +213,19 @@ export async function validateVirtualApiKey(params: {
     );
   }
 
+  const mappedRow = await LlmProviderApiKeyModel.findById(
+    mappedProviderKey.providerApiKeyId,
+  );
+  if (
+    !mappedRow ||
+    mappedRow.organizationId !== resolved.virtualKey.organizationId ||
+    mappedRow.provider !== expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "Virtual API key references an unavailable provider account.",
+    );
+
   // Resolve the real provider API key from the secret first — the per-user
   // check below needs it to recognize a ChatGPT-subscription (Codex) credential.
   // If the parent key's secret was removed (orphaned row), apiKey will be
@@ -955,6 +968,14 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       "LLM OAuth client references a missing provider API key.",
     );
   }
+  if (
+    providerApiKey.organizationId !== oauthClient.organizationId ||
+    providerApiKey.provider !== params.expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "LLM OAuth client references an unavailable provider account.",
+    );
   const oauthMappedSecret = providerApiKey.secretId
     ? ((await getSecretValueForLlmProviderApiKey(providerApiKey.secretId)) as
         | string

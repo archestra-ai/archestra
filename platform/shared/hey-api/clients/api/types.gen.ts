@@ -30477,6 +30477,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -30970,6 +30974,10 @@ export type AzureRealtimeTurnWithAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -31146,6 +31154,10 @@ export type AzureImagesWithDefaultAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -31267,6 +31279,10 @@ export type AzureImagesWithAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -31381,15 +31397,19 @@ export type AzureEmbeddingsWithDefaultAgentData = {
         dimensions?: number;
         encoding_format?: 'float' | 'base64';
     };
-    headers: {
+    headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path?: never;
     query?: never;
@@ -31472,7 +31492,7 @@ export type AzureEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -31492,15 +31512,19 @@ export type AzureEmbeddingsWithAgentData = {
         dimensions?: number;
         encoding_format?: 'float' | 'base64';
     };
-    headers: {
+    headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
         /**
          * The user agent of the client
          */
         'user-agent'?: string;
         /**
-         * Bearer token for OpenAI
+         * Bearer token for Azure AI Foundry
          */
-        authorization: string;
+        authorization?: string;
     };
     path: {
         agentId: string;
@@ -31585,7 +31609,7 @@ export type AzureEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -31601,6 +31625,10 @@ export type AzureEmbeddingsWithAgentResponse = AzureEmbeddingsWithAgentResponses
 export type AzureChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
         /**
          * The user agent of the client
          */
@@ -31799,6 +31827,10 @@ export type AzureResponsesWithDefaultAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -31971,6 +32003,10 @@ export type AzureResponsesWithAgentData = {
     };
     headers?: {
         /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
+        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -32109,6 +32145,10 @@ export type AzureResponsesWithAgentResponse = AzureResponsesWithAgentResponses[k
 export type AzureChatCompletionsWithAgentData = {
     body: XaiChatCompletionRequestInput;
     headers?: {
+        /**
+         * Archestra virtual API key for native Azure SDK clients
+         */
+        'api-key'?: string;
         /**
          * The user agent of the client
          */

@@ -2,7 +2,7 @@
 title: Azure AI Foundry
 description: Connect Azure model deployments with an API key or Microsoft Entra ID
 order: 2
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,6 +26,45 @@ Use the models you deployed in Azure, with an API key or with no key at all thro
 Your deployments show under **Models**. Clients call `https://<archestra-host>/v1/azure` with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). The Azure resource key stays in the provider configuration; it does not authenticate clients to Archestra.
 
 One provider key covers the whole resource. Do not add a key for each deployment.
+
+## Use the Azure SDK
+
+Point `AzureOpenAI` at Archestra and replace the Azure key with your virtual key; Archestra selects the configured Azure credential.
+
+```python
+import os
+from openai import AzureOpenAI
+
+client = AzureOpenAI(
+    azure_endpoint="https://archestra.example/v1/azure",
+    api_key=os.environ["ARCHESTRA_VIRTUAL_KEY"],
+    api_version="2025-01-01-preview",
+)
+response = client.chat.completions.create(
+    model="my-gpt-deployment",
+    messages=[{"role": "user", "content": "Reply READY."}],
+)
+```
+
+```javascript
+import { AzureOpenAI } from "openai";
+
+const client = new AzureOpenAI({
+  endpoint: "https://archestra.example/v1/azure",
+  apiKey: process.env.ARCHESTRA_VIRTUAL_KEY,
+  apiVersion: "2025-01-01-preview",
+});
+const response = await client.chat.completions.create({
+  model: "my-gpt-deployment",
+  messages: [{ role: "user", content: "Reply READY." }],
+});
+```
+
+For the standard `OpenAI` client, use `https://archestra.example/v1/azure/openai/v1` as the base URL and the same virtual key. Existing clients using `/v1/azure` and bearer authentication also work.
+
+- The deployment in the SDK's URL selects the model and its limits, even when the request body names a different model.
+- Archestra preserves your API version and query parameters. The configured API version supplies the default for classic requests without one.
+- Send one credential: conflicting `api-key` and `Authorization` values are rejected. Unsupported Azure APIs return an error.
 
 ## Choose a Model API
 
@@ -141,7 +180,7 @@ The subject must match your Helm release's namespace and service account. See Mi
 | An image or realtime model rejects a text endpoint | Use the matching endpoint above, or select the model in Chat. |
 | A Claude model fails | Claude on Foundry uses Anthropic's API. Add it as the [Anthropic provider](/docs/llm-proxy/providers/anthropic#anthropic-on-microsoft-foundry). |
 | `'max_tokens' is not supported with this model` | Use a Foundry v1 URL, or set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION) to `2024-09-01` or later. Archestra then sends `max_completion_tokens` to OpenAI model deployments. |
-| An Azure API version error | Set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION), or [`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION) for `/responses`. Foundry v1 URLs use neither. |
+| An Azure API version error | Set the SDK's API version, or configure [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION) as the classic default and [`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION) as the `/responses` default. Foundry v1 URLs need no version. |
 
 ## What to Know
 

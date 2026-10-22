@@ -7,10 +7,12 @@ import {
 import config from "@/config";
 import {
   getDbResourceExhaustionErrorCode,
+  getNonDatabaseConnectionTarget,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
+import { FAILED_QUERY_CLIENT_MESSAGE, hasFailedQueryText } from "@/utils/db";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { isFetchConnectivityError } from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
@@ -150,17 +152,20 @@ export function handleServerError(
     });
   }
 
-  // Native HTTP fetch errors share socket codes with database connections.
-  // Preserve their known origin before the broader database errno matching.
-  if (isFetchConnectivityError(error)) {
+  // Native HTTP fetch errors and connection failures to a host other than
+  // the database share socket codes with database connections. Preserve
+  // their known origin before the broader database errno matching.
+  const outboundTarget = getNonDatabaseConnectionTarget(error);
+  if (outboundTarget || isFetchConnectivityError(error)) {
     this.log.warn(
-      { ...requestContext, statusCode: 503 },
+      { ...requestContext, statusCode: 503, outboundTarget },
       "HTTP 503 upstream service unavailable",
     );
     return reply.status(503).send({
       error: {
-        message:
-          "Could not connect to an upstream service. Check the service URL and network access, then retry.",
+        message: outboundTarget
+          ? `Could not connect to ${outboundTarget}. Check that the network egress policy allows this host and that the service is reachable, then retry.`
+          : "Could not connect to an upstream service. Check the service URL and network access, then retry.",
         type: "api_service_unavailable_error",
       },
     });
@@ -298,7 +303,10 @@ export function handleServerError(
 
     return reply.status(statusCode).send({
       error: {
-        message,
+        // A route can build an ApiError from a failed query's message.
+        message: hasFailedQueryText(error)
+          ? FAILED_QUERY_CLIENT_MESSAGE
+          : message,
         type,
         ...(internalCode && { internal_code: internalCode }),
         ...(error.details && { details: error.details }),
@@ -330,7 +338,11 @@ export function handleServerError(
 
   return reply.status(statusCode).send({
     error: {
-      message,
+      // A failed query's message holds its SQL and parameter values. Keep it
+      // in the log and the error report above, not in the response.
+      message: hasFailedQueryText(error)
+        ? FAILED_QUERY_CLIENT_MESSAGE
+        : message,
       type: "api_internal_server_error",
     },
   });

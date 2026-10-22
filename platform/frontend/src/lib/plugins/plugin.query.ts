@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -56,7 +57,7 @@ export function usePlugins(
   const sharedWith = filters?.sharedWith;
   const owner = filters?.owner;
   return useQuery({
-    queryKey: ["plugins", { labels, access, sharedWith, owner }],
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
@@ -348,20 +349,4 @@ export function useBulkDeletePlugins() {
   });
 }
 
-/**
- * Whether a connection setup for this client delivers the plugin: it is for
- * that client, enabled, and its current content is the approved one.
- */
-export function isDeliverablePlugin(
-  plugin: Pick<
-    PluginListItem,
-    "clientType" | "enabled" | "approvedContentHash" | "contentHash"
-  >,
-  clientId: string,
-): boolean {
-  return (
-    plugin.clientType === clientId &&
-    plugin.enabled &&
-    plugin.approvedContentHash === plugin.contentHash
-  );
-}
+export { isDeliverablePlugin } from "./plugin-eligibility";

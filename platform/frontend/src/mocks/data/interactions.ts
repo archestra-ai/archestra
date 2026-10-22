@@ -69,6 +69,7 @@ export function makeSessionSummary(
     contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
+    connectorName: null,
     ...overrides,
   };
 }
@@ -94,6 +95,7 @@ export function makeInteraction(
     authenticatedAppId: null,
     authenticatedAppName: null,
     billingTeamId: null,
+    attributionLabels: null,
     request: {
       model: "gpt-4o",
       messages: [{ role: "user", content: "What is the capital of France?" }],

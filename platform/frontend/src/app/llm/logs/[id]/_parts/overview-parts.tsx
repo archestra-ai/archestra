@@ -23,7 +23,7 @@ export function OverviewHeader({
     <PaneHeader>
       <span className="text-xs font-medium">Overview</span>
       <span className="text-[11px] text-muted-foreground tabular-nums">
-        {index + 1} of {count}
+        {index + 1} of {count} rows
       </span>
       <span className="-mr-1.5 ml-auto inline-flex items-center">
         <Button

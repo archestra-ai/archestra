@@ -38,6 +38,6 @@ Without explicit path prefixes, each seed limits crawling to its containing dire
 
 ## JavaScript Pages
 
-Enable **Render JavaScript** when page content loads in the browser. The server needs Chromium; see [Knowledge configuration](/docs/reference/configuration#knowledge-base). Set **Content Selector** to the page's main content and **Render Wait** when asynchronous content needs extra time.
+Enable **Render JavaScript** when page content loads in the browser. The server needs Chromium; see [Knowledge configuration](/docs/admin/deployment/configuration#knowledge-base). Set **Content Selector** to the page's main content and **Render Wait** when asynchronous content needs extra time.
 
 Rendering does not click buttons or scroll. Hash-only navigation links are not crawled. If a first sync indexes no text, check whether the chosen selector exists and the page content appears within the render wait.

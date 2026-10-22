@@ -46,6 +46,21 @@ export const CredentialBindingParamsSchema = z.object({
   variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
 });
 
+/**
+ * A stored binding as the API reads it back: the credential definition key it
+ * names, never the credential's value.
+ */
+export const CredentialBindingViewSchema = z.object({
+  variable: z.string(),
+  credentialKey: z.string(),
+  /** Whether the bound credential currently has an organization value to hand over. */
+  hasValue: z.boolean(),
+  updatedBy: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type CredentialBindingView = z.infer<typeof CredentialBindingViewSchema>;
+
 /** The key to bind a variable to; null unbinds it. */
 export const SetCredentialBindingSchema = z.strictObject({
   key: z.string().min(1).max(200).nullable(),
@@ -157,71 +172,14 @@ export const ServedCompositionSchema = z.discriminatedUnion("kind", [
 ]);
 export type ServedComposition = z.infer<typeof ServedCompositionSchema>;
 
-/**
- * What an effective policy keeps for conversations that started under earlier
- * policies, stored beside it: each kept annotator with the opening policies
- * that need it and when a conversation under them was last active, the names
- * no active conversation needs any more, and when to check again.
- * `contentHash` anchors it to the bytes it describes.
- */
-export const RetainedAnnotatorsSchema = z.object({
-  v: z.literal(1),
-  contentHash: z.string(),
-  horizonDays: z.number().int(),
-  checkedAt: z.string(),
-  /** When the next kept annotator may lose its last active conversation; null when nothing needs a check. */
-  recheckAt: z.string().nullable(),
-  /** False when conversation activity could not be read, so every candidate was kept. */
-  livenessKnown: z.boolean(),
-  kept: z.array(
-    z.object({
-      name: z.string(),
-      binding: z.string(),
-      openingHashes: z.array(z.string()),
-      liveRoots: z.number().int(),
-      lastActivityAt: z.string().nullable(),
-    }),
-  ),
-  inactive: z.array(
-    z.object({
-      name: z.string(),
-      binding: z.string(),
-      openingHashes: z.array(z.string()),
-    }),
-  ),
-  dropped: z.array(z.object({ name: z.string(), reason: z.string() })),
-});
-export type RetainedAnnotators = z.infer<typeof RetainedAnnotatorsSchema>;
-
 export const EffectivePolicySchema = createSelectSchema(
   openappaEffectivePoliciesTable,
 ).extend({
   compiledAt: z.coerce.date(),
   lastErrorAt: z.coerce.date().nullable(),
   served: ServedCompositionSchema.nullable(),
-  retainedAnnotators: RetainedAnnotatorsSchema.nullable(),
 });
 
-/** The annotators kept for earlier conversations, as the API shows them. */
-const RetainedAnnotatorsViewSchema = z.object({
-  /** 0: kept for as long as a policy that needs them is stored. */
-  horizonDays: z.number().int(),
-  livenessKnown: z.boolean(),
-  kept: z.array(
-    z.object({
-      name: z.string(),
-      binding: z.string(),
-      /** Conversations under the policies that need it, active within the horizon. */
-      liveRoots: z.number().int(),
-      lastActivityAt: z.coerce.date().nullable(),
-      /** When it stops being kept unless one of them is active again; null with horizon 0. */
-      retiresAt: z.coerce.date().nullable(),
-    }),
-  ),
-  /** No longer kept: no conversation that needs it was active within the horizon. */
-  inactive: z.array(z.object({ name: z.string(), binding: z.string() })),
-  dropped: z.array(z.object({ name: z.string(), reason: z.string() })),
-});
 export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 
 /** A battery of the composition the runtime enforces, as a reader sees it. */
@@ -245,6 +203,9 @@ export const CompositionViewSchema = z.object({
       rootRevision: z.number().int(),
       composedAt: z.coerce.date(),
     }),
+    // The latest attempt was refused and the earlier composition stays
+    // enforced. A composition kept this way is not a policy snapshot: every
+    // conversation still follows the deployment.
     z.object({
       kind: z.literal("previous"),
       rootRevision: z.number().int().nullable(),
@@ -267,14 +228,11 @@ export type CompositionView = z.infer<typeof CompositionViewSchema>;
 /** The effective policy as the API returns it: the stored row with its composition view. */
 export const EffectivePolicyViewSchema = EffectivePolicySchema.omit({
   served: true,
-  retainedAnnotators: true,
 }).extend({
   composition: CompositionViewSchema,
-  retained: RetainedAnnotatorsViewSchema.nullable(),
   /**
    * The deployment head and its publication time. A saved change publishes at
-   * the next protected live call; null before the first publish. Pinned
-   * families keep their opening policy.
+   * the next protected live call; null before the first publish.
    */
   servedRevision: z
     .object({ revision: z.number().int(), publishedAt: z.date() })

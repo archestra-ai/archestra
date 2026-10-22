@@ -132,6 +132,28 @@ describe("ChatOpsConfigModel", () => {
     });
   });
 
+  describe("getStoredConfig", () => {
+    test("returns null when no config exists", async () => {
+      expect(await ChatOpsConfigModel.getStoredConfig("telegram")).toBeNull();
+    });
+
+    test("returns the normalized config with its row's update time", async () => {
+      // Saved before socket mode existed: a signing secret and no mode.
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: true,
+        botToken: "xoxb-legacy",
+        signingSecret: "legacy-secret",
+        appId: "A0LEGACY",
+      });
+
+      const stored = await ChatOpsConfigModel.getStoredConfig("slack");
+
+      expect(stored?.value).toEqual(await ChatOpsConfigModel.getSlackConfig());
+      expect(stored?.value.connectionMode).toBe("webhook");
+      expect(stored?.updatedAt).toBeInstanceOf(Date);
+    });
+  });
+
   describe("independent storage", () => {
     test("MS Teams and Slack configs are stored independently", async () => {
       const msTeamsConfig = {

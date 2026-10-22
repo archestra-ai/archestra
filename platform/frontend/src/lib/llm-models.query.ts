@@ -12,6 +12,9 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { llmModelsQueryKey } from "@/lib/llm-models-query-keys";
+import { soleAvailableLlmProviderApiKeyId } from "@/lib/llm-provider-api-keys.query";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
@@ -44,9 +47,35 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
  */
 export function useLlmModels(params?: LlmModelsParams) {
   const apiKeyId = params?.apiKeyId;
+  const client = useQueryClient();
+  // The server lists the models of every key the viewer may use, or of one
+  // of them. When that key is their only one, both answers are the same
+  // list: reuse the full one rather than ask again. Not while that list is
+  // invalidated or refetching, though: right after the key is added it can
+  // still hold the answer from before the key's models were synced, and
+  // seeding from it would latch an empty list as fresh data.
+  const allModels = () => {
+    if (!apiKeyId || soleAvailableLlmProviderApiKeyId(client) !== apiKeyId) {
+      return undefined;
+    }
+    const state = client.getQueryState<LlmModel[]>(llmModelsQueryKey(null));
+    if (state?.isInvalidated || state?.fetchStatus === "fetching") {
+      return undefined;
+    }
+    return state;
+  };
   return useQuery({
-    queryKey: ["llm-models", apiKeyId ?? null],
-    queryFn: async (): Promise<LlmModel[]> => {
+    queryKey: llmModelsQueryKey(apiKeyId ?? null),
+    initialData: () => allModels()?.data,
+    initialDataUpdatedAt: () => allModels()?.dataUpdatedAt,
+    queryFn: async ({ client }): Promise<LlmModel[]> => {
+      if (apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId) {
+        const listed = await inFlightQueryData<LlmModel[]>(
+          client,
+          llmModelsQueryKey(null),
+        );
+        if (listed) return listed;
+      }
       const { data, error } = await getLlmModels({
         query: apiKeyId ? { apiKeyId } : undefined,
       });
@@ -295,3 +324,5 @@ export function useSyncLlmModels() {
     },
   });
 }
+
+// ===

@@ -172,16 +172,16 @@ export const TOOL_DELETE_PLUGIN_SHORT_NAME = "delete_plugin";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 // Durable Agent runs: delegated work uses Agent Runtime when the target Agent
 // configured it; direct chat remains foreground. The MCP face of the same A2A
-// machinery the A2A v2 protocol exposes — each run is tracked as an A2A task,
-// keyed by its `task_id` — so either kind of client can drive the identical
-// lifecycle.
-export const TOOL_START_RUN_SHORT_NAME = "start_run";
-export const TOOL_GET_RUN_SHORT_NAME = "get_run";
-export const TOOL_LIST_RUNS_SHORT_NAME = "list_runs";
+// machinery the A2A v2 protocol exposes, so either kind of client can drive
+// the identical lifecycle. Each turn is an A2A task; the model-facing `run_id`
+// is the run's stable session id.
+export const TOOL_START_AGENT_RUN_SHORT_NAME = "start_agent_run";
+export const TOOL_GET_AGENT_RUN_SHORT_NAME = "get_agent_run";
 export const TOOL_LIST_AGENT_RUNS_SHORT_NAME = "list_agent_runs";
-export const TOOL_STEER_RUN_SHORT_NAME = "steer_run";
-export const TOOL_CANCEL_RUN_SHORT_NAME = "cancel_run";
-export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
+export const TOOL_STEER_AGENT_RUN_SHORT_NAME = "steer_agent_run";
+export const TOOL_CANCEL_AGENT_RUN_SHORT_NAME = "cancel_agent_run";
+export const TOOL_POST_AGENT_RUN_FILE_SHORT_NAME = "post_agent_run_file";
+export const TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME = "post_agent_run_message";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
@@ -222,6 +222,14 @@ export const TOOL_SET_APP_LABELS_SHORT_NAME = "set_app_labels";
 export const TOOL_SET_APP_LOCK_SHORT_NAME = "set_app_lock";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
+export const TOOL_YELL_SHORT_NAME = "yell";
+/**
+ * What a yell tells the agent when break the glass turned OpenAPPA off. The
+ * chat composer reads it in the yell's result to show that guardrails no
+ * longer apply to the chat, so the wording is shared, not copied.
+ */
+export const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_PREVIEW_APP_TOOL_SHORT_NAME = "preview_app_tool";
 export const TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME = "get_app_diagnostics";
@@ -355,13 +363,13 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EDIT_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
-  TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -590,13 +598,13 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   delete_plugin: "plugins",
 
   run_command: "skill_sandbox",
-  start_run: "tasks",
-  get_run: "tasks",
-  list_runs: "tasks",
+  start_agent_run: "tasks",
+  get_agent_run: "tasks",
   list_agent_runs: "tasks",
-  steer_run: "tasks",
-  cancel_run: "tasks",
-  post_run_file: "tasks",
+  steer_agent_run: "tasks",
+  cancel_agent_run: "tasks",
+  post_agent_run_file: "tasks",
+  post_agent_run_message: "tasks",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
   transfer_workspace_file: "tasks",
@@ -777,22 +785,22 @@ export const TOOL_DELETE_PLUGIN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_PLUGIN_SHORT_NAME}` as const;
 export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
-export const TOOL_START_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_RUN_SHORT_NAME}` as const;
+export const TOOL_START_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_AGENT_RUN_SHORT_NAME}` as const;
 export const TOOL_TRANSFER_CREDENTIAL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}` as const;
-export const TOOL_GET_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_RUN_SHORT_NAME}` as const;
-export const TOOL_LIST_RUNS_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_RUNS_SHORT_NAME}` as const;
+export const TOOL_GET_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AGENT_RUN_SHORT_NAME}` as const;
 export const TOOL_LIST_AGENT_RUNS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENT_RUNS_SHORT_NAME}` as const;
-export const TOOL_STEER_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_RUN_SHORT_NAME}` as const;
-export const TOOL_CANCEL_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_RUN_SHORT_NAME}` as const;
-export const TOOL_POST_RUN_FILE_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_STEER_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_AGENT_RUN_SHORT_NAME}` as const;
+export const TOOL_CANCEL_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_AGENT_RUN_SHORT_NAME}` as const;
+export const TOOL_POST_AGENT_RUN_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_AGENT_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
@@ -1125,11 +1133,11 @@ const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
  */
 const PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_AGENTS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
@@ -1205,10 +1213,11 @@ export function isChatOnlyArchestraToolShortName(
 // Run handles remain usable without an assignment row. Gateways discover these
 // controls through search/run; internal chat keeps their direct declarations.
 export const RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES = [
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export function isRunControlArchestraToolShortName(
@@ -1242,30 +1251,30 @@ export function buildElicitationMandateInstruction(params?: {
  * and tool declarations to keep provider state clean.
  */
 export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
-  TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers", "trajectory"],
   [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
   [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
-  [TOOL_START_RUN_SHORT_NAME]: ["runtime_proof"],
-  [TOOL_STEER_RUN_SHORT_NAME]: ["runtime_proof"],
-  [TOOL_GET_RUN_SHORT_NAME]: ["runtime_proof"],
-  [TOOL_LIST_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_START_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_STEER_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_GET_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
   [TOOL_LIST_AGENT_RUNS_SHORT_NAME]: ["runtime_proof"],
   [TOOL_READ_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
-  [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_AGENT_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
     "trajectory",

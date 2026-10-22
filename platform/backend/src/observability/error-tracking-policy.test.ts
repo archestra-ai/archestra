@@ -1,5 +1,6 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
+import config from "@/config";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { classifyErrorForTracking } from "./error-tracking-policy";
 
@@ -132,6 +133,15 @@ describe("classifyErrorForTracking", () => {
     expect(refusedDecision.fingerprint?.[0]).toBe("db-transient");
   });
 
+  test("does not group outbound failures to other hosts as database outages", () => {
+    // A tool call whose outbound request was blocked relays the socket error
+    // text; the database is not the host that could not be reached.
+    const relayed = new Error(
+      "MCP error -32603: request to https://api.example.com/v1 failed, reason: getaddrinfo ENOTFOUND api.example.com",
+    );
+    expect(classifyErrorForTracking(relayed)).toEqual({ report: false });
+  });
+
   test("does not group native HTTP fetch failures as database outages", () => {
     const cause = new AggregateError([
       Object.assign(new Error("connection timed out"), { code: "ETIMEDOUT" }),
@@ -189,9 +199,10 @@ describe("classifyErrorForTracking", () => {
   });
 
   test("groups transient DB connectivity failures by root cause", () => {
+    const databasePort = new URL(config.database.url).port || "5432";
     const dbError = new Error(
       'Failed query: select "id" from "agents" where "slug" = $1',
-      { cause: new Error("connect ECONNREFUSED 10.0.0.1:5432") },
+      { cause: new Error(`connect ECONNREFUSED 10.0.0.1:${databasePort}`) },
     );
     const decision = classifyErrorForTracking(dbError);
     expect(decision.report).toBe(true);

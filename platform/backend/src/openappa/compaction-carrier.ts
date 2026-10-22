@@ -10,7 +10,10 @@ export function unwrapCompactionCarriersFromRequest(body: unknown): string[] {
     if (!item.encrypted_content.startsWith(CARRIER_PREFIX)) continue;
     candidates++;
     if (candidates > MAX_COMPACTION_ITEMS) {
-      throw new ApiError(400, "Too many OpenAI compaction carriers");
+      throw new ApiError(
+        400,
+        "OpenAPPA received too many OpenAI compaction carriers",
+      );
     }
     const carrier = parseCarrier(item.encrypted_content);
     if (!carrier) continue;
@@ -32,7 +35,10 @@ export function wrapCompactionItem<T>(item: T, proof: string): T {
     Buffer.byteLength(item.encrypted_content, "utf8") >
     MAX_ENCRYPTED_CONTENT_BYTES
   ) {
-    throw new ApiError(502, "OpenAI compaction item exceeds the proxy limit");
+    throw new ApiError(
+      502,
+      "OpenAPPA received an OpenAI compaction item over the proxy limit",
+    );
   }
 
   const claims: CarrierClaims = [1, item.encrypted_content, proof];
@@ -40,7 +46,7 @@ export function wrapCompactionItem<T>(item: T, proof: string): T {
   if (Buffer.byteLength(canonical, "utf8") > MAX_CLAIMS_BYTES) {
     throw new ApiError(
       502,
-      "OpenAI compaction carrier exceeds the proxy limit",
+      "OpenAPPA received an OpenAI compaction carrier over the proxy limit",
     );
   }
   return {
@@ -116,7 +122,7 @@ function validateProof(proof: string): void {
     proof.length === 0 ||
     Buffer.byteLength(proof, "utf8") > MAX_PROOF_BYTES
   ) {
-    throw new ApiError(500, "Invalid OpenAPPA compaction context");
+    throw new ApiError(500, "OpenAPPA received an invalid compaction context");
   }
 }
 

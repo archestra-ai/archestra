@@ -1,8 +1,8 @@
 /**
  * Records the rows the previous OpenAPPA pin writes for one conversation, as
- * `opening-identity-pinned.json`. That conversation is a pinned family: it
- * opened before policy revisions existed, so it keeps its opening policy
- * until it ends, whatever its organization publishes later.
+ * `opening-identity-pinned.json`. That conversation is a legacy family: it
+ * opened pinned to its opening policy before policy revisions existed, and
+ * this build refuses it with `legacy_family`.
  *
  * Build the binding at the previous pin, then run this against a scratch
  * database migrated with `pnpm --dir backend db:migrate`:

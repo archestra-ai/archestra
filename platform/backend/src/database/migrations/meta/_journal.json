@@ -4047,6 +4047,104 @@
       "when": 1792421603566,
       "tag": "0577_crazy_warhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 578,
+      "version": "7",
+      "when": 1792438322806,
+      "tag": "0578_interaction_session_heads",
+      "breakpoints": true
+    },
+    {
+      "idx": 579,
+      "version": "7",
+      "when": 1792452235075,
+      "tag": "0579_remove_seeded_openappa_plugin",
+      "breakpoints": true
+    },
+    {
+      "idx": 580,
+      "version": "7",
+      "when": 1792483829625,
+      "tag": "0580_connect_page_user_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 581,
+      "version": "7",
+      "when": 1792491071255,
+      "tag": "0581_chunk_size_markers",
+      "breakpoints": true
+    },
+    {
+      "idx": 582,
+      "version": "7",
+      "when": 1792514792368,
+      "tag": "0582_famous_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 583,
+      "version": "7",
+      "when": 1792525626146,
+      "tag": "0583_loud_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 584,
+      "version": "7",
+      "when": 1792537291447,
+      "tag": "0584_public_lady_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 585,
+      "version": "7",
+      "when": 1792546593720,
+      "tag": "0585_lame_husk",
+      "breakpoints": true
+    },
+    {
+      "idx": 586,
+      "version": "7",
+      "when": 1792594889854,
+      "tag": "0586_normal_sally_floyd",
+      "breakpoints": true
+    },
+    {
+      "idx": 587,
+      "version": "7",
+      "when": 1792615407451,
+      "tag": "0587_salty_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 588,
+      "version": "7",
+      "when": 1792631709775,
+      "tag": "0588_cool_raza",
+      "breakpoints": true
+    },
+    {
+      "idx": 589,
+      "version": "7",
+      "when": 1792671812526,
+      "tag": "0589_rename-agent-run-tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 590,
+      "version": "7",
+      "when": 1792675102727,
+      "tag": "0590_brave_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 591,
+      "version": "7",
+      "when": 1792682146439,
+      "tag": "0591_exotic_excalibur",
+      "breakpoints": true
     }
   ]
 }

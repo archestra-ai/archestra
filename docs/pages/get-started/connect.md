@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -52,7 +52,7 @@ The command changes nothing on your computer until you approve it in your browse
 2. Click **Copy** and run the command in a terminal. It prints a code and opens an approval page in your browser.
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Back in the terminal, the installer sets up your client and lists what it set up. When it asks **Sign in now?**, press Enter to sign in to the gateway in your browser.
-5. Open a new terminal and run the command the installer prints last. It starts your client with a first question about the gateway's tools, leaving your other MCP servers alone. Cursor has no command: open Cursor.
+5. When it asks to start your client now, press Enter. Your client starts with a first question about the gateway's tools, leaving your other MCP servers alone. On Windows, or if you answer no, open a new terminal and run the command the installer prints last. Cursor has no command: open Cursor.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
@@ -75,11 +75,11 @@ Some clients need one more step. The installer prints any other steps under **Go
 ## After Setup
 
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, or Kilo Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, or `ARCHESTRA_KILO_GUARD=0`.
-- **Startup check updates:** each launch also checks whether your installed startup check is older than the deployment. If an update is available, it shows why and how to rerun setup, then continues after six seconds. Press any key to continue sooner.
+- **Startup check updates:** each launch checks for a newer startup check, installs it automatically, and runs it during the same launch. Requires Node.js 18 or newer. A launch hands off at most once; any skip, reconfigure, or disconnect choice made during the initial health probe takes precedence. Failed downloads keep the installed copy and retry next launch; a failed handoff restores the cached check. Customized scripts stay untouched. Updates preserve your client settings, credentials, permissions, and disconnected resources.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
 - **Automatic client helpers:** approved OpenCode and Kilo Code setup installs an update loader for the managed launcher helper and routing plugin, using Node.js 18 or newer. Before launch or plugin activation, it refreshes verified code from your connected Archestra deployment over HTTPS and loads that code in the same process. Concurrent starts share a download check for 30 seconds. Failed or offline downloads keep the verified cached code. These updates do not upgrade the client CLI, rerun installation, issue new provider keys, or replace your original backups.
 - **Duplicate gateways:** the launcher and plugin repair equivalent, enabled registrations before tools bind. They match the exact gateway URL, preserve JSONC comments and authentication settings, and leave deliberately disabled or disconnected bindings disabled. Conflicting connection settings stop repair rather than choose credentials for you.
-- **Existing installations:** a launcher installed without the update loader cannot download and execute new code retroactively. Apply an approved setup once to enroll it; subsequent managed helper updates need no setup rerun. The shell-profile wrapper and health-check screen remain installed locally, separate from the automatically updated helper. Plain-HTTP local development uses cached helper code only.
+- **Existing installations:** a startup check or launcher installed without an update loader needs one approved setup to enroll. Subsequent updates need no setup rerun. Client-helper updates require HTTPS; startup-check updates also support loopback HTTP for local development.
 - **Guardrail helpers in Codex:** setup lets Codex run the guardrail helper tools, such as [`ask_user`](/docs/reference/archestra-mcp-server#ask_user) and [`yell`](/docs/reference/archestra-mcp-server#yell), without a prompt each time. A call that needs your approval still shows the approval form. To get the prompts back, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
 - **Codex waits for the gateway:** Codex 0.99 or newer does not send the first `codex exec` request until the gateway is connected. If you skipped sign-in, or the gateway is down, that command stops. Sign in with `codex mcp login <gateway>`, then run it again. Older Codex ignores this and can still send the first request early. To let `codex exec` start without the gateway, delete `required = true` under the gateway's entry in `~/.codex/config.toml`.
 - **Setup reference:** the first conversation that presents the installer's reference with a valid session ID is exempt from Guardrails for the rest of the ten-minute setup window. Later requests must carry both the reference and that session ID. Different session IDs and requests without the reference remain governed.

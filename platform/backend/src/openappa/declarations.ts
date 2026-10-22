@@ -90,9 +90,6 @@ type BoundPolicy = {
  */
 type Grant = { battery: string; variable: string; key: string };
 
-/** A bound runtime credential whose value could not be read for a dispatch. */
-export type UnreadableCredential = { variable: string; key: string };
-
 /** The grants `next` holds that `previous` did not, key changes included. */
 export function addedGrants(
   previous: readonly Grant[],
@@ -475,13 +472,11 @@ class OpenAppaDeclarations {
    * `token_env`, resolved for the organization now, so a value set, rotated or
    * removed since the last dispatch reaches this one. A variable with no
    * binding or no organization value is left out; a bound one that cannot be
-   * resolved rejects. `onUnreadable` hears, before either outcome, of every
-   * bound variable whose value could not be read.
+   * resolved rejects.
    */
   async dispatchPolicy(params: {
     organizationId: string;
     content: string;
-    onUnreadable?: (unreadable: UnreadableCredential[]) => void;
   }): Promise<DispatchPolicy> {
     const { organizationId, content } = params;
     const contentHash = createHash("sha256").update(content).digest("hex");
@@ -508,23 +503,19 @@ class OpenAppaDeclarations {
       ),
     );
     const credentials: Record<string, string> = {};
-    const unreadable: UnreadableCredential[] = [];
     const failures: { variable: string; error: unknown }[] = [];
     outcomes.forEach((outcome, index) => {
-      const { variable, key } = bound[index];
+      const { variable } = bound[index];
       if (outcome.status === "fulfilled") {
-        if (outcome.value === null) unreadable.push({ variable, key });
-        else credentials[variable] = outcome.value;
+        if (outcome.value !== null) credentials[variable] = outcome.value;
         return;
       }
       logger.warn(
         { organizationId, variable, error: outcome.reason },
         "OpenAPPA runtime credential could not be resolved",
       );
-      unreadable.push({ variable, key });
       failures.push({ variable, error: outcome.reason });
     });
-    if (unreadable.length > 0) params.onUnreadable?.(unreadable);
     const [failed] = failures;
     if (failed) {
       // A bound credential that cannot be read fails the dispatch rather than
@@ -655,7 +646,7 @@ class OpenAppaDeclarations {
           contentHash: params.contentHash,
           error,
         },
-        "Stored OpenAPPA battery package no longer validates; ignoring it",
+        "OpenAPPA stored battery package no longer validates; ignoring it",
       );
       return null;
     }

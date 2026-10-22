@@ -3,10 +3,7 @@
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import {
-  GuardrailsDisabledWarning,
-  GuardrailsSnapshotPolicyWarning,
-} from "@/app/openappa/_parts/guardrails-deployment-toggle";
+import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import {
   DropdownMenu,
@@ -95,8 +92,8 @@ export function SidebarWarningsAccordion({
   // Null under full white-labeling, where the environments screen carries the
   // same explanation and stays reachable.
   const networkPolicyDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformDeployment,
-    "ssrf-protection-for-mcp-server-pods",
+    DocsPage.PlatformDeploymentNetworking,
+    "enforce-workload-egress",
   );
 
   const warnings = [
@@ -119,11 +116,7 @@ export function SidebarWarningsAccordion({
     openappaEnabled === true &&
     showGuardrailsStatus &&
     guardrailsDeployment.data?.enabled === false;
-  // No navigation row carries this one, so it shows in every sidebar mode.
-  const showSnapshotPolicy =
-    openappaEnabled === true &&
-    guardrailsDeployment.data?.newSessionPolicy === "snapshot";
-  if (warnings.length === 0 && !showGuardrails && !showSnapshotPolicy) {
+  if (warnings.length === 0 && !showGuardrails) {
     return null;
   }
 
@@ -188,7 +181,6 @@ export function SidebarWarningsAccordion({
             warnings.map((w) => <WarningItem key={w.label} {...w} />)
           )}
           {showGuardrails && <GuardrailsDisabledWarning />}
-          {showSnapshotPolicy && <GuardrailsSnapshotPolicyWarning />}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

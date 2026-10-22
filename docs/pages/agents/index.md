@@ -16,7 +16,7 @@ An agent is a reusable assistant: instructions, a model, and the tools, knowledg
 ## Create an Agent
 
 1. Go to **Agents** and click **Add Agent**.
-2. Start from scratch, or pick a template under **Coding agents**.
+2. Start from scratch, or pick a template under **Agent Runtimes**.
 3. On **Configuration**, enter a name and instructions, and choose the model.
 4. Click **Continue setup** to choose tools, knowledge, skills, subagents, and messaging channels.
 5. Click **Create**, then **Chat** to send your first task.
@@ -57,7 +57,7 @@ What to know:
 Run an agent interactively, delegate work to it from your coding client, or trigger it from team channels and APIs:
 
 - **Chat and Projects:** select the agent from the picker in [Chat](/docs/chat) or scope it to a [Project](/docs/chat/projects).
-- **Coding agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_run`](/docs/reference/archestra-mcp-server#start_run) and monitor their progress. See [Hand Off Work](/docs/agents/runtime/handoff).
+- **Coding agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) and monitor their progress. See [Hand Off Work](/docs/agents/runtime/handoff).
 - **Messaging channels:** connect [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), or [Email](/docs/agents/triggers-and-channels/email) on the agent's **Messaging Channels** tab. See [Triggers & Channels](/docs/agents/triggers-and-channels).
 - **Automations and APIs:** invoke the agent programmatically via [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
 
@@ -98,12 +98,12 @@ What to know:
 Each conversation gets a private Linux container, so the agent can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command).
 
 - **Files you attach** appear under `/home/sandbox/attachments/`.
-- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 64 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
+- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 32 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
 - **Files the agent saves** appear in the conversation's **Files** panel.
 - **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment.
 
 What to know:
 
 - Files stay between commands. Running processes do not.
-- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 64 KB.
-- The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment#code-sandbox).
+- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 32 KB.
+- The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment/networking#code-sandbox-requirements).

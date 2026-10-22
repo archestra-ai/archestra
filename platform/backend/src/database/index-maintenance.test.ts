@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import db from "@/database";
 import {
   createAgentToolsIndexes,
+  createInteractionsIndexes,
   createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
 } from "./index-maintenance";
@@ -198,6 +199,61 @@ describe("createMcpServerIndexes", () => {
     expect(await createMcpServerIndexes(options)).toEqual({
       [name]: "unexpected_definition",
     });
+  });
+});
+
+describe("createInteractionsIndexes", () => {
+  const name = "interactions_session_preview_missing_idx";
+  const passthroughName = "interactions_passthrough_virtual_key_id_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
+  });
+
+  test("creates the missing-preview index, then recognizes it on the next boot", async () => {
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "created",
+      [passthroughName]: "created",
+    });
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.interactions USING btree (created_at, id) WHERE ((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))`,
+    );
+    const oid = await indexOid(name);
+
+    // A predicate that does not match what PostgreSQL prints back would read
+    // as someone else's index here, and the index would never be maintained.
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "already_valid",
+      [passthroughName]: "already_valid",
+    });
+    expect(await indexOid(name)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  // The predicate must read back as Postgres prints it, or every boot would
+  // find the index under an "unexpected" definition and never repair it.
+  test("creates the passthrough key index, then leaves it alone", async () => {
+    expect((await createInteractionsIndexes(options))[passthroughName]).toBe(
+      "created",
+    );
+    expect(await indexDefinition(passthroughName)).toBe(
+      `CREATE INDEX ${passthroughName} ON public.interactions USING btree (passthrough_virtual_key_id) WHERE (passthrough_virtual_key_id IS NOT NULL)`,
+    );
+    const oid = await indexOid(passthroughName);
+
+    expect((await createInteractionsIndexes(options))[passthroughName]).toBe(
+      "already_valid",
+    );
+    expect(await indexOid(passthroughName)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
   });
 });
 

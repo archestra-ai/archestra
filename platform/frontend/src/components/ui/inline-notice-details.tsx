@@ -18,9 +18,12 @@ import { cn } from "@/lib/utils/tailwind";
 export function InlineNoticeDetails({
   children,
   className,
+  label = "details",
 }: {
   children: string;
   className?: string;
+  /** What the toggle shows and hides, as in "Show full error". */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -34,7 +37,7 @@ export function InlineNoticeDetails({
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? "Hide details" : "Show details"}
+        {open ? `Hide ${label}` : `Show ${label}`}
       </button>
       {open && (
         <pre

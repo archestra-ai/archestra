@@ -28,8 +28,10 @@ import {
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
@@ -193,6 +195,8 @@ export const ConfigResponseSchema = z.strictObject({
      * discovered from installed MCP servers.
      */
     mcpGatewaySkillsEnabled: z.boolean(),
+    /** Internal UI feedback overlay; on only where its Slack channel is set. */
+    devFeedbackEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -278,6 +282,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         redirectUri: getGoogleDriveOAuthRedirectUri(),
       },
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
+      devFeedbackEnabled: devFeedbackService.isAvailable,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,
@@ -309,7 +314,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
   };
 }
 
-const PublicConfigResponseSchema = z.strictObject({
+export const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
   disableImpersonation: z.boolean(),
@@ -344,7 +349,17 @@ let cachedAnalyticsInstanceId: string | null = null;
 let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
 let hasLoggedAnalyticsInstanceIdError = false;
 
-async function getPublicConfigResponse(): Promise<
+// Shared test workers replace their database between cases; the cached
+// installation identity must not survive that database reset.
+registerProcessLocalCache({
+  clear() {
+    cachedAnalyticsInstanceId = null;
+    pendingAnalyticsInstanceId = null;
+    hasLoggedAnalyticsInstanceIdError = false;
+  },
+});
+
+export async function getPublicConfigResponse(): Promise<
   z.infer<typeof PublicConfigResponseSchema>
 > {
   return {

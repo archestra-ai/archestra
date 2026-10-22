@@ -327,7 +327,7 @@ describe("PageLayout header", () => {
     expect(heading).toHaveAccessibleName("filesystem");
     expect(heading.querySelector("svg")).toBeNull();
     // Heading and description share one column; the icon is outside it.
-    const textColumn = heading.parentElement?.parentElement;
+    const textColumn = heading.closest("[data-page-title-row]")?.parentElement;
     expect(textColumn).toContainElement(description);
     expect(textColumn).not.toContainElement(icon as HTMLElement);
     expect(icon).toHaveAttribute("aria-hidden");
@@ -349,7 +349,7 @@ describe("PageLayout header", () => {
     // destination from the tooltip.
     expect(link).toHaveAttribute("title", "Agents");
     const heading = screen.getByRole("heading", { level: 1 });
-    expect(heading.parentElement).toContainElement(link);
+    expect(heading.closest("[data-page-title-row]")).toContainElement(link);
   });
 
   it("leads the record's icon with the back link rather than splitting icon and title", () => {
@@ -420,7 +420,9 @@ describe("PageLayout header", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1 }).parentElement,
+      screen
+        .getByRole("heading", { level: 1 })
+        .closest("[data-page-title-row]"),
     ).not.toHaveClass("mb-2");
   });
 
@@ -502,9 +504,11 @@ describe("PageLayout header", () => {
       </PageLayout>,
     );
 
-    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveClass(
-      "min-h-10",
-    );
+    expect(
+      screen
+        .getByRole("heading", { level: 1 })
+        .closest("[data-page-title-row]"),
+    ).toHaveClass("min-h-10");
     const description = document.querySelector("[data-page-description]");
     expect(description).toHaveClass("sm:mt-1");
     if (maxWidth === "wizard") {

@@ -26,33 +26,47 @@ import { cn } from "@/lib/utils/tailwind";
 
 type McpToolCallRecord = archestraApiTypes.GetMcpToolCallResponses["200"];
 
+/** The server's mark for the page's icon tile; its initial when it has none. */
+export function ToolCallHeaderIcon({
+  display,
+}: {
+  display: McpServerDisplay | undefined;
+}) {
+  const hasMark =
+    Boolean(display?.icon) || display?.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+  if (hasMark || !display) {
+    return (
+      <McpCatalogIcon
+        icon={display?.icon}
+        catalogId={display?.catalogId}
+        size={24}
+      />
+    );
+  }
+  return (
+    <span className="flex items-center justify-center font-sans text-lg font-semibold text-foreground/80">
+      {display.name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /**
- * What was called behind its server's 44px tile, laid out like the session
- * page's title: from `lg` the tile fronts both header lines. A protocol
- * method (`initialize`, `tools/list`) is named by the method and says so.
+ * What was called. A protocol method (`initialize`, `tools/list`) is named by
+ * the method and says so.
  */
 export function ToolCallHeaderTitle({
-  display,
   title,
   method,
 }: {
-  display: McpServerDisplay | undefined;
   title: string;
   method: string;
 }) {
   return (
-    <span className="flex min-w-0 items-center gap-3.5">
-      <span className="shrink-0 lg:relative lg:h-8 lg:w-11">
-        <span className="block lg:absolute lg:top-1.5 lg:left-0">
-          <ServerTile display={display} />
-        </span>
+    <span className="flex min-w-0 items-center gap-2.5">
+      <span className="min-w-0 truncate font-mono" title={title}>
+        {title}
       </span>
-      <span className="flex min-w-0 flex-wrap items-center gap-x-2.5">
-        <span className="min-w-0 font-mono text-xl leading-7 break-all lg:text-2xl lg:leading-8">
-          {title}
-        </span>
-        {method === "tools/call" ? null : <McpCallChip method={method} />}
-      </span>
+      {method === "tools/call" ? null : <McpCallChip method={method} />}
     </span>
   );
 }
@@ -82,7 +96,7 @@ export function ToolCallIdentityLine({
   // separator's width and clipped, so the dot that would start a line is
   // hidden instead of dangling there.
   return (
-    <div className="pl-[90px]">
+    <div className="min-w-0">
       <div className="-my-0.5 overflow-hidden py-0.5">
         <div className="-ml-6 flex flex-wrap items-center gap-y-1 text-sm text-muted-foreground">
           <IdentityGroup>
@@ -223,27 +237,4 @@ function describeCaller(call: McpToolCallRecord): {
     label: "Unattributed",
     explanation: "No user was recorded for this call.",
   };
-}
-
-function ServerTile({ display }: { display: McpServerDisplay | undefined }) {
-  const hasMark =
-    Boolean(display?.icon) || display?.catalogId === ARCHESTRA_MCP_CATALOG_ID;
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-[11px] border border-border/70 bg-background text-muted-foreground"
-    >
-      {hasMark || !display ? (
-        <McpCatalogIcon
-          icon={display?.icon}
-          catalogId={display?.catalogId}
-          size={22}
-        />
-      ) : (
-        <span className="font-sans text-lg font-semibold text-foreground/80">
-          {display.name.trim().charAt(0).toUpperCase()}
-        </span>
-      )}
-    </span>
-  );
 }

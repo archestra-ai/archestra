@@ -121,6 +121,7 @@ export function GuardrailsProvider({
     if (!guardrails?.consults.some((c) => c.key === key)) return;
     appliedLink.current = linkedConsult;
     selectConsult(key);
+    revealConsultDetails();
   });
 
   const state: GuardrailsState = {
@@ -482,4 +483,22 @@ function Term({
       <TooltipContent className="max-w-60">{explanation}</TooltipContent>
     </Tooltip>
   );
+}
+
+/**
+ * The consult log links here for one check's result, and the details pane
+ * sits below the request list: bring it into view once it has rendered, so
+ * no one has to scroll down to find what they clicked.
+ */
+function revealConsultDetails(framesLeft = 30) {
+  const pane = document.querySelector(
+    'section[aria-label="Guardrail consult details"]',
+  );
+  if (pane) {
+    pane.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (framesLeft > 0) {
+    requestAnimationFrame(() => revealConsultDetails(framesLeft - 1));
+  }
 }

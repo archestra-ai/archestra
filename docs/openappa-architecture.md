@@ -51,7 +51,7 @@ The HTTP API and policy tools share validation and revision checks. Edits compil
 
 The editor accepts `[policy]`, `[aliases]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. For now the text names no credentials: validation refuses a `[credentials]` table and a root `token_env`, and every save path (UI, agent tools, GitHub sync) runs that check. Battery credentials are stored bindings (`openappa_credential_bindings`), set from the Batteries page or `bind_guardrails_credential`. This is a temporary rule until credentials and Git sync are designed together.
 
-Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra and Claude Code batteries, an Archestra server alias under `[aliases.mcp]`, a `claude-code = ["archestra"]` host alias that rebinds the Claude Code battery's rules onto the client built-ins Archestra derives as `host/archestra/<name>`, `internal = ["archestra:members"]`, `context_control = true`, a wildcard annotator (`archestra.llm-annotator`, audiences `self`/`internal`, no marks) that asks the annotator model about every uncovered tool, and a `hitl` authority that may release any attention mark, trust gap, or missing `public` audience. Every `builtin = "archestra"` annotator answers with the model and key saved in `guardrails_deployment.annotator_model_id`/`annotator_llm_api_key_id` (Settings → Guardrails → Annotator model), else the organization's default model. The battery's two shell annotators are re-declared at the root with `builtin = "archestra"`, so the annotator model answers them instead of a local `claude` process. Without a configured model these annotators cannot answer and their calls are refused. Explicit tool rules always take precedence over the wildcard.
+Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra, coding and Claude Code batteries, an Archestra server alias under `[aliases.mcp]`, a `claude-code = ["archestra"]` host alias that rebinds the Claude Code battery's rules onto the client built-ins Archestra derives as `host/archestra/<name>`, an `[aliases.tool.coding]` map that binds the coding battery's canonical shell and file tools to Codex's and OpenCode's spellings (the Claude Code battery carries the map for Claude Code's), `internal = ["archestra:members"]`, `context_control = true`, a wildcard annotator (`archestra.llm-annotator`, audiences `self`/`internal`, no marks) that asks the annotator model about every uncovered tool, and a `human-approval` authority (the `hitl` builtin) that may release any attention mark, trust gap, or missing `public` audience. Every `builtin = "archestra"` annotator answers with the model and key saved in `guardrails_deployment.annotator_model_id`/`annotator_llm_api_key_id` (Settings → Guardrails → Annotator model), else the organization's default model. The coding battery's two shell annotators and the Claude Code battery's Monitor annotator are re-declared at the root with `builtin = "archestra"`, so the annotator model answers them instead of a local `claude` process. Without a configured model these annotators cannot answer and their calls are refused. Explicit tool rules always take precedence over the wildcard.
 
 Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organizationSettings:update`, the same permission the explicit deployment toggle API checks. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement.
 
@@ -83,6 +83,7 @@ Your organization policy text owns battery declarations:
 - `include`: names bundled batteries (`batteries/<name>/appa.toml`) or uploaded packages (`batteries/<name>@sha256-<64 hex>/appa.toml`).
 - `[aliases.mcp]`: maps battery namespaces to catalog tool prefixes. The legacy top-level `[server_aliases]` table still reads the same; a document may not use both.
 - `[aliases.host]`: maps a bundled client battery's host namespace onto this host's client built-ins (`claude-code = ["archestra"]`).
+- `[aliases.tool]`: binds a battery's canonical `tool/<namespace>/<tool>` rules to client tools, with per-client argument names. Composition expands each canonical rule in place, so the evaluated name stays what the client sent.
 - `[credentials]`: maps `APPA_PROVIDER_*` variables to runtime credential keys.
 
 Resolution is exact. Bundled names always resolve to bundled packages, and uploads never shadow them. You can include a battery name only once. Declarations in `openappa_battery_installs` form a derived read model. Recomposition updates these rows while preserving their IDs. Removing an `include` line removes that battery. Removing an alias keeps the battery included, moving its status to `server_missing`.
@@ -133,7 +134,7 @@ Before dispatch, the host compares root revisions and the revision-0 starter has
 
 ### Policy revisions
 
-By default, conversations follow their organization's current policy revision. Each organization has one OpenAPPA deployment line, named by the organization id. The runtime keeps the line's head in `openappa_deployments` and every revision it published in `openappa_policy_revisions` ([`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs)).
+Conversations follow their organization's current policy revision. Each organization has one OpenAPPA deployment line, named by the organization id. The runtime keeps the line's head in `openappa_deployments` and every revision it published in `openappa_policy_revisions` ([`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs)).
 
 - **Publish.** A dispatch prepares the effective policy it carries and publishes it as the line's head. Bytes the head already names publish nothing, so every pod, a restart, and a credential rotation share one revision. A saved change publishes at the organization's next protected call, on whichever pod serves it. Saving the composition and publishing its runtime revision are separate: a call already preparing before the save may finish before that newer revision is published.
 - **Pin.** The dispatch runs through a view pinned to that head. A runtime follows a publish its own process made. A publish by another pod makes a pinned view refuse the dispatch, retryably, and nothing is appended. The binding then pins the head when it names the same policy file, and runs the dispatch once more.
@@ -141,43 +142,19 @@ By default, conversations follow their organization's current policy revision. E
 - **Offers.** A publish retires every pending remedy offer and approval. The runtime answers "this offer no longer stands; re-propose the call", and the agent proposes the call again under the new revision. When a reviewer answers a review after a publish, the gateway says that the policy changed instead of reporting the approval, and Chat shows "Policy changed, the agent will ask again".
 - **Running calls.** A tool call running across a publish finishes. Its result is labelled under the terms its release recorded, narrowed by the head's.
 - **Display.** The chat status rail shows the revision a conversation's next call is decided under. The Guardrails **Effective** view shows the runtime revision and when it was published.
-- **Earlier releases.** A conversation that the previous Archestra release started keeps that release's behaviour until it ends: it stays on the policy file it opened under, and the retired-annotator 409 still applies to it.
-
-#### Policy for new sessions
-
-**Settings → Guardrails → Policy for new sessions** takes the deployment back to snapshot policies without a redeploy. It is deployment-wide, beside the enforcement switch: `guardrails_deployment.new_session_policy`, `live` (the default) or `snapshot`. Changing it needs `organizationSettings:update` and is audited like the other deployment settings. The backend reads it with every policy read and sends it to the runtime as `DispatchPolicy.snapshot`.
-
-- **`snapshot`.** No policy revision is published on any line. A conversation already following its line keeps deciding at the line's current head (frozen). A new conversation opens as a pinned family under the policy composed at its first call and keeps it until it ends, as conversations did before policy revisions; the retired-annotator 409 applies to it again. A saved change reaches new conversations only. The chat rail shows "policy snapshot" for a pinned conversation, and **Effective** says that new sessions keep a policy snapshot.
-- **Back to `live`.** New conversations open following again. A following conversation takes the next publish at its next call. A conversation that opened pinned stays pinned until it ends: OpenAPPA never turns a pinned family into a following one.
-
-| Family | While snapshot is selected | After selecting live again |
-| --- | --- | --- |
-| Already following its deployment line | Decides at the frozen head, even after a policy save | Follows the next published revision |
-| Opens while snapshot is selected | Opens pinned to the current saved policy; later saves do not change it | Keeps its opening snapshot |
-| Legacy pinned family | Keeps its opening snapshot | Keeps its opening snapshot |
-
-The binding reads the family's opening row to choose the view. New and pinned families use `Runtime::snapshot`; following families use the stored head's policy file, compiled with the organization's current credentials. That file retains external annotator bindings and `token_env` names, and must compile back to the head's exact key. A mismatch fails closed rather than serving different bytes.
-
-Frozen views and live retry repins use the read-only `Runtime::at_revision` API, never `publish`. It verifies the prepared file against the exact stored revision without moving the head. If another live pod advances the head after it was read, the stale view refuses with `PolicyMoved`; retrying can pin the newer head but cannot republish the old policy. Credential rotation can rebuild a view without publishing a revision. A pinned family's status has no served `policyRevision`, including after live mode resumes; a following family's status names its served head.
+- **Legacy conversations.** A conversation that opened pinned to its first policy, before live policy revisions or while an earlier release kept a policy snapshot for new sessions, is refused with the code `legacy_family`: a non-retryable 409 that says "This conversation was opened under an earlier policy model. Start a new conversation." The next conversation follows the line. `pnpm --dir backend db:openappa-count-legacy` counts such conversations per organization before an upgrade.
 
 #### Rolling out and rolling back
-
-When live policy revisions misbehave, select **New sessions keep a policy snapshot** first:
-
-1. Select it. Dispatches that read the setting stop publishing; following conversations use the stored head, and new ones keep the policy they open with. Let already-running live dispatches finish before treating the head as frozen.
-2. Observe. Once every serving pod honors the setting, `openappa_deployments.head` stops moving while policies are saved. Check for unexpected 503 responses with code `policy_moved`; a live pod can still move the head during a mixed-version rollout, so keep policy edits frozen during that rollout.
-3. Fix the cause: the policy, a battery, or the release.
-4. Select **New sessions reference the live policy** again. Following conversations take the next publish; pinned ones keep their snapshot.
-
-A redeploy of the previous image stays the last resort (below).
 
 A policy published while pods of two releases run can make an old pod's decision a regression for one conversation. Freeze policy edits for the roll:
 
 1. Freeze everything that recomposes: Guardrails saves, Git sync pulls, battery, alias and credential changes. The hourly recompose may run; unchanged inputs publish nothing.
-2. The pre-upgrade migration job creates `openappa_deployments` and `openappa_policy_revisions` and adds `guardrails_deployment.new_session_policy` with default `live`. The previous release ignores these additions. New pods need them before they open a conversation.
+2. The pre-upgrade migration job applies the release's schema changes. New pods need them before they open a conversation.
 3. Roll the web and worker pods as usual. Expected refusals: none.
 4. Unfreeze. Check that `openappa_deployments` holds one row per organization, that a policy change publishes the next revision and an open conversation's next call decides under it, and that no burst of the 503 above follows.
-5. To roll back, deploy the previous image. The two tables are harmless to it. A conversation that already received a decision under a later revision is refused by the previous release until the next upgrade, which is why edits stay frozen.
+5. To roll back, deploy the previous image. A conversation that already received a decision under a later revision is refused by the previous release until the next upgrade, which is why edits stay frozen.
+
+A rollback to the release before policy snapshots were removed needs `guardrails_deployment.new_session_policy`, `openappa_effective_policies.retained_annotators` and `openappa_root_openings` re-created first (the SQL is in the release notes). That release refuses every conversation this one opened, and every earlier conversation this one continued, so each of them restarts once more.
 
 Nothing in Archestra enforces the freeze yet. A follow-up could add a deployment-level "policy edits paused" switch that every recompose trigger reads.
 
@@ -189,9 +166,7 @@ Nothing in Archestra enforces the freeze yet. A follow-up could add a deployment
 - Two processes serving different bytes on one line refuse each other's dispatches until one serves the other's head. The stale-read check above keeps this to the moment of a save.
 - After a revision changes the trust chain, file tools refuse calls in workspaces opened under the earlier chain.
 - A held or embedded peer message the previous release wrote carries its trust as a position, not a rank name. Read after a publish that reorders ranks, it takes the rank now at that position. The freeze closes this window.
-- Conversations the previous release started keep its behaviour until they end.
-- With **New sessions keep a policy snapshot** selected, a policy change reaches no running conversation. A conversation that opened pinned keeps its snapshot after **live** is selected again, so it takes a policy change only when the user starts a new conversation.
-- The setting stops publishes, not saves: a save, a Git sync pull, or a battery change still recomposes, and new conversations open under that composition.
+- A legacy conversation cannot be continued; its user starts a new conversation.
 
 ### Helpers
 
@@ -613,7 +588,7 @@ Archestra uses distinct markers for different boundaries. Display text, signed l
 | `<toolu\|call\|aq>_aq2_<nonce>` | Governed native question call ID | Random ID plus a one-use cache record. Paired question identity admits answers. Kept in history without an HMAC. |
 | `peer_proof` | Peer list/read execution arguments | Signed session, action, call ID, and read target. Separate inbox proof, not remedy routing. Removed from provider history. |
 
-The standard receipt block includes a two-line logo. Non-streaming requests prepend it to the first non-empty text chunk. Streaming requests use the response transform. Significant lines are shown below with inert placeholders:
+The standard receipt block includes a single-line logo. Non-streaming requests prepend it to the first non-empty text chunk. Streaming requests use the response transform. Significant lines are shown below with inert placeholders:
 
 ```text
 protected session ABC-DEFG
@@ -836,10 +811,10 @@ Gateway -> Runtime: bind child, inherit restrictions, then deliver inputs
 Gateway -> Ledger: launch outcome under the call ID
 Proxy -> Parent: the recorded outcome, not the client's result
 Runtime -> Proxy: model calls and results under the stored child identity
-Gateway -> Parent: get_run returns the recorded admitted ChildReturn
+Gateway -> Parent: get_agent_run returns the recorded admitted ChildReturn
 ```
 
-Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task. Unrelated sessions and oversized values are withheld. File reads cross the same boundary.
+Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_agent_run` returns only the exact admitted value for the run's current turn. Unrelated sessions and oversized values are withheld; a run with no governed producer returns metadata and the run link only. File reads cross the same boundary.
 
 Downloads check the pinned content, size, and checksum before issuing a ticket. They require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces. Cross-runtime external publishing is refused without an egress crossing.
 
@@ -908,7 +883,6 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 | `ARCHESTRA_LLM_PROXY_PLUGINS` | `appa` | Always includes `appa`, independently of beta features. |
 | `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
-| `guardrails_deployment.new_session_policy` | `live` | `live` publishes and follows the current policy; `snapshot` freezes the head and pins new families to their opening policy. |
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
 | `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting. |
@@ -918,4 +892,4 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 
 Helm manages `offer-signing-secret` inside the auth Secret. Never delete the auth Secret to rotate tokens. Rotate secrets deliberately across all pods and restart them. Existing signed tokens become invalid upon rotation.
 
-Native PostgreSQL TLS relies on system certificates and URL parameters. The addon does not support custom CA flags.
+Native PostgreSQL TLS reads the libpq parameters in the database URL. `sslmode` accepts `disable`, `prefer`, `require`, `verify-ca` and `verify-full`. Every TLS connection verifies the certificate chain and the host name. `sslrootcert=<path>` trusts only that PEM bundle; without it, the system store applies. `sslmode=no-verify` is refused.

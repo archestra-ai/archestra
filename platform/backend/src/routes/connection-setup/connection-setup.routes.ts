@@ -55,6 +55,11 @@ import {
   getVirtualKeyProviderCatalog,
 } from "@/services/agent-connection-setup/credentials/primary-providers";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
+import {
+  StartupGuardArtifactRequestSchema,
+  StartupGuardArtifactSchema,
+  startupGuardArtifact,
+} from "@/services/agent-connection-setup/guard/startup-guard-artifact";
 import { managedRuntimeManifest } from "@/services/agent-connection-setup/payloads/managed-runtime";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
@@ -103,6 +108,7 @@ import {
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
+  CONNECTION_STARTUP_GUARD_PATH,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
 } from "../route-paths";
@@ -284,6 +290,36 @@ const ConnectionHealthResponseSchema = z.object({
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    CONNECTION_STARTUP_GUARD_PATH,
+    {
+      bodyLimit: 512 * 1024,
+      schema: {
+        operationId: RouteId.RenderStartupGuard,
+        description:
+          "Render a credential-free startup check without replaying connection setup.",
+        tags: ["Connection Setups"],
+        body: StartupGuardArtifactRequestSchema,
+        response: constructResponseSchema(StartupGuardArtifactSchema),
+      },
+    },
+    async (request) => {
+      const [requesterLimited, globallyLimited] = await Promise.all([
+        isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-guard-render-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 30 },
+        ),
+        isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-guard-render-global`,
+          { windowMs: 60_000, maxRequests: 600 },
+        ),
+      ]);
+      if (requesterLimited || globallyLimited)
+        throw new ApiError(429, "Too many requests");
+      return startupGuardArtifact(request.body);
+    },
+  );
+
   fastify.get(
     CONNECTION_RUNTIME_PATH,
     {

@@ -41,8 +41,9 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
+import { markShellSeeded } from "@/lib/shell-deferral";
 import { saveConnectChoices } from "./connect-choices";
 import ConnectionPage from "./page";
 
@@ -59,6 +60,24 @@ const { catalogHookMock, rowsByIdsCache } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation");
+// The page loads each view as its own chunk. Resolve both before the tests
+// render, so a test sees the view on its first render, as a server-rendered
+// document does.
+const dynamicViews = vi.hoisted(() => [] as Promise<unknown>[]);
+vi.mock("next/dynamic", () => ({
+  default: (load: () => Promise<React.ComponentType<object>>) => {
+    let View: React.ComponentType<object> | null = null;
+    dynamicViews.push(
+      load().then((loaded) => {
+        View = loaded;
+      }),
+    );
+    return (props: object) => (View ? <View {...props} /> : null);
+  },
+}));
+beforeAll(async () => {
+  await Promise.all(dynamicViews);
+});
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
@@ -376,6 +395,26 @@ describe("ConnectPage gateway footprint", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Example server")).toBeVisible();
     expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
+  });
+
+  it("links each server name to its registry page and lists no tool names", async () => {
+    api.use(http.get(previewUrl, () => HttpResponse.json(listed(1200))));
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    await userEvent.click(
+      await within(summary).findByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const row = within(dialog).getByRole("listitem");
+    expect(
+      within(row).getByRole("link", { name: "Example server" }),
+    ).toHaveAttribute("href", "/mcp/registry/catalog-1");
+    expect(within(row).getByText("2 tools")).toBeVisible();
+    // The server page lists the tools; the dialog stays one line per server.
+    expect(within(dialog).queryByText("example__read")).toBeNull();
   });
 
   it("shows an empty gateway instead of retaining catalog counts", async () => {
@@ -998,6 +1037,43 @@ describe("ConnectionPage (connect request approval)", () => {
     expect(
       screen.getByRole("status", { name: "Checking connection settings" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the flow at once from the settings the server read for this document", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "connectRequest=request&clientId=opencode",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    const settings = {
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+      connectionPluginsEnabled: true,
+    };
+    // No read has happened since mount: only the server seed holds the data.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: settings,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    const seeded = new QueryClient();
+    markShellSeeded(seeded);
+    seeded.setQueryData(organizationKeys.details(), settings);
+
+    rtlRender(<ConnectionPage />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={seeded}>{children}</QueryClientProvider>
+      ),
+    });
+
+    expect(
+      screen.queryByRole("status", { name: "Checking connection settings" }),
+    ).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ skillsEnabled: true, llmProxyEnabled: true }),
+    );
   });
 
   it("keeps the flow visible during revalidation without dropping selections", () => {

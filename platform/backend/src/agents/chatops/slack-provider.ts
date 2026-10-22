@@ -62,7 +62,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
-import { slackMessageText } from "./slack-message-text";
+import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
 import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
@@ -136,10 +136,10 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: 10 * TimeInMs.Minute,
   });
   /**
-   * Reads the channel description on the way to a reply, so it must fail fast:
-   * the default client retries for minutes, holding the reply back.
+   * Optional descriptions and startup acknowledgments must fail fast; the
+   * default client can retry for minutes and hold the final reply back.
    */
-  private descriptionClient: WebClient | null = null;
+  private bestEffortClient: WebClient | null = null;
   /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
@@ -229,8 +229,9 @@ class SlackProvider implements ChatOpsProvider {
     await slackAppFactory.ensureManifestScopes(this.config);
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
-    this.descriptionClient = new WebClient(botToken, {
+    this.bestEffortClient = new WebClient(botToken, {
       retryConfig: { retries: 0 },
+      rejectRateLimitedCalls: true,
       timeout: 3 * TimeInMs.Second,
     });
 
@@ -316,6 +317,7 @@ class SlackProvider implements ChatOpsProvider {
     this.eventHandler = null;
     this.socketDedup.clear();
     this.client = null;
+    this.bestEffortClient = null;
     this.botUserId = null;
     this.botId = null;
     this.botDisplayName = null;
@@ -632,7 +634,8 @@ class SlackProvider implements ChatOpsProvider {
     options: ChatReplyOptions,
     replaceTs?: string,
   ): Promise<string> {
-    if (!this.client) {
+    const client = options.bestEffort ? this.bestEffortClient : this.client;
+    if (!client) {
       throw new Error("SlackProvider not initialized");
     }
 
@@ -699,7 +702,7 @@ class SlackProvider implements ChatOpsProvider {
         options.originalMessage.threadId ?? (firstTs || undefined);
 
       if (i === 0 && replaceTs) {
-        await this.client.chat.update({
+        await client.chat.update({
           channel: options.originalMessage.channelId,
           ts: replaceTs,
           text: fallbackText,
@@ -724,7 +727,7 @@ class SlackProvider implements ChatOpsProvider {
         },
         "[SlackProvider] chat.postMessage (sendReply)",
       );
-      const result = await this.client.chat.postMessage(postArgs);
+      const result = await client.chat.postMessage(postArgs);
       if (i === 0) firstTs = (result.ts as string) || "";
     }
 
@@ -851,6 +854,89 @@ class SlackProvider implements ChatOpsProvider {
       "[SlackProvider] chat.postMessage (addApprovalRequestForm)",
     );
     await this.client.chat.postMessage(postArgs);
+  }
+
+  /** Authenticate only the outbound sender; never open a socket or change the app. */
+  async verifyRuntimeNoticeWorkspace(workspaceId: string): Promise<void> {
+    const identity = await this.runtimeNoticeClient().auth.test();
+    if (identity.team_id !== workspaceId || !identity.bot_id) {
+      throw new Error("Slack runtime notice workspace mismatch");
+    }
+    this.botId = identity.bot_id;
+  }
+
+  /** Generic runtime attention only: no command, prompt, or approval payload. */
+  async postRuntimeAttentionNotice(params: {
+    channelId: string;
+    threadId: string;
+    noticeId: string;
+    runUrl: string;
+  }): Promise<string> {
+    const result = await this.runtimeNoticeClient().chat.postMessage({
+      channel: params.channelId,
+      thread_ts: params.threadId,
+      ...runtimeAttentionContent(params.runUrl, false),
+      metadata: {
+        event_type: "archestra_runtime_attention",
+        event_payload: { notice_id: params.noticeId },
+      },
+      unfurl_links: false,
+      unfurl_media: false,
+      reply_broadcast: false,
+    });
+    if (!result.ts)
+      throw new Error("Slack runtime notice returned no message timestamp");
+    return result.ts;
+  }
+
+  async resolveRuntimeAttentionNotice(params: {
+    channelId: string;
+    messageTs: string;
+    runUrl: string;
+  }): Promise<void> {
+    await this.runtimeNoticeClient().chat.update({
+      channel: params.channelId,
+      ts: params.messageTs,
+      ...runtimeAttentionContent(params.runUrl, true),
+    });
+  }
+
+  /** Recover an uncertain post without blindly creating a second notification. */
+  async findRuntimeAttentionNotice(params: {
+    channelId: string;
+    threadId: string;
+    noticeId: string;
+  }): Promise<string | null> {
+    const client = this.runtimeNoticeClient();
+    let cursor: string | undefined;
+    // Bounded below the delivery lease. If a very long thread cannot be fully
+    // checked, fail safely instead of posting a possible duplicate.
+    for (let page = 0; page < 10; page++) {
+      const result = await client.conversations.replies({
+        channel: params.channelId,
+        ts: params.threadId,
+        cursor,
+        limit: 100,
+        include_all_metadata: true,
+      });
+      const message = result.messages?.find(
+        (message) =>
+          message.bot_id === this.botId &&
+          message.metadata?.event_type === "archestra_runtime_attention" &&
+          (
+            message.metadata?.event_payload as
+              | Record<string, unknown>
+              | undefined
+          )?.notice_id === params.noticeId,
+      );
+      if (message?.ts) return message.ts;
+      cursor = result.response_metadata?.next_cursor || undefined;
+      if (!cursor && !result.has_more) return null;
+      if (!cursor) break;
+    }
+    throw new Error(
+      "Could not finish checking the Slack thread for a runtime notice",
+    );
   }
 
   async updateApprovalRequest(
@@ -1032,7 +1118,7 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit).map((message) => ({
         ...message,
-        text: slackMessageText(message),
+        text: slackThreadMessageText(message),
       }));
 
       // Keep text-less USER messages that carry downloadable files: a
@@ -1207,7 +1293,7 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async getChannelDescription(channelId: string): Promise<string | null> {
-    const client = this.descriptionClient ?? this.client;
+    const client = this.bestEffortClient ?? this.client;
     if (!client) return null;
     const cached = this.channelDescriptionCache.get(channelId);
     if (cached !== undefined) return cached || null;
@@ -1815,6 +1901,19 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  private runtimeNoticeClient(): WebClient {
+    if (!this.isConfigured()) {
+      throw new Error("Slack runtime notice provider not initialized");
+    }
+    // The durable task queue owns retries. Bound each call so it cannot outlive
+    // the notice's delivery lease, including rate-limit responses.
+    return new WebClient(this.config.botToken, {
+      retryConfig: { retries: 0 },
+      timeout: 10_000,
+      rejectRateLimitedCalls: true,
+    });
+  }
 
   /** Completed control retries must not stop a later turn or re-mute a resumed thread. */
   private async handleControlEvent(
@@ -2780,14 +2879,29 @@ const SLACK_MAX_SUGGESTED_PROMPTS = 4;
  * line of the reply.
  */
 function buildTrailingContextBlocks(
-  options: Pick<ChatReplyOptions, "hint" | "footer">,
+  options: Pick<ChatReplyOptions, "hint" | "footer" | "conversationUrl">,
 ) {
-  return [options.hint, options.footer]
-    .filter((text): text is string => Boolean(text))
-    .map((text) => ({
-      type: "context" as const,
-      elements: [{ type: "plain_text" as const, text, emoji: true }],
-    }));
+  return [
+    ...(options.conversationUrl
+      ? [
+          {
+            type: "context" as const,
+            elements: [
+              {
+                type: "mrkdwn" as const,
+                text: `<${options.conversationUrl}|Open conversation>`,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...[options.hint, options.footer]
+      .filter((text): text is string => Boolean(text))
+      .map((text) => ({
+        type: "context" as const,
+        elements: [{ type: "plain_text" as const, text, emoji: true }],
+      })),
+  ];
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -2822,8 +2936,8 @@ function truncateFallbackText(text: string): string {
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
 // sendReply message reserves slots for context footers (a continuation hint, or
-// the agent footer plus an optional hint — at most 2), so the
-// markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
+// the agent footer, an optional hint, and a conversation link — at most 3), so the
+// markdown block's expansion is bounded to 45, keeping the worst case (45 + 3)
 // safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
 
@@ -3206,3 +3320,27 @@ type SlackJoinableChannel = {
   isPrivate: boolean;
   isMember: boolean;
 };
+
+/** Only fixed copy and the ordinary authenticated app URL enter Slack. */
+function runtimeAttentionContent(runUrl: string, resolved: boolean) {
+  const text = resolved
+    ? "Resolved — the runtime no longer needs your input."
+    : "The runtime needs your input.";
+  return {
+    text: `${text} Open run: ${runUrl}`,
+    blocks: [
+      { type: "section" as const, text: { type: "plain_text" as const, text } },
+      {
+        type: "actions" as const,
+        elements: [
+          {
+            type: "button" as const,
+            action_id: "open_runtime_run",
+            text: { type: "plain_text" as const, text: "Open run" },
+            url: runUrl,
+          },
+        ],
+      },
+    ],
+  };
+}

@@ -74,14 +74,21 @@ export function describeSessionOrigin(session: IdentitySession): {
  * arrived on a credential that identifies nobody.
  */
 export function describeActor(
-  session: Pick<IdentitySession, "userNames" | "unattributedReason">,
+  session: Pick<IdentitySession, "userNames" | "unattributedReason"> & {
+    source?: IdentitySession["source"];
+  },
   appName: string,
 ): Actor {
   const names = session.userNames ?? [];
   if (names.length > 0) {
     return { kind: "people", names, label: names[0] };
   }
-  const reason = session.unattributedReason ?? "unknown";
+  // Knowledge work (embedding, reranking, OCR) is the platform's own
+  // background traffic, whatever credential it happened to log.
+  const reason =
+    session.source && isKnowledgeSource(session.source)
+      ? "internal"
+      : (session.unattributedReason ?? "unknown");
   switch (reason) {
     case "internal":
       return {
@@ -162,7 +169,9 @@ export function SessionAvatar({
           </span>
         </UnstyledButton>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs px-2.5 py-2">
+      {/* A wrapped line never shrinks its box back, so a wide cap left a
+          strip of dead space; this width fits the explanations' wrap. */}
+      <TooltipContent className="max-w-64 px-2.5 py-2">
         {actor.kind === "people" ? (
           <>
             <div className="mb-1.5 text-muted-foreground">
@@ -185,12 +194,53 @@ export function SessionAvatar({
             <div className="mb-1.5 text-muted-foreground">
               {`${actor.label} via ${originLabel}`}
             </div>
-            <p className="leading-snug">{actor.explanation}</p>
+            <p className="leading-snug text-pretty">{actor.explanation}</p>
           </>
         )}
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/**
+ * The client's (or source's) mark alone, for a detail page's icon tile, which
+ * draws its own frame: the acting person is named in the line beside it.
+ */
+export function SessionClientMark({
+  client,
+  source,
+}: {
+  client: ClientFamily | null;
+  source: InteractionSource | null;
+}) {
+  const appIconLogo = useAppIconLogo();
+  if (client?.mark) return <ClientIcon client={client} size={24} />;
+  const logo = client
+    ? {
+        src: client.icon ?? providerLogoUrl(client.provider),
+        alt: client.label,
+        invert: true,
+      }
+    : source === "chat"
+      ? { src: appIconLogo, alt: "Chat", invert: false }
+      : source && source in CHATOPS_LOGOS
+        ? {
+            ...CHATOPS_LOGOS[source as keyof typeof CHATOPS_LOGOS],
+            invert: false,
+          }
+        : null;
+  if (logo) {
+    return (
+      <Image
+        src={logo.src}
+        alt={logo.alt}
+        width={20}
+        height={20}
+        className={cn("object-contain", logo.invert && "dark:invert")}
+      />
+    );
+  }
+  return source ? <SourceIcon source={source} /> : <Globe aria-hidden="true" />;
 }
 
 // ============================================================================

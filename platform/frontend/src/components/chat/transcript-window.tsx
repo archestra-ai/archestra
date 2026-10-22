@@ -47,10 +47,30 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
     null,
   );
   const count = items.length;
+  // The first message at or after the start: when earlier items are put in
+  // front of the transcript (a long conversation's history arriving after
+  // its end was shown), the window follows this message instead of keeping
+  // its index, which would mount everything that arrived.
+  const anchor = useRef<{ id: string; offset: number } | null>(null);
+  const anchoredStart =
+    start !== null && anchor.current
+      ? indexOfMessage(items, anchor.current.id)
+      : -1;
+  const openingStart = Math.max(0, count - TRANSCRIPT_INITIAL_WINDOW);
+  // Never fewer mounted than a transcript opens with: a short end shown
+  // first fills up with the history that arrives in front of it.
   const effectiveStart = Math.min(
-    start ?? Math.max(0, count - TRANSCRIPT_INITIAL_WINDOW),
+    anchoredStart >= 0
+      ? Math.min(
+          Math.max(0, anchoredStart - (anchor.current?.offset ?? 0)),
+          openingStart,
+        )
+      : (start ?? openingStart),
     count,
   );
+  if (start !== null) {
+    anchor.current = anchorAt(items, effectiveStart);
+  }
 
   // Fix the start the first time there is something to show (a deep link may
   // move it further back).
@@ -64,19 +84,23 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
       : -1;
     if (targetIndex >= 0) {
       setDeepLinkedMessageId(target);
-      setStart(
-        Math.max(0, Math.min(effectiveStart, targetIndex - DEEP_LINK_CONTEXT)),
+      const next = Math.max(
+        0,
+        Math.min(effectiveStart, targetIndex - DEEP_LINK_CONTEXT),
       );
+      anchor.current = anchorAt(items, next);
+      setStart(next);
     } else {
+      anchor.current = anchorAt(items, effectiveStart);
       setStart(effectiveStart);
     }
   }, [start, count, items, effectiveStart]);
 
   const showEarlier = useCallback(() => {
-    setStart((current) =>
-      Math.max(0, (current ?? effectiveStart) - TRANSCRIPT_BACKFILL_STEP),
-    );
-  }, [effectiveStart]);
+    const next = Math.max(0, effectiveStart - TRANSCRIPT_BACKFILL_STEP);
+    anchor.current = anchorAt(items, next);
+    setStart(next);
+  }, [effectiveStart, items]);
 
   return { start: effectiveStart, showEarlier, deepLinkedMessageId };
 }
@@ -195,4 +219,20 @@ function readDeepLinkedMessageId(): string | null {
   } catch {
     return null;
   }
+}
+
+function indexOfMessage(items: readonly TimelineItem[], id: string): number {
+  return items.findIndex((item) => "message" in item && item.message.id === id);
+}
+
+function anchorAt(
+  items: readonly TimelineItem[],
+  start: number,
+): { id: string; offset: number } | null {
+  for (let index = start; index < items.length; index++) {
+    const item = items[index];
+    if ("message" in item)
+      return { id: item.message.id, offset: index - start };
+  }
+  return null;
 }

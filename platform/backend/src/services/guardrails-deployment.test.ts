@@ -43,33 +43,28 @@ describe("readGuardrailsV2Activation", () => {
     }
   });
 
-  test("enforcement turns off at the small-team threshold unless the AI Security licence is set", async () => {
+  test("enforcement turns off at the small-team threshold unless the enterprise licence is set", async () => {
     const previous = config.openappa.enabled;
-    const previousFlags = { ...config.enterpriseFeatures };
-    const setFlag = (key: "core" | "aiSecurity", value: boolean) =>
-      Object.defineProperty(config.enterpriseFeatures, key, {
+    const previousCore = config.enterpriseFeatures.core;
+    const setCore = (value: boolean) =>
+      Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,
       });
     config.openappa.enabled = true;
-    setFlag("core", false);
-    setFlag("aiSecurity", false);
+    setCore(false);
     try {
       await GuardrailsDeploymentModel.setEnabled(true);
       enterpriseTier.setUserCountForTesting(29);
       await expect(readGuardrailsV2Activation()).resolves.toBe("active");
       enterpriseTier.setUserCountForTesting(30);
       await expect(readGuardrailsV2Activation()).resolves.toBe("inactive");
-      // The Platform licence alone does not include AI Security.
-      setFlag("core", true);
-      await expect(readGuardrailsV2Activation()).resolves.toBe("inactive");
-      setFlag("aiSecurity", true);
+      setCore(true);
       await expect(readGuardrailsV2Activation()).resolves.toBe("active");
     } finally {
       config.openappa.enabled = previous;
-      setFlag("core", previousFlags.core);
-      setFlag("aiSecurity", previousFlags.aiSecurity);
+      setCore(previousCore);
       enterpriseTier.setUserCountForTesting(0);
     }
   });

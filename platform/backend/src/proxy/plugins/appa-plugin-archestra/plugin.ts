@@ -16,7 +16,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -102,6 +102,7 @@ import {
   processProxyResults,
   returnRuntimeValue,
   type SpawnReturnDeclaration,
+  SUBAGENT_TOOL,
   sendPeerMessage,
   sharedPolicy,
   startRuntimeChild,
@@ -149,6 +150,10 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { pendingExports } from "@/services/agent-runtime/pending-exports";
+import {
+  agentRunUrl,
+  submittedRunNextStep,
+} from "@/services/agent-runtime/run-handle";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
@@ -161,6 +166,7 @@ import {
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
 import { labeledQuestionRuling } from "./adapters/native-question-ruling";
+import { openCodeReviewQuestion } from "./adapters/opencode-review";
 import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
@@ -239,16 +245,19 @@ type AppaPluginObserver = {
 };
 
 type NativeQuestionClaim = {
+  /** Exact server-issued native question, never recovered from client history. */
+  askedQuestion?: string;
   offerIds?: string[];
   /** The card offered Inspect; its answers resolve inspection state. */
   inspectable?: boolean;
-  /** The card was issued with the complete review text above it. */
+  /** The issued card carried the complete review in its input or preceding text. */
   reviewText?: boolean;
   /** The exact staged payload the card was issued from. */
   digest?: string;
 };
 
 type IssuedNativeQuestion = {
+  askedQuestion?: string;
   id: string;
   name: string;
   offerIds: string[];
@@ -602,6 +611,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return undefined;
         if (binding.request.restoredNoticeCallIds?.has(answer.id))
           return "pending";
+        if (childReturns.failedSpawns.has(answer.id)) return "failed";
         return (
           binding.adapter.classifySpawnResult?.(answer) ??
           (answer.isError ? "failed" : "pending")
@@ -1054,6 +1064,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let reviewText: string | undefined;
       let inspectableReview = false;
       let reviewDigest: string | undefined;
+      let askedQuestion: string | undefined;
       if (
         isSpecialToolMember(binding, call, "askUser") &&
         archestraMcpBranding.getToolShortName(
@@ -1104,6 +1115,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         reviewText = canonical.reviewText;
         inspectableReview = canonical.inspectable === true;
         reviewDigest = canonical.digest;
+        askedQuestion = canonical.askedQuestion;
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
@@ -1119,14 +1131,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : undefined;
       if (issued) {
         prepared = issued.call;
-        // The complete review rides beside the card as server-generated
-        // assistant text; it is never part of the native question's input.
-        if (reviewText) prepared = { ...prepared, reviewDetails: reviewText };
+        // Claude's complete review precedes the card as assistant text.
+        // OpenCode-family clients carry it in the bound question input instead.
+        if (reviewText && !askedQuestion)
+          prepared = { ...prepared, reviewDetails: reviewText };
         issuedNativeQuestions.push({
           ...issued.question,
           offerIds,
           ...(inspectableReview ? { inspectable: true } : {}),
           ...(reviewDigest ? { digest: reviewDigest } : {}),
+          ...(askedQuestion ? { askedQuestion } : {}),
           ...(reviewText ? { reviewText: true } : {}),
         });
         changed = true;
@@ -1798,7 +1812,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (!binding.runtimeTaskId) {
         throw new ApiError(
           409,
-          "The runtime turn has no authenticated task identity",
+          "OpenAPPA found no authenticated task identity for the runtime turn",
         );
       }
       const outcome = await returnRuntimeValue({
@@ -2204,10 +2218,20 @@ function isDeclaredCall(
   call: { name: string; namespace?: string },
 ): boolean {
   return binding.request.declaredTools.some(
-    (tool) =>
-      tool.name === call.name &&
-      (tool.namespace ?? undefined) === (call.namespace ?? undefined),
+    (tool) => tool.name === call.name && sameNamespace(tool, call),
   );
+}
+
+/**
+ * Whether two tools share a namespace. An empty namespace is none: a declared
+ * local tool has no namespace, and the native question that replaces ask_user
+ * carries an explicit empty one.
+ */
+function sameNamespace(
+  a: { namespace?: string },
+  b: { namespace?: string },
+): boolean {
+  return (a.namespace || undefined) === (b.namespace || undefined);
 }
 
 function notLoadedFeedback(params: {
@@ -2216,7 +2240,7 @@ function notLoadedFeedback(params: {
 }): string {
   const { call } = params;
   const held = params.binding.request.heldTools?.some(
-    (tool) => tool.name === call.name && tool.namespace === call.namespace,
+    (tool) => tool.name === call.name && sameNamespace(tool, call),
   );
   return held
     ? `[appa] ${call.name} cannot be used until ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} are both loaded. Search for the one that is missing with your tool search, then call it again.`
@@ -2417,7 +2441,8 @@ async function resolveRuntimeCalls(params: {
   if (
     [...result.values()].some(
       (call) =>
-        call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
+        call.action === TOOL_START_AGENT_RUN_SHORT_NAME ||
+        isAgentTool(call.action),
     )
   ) {
     const { organizationId } = params;
@@ -2436,7 +2461,7 @@ async function resolveRuntimeCalls(params: {
     ]);
     for (const call of result.values()) {
       call.spawn =
-        call.action === TOOL_START_RUN_SHORT_NAME
+        call.action === TOOL_START_AGENT_RUN_SHORT_NAME
           ? typeof call.args.agent_id === "string" &&
             ids.has(call.args.agent_id)
           : names.has(call.action);
@@ -2486,7 +2511,7 @@ async function admitSubagentReturns(params: {
 /**
  * An Archestra delegation call declares its own child's return: as spoken by
  * default, schema-attested when it names a `return_schema`. A runtime launch
- * through `start_run` keeps the explicit declaration flow.
+ * through `start_agent_run` keeps the explicit declaration flow.
  */
 function delegationReturnDeclaration(
   call: RuntimeCall | undefined,
@@ -2528,7 +2553,9 @@ async function releasedRuntimeSpawns(params: {
           archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
         return (
           call.spawn &&
-          (action === TOOL_START_RUN_SHORT_NAME || isAgentTool(action))
+          (action === TOOL_START_AGENT_RUN_SHORT_NAME ||
+            action === SUBAGENT_TOOL ||
+            isAgentTool(action))
         );
       })
       .map(([id]) => id),
@@ -2546,9 +2573,12 @@ function runtimeLaunchResult(
   if (!outcome) return "The runtime launch returned no verifiable handle.";
   if (outcome.kind === "launched") {
     return JSON.stringify({
-      session_id: outcome.session_id,
+      run_id: outcome.session_id,
       ...(outcome.state ? { state: outcome.state } : {}),
-      message: "Use get_run to retrieve admitted runtime output.",
+      run_url: agentRunUrl(outcome.session_id),
+      next_step: submittedRunNextStep({
+        reportsToThread: outcome.reports_to_thread === true,
+      }),
     });
   }
   const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
@@ -2577,6 +2607,8 @@ async function approveChildReturnCarriers(params: {
   updates: Record<string, string>;
   /** Results of children that ran while enforcement was off, with no crossing. */
   ignored: Set<string>;
+  /** Spawn results that carry no return: the child failed before it returned. */
+  failedSpawns: Set<string>;
 }> {
   const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
@@ -2586,8 +2618,9 @@ async function approveChildReturnCarriers(params: {
       adapter?.isChildCompletionResult?.(result) === true,
   );
   const ignored = new Set<string>();
+  const failedSpawns = new Set<string>();
   if (completions.length === 0 && completionResults.length === 0) {
-    return { updates: {}, ignored };
+    return { updates: {}, ignored, failedSpawns };
   }
   // Display markers carry no authority. Assistant quotes are stripped from
   // the request but never treated as parent-bound completions.
@@ -2799,7 +2832,40 @@ async function approveChildReturnCarriers(params: {
       arrived.set(child, { ...record, spawnCallId });
     }
   }
-  const unrecordedResult = completionResults.find(
+  // A child's return always reaches the parent framed or marked. So when this
+  // session released a spawn, its child crossed nothing, and no collected
+  // return names the spawn's result, the result is the client's own text
+  // about a child that failed before it returned, for example on a provider
+  // error before its first request. The runtime closes that spawn and
+  // withholds the text, so the parent can go on and spawn again. A spawn this
+  // session never released, or one a fork carries, is still refused below.
+  const released = new Set(params.binding.request.releasedSpawnCalls);
+  // Display-only echoes name no return, as in the matching above.
+  const named = new Set(
+    completions
+      .filter((completion) => !completion.assistantOrigin)
+      .flatMap((completion) =>
+        [completion.envelopeId, completion.spawnCallId].flatMap((id) =>
+          id ? [withoutTrajectoryStamp(id)] : [],
+        ),
+      ),
+  );
+  for (const result of completionResults) {
+    const id = withoutTrajectoryStamp(result.id);
+    if (
+      !params.binding.session.fork_of &&
+      directSpawnResults.has(id) &&
+      released.has(id) &&
+      !crossedSpawns.has(id) &&
+      !named.has(id) &&
+      !unenforcedReturn({ spawnCallId: id })
+    )
+      failedSpawns.add(result.id);
+  }
+  const returnResults = completionResults.filter(
+    (result) => !failedSpawns.has(result.id),
+  );
+  const unrecordedResult = returnResults.find(
     (result) =>
       (byEnvelope.get(withoutTrajectoryStamp(result.id)) ?? []).length === 0 &&
       !ignoredByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
@@ -2833,7 +2899,7 @@ async function approveChildReturnCarriers(params: {
   // Strips unverified text and metadata beside valid returns.
   // Reconstructs result content solely from crossed values.
   const updates: Record<string, string> = Object.create(null);
-  for (const result of completionResults) {
+  for (const result of returnResults) {
     const envelopeId = withoutTrajectoryStamp(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
@@ -2881,7 +2947,7 @@ async function approveChildReturnCarriers(params: {
             ]),
           });
   }
-  return { updates, ignored };
+  return { updates, ignored, failedSpawns };
 }
 
 /**
@@ -4743,6 +4809,9 @@ function stampAskUserTrajectory(
   };
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function canonicalizeHitlAskUserCall(params: {
   binding: AppaPluginBinding;
   call: LlmProxyToolCallsContext["toolCalls"][number];
@@ -4758,8 +4827,9 @@ async function canonicalizeHitlAskUserCall(params: {
   inspectable?: boolean;
   /** The exact staged payload the issued card is bound to. */
   digest?: string;
-  /** The complete review to emit as assistant text immediately before the card. */
+  /** The complete review carried in the native input or preceding assistant text. */
   reviewText?: string;
+  askedQuestion?: string;
 }> {
   if (params.offerIds.length !== 1) {
     const pending = await Promise.all(
@@ -4779,11 +4849,18 @@ async function canonicalizeHitlAskUserCall(params: {
       offerIds: params.offerIds,
     });
     if (inspectable) {
+      const family =
+        params.binding.adapter?.id === "opencode" ||
+        params.binding.adapter?.id === "kilo";
+      const askedQuestion = family
+        ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
+        : undefined;
       return {
         call: {
           ...params.call,
           arguments: JSON.stringify({
             ...inspectable.card,
+            ...(askedQuestion ? { question: askedQuestion } : {}),
             trajectory: currentTrajectory(params.binding.session),
           }),
         },
@@ -4791,6 +4868,7 @@ async function canonicalizeHitlAskUserCall(params: {
         offerIds: [...params.offerIds],
         inspectable: true,
         digest: inspectable.digest,
+        ...(askedQuestion ? { askedQuestion } : {}),
         ...(inspectable.reviewText
           ? { reviewText: inspectable.reviewText }
           : {}),
@@ -4836,6 +4914,8 @@ async function canonicalizeHitlAskUserCall(params: {
     offerIds: [...params.offerIds],
   };
 }
+
+// SPDX-SnippetEnd
 
 /** A call's arguments without the ones only the proxy may write for `tool`. */
 function withoutStampedArguments(params: {
@@ -5031,6 +5111,9 @@ async function rememberNativeQuestions(
           ...(question.inspectable ? { inspectable: true } : {}),
           ...(question.reviewText ? { reviewText: true } : {}),
           ...(question.digest ? { digest: question.digest } : {}),
+          ...(question.askedQuestion
+            ? { askedQuestion: question.askedQuestion }
+            : {}),
         },
         HITL_QUESTION_TTL_MS,
       ),
@@ -5100,6 +5183,7 @@ async function claimNativeQuestionResults(params: {
         inspectable?: unknown;
         reviewText?: unknown;
         digest?: unknown;
+        askedQuestion?: unknown;
         /** A pre-upgrade page card's binding; those cards are gone. */
         page?: unknown;
       }>(candidates.flatMap((candidate) => candidate.keys))
@@ -5123,6 +5207,9 @@ async function claimNativeQuestionResults(params: {
         ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
         ...(entry.inspectable === true ? { inspectable: true } : {}),
         ...(entry.reviewText === true ? { reviewText: true } : {}),
+        ...(typeof entry.askedQuestion === "string"
+          ? { askedQuestion: entry.askedQuestion }
+          : {}),
         ...(typeof entry.digest === "string" && entry.digest.length > 0
           ? { digest: entry.digest }
           : {}),
@@ -5168,6 +5255,7 @@ async function recordNativeHitlRulings(params: {
         carriedReviewText: claim.reviewText === true,
         // An inspectable claim without its payload digest matches nothing.
         claimDigest: claim.digest ?? "",
+        askedQuestion: claim.askedQuestion,
       });
       if (outcome.kind === "ruling") recorded.push(outcome.ruling);
       // A dropped answer records nothing and advances nothing.
@@ -5281,7 +5369,7 @@ async function recordNativeHitlRulings(params: {
           ? "array"
           : typeof answer.content,
       },
-      "Recorded native OpenAPPA HITL answer",
+      "OpenAPPA recorded a native HITL answer",
     );
     for (const offerId of claim.offerIds) {
       const review = await getHitlReview({
@@ -5335,6 +5423,7 @@ type InspectableHitlAnswerOutcome =
  * placeholder id may stand in for it.
  */
 async function recordInspectableHitlAnswer(params: {
+  askedQuestion?: string;
   binding: AppaPluginBinding;
   answer: Record<string, unknown>;
   offerId: string;
@@ -5387,14 +5476,14 @@ async function recordInspectableHitlAnswer(params: {
   };
   let reading = labeledQuestionRuling(
     result,
-    asked.card.shortQuestion ?? asked.card.question,
+    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question,
     asked.card.options.map((option) => option.label),
   );
   let answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
       : undefined;
-  if (reading === "unrecognized") {
+  if (reading === "unrecognized" && !params.askedQuestion) {
     // A card of the previous layout, issued before a deploy, can still be open.
     for (const question of asked.previousQuestions) {
       const previous = labeledQuestionRuling(
@@ -5503,23 +5592,29 @@ async function sealInspectableClosure(params: {
 
 /**
  * Whether an offer-backed ask_user call becomes an inspectable native card:
- * only Claude Code's question tool on a transport that can place the complete
- * review text before the card. Other clients keep the plain card and never
- * offer an Inspect that could not deliver.
+ * Claude needs transport support for review text. OpenCode-family questions
+ * carry it in the native input, including on transports with no text injection.
+ * Their connection plugin enhances presentation; native surfaces remain usable.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function inspectsNatively(
   binding: AppaPluginBinding,
   canShowToolCallReview: boolean,
 ): boolean {
   const native = binding.adapter?.nativeQuestion;
   return (
-    binding.adapter?.id === "claude-code" &&
     !!native?.fromAskUser &&
     native.isAvailable?.(binding.requestHeaders) !== false &&
     declaresNativeQuestion(binding, native.toolName) &&
-    canShowToolCallReview
+    ((binding.adapter?.id === "claude-code" && canShowToolCallReview) ||
+      ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
+        binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );
 }
+
+// SPDX-SnippetEnd
 
 function assertUniqueNativeQuestionResultIds(params: {
   binding: AppaPluginBinding;
@@ -5537,7 +5632,7 @@ function assertUniqueNativeQuestionResultIds(params: {
     if (seen.has(result.id) && questionIds.has(result.id)) {
       throw new ApiError(
         400,
-        "Duplicate native question result IDs are not allowed",
+        "OpenAPPA does not allow duplicate native question result IDs",
       );
     }
     seen.add(result.id);
@@ -6483,7 +6578,10 @@ async function enforcementFor(
   try {
     return await readGuardrailsV2Activation();
   } catch {
-    throw new ApiError(503, "Guardrails availability could not be confirmed");
+    throw new ApiError(
+      503,
+      "OpenAPPA could not confirm Guardrails availability",
+    );
   }
 }
 

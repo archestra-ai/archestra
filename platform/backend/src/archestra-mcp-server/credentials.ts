@@ -269,7 +269,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
     description:
-      "Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
+      "Give a Remote Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
       "PREFER THE SAFE MODE: omit `value` to declare the credential and get back a link. The person opens it and pastes the value themselves, so the secret never enters your context or this transcript. Use it whenever you would otherwise have to read a secret to pass it on. " +
       "Send a `value` only when the person deliberately handed you one to move. That mode writes the secret into your context and this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. " +
       "Either way the credential is personal to you: it applies to every run YOU start on that Agent, and never to anyone else's runs. " +

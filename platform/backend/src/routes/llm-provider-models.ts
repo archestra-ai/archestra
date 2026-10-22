@@ -46,7 +46,7 @@ import {
 import { BulkIdsSchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
-const LlmModelSchema = z.object({
+export const LlmModelSchema = z.object({
   id: z.string(),
   /** The models.id UUID — used as the model_id FK on conversations/agents. */
   dbId: z.string(),
@@ -110,160 +110,9 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider, apiKeyId, isEmbedding } = query;
-
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-        organizationId,
-        user.id,
-        userTeamIds,
-        provider,
+      return reply.send(
+        await getAvailableLlmModels({ query, userId: user.id, organizationId }),
       );
-
-      logger.info(
-        {
-          organizationId,
-          provider,
-          apiKeyId,
-          apiKeyCount: apiKeys.length,
-          apiKeys: apiKeys.map((key) => ({
-            id: key.id,
-            name: key.name,
-            provider: key.provider,
-            isSystem: key.isSystem,
-          })),
-        },
-        "Available API keys for user",
-      );
-
-      const accessibleKeyIds = apiKeys.map((key) => key.id);
-      if (apiKeyId && !accessibleKeyIds.includes(apiKeyId)) {
-        logger.warn(
-          { apiKeyId, organizationId, userId: user.id },
-          "Requested apiKeyId not found in user's accessible keys, falling back to all keys",
-        );
-      }
-
-      const apiKeyIds =
-        apiKeyId && accessibleKeyIds.includes(apiKeyId)
-          ? [apiKeyId]
-          : accessibleKeyIds;
-      const dbModels =
-        await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
-
-      logger.info(
-        {
-          organizationId,
-          provider,
-          apiKeyIds,
-          modelCount: dbModels.length,
-        },
-        "Models fetched from database",
-      );
-
-      // Per-user providers (e.g. GitHub Copilot) are catalogued org-wide and
-      // resolved per-user at request time, so they're sourced separately below
-      // (visible to everyone, flagged) — keep them out of the per-key path so a
-      // member's own connected copy isn't listed twice or shown unflagged.
-      let filteredModels = dbModels.filter(
-        ({ model }) => !providerRequiresPerUserCredential(model.provider),
-      );
-      if (provider) {
-        filteredModels = filteredModels.filter(
-          ({ model }) => model.provider === provider,
-        );
-      }
-
-      // Filter by embedding status if requested
-      if (isEmbedding !== undefined) {
-        filteredModels = filteredModels.filter(({ model }) =>
-          isEmbedding
-            ? model.embeddingDimensions !== null
-            : model.embeddingDimensions === null,
-        );
-      }
-
-      const keyLinkedModels = filteredModels
-        .filter(({ model }) =>
-          isEmbedding ? true : ModelModel.supportsTextChat(model),
-        )
-        .map(({ model, isBest, recommendedForAgents }) => ({
-          id: model.modelId,
-          dbId: model.id,
-          displayName: model.description || model.modelId,
-          provider: model.provider,
-          capabilities: ModelModel.toCapabilities(model, recommendedForAgents),
-          isBest,
-          isFree: isFreeModel(model),
-          embeddingDimensions: model.embeddingDimensions,
-        }));
-
-      const perUserModels = await getPerUserProviderModels({
-        organizationId,
-        provider,
-        isEmbedding,
-        connectedProviders: new Set(
-          apiKeys
-            .filter((key) => providerRequiresPerUserCredential(key.provider))
-            .map((key) => key.provider),
-        ),
-      });
-
-      const models = [...keyLinkedModels, ...perUserModels];
-
-      // Hide models restricted to teams the caller is not part of. Catalog
-      // managers (llmModel:update) keep full visibility so they can see what
-      // they are restricting.
-      const isModelCatalogAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmModel",
-        "update",
-      );
-      let visibleModels = models;
-      if (!isModelCatalogAdmin) {
-        const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
-          modelIds: models.map((model) => model.dbId),
-          organizationId,
-          userId: user.id,
-          action: "read",
-        });
-        visibleModels = models.filter((model) =>
-          allowedModelIds.has(model.dbId),
-        );
-      }
-
-      if (
-        !(await userHasPermission(user.id, organizationId, "llmModel", "read"))
-      ) {
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        const grants = await ResourcePermissions.resolveAll({
-          organizationId,
-          userId: user.id,
-        });
-        // SPDX-SnippetEnd
-        visibleModels = visibleModels.filter((model) =>
-          grants.some(
-            (grant) =>
-              grant.resource === "llmModel" &&
-              grant.action === "read" &&
-              (grant.scope === "*" || grant.scope === model.dbId),
-          ),
-        );
-      }
-
-      logger.info(
-        { organizationId, provider, totalModels: visibleModels.length },
-        "Returning available LLM models from database",
-      );
-
-      // Stored descriptions can still collide at read time — rows synced
-      // before names were disambiguated, or keys whose catalogs each contain
-      // only one member of a colliding pair — so the response gets its own
-      // pass to keep picker rows tellable-apart.
-      return reply.send(withDistinctDisplayNames(visibleModels));
     },
   );
 
@@ -495,10 +344,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user }, reply) => {
-      // No visible keys: a picker needs each model and its `isBest` flag
-      // (still taken across every link), not the keys that serve it.
+      // Resolve prices from the caller's instances; conflicting rates remain
+      // unknown on a picker that has not selected a provider key yet.
       const linked = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
-        visibleKeyIds: [],
+        visibleKeyIds: await LlmProviderApiKeyModel.getVisibleKeyIds(
+          organizationId,
+          user.id,
+        ),
       });
       const unlinked = await findUnlinkedLlmProxyModels(linked);
       const options = [
@@ -763,6 +615,174 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default llmModelsRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/llm-models/available` */
+export async function getAvailableLlmModels(params: {
+  query: {
+    provider?: SupportedProvider;
+    apiKeyId?: string;
+    isEmbedding?: boolean;
+  };
+  userId: string;
+  organizationId: string;
+}) {
+  const { query, userId, organizationId } = params;
+  const { provider, apiKeyId, isEmbedding } = query;
+
+  const userTeamIds = await TeamModel.getUserTeamIds(userId);
+  const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+    organizationId,
+    userId,
+    userTeamIds,
+    provider,
+  );
+
+  logger.info(
+    {
+      organizationId,
+      provider,
+      apiKeyId,
+      apiKeyCount: apiKeys.length,
+      apiKeys: apiKeys.map((key) => ({
+        id: key.id,
+        name: key.name,
+        provider: key.provider,
+        isSystem: key.isSystem,
+      })),
+    },
+    "Available API keys for user",
+  );
+
+  const accessibleKeyIds = apiKeys.map((key) => key.id);
+  if (apiKeyId && !accessibleKeyIds.includes(apiKeyId)) {
+    logger.warn(
+      { apiKeyId, organizationId, userId: userId },
+      "Requested apiKeyId not found in user's accessible keys, falling back to all keys",
+    );
+  }
+
+  const apiKeyIds =
+    apiKeyId && accessibleKeyIds.includes(apiKeyId)
+      ? [apiKeyId]
+      : accessibleKeyIds;
+  const dbModels =
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
+
+  logger.info(
+    {
+      organizationId,
+      provider,
+      apiKeyIds,
+      modelCount: dbModels.length,
+    },
+    "Models fetched from database",
+  );
+
+  // Per-user providers (e.g. GitHub Copilot) are catalogued org-wide and
+  // resolved per-user at request time, so they're sourced separately below
+  // (visible to everyone, flagged) — keep them out of the per-key path so a
+  // member's own connected copy isn't listed twice or shown unflagged.
+  let filteredModels = dbModels.filter(
+    ({ model }) => !providerRequiresPerUserCredential(model.provider),
+  );
+  if (provider) {
+    filteredModels = filteredModels.filter(
+      ({ model }) => model.provider === provider,
+    );
+  }
+
+  // Filter by embedding status if requested
+  if (isEmbedding !== undefined) {
+    filteredModels = filteredModels.filter(({ model }) =>
+      isEmbedding
+        ? model.embeddingDimensions !== null
+        : model.embeddingDimensions === null,
+    );
+  }
+
+  const keyLinkedModels = filteredModels
+    .filter(({ model }) =>
+      isEmbedding ? true : ModelModel.supportsTextChat(model),
+    )
+    .map(({ model, isBest, recommendedForAgents }) => ({
+      id: model.modelId,
+      dbId: model.id,
+      displayName: model.description || model.modelId,
+      provider: model.provider,
+      capabilities: ModelModel.toCapabilities(model, recommendedForAgents),
+      isBest,
+      isFree: isFreeModel(model),
+      embeddingDimensions: model.embeddingDimensions,
+    }));
+
+  const perUserModels = await getPerUserProviderModels({
+    organizationId,
+    provider,
+    isEmbedding,
+    connectedProviders: new Set(
+      apiKeys
+        .filter((key) => providerRequiresPerUserCredential(key.provider))
+        .map((key) => key.provider),
+    ),
+  });
+
+  const models = [...keyLinkedModels, ...perUserModels];
+
+  // Hide models restricted to teams the caller is not part of. Catalog
+  // managers (llmModel:update) keep full visibility so they can see what
+  // they are restricting.
+  const isModelCatalogAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "llmModel",
+    "update",
+  );
+  let visibleModels = models;
+  if (!isModelCatalogAdmin) {
+    const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+      modelIds: models.map((model) => model.dbId),
+      organizationId,
+      userId,
+      action: "read",
+    });
+    visibleModels = models.filter((model) => allowedModelIds.has(model.dbId));
+  }
+
+  if (!(await userHasPermission(userId, organizationId, "llmModel", "read"))) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const grants = await ResourcePermissions.resolveAll({
+      organizationId,
+      userId,
+    });
+    // SPDX-SnippetEnd
+    visibleModels = visibleModels.filter((model) =>
+      grants.some(
+        (grant) =>
+          grant.resource === "llmModel" &&
+          grant.action === "read" &&
+          (grant.scope === "*" || grant.scope === model.dbId),
+      ),
+    );
+  }
+
+  logger.info(
+    { organizationId, provider, totalModels: visibleModels.length },
+    "Returning available LLM models from database",
+  );
+
+  // Stored descriptions can still collide at read time — rows synced
+  // before names were disambiguated, or keys whose catalogs each contain
+  // only one member of a colliding pair — so the response gets its own
+  // pass to keep picker rows tellable-apart.
+  return withDistinctDisplayNames(visibleModels);
+}
 
 /**
  * Build the flagged per-user-provider model entries for the available-models

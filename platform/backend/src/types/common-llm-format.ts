@@ -13,6 +13,7 @@ export type CommonMcpToolDefinition = {
   inputSchema: Record<string, unknown>;
   _meta?: Record<string, unknown>;
   annotations?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
 };
 
 const CommonToolCallBaseSchema = z.object({

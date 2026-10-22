@@ -39,11 +39,11 @@ export function buildConsultColumns(maxMs: number): ColumnDef<ConsultView>[] {
       cell: ({ row }) => <ToolCell view={row.original} />,
     },
     {
-      id: "signal",
-      header: () => <div className="text-right">Signal</div>,
-      size: 150,
-      minSize: 140,
-      cell: ({ row }) => <SignalCell view={row.original} />,
+      id: "status",
+      header: "Status",
+      size: 190,
+      minSize: 160,
+      cell: ({ row }) => <StatusCell view={row.original} />,
     },
     {
       id: "latency",
@@ -95,15 +95,6 @@ function ServiceCell({ view }: { view: ConsultView }) {
         {/* One inline run that truncates as a whole, so a narrow column cuts
             the line short instead of pushing it into the next cell. */}
         <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
-          {tone !== "ok" ? (
-            <>
-              <span className={cn("font-medium", WORD_TONE[tone])}>
-                {OUTCOME_WORD[consult.outcome] ??
-                  OUTCOME_LABEL[consult.outcome]}
-              </span>{" "}
-              <Dot />{" "}
-            </>
-          ) : null}
           <span className="capitalize">{role}</span>{" "}
           <span className="text-muted-foreground/70">via</span> {backend}
         </div>
@@ -137,16 +128,6 @@ function OutcomeTile({
             name={consult.externalName}
             variant="agent"
           />
-          <span className="absolute -right-1.5 -bottom-1.5 flex size-[18px] rounded-full bg-background ring-2 ring-background">
-            <span
-              className={cn(
-                "flex size-full items-center justify-center rounded-full",
-                BADGE_TONE[tone],
-              )}
-            >
-              <Icon className="size-2.5" strokeWidth={3} aria-hidden="true" />
-            </span>
-          </span>
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs px-2 py-1.5">
@@ -209,76 +190,88 @@ function ToolCell({ view }: { view: ConsultView }) {
   );
 }
 
-function SignalCell({ view }: { view: ConsultView }) {
+/**
+ * How the consult ended, in a word, over what came back: the classifier's
+ * score, the HTTP status, or the answer itself. Every row has an outcome, so
+ * none reads as missing.
+ */
+function StatusCell({ view }: { view: ConsultView }) {
   const { consult, diagnostics } = view;
+  const tone = toneOf(consult.outcome);
+  const word = OUTCOME_WORD[consult.outcome] ?? OUTCOME_LABEL[consult.outcome];
   const trusted =
     diagnostics.kind === "jev"
       ? diagnostics.jev.labels.requires_trusted
       : undefined;
+  const score =
+    diagnostics.kind === "jev" && trusted && trusted.probability !== null
+      ? { p: trusted.probability, threshold: trusted.threshold }
+      : null;
+  const over = score ? score.p >= score.threshold : false;
 
-  if (diagnostics.kind === "jev" && trusted && trusted.probability !== null) {
-    const p = trusted.probability;
-    const over = p >= trusted.threshold;
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <UnstyledButton className="ml-auto block cursor-default text-right tabular-nums">
-            <span className="flex items-center justify-end gap-2 text-sm leading-5">
-              {over ? <Tag>Over cutoff</Tag> : null}
-              <span className="font-medium">{Math.round(p * 100)}%</span>
-            </span>
-            <span className="flex h-4 items-center justify-end">
-              <Meter value={p} threshold={trusted.threshold} hot={over} />
-            </span>
-          </UnstyledButton>
-        </TooltipTrigger>
-        <TooltipContent className="px-2 py-1.5">
-          <div className="mb-1 text-muted-foreground">
-            Requires trusted context
-          </div>
-          <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
-            <dt className="text-muted-foreground">Probability</dt>
-            <dd className="text-right">{p.toFixed(2)}</dd>
-            <dt className="text-muted-foreground">Cutoff</dt>
-            <dd className="text-right">{trusted.threshold.toFixed(2)}</dd>
-            <dt className="text-muted-foreground">Decision</dt>
-            <dd className="text-right">{over ? "Requires trusted" : "No"}</dd>
-            <dt className="text-muted-foreground">Model</dt>
-            <dd className="text-right">{diagnostics.jev.model}</dd>
-            <dt className="text-muted-foreground">Classifier time</dt>
-            <dd className="text-right">{diagnostics.jev.elapsed_ms}ms</dd>
-          </dl>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
+  const detail = score ? (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <Meter value={score.p} threshold={score.threshold} hot={over} />
+      <span className="tabular-nums">
+        {Math.round(score.p * 100)}% needs trusted
+      </span>
+    </span>
+  ) : consult.httpStatus ? (
+    <span className="tabular-nums">
+      HTTP {consult.httpStatus} {HTTP_TEXT[consult.httpStatus] ?? ""}
+    </span>
+  ) : (
+    <span className="flex min-w-0 items-center gap-1">
+      {outcomeDetail(view)}
+    </span>
+  );
 
-  if (consult.httpStatus) {
-    const ok = consult.httpStatus < 400;
-    return (
-      <div className="text-right tabular-nums">
-        <div
-          className={cn(
-            "text-sm leading-5 font-medium",
-            !ok && "text-destructive",
-          )}
-        >
-          {consult.httpStatus}
-        </div>
-        <div className="h-4 text-xs leading-4 whitespace-nowrap text-muted-foreground">
-          HTTP {HTTP_TEXT[consult.httpStatus] ?? (ok ? "OK" : "error")}
-        </div>
-      </div>
-    );
-  }
+  const body = (
+    <span className="block min-w-0 text-left">
+      <span className="flex h-5 items-center gap-1.5 text-sm leading-5">
+        <span
+          aria-hidden="true"
+          className={cn("size-1.5 shrink-0 rounded-full", DOT_TONE[tone])}
+        />
+        <span className={cn("truncate", WORD_TONE[tone])}>{word}</span>
+        {over ? <Tag>Over cutoff</Tag> : null}
+      </span>
+      <span className="flex h-4 min-w-0 items-center truncate pl-3 text-xs leading-4 text-muted-foreground">
+        {detail}
+      </span>
+    </span>
+  );
 
+  if (!score) return body;
   return (
-    <div className="text-right">
-      <div className="text-sm leading-5 text-muted-foreground/60">—</div>
-      <div className="h-4 text-xs leading-4 text-muted-foreground/60">
-        no signal
-      </div>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton className="block w-full min-w-0 cursor-default">
+          {body}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="px-2 py-1.5">
+        <div className="mb-1 text-muted-foreground">
+          Requires trusted context
+        </div>
+        <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
+          <dt className="text-muted-foreground">Probability</dt>
+          <dd className="text-right">{score.p.toFixed(2)}</dd>
+          <dt className="text-muted-foreground">Cutoff</dt>
+          <dd className="text-right">{score.threshold.toFixed(2)}</dd>
+          <dt className="text-muted-foreground">Decision</dt>
+          <dd className="text-right">{over ? "Requires trusted" : "No"}</dd>
+          {diagnostics.kind === "jev" ? (
+            <>
+              <dt className="text-muted-foreground">Model</dt>
+              <dd className="text-right">{diagnostics.jev.model}</dd>
+              <dt className="text-muted-foreground">Classifier time</dt>
+              <dd className="text-right">{diagnostics.jev.elapsed_ms}ms</dd>
+            </>
+          ) : null}
+        </dl>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -339,8 +332,11 @@ function TimeCell({ view }: { view: ConsultView }) {
           >
             {formatCompactRelativeTime(consult.createdAt)}
           </time>
-          <span className="block font-mono text-[11px] leading-4 whitespace-nowrap text-muted-foreground">
-            {consult.sessionId ? shortId(consult.sessionId) : "no session"}
+          <span className="block text-xs leading-4 whitespace-nowrap text-muted-foreground">
+            {formatDate({
+              date: consult.createdAt,
+              dateFormat: "MMM d · HH:mm",
+            })}
           </span>
         </UnstyledButton>
       </TooltipTrigger>
@@ -383,12 +379,10 @@ function toneOf(outcome: Outcome): Tone {
 
 const TONE_ICON: Record<Tone, LucideIcon> = { ok: Check, warn: Clock, fail: X };
 
-// Opaque fills: the badge overlaps the hue tile, so a translucent tint would
-// pick up the tile's color underneath.
-const BADGE_TONE: Record<Tone, string> = {
-  ok: "bg-muted text-muted-foreground",
-  warn: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/20 dark:text-amber-300",
-  fail: "bg-destructive/15 text-destructive dark:bg-destructive/30",
+const DOT_TONE: Record<Tone, string> = {
+  ok: "bg-emerald-500",
+  warn: "bg-amber-500",
+  fail: "bg-destructive",
 };
 
 const ICON_TONE: Record<Tone, string> = {
@@ -522,10 +516,6 @@ function formatMs(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.round((ms % 60_000) / 1000);
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-}
-
-function shortId(id: string): string {
-  return id.length > 14 ? `${id.slice(0, 12)}…` : id;
 }
 
 function Meter({

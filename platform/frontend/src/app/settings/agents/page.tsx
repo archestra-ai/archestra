@@ -23,6 +23,11 @@ import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import {
+  EMPTY_MODEL_TIERS,
+  ModelTierPickers,
+  type ModelTierSelection,
+} from "@/components/model-tier-pickers";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
@@ -78,12 +83,14 @@ export default function AgentSettingsPage() {
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
+  const [tiers, setTiers] = useState<ModelTierSelection>(EMPTY_MODEL_TIERS);
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
     defaultModel: "",
+    tiers: EMPTY_MODEL_TIERS,
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
@@ -124,6 +131,7 @@ export default function AgentSettingsPage() {
     const state = resolveInitialState(organization, apiKeys);
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
+    setTiers(state.tiers);
     setDefaultAgentId(state.defaultAgentId);
     const savedFileUploads: FileUploadsEnabled =
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled";
@@ -143,6 +151,7 @@ export default function AgentSettingsPage() {
   const localState: AgentSettingsState = {
     selectedApiKeyId,
     defaultModel,
+    tiers,
     defaultAgentId,
   };
 
@@ -172,6 +181,7 @@ export default function AgentSettingsPage() {
     const saved = savedStateRef.current;
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
+    setTiers(saved.tiers);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
   };
@@ -203,6 +213,7 @@ export default function AgentSettingsPage() {
   const handleResetDefaultModel = useCallback(() => {
     setSelectedApiKeyId("");
     setDefaultModel("");
+    setTiers(EMPTY_MODEL_TIERS);
   }, []);
 
   const isSaving =
@@ -256,6 +267,7 @@ export default function AgentSettingsPage() {
                     onSelectKey={(value) => {
                       setSelectedApiKeyId(value);
                       setDefaultModel("");
+                      setTiers(EMPTY_MODEL_TIERS);
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
@@ -283,6 +295,15 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
+                  {selectedApiKey && defaultModel && (
+                    <ModelTierPickers
+                      apiKeyId={selectedApiKey.id}
+                      provider={selectedApiKey.provider}
+                      value={tiers}
+                      onChange={setTiers}
+                      disabled={isSaving || !hasPermission}
+                    />
+                  )}
                   {selectedApiKeyIsSubscription && (
                     <Alert>
                       <AlertDescription>
@@ -425,8 +446,8 @@ export default function AgentSettingsPage() {
             id="popular-agents"
             catalogKey="popularAgentOverrides"
             catalog={PopularAgentIdSchema.options}
-            title="Coding agents"
-            description="Choose which coding agents are available when creating a new agent, and in what order."
+            title="Agent Runtimes"
+            description="Choose which Agent Runtimes are available when creating a new agent, and in what order."
             options={PopularAgentIdSchema.options.map((id) => ({
               value: id,
               label: AGENT_CATALOG_TEMPLATE_NAMES[id],
@@ -436,9 +457,9 @@ export default function AgentSettingsPage() {
                 </span>
               ),
             }))}
-            placeholder="Select coding agents…"
+            placeholder="Select Agent Runtimes…"
             emptyMessage="No agents found."
-            savedMessage="Coding agents updated"
+            savedMessage="Agent Runtimes updated"
           />
           {runtimeBackend && <RuntimeBackendSection />}
         </div>

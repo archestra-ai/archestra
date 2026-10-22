@@ -63,6 +63,6 @@ Select the lock icon in the composer, or press `Option+I` (or `Alt+I` on Windows
 
 Encrypted conversations open only on the browser and device that created them. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
 
-To enable encrypted chats organization-wide and allow designated key holders to recover them if browser storage is lost, administrators configure key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow).
+To enable encrypted chats organization-wide and allow designated key holders to recover them if browser storage is lost, administrators configure key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow).
 
 <span id="encrypted-chats"></span><span id="key-escrow"></span>

@@ -76,6 +76,8 @@ export interface ArchestraContext {
    * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
+  /** The model and key the calling run is on, which `agent__self` forks start from. */
+  parentLlm?: import("@archestra/shared").ModelSelection;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Optional cancellation signal from parent chat/tool execution */

@@ -120,7 +120,7 @@ export function AgentsTableSkeleton({
 const COLUMNS = [
   { label: "Tools", width: "w-[90px]" },
   { label: "Subagents", width: "w-[100px]" },
-  { label: "Last used", width: "w-[140px]" },
+  { label: "Last used", width: "w-[180px]" },
   { label: "Provider", width: "w-[96px]" },
   { label: "Actions", width: "w-[150px]" },
 ];

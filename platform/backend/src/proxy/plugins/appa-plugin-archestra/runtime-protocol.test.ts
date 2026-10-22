@@ -70,23 +70,23 @@ describe("protected runtime protocol", () => {
       toolCalls: [
         {
           id: "observed-read",
-          name: "archestra__get_run",
-          arguments: { task_id: "task-one" },
+          name: "archestra__get_agent_run",
+          arguments: { run_id: "task-one" },
         },
         {
           id: "observed-launch",
-          name: "archestra__start_run",
+          name: "archestra__start_agent_run",
           arguments: launch,
         },
         {
           id: "observed-steer",
-          name: "archestra__steer_run",
-          arguments: { task_id: "task-one", message: "keep going" },
+          name: "archestra__steer_agent_run",
+          arguments: { run_id: "task-one", message: "keep going" },
         },
         {
           id: "observed-forged",
-          name: "archestra__get_run",
-          arguments: { task_id: "task-one", runtime_proof: "model-written" },
+          name: "archestra__get_agent_run",
+          arguments: { run_id: "task-one", runtime_proof: "model-written" },
         },
       ],
     });
@@ -97,11 +97,11 @@ describe("protected runtime protocol", () => {
     // made again under a ruling, and a proof the model wrote is not replaced.
     expect(spawn.arguments).toEqual(launch);
     expect(steer.arguments).toEqual({
-      task_id: "task-one",
+      run_id: "task-one",
       message: "keep going",
     });
     expect(forged.arguments).toEqual({
-      task_id: "task-one",
+      run_id: "task-one",
       runtime_proof: "model-written",
     });
     const signed = read.arguments as Record<string, unknown>;
@@ -110,7 +110,7 @@ describe("protected runtime protocol", () => {
         proof: signed.runtime_proof,
         organizationId: org.id,
         callerId: "user:owner",
-        action: "get_run",
+        action: "get_agent_run",
         arguments: signed,
         secret,
       }),
@@ -163,8 +163,8 @@ describe("protected runtime protocol", () => {
       toolCalls: [
         {
           id: "unrecorded-read",
-          name: "archestra__get_run",
-          arguments: { task_id: "task-one" },
+          name: "archestra__get_agent_run",
+          arguments: { run_id: "task-one" },
         },
       ],
     });
@@ -196,9 +196,16 @@ describe("protected runtime protocol", () => {
         ? {
             id: "spawn-one",
             name: "archestra__run_tool",
-            arguments: { tool_name: "archestra__start_run", tool_args: args },
+            arguments: {
+              tool_name: "archestra__start_agent_run",
+              tool_args: args,
+            },
           }
-        : { id: "spawn-one", name: "archestra__start_run", arguments: args };
+        : {
+            id: "spawn-one",
+            name: "archestra__start_agent_run",
+            arguments: args,
+          };
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: [call],
@@ -219,7 +226,7 @@ describe("protected runtime protocol", () => {
           arguments: target,
           organizationId: org.id,
           callerId: "user:owner",
-          action: "start_run",
+          action: "start_agent_run",
           secret,
         }),
       ).toEqual({
@@ -237,7 +244,7 @@ describe("protected runtime protocol", () => {
           arguments: { ...target, prompt: "Changed report" },
           organizationId: org.id,
           callerId: "user:owner",
-          action: "start_run",
+          action: "start_agent_run",
           secret,
         }),
       ).toBeNull();
@@ -261,11 +268,11 @@ describe("protected runtime protocol", () => {
     },
   ]) {
     for (const { tool, spawn, wrapped } of [
-      { tool: "start_run", spawn: true, wrapped: true },
-      { tool: "get_run", spawn: false, wrapped: false },
-      { tool: "get_run", spawn: false, wrapped: true },
-      { tool: "list_runs", spawn: false, wrapped: true },
-      { tool: "steer_run", spawn: false, wrapped: true },
+      { tool: "start_agent_run", spawn: true, wrapped: true },
+      { tool: "get_agent_run", spawn: false, wrapped: false },
+      { tool: "get_agent_run", spawn: false, wrapped: true },
+      { tool: "list_agent_runs", spawn: false, wrapped: true },
+      { tool: "steer_agent_run", spawn: false, wrapped: true },
     ]) {
       test(`signs ${tool} from ${client.label} behind an attested gateway (wrapped=${wrapped})`, async ({
         makeOrganization,
@@ -281,7 +288,7 @@ describe("protected runtime protocol", () => {
           organizationId: org.id,
           declarations: [
             "archestra__run_tool",
-            ...(wrapped ? [] : ["archestra__get_run"]),
+            ...(wrapped ? [] : ["archestra__get_agent_run"]),
             "archestra__get_remedy_plans",
             "archestra__execute_remedy_plan",
           ].map((name) => ({
@@ -310,11 +317,11 @@ describe("protected runtime protocol", () => {
         await plugin.onSessionInit(context);
         const args = spawn
           ? { agent_id: agent.id, message: "Do the work" }
-          : tool === "list_runs"
-            ? { agent_id: agent.id }
+          : tool === "list_agent_runs"
+            ? { agent_ids: [agent.id], mine_only: true }
             : {
-                task_id: "example-run",
-                ...(tool === "steer_run"
+                run_id: "example-run",
+                ...(tool === "steer_agent_run"
                   ? { message: "Continue the work" }
                   : {}),
               };
@@ -383,7 +390,7 @@ describe("protected runtime protocol", () => {
         { kind: "allow" },
       ]);
       await registry.onSessionInit(context);
-      const tool = shape === "omitted" ? "list_agent_runs" : "start_run";
+      const tool = shape === "omitted" ? "list_agent_runs" : "start_agent_run";
       const args =
         shape === "omitted"
           ? {}
@@ -447,7 +454,7 @@ describe("protected runtime protocol", () => {
       id: "runtime-call",
       name: "archestra__run_tool",
       arguments: JSON.stringify({
-        tool_name: "archestra__start_run",
+        tool_name: "archestra__start_agent_run",
         tool_args: '{"agent_id": "cut off',
       }),
     };
@@ -494,10 +501,40 @@ describe("protected runtime protocol", () => {
     expect(
       JSON.parse(String(outcome?.toolResultUpdates["runtime-call"])),
     ).toEqual({
-      session_id: sessionId,
+      run_id: sessionId,
       state: "submitted",
-      message: "Use get_run to retrieve admitted runtime output.",
+      run_url: expect.stringMatching(new RegExp(`/chat/runs/${sessionId}$`)),
+      next_step: expect.any(String),
     });
+  });
+
+  // A governed agent__ spawn is recorded under the host Agent tool.
+  test("gives the model the recorded run for an agent__ spawn", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sessionId = randomUUID();
+    const { plugin, context } = await releasedLaunch(
+      org.id,
+      { kind: "launched", session_id: sessionId, state: "submitted" },
+      "Agent",
+    );
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "runtime-call",
+          name: "agent__research",
+          content: JSON.stringify({ session_id: randomUUID() }),
+          isError: false,
+        },
+      ],
+    });
+
+    expect(
+      JSON.parse(String(outcome?.toolResultUpdates["runtime-call"])),
+    ).toMatchObject({ run_id: sessionId, state: "submitted" });
   });
 
   test("tells the model why the gateway started no run", async ({
@@ -649,12 +686,13 @@ describe("protected runtime protocol", () => {
 });
 
 /**
- * A session whose `start_run` call, sent through `run_tool`, was released,
+ * A session whose `start_agent_run` call, sent through `run_tool`, was released,
  * with the outcome the gateway recorded for it, if any.
  */
 async function releasedLaunch(
   organizationId: string,
   recorded?: RuntimeLaunchOutcome,
+  tool = "archestra__start_agent_run",
 ) {
   const context = request(organizationId);
   const { session } = context.resources.get(
@@ -679,7 +717,7 @@ async function releasedLaunch(
     input: {
       semantic: {
         event: "tool_call",
-        tool: "archestra__start_run",
+        tool,
         spawn: true,
       },
     },
@@ -750,7 +788,7 @@ function request(organizationId: string, runtime = false) {
         notice: { name: "archestra__get_remedy_plans" },
         askUser: undefined,
         platformToolNames: new Set([
-          "archestra__start_run",
+          "archestra__start_agent_run",
           "archestra__run_tool",
         ]),
         namespaces: new Map(),

@@ -274,13 +274,13 @@ export const TOOL_PERMISSIONS: Record<
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.
-  start_run: { resource: "agent", action: "read" },
-  get_run: { resource: "agent", action: "read" },
-  list_runs: { resource: "agent", action: "read" },
+  start_agent_run: { resource: "agent", action: "read" },
+  get_agent_run: { resource: "agent", action: "read" },
   list_agent_runs: { resource: "agent", action: "read" },
-  steer_run: { resource: "agent", action: "read" },
-  cancel_run: { resource: "agent", action: "read" },
-  post_run_file: { resource: "agent", action: "read" },
+  steer_agent_run: { resource: "agent", action: "read" },
+  cancel_agent_run: { resource: "agent", action: "read" },
+  post_agent_run_file: { resource: "agent", action: "read" },
+  post_agent_run_message: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
   transfer_workspace_file: { resource: "agent", action: "read" },

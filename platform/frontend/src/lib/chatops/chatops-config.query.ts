@@ -15,6 +15,18 @@ export function useNgrokConfig(enabled = true) {
   });
 }
 
+export function useMsTeamsChatOpsConfig(enabled = true) {
+  return useQuery({
+    queryKey: ["chatops", "ms-teams-config"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getMsTeamsChatOpsConfig();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+
 export function useUpdateChatOpsConfigInQuickstart() {
   const queryClient = useQueryClient();
 
@@ -43,6 +55,9 @@ export function useUpdateChatOpsConfigInQuickstart() {
       }
       toast.success("MS Teams configuration updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "ms-teams-config"],
+      });
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
     onError: (error) => {

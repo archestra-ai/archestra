@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
@@ -78,6 +78,11 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+      // A cursor belongs to the listing it was issued for.
+      if (!("cursor" in updates)) {
+        params.delete("cursor");
+        params.delete("page");
+      }
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === "") params.delete(key);
         else params.set(key, value);
@@ -90,18 +95,10 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   // Any filter change starts over from the newest event.
   const filterChange = useCallback(
     (key: string) => (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ [key]: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
-
-  // A new page-wide range starts over from the newest event.
-  const { goNewest } = cursorPagination;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on a range change
-  useEffect(() => {
-    goNewest();
-  }, [window.startDate, window.endDate, goNewest]);
 
   const { data, isFetching, isLoadingError, refetch } = useConnectionLog({
     limit: cursorPagination.pageSize,
@@ -133,9 +130,8 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   const hasFilters = userId !== undefined || action !== undefined;
 
   const clearFilters = useCallback(() => {
-    cursorPagination.goNewest();
     updateUrlParams({ userId: null, action: null });
-  }, [cursorPagination.goNewest, updateUrlParams]);
+  }, [updateUrlParams]);
 
   if (isLoadingError) {
     return (
@@ -181,20 +177,7 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
         hideSelectedCount
         fixedWidthColumnIds={["agent", "added", "time"]}
         flexibleColumnIds={["event"]}
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}

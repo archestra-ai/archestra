@@ -466,6 +466,10 @@ export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 
 export const SalesforceConfigSchema = z.object({
   type: SALESFORCE,
+  // Absence preserves existing password-based connectors. Routes restrict
+  // creation to OAuth and prevent migrated connectors from downgrading.
+  authMethod: z.enum(["oauth_client_credentials", "soap_legacy"]).optional(),
+  clientId: z.string().trim().min(1).optional(),
   loginUrl: connectorUrlSchema
     .optional()
     .default("https://login.salesforce.com"),

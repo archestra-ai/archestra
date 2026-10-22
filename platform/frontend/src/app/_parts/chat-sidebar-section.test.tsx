@@ -178,6 +178,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  SIDEBAR_PINNED_PROJECTS_QUERY: { pinned: true, limit: 100, offset: 0 },
   // Answers like the endpoint: `pinned` splits the list, results are paged.
   useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
     mockUseProjects(filters);
@@ -196,6 +197,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
 }));
 
 vi.mock("@/lib/app.query", () => ({
+  SIDEBAR_PINNED_APPS_QUERY: { limit: 100, offset: 0, pinned: true },
   useApps: () =>
     mockAppsLoading
       ? { data: undefined, isLoading: true }
@@ -621,6 +623,36 @@ describe("ChatSidebarSection", () => {
     fireEvent.click(pinned);
     expect(screen.getByText("Pinned chat")).toBeInTheDocument();
     expect(today).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    { pinned: true, firstLabel: "Pinned" },
+    { pinned: false, firstLabel: "Today" },
+  ])("puts search on the first group label ($firstLabel) and opens the palette from it", ({
+    pinned,
+    firstLabel,
+  }) => {
+    mockConversations = [
+      ...(pinned
+        ? [makeConv("pinned", "Pinned chat", { pinnedAt: daysAgo(0) })]
+        : []),
+      makeConv("today", "Today's chat"),
+      makeConv("older", "Older chat", { lastMessageAt: daysAgo(3) }),
+    ];
+    const onOpen = vi.fn();
+    window.addEventListener("open-conversation-search", onOpen);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    const searchButtons = screen.getAllByRole("button", { name: "Search" });
+    expect(searchButtons).toHaveLength(1);
+    // The label button and search share the label row.
+    expect(
+      screen.getByRole("button", { name: firstLabel }).parentElement,
+    ).toContainElement(searchButtons[0]);
+
+    fireEvent.click(searchButtons[0]);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    window.removeEventListener("open-conversation-search", onOpen);
   });
 
   it.each([

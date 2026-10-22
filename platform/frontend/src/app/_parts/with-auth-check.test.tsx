@@ -53,6 +53,7 @@ vi.mock("@archestra/shared", async (importOriginal) => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockLocationReload = vi.fn();
 const MockChild = () => (
   <div data-testid="protected-content">Protected Content</div>
 );
@@ -66,6 +67,7 @@ const setWindowLocation = (pathname: string, search = "") => {
       search: url.search,
       hash: url.hash,
       href: url.href,
+      reload: mockLocationReload,
     },
     writable: true,
   });
@@ -571,6 +573,9 @@ describe("WithAuthCheck", () => {
         data: null,
         isPending: false,
       } as unknown as ReturnType<typeof useSession>);
+      setWindowLocation("/dashboard");
+      window.sessionStorage.clear();
+      mockLocationReload.mockClear();
     });
 
     afterEach(() => {
@@ -603,8 +608,48 @@ describe("WithAuthCheck", () => {
         });
       });
       // Endpoint is hit exactly once (guarded by a ref) rather than the login
-      // form being shown.
+      // form being shown, and the document loads again with the new cookie so
+      // the server seeds it as for any signed-in visitor.
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(mockLocationReload).toHaveBeenCalledTimes(1);
+      });
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(
+        Number(
+          window.sessionStorage.getItem(
+            "archestra.dev-auto-login.attempted-at",
+          ),
+        ),
+      ).toBeGreaterThan(0);
+    });
+
+    it("sends a reloaded page that is still signed out to sign-in instead of signing in again", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      window.sessionStorage.setItem(
+        "archestra.dev-auto-login.attempted-at",
+        String(Date.now()),
+      );
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fdashboard",
+        );
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mockLocationReload).not.toHaveBeenCalled();
     });
 
     it("falls back to the sign-in redirect when auto-login fails", async () => {

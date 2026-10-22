@@ -1476,13 +1476,9 @@ export const geminiAdapterFactory: LLMProvider<
     // like "The input token count (X) exceeds the maximum number of tokens
     // allowed (Y)". The ErrorInfo details array does not carry a structured
     // reason for this case, so message sniffing is the only signal. The
-    // status and message can appear at the top level or nested under
-    // `error`.
-    const status: unknown = get(error, "error.status") ?? get(error, "status");
+    // SDK errors serialize the provider body into their message.
+    const { status, message } = extractGeminiError(error);
     if (status !== "INVALID_ARGUMENT") return undefined;
-    const message: unknown =
-      get(error, "error.message") ?? get(error, "message");
-    if (typeof message !== "string") return undefined;
     const msg = message.toLowerCase();
     if (
       msg.includes("input token count") ||
@@ -1494,24 +1490,82 @@ export const geminiAdapterFactory: LLMProvider<
   },
 
   extractErrorMessage(error: unknown): string {
-    // Gemini SDK error structure
-    const geminiMessage = get(error, "message");
-    if (typeof geminiMessage === "string") {
-      return geminiMessage;
+    const { message, httpStatus } = extractGeminiError(error);
+    if (
+      httpStatus === 403 &&
+      /^Lightning dunning decision is deny for project:/i.test(message)
+    ) {
+      // This project-level block can persist with an active billing account.
+      // Do not claim that the API key is invalid or the balance is too low.
+      return "Google denied access to the configured project (Lightning dunning). Ask your administrator to check project restrictions and billing in Google AI Studio or Google Cloud Console. Contact Google support if access remains blocked.";
     }
 
-    const nestedMessage = get(error, "error.message");
-    if (typeof nestedMessage === "string") {
-      return nestedMessage;
-    }
-
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    return "Internal server error";
+    return message;
   },
 };
+
+/**
+ * The SDK puts the provider body in Error.message. An upstream proxy can add
+ * another error envelope, including when it returns JSON as text. Unwrap only
+ * error/message fields, with a fixed bound for malformed or cyclic payloads.
+ * Keep ordinary text and unrecognized JSON unchanged.
+ */
+function extractGeminiError(error: unknown): {
+  message: string;
+  status?: string;
+  httpStatus?: number;
+} {
+  let current = error;
+  let message = "Internal server error";
+  let status: string | undefined;
+  let httpStatus: number | undefined;
+
+  for (let depth = 0; depth < 16; depth++) {
+    if (typeof current === "string") {
+      message = current;
+      try {
+        const parsed: unknown = JSON.parse(current);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          break;
+        }
+        current = parsed;
+        continue;
+      } catch {
+        break;
+      }
+    }
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      break;
+    }
+
+    const candidateStatus: unknown = get(current, "status");
+    if (typeof candidateStatus === "string") status = candidateStatus;
+    const candidateHttpStatus: unknown =
+      typeof candidateStatus === "number"
+        ? candidateStatus
+        : get(current, "code");
+    if (typeof candidateHttpStatus === "number") {
+      httpStatus = candidateHttpStatus;
+    }
+    const candidateMessage: unknown = get(current, "message");
+    if (typeof candidateMessage === "string") message = candidateMessage;
+    const nestedError: unknown = get(current, "error");
+    if (
+      (typeof nestedError === "string" && nestedError.length > 0) ||
+      (nestedError &&
+        typeof nestedError === "object" &&
+        !Array.isArray(nestedError))
+    ) {
+      current = nestedError;
+    } else if (typeof candidateMessage === "string") {
+      current = candidateMessage;
+    } else {
+      break;
+    }
+  }
+
+  return { message, status, httpStatus };
+}
 
 type GeminiProviderRequestContext = {
   providerRequest: GeminiRequestWithModel;

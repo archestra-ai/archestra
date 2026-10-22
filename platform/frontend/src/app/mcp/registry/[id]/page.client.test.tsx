@@ -645,7 +645,10 @@ describe("McpCatalogItemDetailPage overview", () => {
     });
 
     expect(initiateOAuth).toHaveBeenCalledTimes(1);
-    expect(initiateOAuth).toHaveBeenCalledWith({ catalogId: "cat-1" });
+    expect(initiateOAuth).toHaveBeenCalledWith({
+      catalogId: "cat-1",
+      serverId: "srv-own",
+    });
     expect(screen.getByText("Redirecting to sign in…")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });

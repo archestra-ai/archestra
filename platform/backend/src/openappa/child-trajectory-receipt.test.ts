@@ -26,7 +26,7 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
   test("round-trips a complete signed binding beside the display marker", () => {
     const footer = mintChildTrajectoryReceipt(BINDING);
     expect(footer).toMatch(
-      /^▄█▄▄▄█▄\n██▄█▄██ {2}started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\.$/,
+      /^▄█▄▄▄█▄ {2}started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\.$/,
     );
     const stripped = stripChildTrajectoryReceipts(
       appendChildTrajectoryReceipt("compacted history", footer ?? ""),
@@ -45,6 +45,22 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         childNativeId: BINDING.childNativeId,
       }),
     ).toBe(true);
+  });
+
+  test("strips legacy two-line and space-collapsed child trajectory display headers", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const legacyTwoLine = footer.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄\n██▄█▄██");
+    const legacyCollapsed = footer.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄ ██▄█▄██");
+
+    for (const candidate of [legacyTwoLine, legacyCollapsed]) {
+      const stripped = stripChildTrajectoryReceipts(
+        appendChildTrajectoryReceipt("compacted history", candidate),
+      );
+      expect(stripped.text).toBe("compacted history");
+      expect(stripped.receipts).toHaveLength(1);
+      expect(stripped.receipts[0]).toMatchObject(BINDING);
+    }
   });
 
   test("signs a runtime workspace anchor without changing a v2 receipt", () => {

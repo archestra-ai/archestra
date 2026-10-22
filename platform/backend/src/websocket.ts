@@ -9,6 +9,7 @@ import {
   type LocalMcpInstallationState,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
+  type OpenAppaValidationProgressMessage,
   type ServerWebSocketMessage,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -23,6 +24,7 @@ import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   AgentRunModel,
+  AgentRunTranscriptModel,
   McpServerModel,
   ProjectAccessModel,
   ProjectModel,
@@ -279,6 +281,7 @@ export class WebSocketService {
         message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
         clientContext,
         message.payload.includeSessionHistory ?? false,
+        message.payload.tailBytes,
       );
     },
     unsubscribe_agent_run_logs: (ws) => {
@@ -712,6 +715,7 @@ export class WebSocketService {
     lines: number,
     clientContext: WebSocketClientContext,
     includeSessionHistory = false,
+    tailBytes?: number,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
     const abortController = new AbortController();
@@ -752,6 +756,24 @@ export class WebSocketService {
       return;
     }
 
+    // An ended run's recording can open on its end: the start of its last
+    // turn and any earlier turns are left out and counted, for the viewer to
+    // load on request. Without a complete stored recording, the full path
+    // below sends what was retained.
+    if (session.endedAt && tailBytes) {
+      await this.refreshRetainedTranscript({ session, runId });
+      if (abortController.signal.aborted) return;
+      const sent = await this.streamAgentRunTail({
+        ws,
+        runId,
+        session,
+        tailBytes,
+        includeSessionHistory,
+        signal: abortController.signal,
+      });
+      if (sent || abortController.signal.aborted) return;
+    }
+
     let history = { complete: true, bytes: 0 };
     try {
       if (includeSessionHistory) {
@@ -778,26 +800,7 @@ export class WebSocketService {
     if (abortController.signal.aborted) return;
 
     if (session.endedAt) {
-      if (session.virtualApiKeyId) {
-        const backend = resolveAgentRuntimeBackendDriver(session.backend);
-        const output = new AgentRuntimeOutputCapture({ backend, session });
-        try {
-          await output.recoverSnapshot(AbortSignal.timeout(30_000));
-          if (output.observedTranscriptBytes > 0) {
-            await agentRunTranscriptStore.persist({
-              runId: session.id,
-              transcript: output.completeTranscript,
-              observedBytes: output.observedTranscriptBytes,
-              readableTranscript: output.readableTranscript,
-            });
-          }
-        } catch (error) {
-          logger.warn(
-            { error, runId },
-            "Could not refresh retained terminal output",
-          );
-        }
-      }
+      if (!tailBytes) await this.refreshRetainedTranscript({ session, runId });
       const decoder = new StringDecoder("utf8");
       const transcript = await agentRunTranscriptStore
         .stream({
@@ -917,21 +920,167 @@ export class WebSocketService {
     }
   }
 
+  /**
+   * Re-read a run's output from its workspace and store it, for a run whose
+   * terminal stays attachable (it keeps its key) and may have written more
+   * since it ended.
+   */
+  private async refreshRetainedTranscript(params: {
+    session: AgentRunRecord;
+    runId: string;
+  }): Promise<void> {
+    const { session, runId } = params;
+    if (!session.virtualApiKeyId) return;
+    const backend = resolveAgentRuntimeBackendDriver(session.backend);
+    const output = new AgentRuntimeOutputCapture({ backend, session });
+    try {
+      await output.recoverSnapshot(AbortSignal.timeout(30_000));
+      if (output.observedTranscriptBytes > 0) {
+        await agentRunTranscriptStore.persist({
+          runId: session.id,
+          transcript: output.completeTranscript,
+          observedBytes: output.observedTranscriptBytes,
+          readableTranscript: output.readableTranscript,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error, runId },
+        "Could not refresh retained terminal output",
+      );
+    }
+  }
+
+  /**
+   * Send the end of an ended run's complete recording and close the stream.
+   * False, having sent nothing, when no complete recording is stored.
+   */
+  private async streamAgentRunTail(params: {
+    ws: WebSocket;
+    runId: string;
+    session: AgentRunRecord;
+    tailBytes: number;
+    includeSessionHistory: boolean;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { ws, runId, session, signal } = params;
+    const decoder = new StringDecoder("utf8");
+    let sentOutput = false;
+    const send = (logs: string) => {
+      if (!logs || signal.aborted) return;
+      sentOutput = true;
+      this.sendToClient(ws, {
+        type: "agent_run_logs",
+        payload: { runId, logs },
+      });
+    };
+    const fail = (error: unknown, message: string) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: session.taskId },
+        message,
+      );
+      if (signal.aborted) return;
+      this.sendToClient(ws, {
+        type: "agent_run_logs_error",
+        payload: { runId, error: message },
+      });
+      this.unsubscribeAgentRunLogs(ws);
+    };
+    let tail: Awaited<ReturnType<typeof agentRunTranscriptStore.streamTail>>;
+    try {
+      tail = await agentRunTranscriptStore.streamTail({
+        runId: session.id,
+        maxBytes: params.tailBytes,
+        onChunk: (chunk) => send(decoder.write(chunk)),
+      });
+    } catch (error) {
+      // Once part of the tail is out, the full recording cannot follow it:
+      // the viewer would see the end of the run spliced in front of the run.
+      if (!sentOutput) {
+        logger.warn(
+          { error, sessionId: session.id, taskId: session.taskId },
+          "Could not read the end of the Agent run transcript",
+        );
+        return false;
+      }
+      fail(error, "Could not read the end of the recording");
+      return true;
+    }
+    if (!tail || signal.aborted) return Boolean(tail);
+    send(decoder.end());
+    let historyBytes = 0;
+    if (params.includeSessionHistory) {
+      try {
+        historyBytes = await this.sessionHistoryBytes(session);
+      } catch (error) {
+        fail(error, "Could not read session history");
+        return true;
+      }
+    }
+    if (signal.aborted) return true;
+    // A session's earlier turns are left out of a tail entirely, so they
+    // count as omitted: a full subscription with the session's history
+    // streams them along with the rest of this turn's recording.
+    this.sendToClient(ws, {
+      type: "agent_run_logs_ended",
+      payload: {
+        runId,
+        source: "full",
+        truncated: false,
+        totalBytes: tail.uncompressedBytes + historyBytes,
+        omittedBytes: tail.omittedBytes + historyBytes,
+      },
+    });
+    this.unsubscribeAgentRunLogs(ws);
+    return true;
+  }
+
+  /** A session's earlier turns, a page at a time, oldest first. */
+  private async *previousTurnPages(
+    session: AgentRunRecord,
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentRunRecord[]> {
+    let afterId: string | undefined;
+    while (!signal?.aborted) {
+      const turns = await AgentRunModel.listPreviousTurns({
+        run: session,
+        afterId,
+      });
+      if (!turns.length) return;
+      yield turns;
+      afterId = turns.at(-1)?.id;
+    }
+  }
+
+  /**
+   * The stored size of a session's earlier turns: what
+   * `streamAgentSessionHistory` counts, without sending them.
+   */
+  private async sessionHistoryBytes(session: AgentRunRecord): Promise<number> {
+    let bytes = 0;
+    for await (const turns of this.previousTurnPages(session)) {
+      const sizes = await AgentRunTranscriptModel.findSizesByRunIds(
+        turns.map((turn) => turn.id),
+      );
+      for (const turn of turns) {
+        bytes += turnOutputBytes(turn, sizes.get(turn.id));
+      }
+    }
+    return bytes;
+  }
+
   private async streamAgentSessionHistory(params: {
     ws: WebSocket;
     runId: string;
     session: AgentRunRecord;
     signal: AbortSignal;
   }): Promise<{ complete: boolean; bytes: number }> {
-    let afterId: string | undefined;
     let complete = true;
     let bytes = 0;
-    while (!params.signal.aborted) {
-      const turns = await AgentRunModel.listPreviousTurns({
-        run: params.session,
-        afterId,
-      });
-      if (!turns.length) break;
+    for await (const turns of this.previousTurnPages(
+      params.session,
+      params.signal,
+    )) {
       for (const turn of turns) {
         if (params.signal.aborted) return { complete, bytes };
         const decoder = new StringDecoder("utf8");
@@ -951,12 +1100,9 @@ export class WebSocketService {
           complete = false;
           send(turn.logs ?? "");
         }
-        bytes +=
-          transcript?.uncompressedBytes ??
-          Buffer.byteLength(turn.logs ?? "", "utf8");
+        bytes += turnOutputBytes(turn, transcript?.uncompressedBytes);
         send("\r\n\u001b[0m");
       }
-      afterId = turns.at(-1)?.id;
     }
     return { complete, bytes };
   }
@@ -1818,6 +1964,19 @@ export class WebSocketService {
     );
   }
 
+  /**
+   * Push one validation run's progress to the user who started it, on every
+   * replica: the run's request and that user's socket rarely share a pod.
+   * Fire-and-forget; a file's steps are trimmed to fit one relay message.
+   */
+  sendOpenAppaValidationProgress(params: {
+    userId: string;
+    organizationId: string;
+    payload: OpenAppaValidationProgressMessage["payload"];
+  }): void {
+    this.relayToAllReplicas(fitValidationProgressEvent(params));
+  }
+
   private relayToAllReplicas(event: CrossReplicaEvent): void {
     if (!this.crossReplica) {
       this.deliverToLocalClients(event);
@@ -1859,6 +2018,21 @@ export class WebSocketService {
           error: event.error,
         },
       });
+      return;
+    }
+
+    if (event.kind === "openappa_validation_progress") {
+      const { userId, organizationId, payload } = event;
+      this.sendToClients(
+        { type: "openappa_validation_progress", payload },
+        (client) => {
+          const context = this.clientContexts.get(client);
+          return (
+            context?.userId === userId &&
+            context.organizationId === organizationId
+          );
+        },
+      );
       return;
     }
 
@@ -1990,6 +2164,49 @@ function describeExecFailure(
 const CROSS_REPLICA_CHANNEL = "websocket_mcp_events";
 const MAX_RELAYED_ERROR_LENGTH = 4_000;
 const MAX_RELAYED_IDS_PER_EVENT = 50;
+/** Room left for a relayed event under the hub's 7,900-byte NOTIFY envelope. */
+const MAX_RELAYED_EVENT_BYTES = 7_600;
+const MAX_PROGRESS_ERROR_LENGTH = 2_000;
+const MAX_PROGRESS_STEP_ERROR_LENGTH = 500;
+
+const ValidationStatusSchema = z.enum(["passed", "failed", "cannot_run"]);
+const ValidationProgressPayloadSchema = z.discriminatedUnion("phase", [
+  z.object({
+    token: z.string(),
+    phase: z.literal("started"),
+    paths: z.array(z.string()),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_started"),
+    path: z.string(),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_finished"),
+    path: z.string(),
+    status: ValidationStatusSchema,
+    assertionCount: z.number(),
+    durationMs: z.number(),
+    error: z.string().nullable().optional(),
+    steps: z.array(
+      z.object({
+        line: z.number(),
+        tool: z.string(),
+        expected: z.string(),
+        actual: z.string().nullable(),
+        status: ValidationStatusSchema,
+        error: z.string().nullable().optional(),
+      }),
+    ),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("finished"),
+    runId: z.string().nullable(),
+    error: z.string().optional(),
+  }),
+]);
 
 const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -2004,9 +2221,95 @@ const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
     serverIds: z.array(z.string()),
     catalogIds: z.array(z.string()),
   }),
+  z.object({
+    kind: z.literal("openappa_validation_progress"),
+    userId: z.string(),
+    organizationId: z.string(),
+    payload: ValidationProgressPayloadSchema,
+  }),
 ]);
 
 type CrossReplicaEvent = z.infer<typeof CrossReplicaEventSchema>;
+type ValidationProgressEvent = Extract<
+  CrossReplicaEvent,
+  { kind: "openappa_validation_progress" }
+>;
+
+/**
+ * Bounds a progress event so it always fits one NOTIFY payload, measured as
+ * the hub sends it: JSON-encoded again inside its envelope. Error text is cut
+ * first; then a file's steps are dropped, passed ones before the failing or
+ * unrunnable ones the reader needs. The recorded run keeps every step.
+ */
+function fitValidationProgressEvent(params: {
+  userId: string;
+  organizationId: string;
+  payload: OpenAppaValidationProgressMessage["payload"];
+}): ValidationProgressEvent {
+  const event = { kind: "openappa_validation_progress" as const, ...params };
+  const { payload } = params;
+  switch (payload.phase) {
+    // Paths are short in practice. An event over the NOTIFY limit still
+    // reaches this replica's clients; the hub logs the miss.
+    case "started":
+    case "file_started":
+      return event;
+    case "finished":
+      return payload.error === undefined
+        ? event
+        : {
+            ...event,
+            payload: {
+              ...payload,
+              error: truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+            },
+          };
+  }
+  const fitted = {
+    ...payload,
+    error:
+      payload.error == null
+        ? payload.error
+        : truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+    steps: [] as typeof payload.steps,
+  };
+  let size = relayedSize({ ...event, payload: fitted });
+  const ranked = payload.steps
+    .map((step, index) => ({
+      index,
+      step: {
+        ...step,
+        error:
+          step.error == null
+            ? step.error
+            : truncate(step.error, MAX_PROGRESS_STEP_ERROR_LENGTH),
+      },
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.step.status === "passed") -
+          Number(b.step.status === "passed") || a.index - b.index,
+    );
+  const kept: typeof ranked = [];
+  for (const entry of ranked) {
+    // Inside the envelope a step adds its escaped encoding and a comma.
+    const added = relayedSize(entry.step) - 1;
+    if (size + added > MAX_RELAYED_EVENT_BYTES) continue;
+    size += added;
+    kept.push(entry);
+  }
+  fitted.steps = kept.sort((a, b) => a.index - b.index).map(({ step }) => step);
+  return { ...event, payload: fitted };
+}
+
+/** Bytes `value` takes once encoded as a string inside a fan-out envelope. */
+function relayedSize(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(JSON.stringify(value)));
+}
+
+function truncate(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+}
 
 /**
  * Same endpoint choice as the chat and A2A notifiers: polling compatibility
@@ -2019,4 +2322,15 @@ function createCrossReplicaNotifyHub(): PgNotifyHub {
     : createPostgresNotifyHub(
         config.chat.activeRun.notifyDatabaseUrl || config.database.url,
       );
+}
+
+/**
+ * What a turn's output counts for: its stored recording's size, or its
+ * retained log's when nothing is stored.
+ */
+function turnOutputBytes(
+  turn: Pick<AgentRunRecord, "logs">,
+  storedBytes: number | undefined,
+): number {
+  return storedBytes ?? Buffer.byteLength(turn.logs ?? "", "utf8");
 }

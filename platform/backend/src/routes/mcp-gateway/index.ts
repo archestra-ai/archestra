@@ -6,6 +6,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import { RequestLookups } from "@/auth/request-lookups";
+import { internalCallProvenance } from "@/clients/internal-call";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -60,6 +61,7 @@ import { PendingInboundRequests } from "./pending-inbound-requests";
 import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
+  buildGatewayInstructions,
   extractTraceContext,
   isDiscoverRequest,
   isMethodRemovedForRevision,
@@ -1235,12 +1237,15 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             runId: readHeader(request, RUN_ID_HEADER),
           }),
         );
+        // One primary-key read, memoized for the rest of this request.
+        const agent = await lookups.gatewayAgent(profileId);
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({
             agentId: profileId,
             version: config.api.version,
             revision: resolution.revision,
+            instructions: buildGatewayInstructions(agent?.description),
           }),
           id: (request.body as { id?: string | number })?.id ?? null,
         };
@@ -1305,11 +1310,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
 };
 
 /**
- * Who sent a gateway request: the built-in chat's loopback client marks
- * itself; everything else is an outside agent.
+ * Only the built-in client can attest that a gateway request came from chat.
  */
 function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
-  return readHeader(request, SOURCE_HEADER) === "chat" ? "chat" : "api";
+  return readHeader(request, SOURCE_HEADER) === "chat" &&
+    internalCallProvenance(request).inProcess
+    ? "chat"
+    : "api";
 }
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {

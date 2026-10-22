@@ -22,6 +22,7 @@ import type {
   InteractionResponse,
   ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import type { InteractionSessionPreview } from "@/types/interaction";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
@@ -187,6 +188,8 @@ const interactionsTable = pgTable(
      * history on this write-hot table.
      */
     billingTeamId: text("billing_team_id"),
+    /** Admission-time labels; later edits/deletions must not rewrite showback. */
+    attributionLabels: jsonb("attribution_labels").$type<AttributionLabels>(),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     sessionPreview: jsonb("session_preview").$type<InteractionSessionPreview>(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
@@ -305,9 +308,16 @@ const interactionsTable = pgTable(
       "interactions_session_thread_created_at_idx",
     ).on(table.sessionId, table.threadId, table.createdAt.desc()),
     parentIdIdx: index("interactions_parent_id_idx").on(table.parentId),
+    // The partial index interactions_passthrough_virtual_key_id_idx is built
+    // concurrently from worker startup (database/index-maintenance.ts). Keep
+    // it out of Drizzle's transactional migrations, which can only take the
+    // write-blocking CREATE INDEX.
     // The optional interactions_statistics_v2_idx is managed by the operator
     // CLI db:create-statistics-index. Keep it out of Drizzle's transactional
     // migrations so its build remains concurrent on existing large tables.
+    // The partial interactions_session_preview_missing_idx (rows still without
+    // a session preview) is built concurrently from worker startup
+    // (database/index-maintenance.ts), for the same reason.
     // Note: interactions deliberately has NO trgm/GIN indexes on the request/
     // response payload columns. Migration 0116 used to create them for a
     // free-text log search that no longer exists (the LLM logs UI filters by

@@ -49,7 +49,7 @@ export async function getOpenAppaYell(params: {
     }).catch((error) =>
       logger.warn(
         { error, yellId: row.id, conversationId: params.conversationId },
-        "Could not link the conversation to the OpenAPPA yell",
+        "OpenAPPA could not link the conversation to the yell",
       ),
     );
   }

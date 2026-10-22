@@ -817,8 +817,29 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Find catalog item by ID with all secrets resolved to actual values.
-   * Use this for runtime flows (OAuth, MCP server startup).
+   * Resolve only the OAuth client secret of an already authorized catalog.
+   * Interactive callers must pass through the OAuth access service first.
+   */
+  static async resolveOAuthClientSecret(
+    catalogItem: InternalMcpCatalog & {
+      oauthConfig: NonNullable<InternalMcpCatalog["oauthConfig"]>;
+    },
+  ) {
+    const oauthConfig = { ...catalogItem.oauthConfig };
+    if (catalogItem.clientSecretId) {
+      const secret = await secretManager().getSecret(
+        catalogItem.clientSecretId,
+        { skipCache: true },
+      );
+      const value = secret?.secret.client_secret;
+      if (value) oauthConfig.client_secret = String(value);
+    }
+    return { ...catalogItem, oauthConfig };
+  }
+
+  /**
+   * Resolve runtime credentials for an existing installation.
+   * Interactive OAuth routes use the caller-scoped OAuth access service.
    */
   static async findByIdWithResolvedSecrets(
     id: string,

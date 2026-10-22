@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import {
   type CSSProperties,
-  Suspense,
   startTransition,
   useCallback,
   useEffect,
@@ -16,6 +15,7 @@ import {
 } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
+import { DevFeedbackLauncher } from "@/components/dev-feedback/dev-feedback-launcher";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
 import {
@@ -33,6 +33,7 @@ import { Version } from "@/components/version";
 import { afterNextPaint, appInteractive } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
+import { seededConversationId } from "@/lib/auth/shell-seed";
 import {
   ConnectivityProvider,
   useConnectivity,
@@ -41,13 +42,14 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
-import { useShellReady } from "@/lib/shell-deferral";
+import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
-import { lazyComponent, preloadableLazy } from "@/lib/utils/preloadable-lazy";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
+import { AppSidebar } from "./sidebar";
 import {
   SidebarResizeHandle,
   useSidebarWidthState,
@@ -109,6 +111,9 @@ export function AppShell({ children }: AppShellProps) {
   // Every signed-in user sees the active banner.
   // The banner waits for the page's first data (see useShellReady).
   const shellReady = useShellReady();
+  // A server-seeded page has the banner and the sidebar's data in its HTML,
+  // so both render with the page instead of after it.
+  const shellSeeded = useIsShellSeeded();
   const { data: notification } = useActiveSiteNotification({
     enabled: shellReady && !isAuthPage && !isBrowserPreview && !isAppRuntime,
   });
@@ -186,13 +191,14 @@ export function AppShell({ children }: AppShellProps) {
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
-          <DeferredSidebar defer={isChat} />
+          <DeferredSidebar defer={isChat && !shellSeeded} />
           <SidebarResizeHandle
             width={sidebarWidth.width}
             onWidthChange={sidebarWidth.setWidth}
             onResizingChange={sidebarWidth.setResizing}
           />
           <MaintenanceModeOverlay />
+          <DevFeedbackLauncher />
           {/* MAIN_CONTENT_ID + tabIndex={-1} make this the "skip to main
               content" target (WCAG 2.4.1 Bypass Blocks), so activating that
               link moves keyboard focus past the sidebar navigation and into
@@ -240,14 +246,21 @@ export function AppShell({ children }: AppShellProps) {
               >
                 {children}
               </div>
-              <Version />
+              {/* The new-chat screen shows its own version line under the
+                  composer (`ChatPageContent` in `app/chat/page.client.tsx`)
+                  and hides this one with the `hide-version` body class, but
+                  only after it mounts: rendering it there would draw two
+                  lines on the server and drop one as the page starts,
+                  moving the centred composer. */}
+              {pathname !== "/chat" && !seededConversationId(pathname) && (
+                <Version />
+              )}
             </div>
           </main>
           <Toaster />
           <ConversationSearchProvider />
           <AfterIdle>
             <OnboardingSurveyDialog />
-            <FeedbackPopupDialog />
           </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
@@ -256,13 +269,14 @@ export function AppShell({ children }: AppShellProps) {
 }
 
 /**
- * On chat pages, the sidebar after the page's first commit. Its navigation, conversation
- * list and their queries are not what the visitor came for, so the first
- * render (on the server too) draws its empty frame at the exact width, and
- * the real sidebar replaces it in a transition right after the page —
- * the chat composer — has committed and painted (so its chunk is not
- * evaluated between the composer's commit and its first typeable frame). The
- * frame stays while the chunk loads.
+ * On chat pages the server did not seed, the sidebar after the page's first
+ * commit. Its navigation, conversation list and their queries are not what
+ * the visitor came for, so the first render draws its empty frame at the
+ * exact width, and the real sidebar replaces it in a transition right after
+ * the page (the chat composer) has committed and painted. A seeded page has
+ * the sidebar's data and renders it in the HTML. Its code ships with the
+ * shell: loaded later, it would not be there when the page hydrates, and the
+ * server's sidebar would drop to the frame and back.
  */
 function DeferredSidebar({ defer }: { defer: boolean }) {
   // Only where the composer is the first screen. Elsewhere the sidebar mounts
@@ -272,18 +286,9 @@ function DeferredSidebar({ defer }: { defer: boolean }) {
   useEffect(() => {
     afterNextPaint(() => startTransition(() => setMounted(true)));
   }, []);
-  const placeholder = <SidebarPlaceholder collapsible="icon" />;
-  if (!mounted) return placeholder;
-  return (
-    <Suspense fallback={placeholder}>
-      <appSidebar.Component />
-    </Suspense>
-  );
+  if (!mounted) return <SidebarPlaceholder collapsible="icon" />;
+  return <AppSidebar />;
 }
-
-const appSidebar = preloadableLazy<Record<string, never>>(() =>
-  import("./sidebar").then((m) => ({ default: m.AppSidebar })),
-);
 
 /** Renders its children from the first idle callback after the app is interactive. */
 function AfterIdle({ children }: { children: React.ReactNode }) {
@@ -303,12 +308,6 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
 const OnboardingSurveyDialog = lazyComponent(() =>
   import("@/components/onboarding-survey-dialog").then(
     (m) => m.OnboardingSurveyDialog,
-  ),
-);
-
-const FeedbackPopupDialog = lazyComponent(() =>
-  import("@/components/feedback-popup-dialog").then(
-    (m) => m.FeedbackPopupDialog,
   ),
 );
 

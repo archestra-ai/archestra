@@ -1,10 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { isLlmProxyPath } from "@/routes/route-paths";
 
 /**
- * Caller lookups (principal, role permissions) that one read request shares
- * across the auth middleware, the route and the models it calls. The auth
- * plugin binds a scope to each request. Only reads memoize, so a request that
- * changes roles or teams never sees an answer from before its own write.
+ * Caller lookups (principal, role permissions) that one request shares across
+ * the auth middleware, the route and the models it calls. The auth plugin
+ * binds a scope to each request. Only requests that never change roles or
+ * teams memoize, so a write never sees an answer from before itself.
  */
 class RequestScope {
   private storage = new AsyncLocalStorage<Map<
@@ -41,16 +42,25 @@ class RequestScope {
 export const requestScope = new RequestScope();
 
 /**
- * True for reads of the REST API: GET and HEAD under /api/. Better Auth's
- * routes under /api/auth/ are excluded, because their sign-in and SSO
- * callbacks write the caller's role and teams during a GET. Long-lived
- * streams, such as the MCP gateway's SSE GET and WebSockets, are outside
- * /api/, so they never keep one answer for hours.
+ * True for reads of the REST API and for LLM proxy calls.
+ *
+ * REST reads are GET and HEAD under /api/. Better Auth's routes under
+ * /api/auth/ are excluded, because their sign-in and SSO callbacks write the
+ * caller's role and teams during a GET. Long-lived streams, such as the MCP
+ * gateway's SSE GET and WebSockets, are outside /api/, so they never keep one
+ * answer for hours.
+ *
+ * An LLM proxy call, of any method, resolves its caller several times while
+ * authenticating and never writes members, roles or teams. A streamed proxy
+ * call keeps these answers for its whole life, so an access check made
+ * mid-stream must not rely on them; read the database directly. The other routes
+ * under /v1/ (MCP gateway, A2A, health) are not proxy routes and keep no memo.
  */
 export function shouldShareCallerLookups(request: {
   method: string;
   url: string;
 }): boolean {
+  if (isLlmProxyPath(request.url)) return true;
   return (
     (request.method === "GET" || request.method === "HEAD") &&
     request.url.startsWith("/api/") &&

@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
@@ -45,23 +45,17 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
-import { RequestDetails } from "./_parts/request-details";
-import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
-  SessionHeaderTitle,
+  SessionHeaderIcon,
   SessionIdentityLine,
 } from "./_parts/session-header";
 import {
   buildTimeline,
   requestSpanKey,
-  type TimelineSpan,
   toolCallSpanKey,
 } from "./_parts/session-timeline";
-import {
-  DETAILS_PANE_DEFAULT_HEIGHT,
-  SplitHandle,
-} from "./_parts/split-handle";
+import { DETAILS_PANE_DEFAULT_HEIGHT } from "./_parts/split-handle";
 import { useLinkedRequest } from "./_parts/use-linked-request";
 import { useSessionToolCalls } from "./_parts/use-session-tool-calls";
 
@@ -72,7 +66,6 @@ export default function SessionDetailPage({
 }) {
   // The session key: a session id, or a sessionless request's own id.
   const sessionId = decodeURIComponent(use(paramsPromise).id);
-  const router = useRouter();
   const appName = useAppName();
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
@@ -210,9 +203,6 @@ export default function SessionDetailPage({
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
-  const [detailsHeight, setDetailsHeight] = useState(
-    DETAILS_PANE_DEFAULT_HEIGHT,
-  );
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -310,28 +300,26 @@ export default function SessionDetailPage({
           : null
       : null;
 
-  // A request's whole record is in the details pane; a tool call has a page.
-  const openSpan = (span: TimelineSpan) => {
-    if (span.type === "tool") router.push(`/mcp/logs/${span.call.id}`);
-  };
   const exportDisabled = exportSession.isPending || totalRequests === 0;
 
   return (
     <TooltipProvider delayDuration={150}>
       <PageLayout
         denseContent
+        // Laid out like every other detail page: back arrow, the record's
+        // mark in its tile, then the title over its one-line description.
+        icon={<SessionHeaderIcon session={sessionData} />}
         title={
-          <SessionHeaderTitle
-            session={sessionData}
-            title={sessionTitle || "Session"}
-          />
+          // Block, or truncate does nothing: an inline span keeps the whole
+          // first prompt on one line and the page scrolls sideways.
+          <span className="block truncate" title={sessionTitle || "Session"}>
+            {sessionTitle || "Session"}
+          </span>
         }
         documentTitle={sessionTitle || "Session"}
         stackHeaderOnMobile
         backLink={
-          <span className="flex shrink-0 lg:translate-y-3">
-            <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
-          </span>
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
         }
         description={<SessionIdentityLine session={sessionData} />}
       >
@@ -382,8 +370,6 @@ export default function SessionDetailPage({
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
                 onSelect={setPickedKey}
-                onOpen={openSpan}
-                openHint="Enter or double-click opens a tool call"
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}
@@ -425,9 +411,9 @@ export default function SessionDetailPage({
                   </Button>
                 }
               />
-              <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
+              <div className="hidden h-px bg-border lg:block" />
               <TraceDetails
-                height={detailsHeight}
+                height={DETAILS_PANE_DEFAULT_HEIGHT}
                 loading={traceLoading}
                 span={traceLoading ? null : selected}
                 origin={timeline?.origin ?? 0}

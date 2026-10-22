@@ -40,9 +40,25 @@ describe("toInternalReturnPath", () => {
 });
 
 describe("getOAuthCallbackErrorState", () => {
+  test.each([
+    null,
+    "another-tab-state",
+  ])("rejects a callback whose state does not match this tab (%s)", (expectedState) => {
+    expect(
+      getOAuthCallbackErrorState({
+        code: "auth-code",
+        state: "oauth-state",
+        expectedState,
+        error: null,
+        errorDescription: null,
+      }),
+    ).toMatchObject({ title: "OAuth Connection Expired" });
+  });
+
   test("returns null when code and state are present", () => {
     expect(
       getOAuthCallbackErrorState({
+        expectedState: "oauth-state",
         code: "auth-code",
         error: null,
         errorDescription: null,
@@ -54,6 +70,7 @@ describe("getOAuthCallbackErrorState", () => {
   test("prefers provider error description when present", () => {
     expect(
       getOAuthCallbackErrorState({
+        expectedState: "oauth-state",
         code: null,
         error: "invalid_scope",
         errorDescription:
@@ -70,6 +87,7 @@ describe("getOAuthCallbackErrorState", () => {
   test("handles missing code without provider error", () => {
     expect(
       getOAuthCallbackErrorState({
+        expectedState: "oauth-state",
         code: null,
         error: null,
         errorDescription: null,
@@ -85,6 +103,7 @@ describe("getOAuthCallbackErrorState", () => {
   test("handles missing state without provider error", () => {
     expect(
       getOAuthCallbackErrorState({
+        expectedState: "oauth-state",
         code: "auth-code",
         error: null,
         errorDescription: null,

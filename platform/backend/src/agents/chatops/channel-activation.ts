@@ -19,6 +19,7 @@
 
 import { randomUUID } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
+import { A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -26,6 +27,7 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
+import AgentRunModel from "@/models/agent-run";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import OrganizationModel from "@/models/organization";
 import type { ChatOpsProviderType } from "@/types/chatops";
@@ -91,14 +93,14 @@ export async function clearChannelThreadActive(params: {
 /**
  * Mute a channel thread — the single side-effecting entry point both providers
  * use when a user asks the bot to be quiet (a mute command, a mute reaction, or
- * a "Mute this thread" button). It does four things, in order:
+ * a "Mute this thread" button). It does four things:
  *
  *  1. Records a fresh mute marker in the distributed cache. Every in-flight
  *     agent run re-reads this marker before posting and drops its reply if it
  *     changed since the run began (see getThreadMuteMarker) — so a mute is never
  *     followed by a late answer, even for a run executing on another pod.
- *  2. Aborts in-flight runs for this thread on THIS pod, stopping their model
- *     requests immediately instead of letting them finish unseen.
+ *  2. Aborts local foreground runs and durably cancels runtime tasks for this
+ *     thread, including tasks executing on another pod.
  *  3. Drops the sticky auto-reply activation, so future un-mentioned messages
  *     stay quiet.
  *  4. Records the answer-all mute marker, which is what keeps an answer-all
@@ -137,6 +139,42 @@ export async function stopChannelThreadReply(params: {
 }): Promise<void> {
   await recordThreadMute(params);
   chatOpsRunRegistry.cancelThread(params);
+  // Runtime turns outlive the local registry and may execute on another pod.
+  // A scoped bot must never cancel its siblings or the unscoped router bot.
+  if (params.scope && !params.scope.startsWith("agent:")) return;
+  const runs = await AgentRunModel.listCancelableInChatOpsThread({
+    provider: params.provider,
+    channelId: params.channelId,
+    threadId: params.threadId,
+    pinnedAgentId: params.scope?.slice("agent:".length),
+  });
+  if (runs.length === 0) return;
+  const { cancelDetachedAgentTask } = await import(
+    "@/services/agent-runtime/start-task"
+  );
+  await Promise.all(
+    runs.map(async (run) => {
+      try {
+        await cancelDetachedAgentTask({
+          actor: {
+            kind: run.actorKind,
+            id: run.actorId,
+            organizationId: run.organizationId,
+          },
+          agentId: run.agentId,
+          taskId: run.taskId,
+        });
+      } catch (error) {
+        if (
+          error instanceof A2AError &&
+          error.kind === A2AErrorKind.TaskNotCancelable
+        ) {
+          return;
+        }
+        throw error;
+      }
+    }),
+  );
 }
 
 /**

@@ -7,14 +7,16 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
-import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
   type DraftHelperSource,
   withDraftHelperSources,
 } from "@/openappa/draft-helper-sources";
-import { OpenappaCredentialError } from "@/openappa/failure";
+import {
+  OpenappaCredentialError,
+  runtimeFailureCode,
+} from "@/openappa/failure";
 import {
   githubPolicyTestVersion,
   policyTestFilesHash,
@@ -32,6 +34,14 @@ import {
   type PolicyTestRunResult,
   PolicyTestRunResultSchema,
 } from "@/types/openappa-policy-tests";
+
+/** One step of a validation run's progress, as replay works through its files. */
+export type PolicyTestProgressEvent =
+  | { phase: "file_started"; path: string }
+  | {
+      phase: "file_finished";
+      file: Omit<PolicyTestRunResult["files"][number], "contentHash">;
+    };
 
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -210,6 +220,11 @@ type EvaluateParams = {
   sourceVersion: string;
   directory: string;
   proposedPolicy?: { content: string; expectedRevision: number };
+  /**
+   * Told as each file starts and finishes, in order. Every file of the run
+   * finishes before this returns, including ones that could not run.
+   */
+  onProgress?: (event: PolicyTestProgressEvent) => void;
 };
 
 async function evaluateOpenAppaPolicyTests(
@@ -357,8 +372,10 @@ async function evaluateWithDraftHelpers(
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];
-  // A dispatch evaluates the composition with every command tool's spelling.
-  const content = expandCommandExecutionPolicyRules(effective.content);
+  const progress = params.onProgress
+    ? new ReplayProgress(params.onProgress)
+    : null;
+  const content = effective.content;
   const cannotRun = (error: string) =>
     params.files.map((file) => ({
       path: file.path,
@@ -401,8 +418,11 @@ async function evaluateWithDraftHelpers(
     const output = await withOpenappaReplayOwner(
       { organizationId: params.organizationId, userId: params.userId },
       (annotatorContext) =>
-        native.replayOpenappaPolicy(replayInput(annotatorContext)),
-    );
+        native.replayOpenappaPolicy(
+          replayInput(annotatorContext),
+          progress?.listener,
+        ),
+    ).finally(() => progress?.stopListening());
     const response = z
       .object({
         engineVersion: z.string(),
@@ -417,6 +437,7 @@ async function evaluateWithDraftHelpers(
       ),
     }));
   }
+  progress?.settle(files);
   const draft =
     Boolean(params.proposedPolicy) ||
     params.files.some(
@@ -478,7 +499,7 @@ export async function replaySavedValidations(params: {
   } catch (error) {
     logger.warn(
       { err: error, organizationId: params.organizationId },
-      "Could not replay saved validations for a policy preview",
+      "OpenAPPA could not replay saved validations for a policy preview",
     );
     return null;
   }
@@ -700,10 +721,7 @@ async function executeAutomaticPolicyValidation(
       await retryChangedInputs();
       return;
     }
-    if (
-      error instanceof Error &&
-      error.message === "Too many OpenAPPA replays are running; retry later"
-    )
+    if (runtimeFailureCode(error) === "replay_busy")
       throw new Error("Policy replay is busy; retry validation");
     const message = "Could not run informational policy validation";
     const saved = await recordFailure(message, collection.files);
@@ -734,7 +752,7 @@ async function executeAutomaticPolicyValidation(
   }
   logger.info(
     { organizationId: job.organizationId },
-    "Informational policy validation completed",
+    "OpenAPPA informational policy validation completed",
   );
 }
 function assertCurrentCollection(
@@ -766,6 +784,75 @@ export async function getOpenAppaPolicyTestRuns(organizationId: string) {
     };
   });
 }
+
+/**
+ * Forwards one replay's native progress to a listener, in order, and makes
+ * sure every file of the run is reported finished exactly once. Native events
+ * are queued to the event loop and may land after the replay settles, so
+ * the run stops listening once replay returns, drops late events, and
+ * `settle` reports what is still missing from the final results.
+ */
+class ReplayProgress {
+  private readonly started = new Set<string>();
+  private readonly finished = new Set<string>();
+  private listening = true;
+
+  constructor(
+    private readonly report: (event: PolicyTestProgressEvent) => void,
+  ) {}
+
+  /**
+   * The native listener. It must never throw: an exception thrown inside a
+   * native callback is fatal to the process.
+   */
+  readonly listener = (json: string) => {
+    if (!this.listening) return;
+    try {
+      const event = NativeReplayProgressSchema.parse(JSON.parse(json));
+      if (event.phase === "file_started")
+        this.deliver({ phase: "file_started", path: event.path });
+      else {
+        const { phase: _, ...file } = event;
+        this.deliver({ phase: "file_finished", file });
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "OpenAPPA dropped an unreadable replay progress event",
+      );
+    }
+  };
+
+  settle(files: PolicyTestRunResult["files"]) {
+    this.stopListening();
+    for (const { contentHash: _, ...file } of files) {
+      if (this.finished.has(file.path)) continue;
+      if (!this.started.has(file.path))
+        this.deliver({ phase: "file_started", path: file.path });
+      this.deliver({ phase: "file_finished", file });
+    }
+  }
+
+  stopListening() {
+    this.listening = false;
+  }
+
+  private deliver(event: PolicyTestProgressEvent) {
+    if (event.phase === "file_started") this.started.add(event.path);
+    else this.finished.add(event.file.path);
+    try {
+      this.report(event);
+    } catch (error) {
+      logger.warn({ err: error }, "OpenAPPA could not report replay progress");
+    }
+  }
+}
+const NativeReplayProgressSchema = z.discriminatedUnion("phase", [
+  z.object({ phase: z.literal("file_started"), path: z.string() }),
+  PolicyTestResultSchema.omit({ contentHash: true }).extend({
+    phase: z.literal("file_finished"),
+  }),
+]);
 
 class AutomaticPolicyValidationWorker {
   private readonly deliveries = new LRUCacheManager<Promise<void>>({

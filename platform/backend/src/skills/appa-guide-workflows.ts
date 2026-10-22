@@ -17,8 +17,13 @@ Use this while the policy's revision is 0 and its delivery is local, also for an
 2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, Git sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
 3. Do not ask about provider-hosted tools, and do not claim that tools the starter does not cover are safe.
 4. Preview the complete starter with \`content\` and the revision you read.
-5. Explain in at most three short sentences: the starter's declared controls for built-in platform tool calls will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. When setup follows a broader safety goal, explain that establishing that goal still requires examining the relevant calls and dependencies; saving the starter does not establish it. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
-6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). If the operator asks to see the TOML, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
+5. Always explain the starter in message text before you ask, even though the preview card shows it. Use at most four short sentences:
+   - Archestra's built-in tools follow fixed rules.
+   - An AI model checks every other tool call (name one or two servers) and asks the user to approve risky or public ones.
+   - This will be saved and turned on now (only saved, when the preview's \`turnsOnEnforcement\` is false).
+   - The AI check can be narrowed later: batteries give the connected servers fixed rules of their own.
+   If setup follows a broader safety goal, add that this starter alone does not reach it: the calls involved still need checking. Do not describe individual rules or server health unless asked. Avoid "annotator", "audience", "catch-all", "composition", "revision", "preview", "rule pack", "delta", and "TOML". These sentences are the whole proposal for a starter: write them instead of the longer change summary in **Approval in Archestra**, not instead of any text.
+6. Only after that explanation, ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). If the operator asks to see the TOML, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy in its own block under a heading such as "Effective policy (with included rules)".
 7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them). Do not offer Git sync; the saved-revision banner already links to its setup.
 
 ## Add batteries
@@ -46,7 +51,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 ## Inspect
 
-1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.content\` shows each bound credential under \`[credentials]\`. \`effective.batteries\` gives each battery's status:
+1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.credentialBindings\` lists each bound credential, and \`composed: true\` adds the composed text as \`effective.content\`. \`effective.batteries\` gives each battery's status:
    - \`active\`: its rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: a required variable has no binding; bind it with \`archestra__bind_guardrails_credential\`.
@@ -55,7 +60,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: the runtime rejected the composition.
 
-   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced.
+   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` (with \`composed: true\`) keeps the last composition that opened, if one did; do not claim the new text is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
 4. Call \`archestra__search_tools\` for the tools visible to the calling agent.

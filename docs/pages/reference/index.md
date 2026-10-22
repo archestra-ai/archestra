@@ -15,4 +15,4 @@ You can manage Archestra in three ways, and all three check the same [permission
 - **[Platform API](/docs/reference/api):** for scripts and CI, with an API key.
 - **[Archestra MCP Server](/docs/reference/archestra-mcp-server):** for agents. Its built-in tools create agents, install MCP servers, and query knowledge, as the person using the agent.
 
-Deployment-wide settings that the web app does not show are [environment variables](/docs/reference/configuration). An [MCP App](/docs/chat/apps) calls platform tools through the [Apps SDK](/docs/reference/apps-sdk), as the person viewing it.
+Deployment-wide settings that the web app does not show are [environment variables](/docs/admin/deployment/configuration). An [MCP App](/docs/chat/apps) calls platform tools through the [Apps SDK](/docs/reference/apps-sdk), as the person viewing it.

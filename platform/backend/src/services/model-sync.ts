@@ -176,7 +176,11 @@ class ModelSyncService {
           deriveRecommendedForAgents(model.capabilities),
         ]),
       );
+      const pricingByModelId = new Map(
+        providerModels.map((m) => [m.id, m.providerPricing]),
+      );
       const modelsWithIds = upsertedModels.map((m) => ({
+        providerPricing: pricingByModelId.get(m.modelId) ?? null,
         id: m.id,
         modelId: m.modelId,
         recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,

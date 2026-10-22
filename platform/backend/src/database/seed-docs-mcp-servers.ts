@@ -193,7 +193,11 @@ async function discoverTools(mcpServer: McpServer): Promise<void> {
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
-        meta: { _meta: tool._meta, annotations: tool.annotations },
+        meta: {
+          _meta: tool._meta,
+          annotations: tool.annotations,
+          outputSchema: tool.outputSchema,
+        },
         catalogId,
       })),
     );

@@ -11,6 +11,11 @@ import {
   useAgentOptionsPage,
 } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  CONNECTION_GATEWAY_FILTERS,
+  CONNECTION_GATEWAY_PAGE_SIZE,
+  CONNECTION_GATEWAY_REFERENCE_FILTERS,
+} from "@/lib/connection-approval-seed";
 import { isInstallerClientId, visibleClients } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 import {
@@ -90,13 +95,11 @@ export function ConnectionFlow({
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
 
-  const gatewayFilters = {
-    agentTypes: ["profile", "mcp_gateway"] as ("profile" | "mcp_gateway")[],
-    excludeOtherPersonalAgents: true,
-  };
+  // The same filters the server seed reads for an approval document.
+  const gatewayFilters = CONNECTION_GATEWAY_FILTERS;
   const gatewayPage = useAgentOptionsPage({
     filters: gatewayFilters,
-    limit: 20,
+    limit: CONNECTION_GATEWAY_PAGE_SIZE,
     enabled: canReadMcpGateway === true,
   });
   const { data: gatewayReferences } = useAgentOptionsByIds({
@@ -107,7 +110,7 @@ export function ConnectionFlow({
       defaultMcpGatewayId,
     ].filter((id): id is string => !!id),
     // Built-ins stay hidden, matching the gateway list above.
-    filters: { ...gatewayFilters, excludeBuiltIn: true },
+    filters: CONNECTION_GATEWAY_REFERENCE_FILTERS,
     enabled: canReadMcpGateway === true,
   });
   const mcpGateways = [
@@ -221,6 +224,10 @@ export function ConnectionFlow({
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+            mcpGatewaysLoading={
+              canReadMcpGateway === undefined ||
+              (canReadMcpGateway === true && gatewayPage.isPending)
+            }
             mcpGatewayId={effectiveMcpId}
             onMcpGatewaySelect={handleMcpSelect}
             llmProxyId={

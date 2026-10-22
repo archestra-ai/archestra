@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
 import {
@@ -198,8 +198,35 @@ export function TerminalPlayback({
     renderRecordingRef.current?.(recording);
   }, [recording]);
 
+  // A recording opens on its latest output, as a terminal does: the first
+  // screen with lines is scrolled to its end, and the view follows new output
+  // while the reader is at the end. A reader who has scrolled up keeps their
+  // place through later output and seeks.
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const openedAtEnd = useRef(false);
+  const atEnd = useRef(true);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const track = () => {
+      atEnd.current =
+        viewport.scrollTop + viewport.clientHeight >=
+        viewport.scrollHeight - FOLLOW_END_SLACK_PX;
+    };
+    viewport.addEventListener("scroll", track);
+    return () => viewport.removeEventListener("scroll", track);
+  }, []);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !snapshot?.lines.length) return;
+    if (openedAtEnd.current && !atEnd.current) return;
+    openedAtEnd.current = true;
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [snapshot]);
+
   return (
     <div
+      ref={viewportRef}
       className="min-h-0 min-w-0 flex-1 overflow-auto bg-slate-950 p-4 pb-2"
       data-testid="terminal-playback-viewport"
     >
@@ -236,6 +263,8 @@ export function TerminalPlayback({
 
 const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
 const RETAINED_SCROLLBACK_LINES = 1_000_000;
+/** How close to the end still counts as "at the end" for following output. */
+const FOLLOW_END_SLACK_PX = 10;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
 

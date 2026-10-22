@@ -1,10 +1,14 @@
+import { createHash } from "node:crypto";
 import {
   isDefaultBrandedAppName,
   STARTUP_GUARD_FORMAT_VERSION,
   type StartupGuardClientId,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CONNECTION_HEALTH_PATH } from "@/routes/route-paths";
+import {
+  CONNECTION_HEALTH_PATH,
+  CONNECTION_STARTUP_GUARD_PATH,
+} from "@/routes/route-paths";
 import {
   ARCHESTRA_MARK,
   ARCHESTRA_MARK_GAP,
@@ -15,6 +19,7 @@ import {
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import { MANAGED_INSTRUCTIONS_REFRESH } from "../payloads/managed-instructions-refresh";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
+import { STARTUP_GUARD_REFRESH } from "../payloads/startup-guard-refresh";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { sh } from "../steps/quoting";
 import type { SetupScriptContext, SetupScriptProxySection } from "../types";
@@ -367,8 +372,8 @@ SKIP_FILE="$HOME/${client.skipRelpath}"
 # rate limiting can never look like an outage.
 HEALTH_URL=${sh(ctx.healthUrl ?? "")}
 # The monotonic format version this guard was stamped with. The health response
-# above reports the running instance's current value; the guard nudges a
-# re-connect only when the instance reports a STRICTLY GREATER number, so an
+# above reports the running instance's current value; the guard refreshes
+# only when the instance reports a STRICTLY GREATER number, so an
 # older instance or a rollback stays silent.
 GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}
 GUARD_LABELS=(${resources.map((r) => sh(r.label)).join(" ")})
@@ -432,6 +437,7 @@ uninstall_guard() {
   }
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
+  rm -f "$GUARD_PATH.update.cjs" "$GUARD_PATH.update.json" "$GUARD_PATH.previous"
   rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md"${client.inlineConfigEnv ? ' "$GUARD_PATH.handoff.mjs"' : ""} 2>/dev/null || true
   rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
@@ -519,10 +525,47 @@ version_is_stale() {
   [ "$arch_ver_num" -gt "$GUARD_FORMAT_VERSION" ]
 }
 
+refresh_version_update() {
+  # The marker exists only in the child guard's environment. A rolling deploy
+  # can report another version immediately; one launch must never loop.
+  [ "\${ARCHESTRA_GUARD_REFRESHED:-}" = "1" ] && return 1
+  if command -v node >/dev/null 2>&1 && [ -f "$GUARD_PATH.update.cjs" ]; then
+    ARCH_UPDATE_NOTICE=$(node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num" --handoff 2>&1)
+    if [ "$?" -eq 10 ]; then
+      ARCH_REFRESH_RECEIPT=$ARCH_UPDATE_NOTICE
+      ARCH_UPDATE_NOTICE=''
+      return 0
+    fi
+  else
+    ARCH_UPDATE_NOTICE="Could not update $APP_NAME launch check automatically; kept the installed config. Node.js and the installed updater are required."
+  fi
+  return 1
+}
+
+launch_refreshed_guard() {
+  version_is_stale || return 0
+  refresh_version_update || return 0
+  if [ "$INTERACTIVE" = "1" ]; then
+    stop_frame_key_reader
+    stty echo </dev/tty 2>/dev/null || true
+    printf '\\033[?1049l'
+    trap - EXIT
+  fi
+  if ARCHESTRA_GUARD_REFRESHED=1 bash "$GUARD_PATH" "$@"; then exit 0; fi
+  # A failed child returns to this already loaded guard. Restore only its exact
+  # generated predecessor; the updater refuses to overwrite concurrent edits.
+  node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num" --rollback "$ARCH_REFRESH_RECEIPT" >/dev/null 2>&1
+  ARCH_UPDATE_NOTICE='Updated launch check could not run; using the cached check this launch.'
+  if [ "$INTERACTIVE" = "1" ]; then
+    draw_guard_screen
+  fi
+}
+
 if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
   if [ -n "$HEALTH_URL" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
+  launch_refreshed_guard "$@"
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     if [ "\${GUARD_ACTIVE[$i]}" = "1" ] && resource_down "$i"; then
@@ -530,9 +573,9 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     fi
     i=$((i+1))
   done
-  if version_is_stale; then
-    printf '%s\\n' "archestra: a newer $APP_NAME setup for ${client.binary} is available — re-run the setup from the $APP_NAME /connection page to update this startup check." >&2
-  fi
+  notify_refreshed=\${ARCHESTRA_GUARD_REFRESHED:-}
+  [ "$notify_refreshed" != "1" ] || printf '%s\\n' "A startup check update was available and has been applied." >&2
+  [ -z "\${ARCH_UPDATE_NOTICE:-}" ] || printf '%s\\n' "$ARCH_UPDATE_NOTICE" >&2
   exit 0
 fi
 
@@ -946,28 +989,16 @@ offer_reconfigure_tail() {
   return 0
 }
 
-# The health request checks for updates on every launch. Show the reason and
-# concrete steps automatically, without requiring a menu or another keypress.
-# Keep the notice readable, but always let the client start after six seconds.
+# Announce from the updated guard, after its checks actually ran.
 notify_version_update() {
   [ "$GUARD_UNINSTALLED" = "1" ] && return 0
-  version_is_stale || return 0
-  # Flush type-ahead without waiting, including a burst beyond PENDING_KEY.
-  # MIN=0/TIME=0 makes the tty return EOF as soon as its queue is empty.
-  arch_update_tty=$(stty -g </dev/tty 2>/dev/null)
-  if [ -n "$arch_update_tty" ] && stty -icanon min 0 time 0 </dev/tty 2>/dev/null; then
-    cat </dev/tty >/dev/null 2>&1
-    stty "$arch_update_tty" </dev/tty 2>/dev/null || true
+  if [ -n "\${ARCH_UPDATE_NOTICE:-}" ]; then
+    printf '%s\\n' "$ARCH_UPDATE_NOTICE" >&2
+    GUARD_DWELL=1
   fi
-  PENDING_KEY_SET=0
-  printf '\\n%sUpdate available%s — a newer %s setup is available.\\n' "$C_WARN" "$C_RESET" "$APP_NAME"
-  printf 'Your installed startup check is older than this deployment.\\n'
-  printf '%sTo update, re-run the %s connection setup:%s\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"
-  printf '  1. Open the %s /connection page and pick %s.\\n' "$APP_NAME" ${sh(client.label)}
-  printf '  2. Copy the setup command it shows and run it in your terminal.\\n'
-  printf '     It reinstalls this startup check at the current version.\\n'
-  printf '%sContinuing in 6 seconds — press any key to continue now.%s\\n' "$C_DIM" "$C_RESET"
-  IFS= read -rs -n 1 -t 6 key </dev/tty 2>/dev/null || true
+  [ "\${ARCHESTRA_GUARD_REFRESHED:-}" = "1" ] || return 0
+  printf '%s\\n' "A startup check update was available and has been applied." >&2
+  GUARD_DWELL=1
 }
 
 # When something is down: the quick (Y/n) reverses everything that failed in
@@ -1110,17 +1141,12 @@ wait_for_health() {
 # way claude itself does — so nothing lingers in the scrollback after claude
 # exits. When the launch needed attention, the outcome is held briefly
 # before the alternate screen closes over it.
+draw_guard_screen() {
 printf '\\033[?1049h\\033[H\\033[2J'
 # Echo off for the whole interactive run: keys pressed while the probes animate
 # (before any read) would otherwise smudge the screen. Restored on exit.
 stty -echo </dev/tty 2>/dev/null || true
 trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
-GUARD_DWELL=0
-OPEN_MENU=0
-finish_guard() {
-  [ "$GUARD_DWELL" = "1" ] && sleep 1.2
-  exit 0
-}
 ${guardHeader(ctx)}
 # Every row is on screen from the start: probed rows keep their glyph, the
 # probing row is bright, and everything still waiting sits dim below it. The
@@ -1131,6 +1157,14 @@ for i in $ACTIVE_IDXS; do
 done
 draw_reconfigure_hint
 printf '\\033[%dA' "$ACTIVE_TOTAL"
+}
+GUARD_DWELL=0
+OPEN_MENU=0
+finish_guard() {
+  [ "$GUARD_DWELL" = "1" ] && sleep 1.2
+  exit 0
+}
+draw_guard_screen
 if [ -n "$HEALTH_URL" ]; then
   spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
@@ -1161,6 +1195,9 @@ if [ "$SKIP_ALL" = "1" ]; then
   printf '\\033[J'
   finish_guard
 fi
+# Hand off before presenting connection decisions. Menu/skip/disconnect choices
+# made during the health probe above take precedence and are never replayed.
+if [ "$ARCH_DISCONNECT_ALL" = "0" ]; then launch_refreshed_guard "$@"; fi
 start_frame_key_reader
 DOWN_IDXS=''
 DOWN_COUNT=0
@@ -1300,6 +1337,7 @@ fi
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
 ${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
 chmod +x "${guardPath}"
+${startupGuardRefreshInstall({ ctx, client, platform: "bash" })}
 if [ "$archestra_guard_pre_feature" = "1" ]; then
   ok ${sh(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
 fi
@@ -1580,4 +1618,75 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   return resources;
+}
+
+/** No connection credentials are minted; only existing local render parameters are kept. */
+export function startupGuardRefreshInstall({
+  ctx,
+  client,
+  platform,
+}: {
+  ctx: StartupGuardContext;
+  client: StartupGuardClient;
+  platform: "bash" | "windows";
+}): string {
+  if (!ctx.healthUrl) return "";
+  const url = new URL(CONNECTION_STARTUP_GUARD_PATH, ctx.healthUrl).href;
+  const context = {
+    appName: ctx.appName,
+    healthUrl: ctx.healthUrl,
+    mcp: ctx.mcp,
+    proxy: ctx.proxy,
+    skills: ctx.skills,
+  };
+  const source =
+    platform === "windows" ? "" : renderStartupGuardScript(ctx, client);
+  const state = {
+    clientId: client.clientId,
+    platform,
+    url,
+    context,
+    updaterHash: createHash("sha256")
+      .update(STARTUP_GUARD_REFRESH)
+      .digest("hex"),
+    hashes:
+      platform === "windows"
+        ? []
+        : [createHash("sha256").update(source).digest("hex")],
+  };
+  if (platform === "windows") {
+    // Hash the exact UTF-8 BOM bytes written by the PowerShell installer.
+    return `$archUpdateState = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(JSON.stringify(state)).toString("base64")}')) | ConvertFrom-Json
+$archUpdateHash = [Security.Cryptography.SHA256]::Create()
+try { $archUpdateState.hashes = @(([BitConverter]::ToString($archUpdateHash.ComputeHash([IO.File]::ReadAllBytes($archGuardPath)))).Replace('-', '').ToLowerInvariant()) } finally { $archUpdateHash.Dispose() }
+foreach ($archUpdateFile in @(($archGuardPath + '.update.cjs'), ($archGuardPath + '.update.json'))) {
+  $archUpdateTemp = $archUpdateFile + '.' + [guid]::NewGuid().ToString('n') + '.tmp'
+  try {
+    New-Item -ItemType File -Path $archUpdateTemp -ErrorAction Stop | Out-Null
+    # Protect an empty file before writing private context. PowerShell also
+    # runs on Unix, where Windows ACL APIs are unavailable.
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+      $archUpdateAcl = New-Object Security.AccessControl.FileSecurity
+      $archUpdateAcl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
+      $archUpdateAcl.SetAccessRuleProtection($true, $false)
+      $archUpdateAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+      Set-Acl -LiteralPath $archUpdateTemp -AclObject $archUpdateAcl -ErrorAction Stop
+    } else {
+      & chmod 600 $archUpdateTemp
+      if ($LASTEXITCODE -ne 0) { throw 'Could not protect startup check refresh files.' }
+    }
+    if ($archUpdateFile.EndsWith('.update.cjs')) {
+      [IO.File]::WriteAllBytes($archUpdateTemp, [Convert]::FromBase64String('${Buffer.from(STARTUP_GUARD_REFRESH).toString("base64")}'))
+    } else {
+      [IO.File]::WriteAllText($archUpdateTemp, ($archUpdateState | ConvertTo-Json -Depth 32 -Compress), (New-Object Text.UTF8Encoding $false))
+    }
+    Move-Item -LiteralPath $archUpdateTemp -Destination $archUpdateFile -Force -ErrorAction Stop
+  } finally {
+    Remove-Item -LiteralPath $archUpdateTemp -Force -ErrorAction SilentlyContinue
+  }
+}`;
+  }
+  return `printf '%s' ${sh(STARTUP_GUARD_REFRESH)} > "${"$HOME"}/${client.scriptRelpath}.update.cjs"
+printf '%s' ${sh(JSON.stringify(state))} > "${"$HOME"}/${client.scriptRelpath}.update.json"
+chmod 600 "${"$HOME"}/${client.scriptRelpath}.update.cjs" "${"$HOME"}/${client.scriptRelpath}.update.json"`;
 }

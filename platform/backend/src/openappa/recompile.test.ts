@@ -115,8 +115,8 @@ describe("recompile coalescing", () => {
       alsoAfterWrite,
     ]);
     expect(native.composed).toEqual([
-      ["archestra", "claude-code"],
-      ["archestra", "claude-code", "acme"],
+      ["archestra", "coding", "claude-code"],
+      ["archestra", "coding", "claude-code", "acme"],
     ]);
     expect(second.installFingerprint).not.toBe(first.installFingerprint);
     expect(third.installFingerprint).toBe(second.installFingerprint);
@@ -273,7 +273,6 @@ async function storeUnrelatedComposition(organizationId: string) {
       installFingerprint: marker,
       error: null,
       served: null,
-      retainedAnnotators: null,
     },
     expected: await OpenAppaEffectivePolicyModel.find(organizationId),
   });

@@ -13,6 +13,7 @@ import {
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
 import { CopyButton } from "@/components/copy-button";
 import { formatCost } from "@/components/cost";
+import { RequestAttributionLabels } from "@/components/request-attribution-labels";
 import { SourceIcon } from "@/components/source-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -39,6 +40,7 @@ import { KindChip } from "./request-waterfall";
 import {
   type RequestSpan,
   requestLabel,
+  requestPrompt,
   SPAN_KINDS,
   type TimelineSpan,
   type ToolCallSpan,
@@ -72,7 +74,7 @@ export function RequestDetails({
   excerpt,
   toolCallChecks,
 }: {
-  /** The resizable pane height, applied from `lg`. */
+  /** The pane height, applied from `lg`. */
   height: number;
   loading: boolean;
   span: TimelineSpan | null;
@@ -153,7 +155,7 @@ export function RequestDetails({
 
   return (
     // Phones: the overview then the content in the page's own flow, each with a
-    // sticky header. Wide: the fixed-height, resizable split.
+    // sticky header. Wide: the fixed-height split.
     <section
       aria-label="Request details"
       className="flex flex-col border-t lg:grid lg:h-[var(--pane-h)] lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden lg:border-t-0"
@@ -221,6 +223,7 @@ function RequestOverview({
       : modelOrigin.name;
   const modelName = row.model ? shortModelName(row.model) : "Unknown model";
   const gapBefore = previous ? span.start - previous.end : null;
+  const prompt = kind === "main" ? requestPrompt(row) : null;
 
   // Tokens: cache counts are part of the input when they fit inside it
   // (OpenAI-style); otherwise they are reported beside it (Anthropic-style).
@@ -285,6 +288,16 @@ function RequestOverview({
             <span className="truncate text-sm font-semibold">{label}</span>
             <KindChip kind={kind} />
           </div>
+          {prompt && prompt !== label ? (
+            // The list names a request by what it did; this is what it was for.
+            <p
+              className="mt-1 line-clamp-2 pl-[11px] text-xs text-muted-foreground"
+              title={prompt}
+            >
+              <span className="font-medium text-foreground/80">Prompt</span>{" "}
+              {prompt}
+            </p>
+          ) : null}
           <div
             className="mt-2 flex min-w-0 items-center gap-2"
             title={row.model ?? undefined}
@@ -323,34 +336,23 @@ function RequestOverview({
           </dl>
         </OverviewSection>
 
+        <OverviewSection title="Attribution labels">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Captured at request start. Credential labels override billing-team
+            labels.
+          </p>
+          <RequestAttributionLabels labels={row.attributionLabels} />
+        </OverviewSection>
+
         <OverviewSection
           title="Timing"
           aside={<BigFigure value={formatLatency(row.durationMs)} />}
         >
-          <div
-            className="relative h-1 rounded-full bg-muted"
-            aria-hidden="true"
-          >
-            <span
-              className={cn(
-                "absolute inset-y-0 rounded-full",
-                SPAN_KINDS[kind].bar,
-              )}
-              style={{
-                left: `${span.x * 100}%`,
-                width: `max(4px, ${span.w * 100}%)`,
-              }}
-            />
-          </div>
-          <dl className={cn(OVERVIEW_GRID, "mt-2")}>
-            <OverviewCell label="Started">
-              {formatDate({
-                date: new Date(span.start).toISOString(),
-                dateFormat: "HH:mm:ss.SSS",
-              })}
-            </OverviewCell>
-            <OverviewCell label="Finished">
-              {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss.SSS" })}
+          {/* The list's bar already places it on the session's timeline;
+              this says when, and what came before. */}
+          <dl className="grid grid-cols-3 gap-x-4">
+            <OverviewCell label="At">
+              {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" })}
             </OverviewCell>
             {excerpt ? null : (
               <OverviewCell label="Into session">

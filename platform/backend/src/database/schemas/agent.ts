@@ -102,6 +102,13 @@ const agentsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */
+    fastModelId: uuid("fast_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    smartModelId: uuid("smart_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(

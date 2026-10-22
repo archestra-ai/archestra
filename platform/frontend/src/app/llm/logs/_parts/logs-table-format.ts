@@ -93,7 +93,9 @@ export function shortModelName(model: string): string {
   // (`:free`, Bedrock's `:0`) are not.
   const size = tag && SIZE_PATTERN.test(tag) ? ` ${tag.toUpperCase()}` : "";
 
-  const modern = id.match(/^claude-(opus|sonnet|haiku)-(\d+)(?:[-.](\d+))?/);
+  // Any named Claude family (opus, sonnet, haiku, fable, …): the family
+  // leads, then its version with a dot, as people say it.
+  const modern = id.match(/^claude-([a-z]+)-(\d+)(?:[-.](\d{1,2}))?(?!\d)/);
   if (modern) {
     return `${capitalize(modern[1])} ${version(modern[2], modern[3])}`;
   }
@@ -112,9 +114,7 @@ export function shortModelName(model: string): string {
     return [`GPT-${gptVersion}`, ...rest.map(formatWord)].join(" ") + size;
   }
   return (
-    id
-      .split("-")
-      .filter(Boolean)
+    joinVersionParts(id.split("-").filter(Boolean))
       .map((part, index) => (index === 0 ? capitalize(part) : formatWord(part)))
       .join(" ") + size
   );
@@ -255,6 +255,28 @@ const KNOWLEDGE_TASK_TITLES: Record<KnowledgeSource, string> = {
 };
 
 const SIZE_PATTERN = /^\d+(\.\d+)?[bmk]$/i;
+
+/**
+ * A dash-separated id spells a version as separate numbers (`llama-3-1-70b`,
+ * `claude-fable-5-1`); read as words they come out "3 1". Adjacent short
+ * numbers are one version: "3.1".
+ */
+function joinVersionParts(parts: string[]): string[] {
+  const joined: string[] = [];
+  for (const part of parts) {
+    const previous = joined.at(-1);
+    if (
+      previous !== undefined &&
+      /^\d{1,2}$/.test(part) &&
+      /^\d{1,2}(\.\d{1,2})*$/.test(previous)
+    ) {
+      joined[joined.length - 1] = `${previous}.${part}`;
+    } else {
+      joined.push(part);
+    }
+  }
+  return joined;
+}
 
 /**
  * Who made a model, by provider id. These name the vendor of the weights, not

@@ -1,9 +1,17 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { ModelInputModality, SupportedProvider } from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
+
+/**
+ * Exit status of a setup script that stopped before changing anything and has
+ * already printed the cause and the next step. The installer adds nothing more.
+ * Bash setup scripts stop with the status of any failing command, so the value
+ * is above curl's codes and the Rust panic status (101), below the shell's 126.
+ */
+export const SETUP_STOPPED_EXIT_CODE = 112;
 
 export interface SetupScriptMcpSection {
   /** Logical server name registered in the client (slug). */
@@ -30,6 +38,12 @@ export interface SetupScriptProxySection {
       name: string;
       context: number | null;
       output: number | null;
+      /**
+       * What the model reads, from the synced model row; null when unknown.
+       * The client drops attachments a model does not read, so a missing
+       * value turns every image into an error.
+       */
+      inputModalities?: ModelInputModality[] | null;
     }>;
   }>;
   /**

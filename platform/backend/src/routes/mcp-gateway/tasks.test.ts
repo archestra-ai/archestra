@@ -1,7 +1,9 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { vi } from "vitest";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { FAILED_QUERY_CLIENT_MESSAGE } from "@/utils/db";
 import { runToolCallMaybeTask } from "./tasks";
 
 vi.mock("@/logging");
@@ -56,6 +58,35 @@ describe("runToolCallMaybeTask - detached continuation", () => {
     // The tool itself succeeded. Recording a failure here would tell the
     // client the opposite of what happened.
     expect(failSpy).not.toHaveBeenCalled();
+  });
+
+  test("a failed query's text does not reach the stored task error", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const failSpy = vi.spyOn(McpGatewayTaskModel, "failIfWorking");
+
+    await runToolCallMaybeTask({
+      eligible: true,
+      agentId: agent.id,
+      principal: "user:continuation-test",
+      toolName: "slow_tool",
+      thresholdMs: 1,
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        throw new DrizzleQueryError(
+          'select "value" from "secret" where "id" = $1',
+          ["secret-id-1"],
+          new Error("timeout"),
+        );
+      },
+    });
+
+    await vi.waitFor(() => expect(failSpy).toHaveBeenCalledTimes(1));
+    expect(failSpy.mock.calls[0][1]).toEqual({
+      code: -32603,
+      message: FAILED_QUERY_CLIENT_MESSAGE,
+    });
   });
 
   test("no rejection escapes when every outcome write fails", async ({

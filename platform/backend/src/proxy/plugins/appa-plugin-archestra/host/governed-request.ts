@@ -191,6 +191,9 @@ export async function prepareOpenappaRequest(params: {
       ? { delegationMarkers: ingress.delegationMarkers }
       : {}),
     ...(ingress.childReturns ? { childReturns: ingress.childReturns } : {}),
+    ...(ingress.releasedSpawnCalls
+      ? { releasedSpawnCalls: ingress.releasedSpawnCalls }
+      : {}),
     ...(ingress.childTrajectoryReceipts
       ? { childTrajectoryReceipts: ingress.childTrajectoryReceipts }
       : {}),

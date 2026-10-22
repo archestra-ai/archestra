@@ -957,8 +957,9 @@ export function copyCsv({
   bySplit: boolean;
 }) {
   const esc = (s: string | number) => {
-    const t = String(s);
-    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    let t = String(s);
+    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
+    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   };
   const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
   let lines: (string | number)[][];
@@ -1071,42 +1072,6 @@ function Tag({ text }: { text: string }) {
 
 function RowGroup({ children }: { children: ReactNode }) {
   return <>{children}</>;
-}
-
-/**
- * Saved-view pills. One swipeable row on phones (bleeding to the page gutter),
- * wrapping from `sm` up.
- */
-export function ViewPills({
-  label,
-  items,
-}: {
-  label: string;
-  items: { id: string; label: string; active: boolean; onSelect: () => void }[];
-}) {
-  return (
-    <nav
-      aria-label={label}
-      className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
-    >
-      {items.map((it) => (
-        <UnstyledButton
-          key={it.id}
-          type="button"
-          aria-pressed={it.active}
-          onClick={it.onSelect}
-          className={cn(
-            "h-7 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs transition-colors",
-            it.active
-              ? "border-foreground bg-foreground text-background"
-              : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
-          )}
-        >
-          {it.label}
-        </UnstyledButton>
-      ))}
-    </nav>
-  );
 }
 
 export function Segmented<T extends string>({

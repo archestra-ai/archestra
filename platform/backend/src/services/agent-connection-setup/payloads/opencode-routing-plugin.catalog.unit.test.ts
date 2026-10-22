@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { KILO_CLIENT } from "../opencode-family";
+import { publicManagedCatalog } from "./opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -320,6 +322,253 @@ describe("managed catalog plugin", () => {
     ]);
   });
 
+  test("sends the managed key when the client's own sign-in for an alias replaces it", async () => {
+    const calls: Request[] = [];
+    globals[directFetch] = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      calls.push(new Request(input, init));
+      return new Response("ok");
+    };
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-signin-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    // Kilo Code keeps its own xAI sign-in here; the connection routes xAI only
+    // through its catalog twin.
+    await mkdir(path.join(root, "data", "kilo"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "kilo", "auth.json"),
+      JSON.stringify({
+        vendor: { type: "oauth", access: "native-vendor-token", refresh: "r" },
+      }),
+    );
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog,
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: {
+        vendor: { options: {} },
+        openai: { options: { apiKey: "user-openai-key" } },
+      },
+    };
+    await hooks.config(config);
+    expect(config.provider.vendor.options).toMatchObject({
+      apiKey: "managed-secret",
+      baseURL: managedRoute,
+    });
+
+    // The client's sign-in transport keeps the hook's headers and sets its
+    // own bearer token, as Kilo Code's xAI sign-in does.
+    const signedIn = async (providerId: string, url: string) => {
+      const output: { headers: Record<string, string> } = { headers: {} };
+      await hooks["chat.headers"](
+        {
+          sessionID: "ses_child",
+          agent: "explore",
+          provider: { id: providerId, options: {} },
+        },
+        output,
+      );
+      return globalThis.fetch(url, {
+        method: "POST",
+        headers: {
+          ...output.headers,
+          Authorization: `Bearer native-${providerId}-token`,
+          "ChatGPT-Account-Id": "acct",
+          "x-api-key": `native-${providerId}-key`,
+        },
+        body: "{}",
+      });
+    };
+    await signedIn("vendor", `${managedRoute}/responses`);
+    await signedIn("openai", `${nativeRoute}/responses`);
+
+    const [alias, native] = calls;
+    expect(alias.url).toBe(`${managedRoute}/responses`);
+    expect(alias.headers.get("authorization")).toBe("Bearer managed-secret");
+    expect(alias.headers.get("chatgpt-account-id")).toBeNull();
+    expect(alias.headers.get("x-api-key")).toBeNull();
+    expect(alias.headers.get("x-opencode-session")).toBe("ses_child");
+    expect(alias.headers.get("x-archestra-managed-alias")).toBeNull();
+    // A provider on its own native route keeps the user's credential.
+    expect(native.headers.get("authorization")).toBe(
+      "Bearer native-openai-token",
+    );
+    expect(native.headers.get("x-api-key")).toBe("native-openai-key");
+    expect(native.headers.get("x-archestra-virtual-key")).toBe(
+      "passthrough-secret",
+    );
+    expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
+  });
+
+  test("V1 tells the client which catalog models read images, on the catalog provider and its native alias", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-reads-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.XDG_CACHE_HOME = path.join(root, "cache");
+    process.env.HOME = root;
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "opencode-primary.key"),
+      "managed-secret\n",
+      { mode: 0o600 },
+    );
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+        mcp: null,
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: publicManagedCatalog({
+          primaryProviders: [
+            {
+              provider: "openai",
+              name: "OpenAI",
+              models: [
+                {
+                  id: "vision",
+                  name: "vision",
+                  context: null,
+                  output: null,
+                  inputModalities: ["text", "image", "pdf"],
+                },
+                {
+                  id: "unknown",
+                  name: "unknown",
+                  context: null,
+                  output: null,
+                  inputModalities: null,
+                },
+              ],
+            },
+          ],
+          ordinaryBaseUrl: "https://deployment.example/v1",
+          routingAgentId: "agent",
+        }),
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config: {
+      provider: Record<string, { models: Record<string, object> }>;
+    } = { provider: {} };
+    await hooks.config(config);
+    for (const id of ["archestra-openai", "openai"]) {
+      expect(config.provider[id].models.vision).toMatchObject({
+        id: "openai:vision",
+        modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+        attachment: true,
+      });
+      expect(config.provider[id].models.unknown).not.toHaveProperty(
+        "modalities",
+      );
+      expect(config.provider[id].models.unknown).not.toHaveProperty(
+        "attachment",
+      );
+    }
+  });
+
+  test("V2 replaces the SDK's default input list with what each catalog model reads", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-reads-"));
+    roots.push(root);
+    const revision = path.join(root, "revision");
+    await writeFakeOpenCodePluginSdk(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: path.join(root, "missing.key"),
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const vendor = catalog.providers["archestra-vendor"];
+    await writeFile(
+      path.join(revision, "routing.mjs"),
+      renderOpenCodeRoutingPluginV2({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          ...catalog,
+          providers: {
+            "archestra-vendor": {
+              ...vendor,
+              models: {
+                "fixture/model": {
+                  ...vendor.models["fixture/model"],
+                  modalities: { input: ["text"], output: ["text"] },
+                  attachment: false,
+                },
+                "fixture/unknown": {
+                  name: "Unknown",
+                  id: "vendor:fixture/unknown",
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+    const result = await run(path.join(revision, "routing.mjs"));
+    expect(result.vendor.models["fixture/model"].capabilities?.input).toEqual([
+      "text",
+    ]);
+    expect(result.vendor.models["fixture/unknown"].capabilities?.input).toEqual(
+      ["text", "image"],
+    );
+  });
+
   test("a supplied empty catalog is authoritative and an omitted catalog is not", async () => {
     expect(
       renderOpenCodeRoutingPlugin({
@@ -552,7 +801,7 @@ async function writeFakeOpenCodePluginSdk(revision: string) {
   await writeFile(
     path.join(sdk, "index.js"),
     `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
+export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, capabilities: { tools: true, input: ["text", "image"], output: ["text"] }, limit: { context: 1, output: 1 } }) } };`,
   );
 }
 
@@ -602,7 +851,10 @@ function run(file: string): Promise<{
       settings: Record<string, string>;
       headers: Record<string, string>;
     };
-    models: Record<string, { id: string; modelID: string }>;
+    models: Record<
+      string,
+      { id: string; modelID: string; capabilities?: { input: string[] } }
+    >;
   };
   openai: {
     provider: { settings: Record<string, string> };

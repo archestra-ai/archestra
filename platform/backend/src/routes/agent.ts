@@ -129,7 +129,7 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -279,7 +279,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.",
+                "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
               ),
             includeTotal: z
               .preprocess(
@@ -492,39 +492,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         );
       }
-      // The bootstrap also carries the caller's and the organization's
-      // default agents, so a chat page can pick its agent without a second,
-      // dependent roster request for them.
-      const [params, defaultAgentId, organization] = await Promise.all([
-        getPermittedAgentRosterOptions({
-          query: CHAT_ROSTER_QUERY,
-          userId: user.id,
-          organizationId,
-        }),
-        MemberModel.getDefaultAgentId(user.id, organizationId),
-        OrganizationModel.getById(organizationId),
-      ]);
-      const defaultIds = [
-        ...new Set(
-          [defaultAgentId, organization?.defaultAgentId].filter(
-            (id): id is string => !!id,
-          ),
-        ),
-      ];
-      const [starting, defaults] = await Promise.all([
-        AgentModel.findChatRosterBootstrap(params),
-        defaultIds.length > 0
-          ? AgentModel.findChatRoster({
-              ...params,
-              options: { ...params.options, ids: defaultIds },
-            })
-          : Promise.resolve([]),
-      ]);
-      return reply.send([
-        ...new Map(
-          [...starting, ...defaults].map((agent) => [agent.id, agent]),
-        ).values(),
-      ]);
+      return reply.send(
+        await getChatRosterBootstrap({ userId: user.id, organizationId }),
+      );
     },
   );
 
@@ -684,25 +654,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      const agents = await AgentModel.findAll(
-        user.id,
-        checker.isAdmin("agent"),
-        {
-          agentTypes: ["agent"],
-          excludeBuiltIn: true,
-          onlyEnforcingMissingCredentials: true,
-          includeTools: false,
-          ids: query.ids,
-        },
-      );
-
       return reply.send(
-        await getAgentCredentialReadiness({ agents, userId: user.id }),
+        await getAgentCredentialReadinessForUser({
+          ids: query.ids,
+          userId: user.id,
+          organizationId,
+        }),
       );
     },
   );
@@ -712,15 +669,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get default MCP Gateway",
+        description:
+          "Get the caller's personal MCP Gateway, creating it on first use.",
         tags: ["MCP Gateway"],
-        response: constructResponseSchema(SelectAgentSchema),
+        querystring: z.object({
+          includeTools: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.",
+            ),
+        }),
+        response: constructResponseSchema(
+          AgentListItemSchema.omit({ pinnedAt: true }),
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const gateway = await AgentModel.ensurePersonalMcpGateway({
-        userId: request.user.id,
-        organizationId: request.organizationId,
+        userId: user.id,
+        organizationId,
+        includeTools: query.includeTools,
       });
       return reply.send(gateway);
     },
@@ -873,6 +842,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
+      await assertModelTrioTiers({
+        apiKeyId: body.llmApiKeyId ?? null,
+        fastModelId: body.fastModelId ?? null,
+        smartModelId: body.smartModelId ?? null,
+      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -1002,20 +976,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Only the agent's own prompts matter here, not the full agent.
-      const agent = await requireReadableAgent({
-        id,
-        userId: user.id,
-        organizationId,
-        load: AgentModel.findByIdForAccess,
-      });
-      const suggestedPrompts =
-        (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(
-          agent.id,
-        ) ?? [];
       return reply.send(
-        await getDocsSuggestedPrompts({
-          agent: { id: agent.id, suggestedPrompts },
+        await getAgentDefaultSuggestedPrompts({
+          id,
           userId: user.id,
           organizationId,
         }),
@@ -2281,6 +2244,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.fastModelId !== undefined && {
+            fastModelId: body.fastModelId,
+          }),
+          ...(body.smartModelId !== undefined && {
+            smartModelId: body.smartModelId,
+          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -2312,6 +2281,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "An agent's model and API key must be set together",
           );
         }
+      }
+
+      if (
+        body.llmApiKeyId !== undefined ||
+        body.fastModelId !== undefined ||
+        body.smartModelId !== undefined
+      ) {
+        await assertModelTrioTiers({
+          apiKeyId:
+            body.llmApiKeyId !== undefined
+              ? body.llmApiKeyId
+              : existingAgent.llmApiKeyId,
+          fastModelId:
+            body.fastModelId !== undefined
+              ? body.fastModelId
+              : existingAgent.fastModelId,
+          smartModelId:
+            body.smartModelId !== undefined
+              ? body.smartModelId
+              : existingAgent.smartModelId,
+        });
       }
 
       if (
@@ -2755,107 +2745,111 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ defaultAgentId: body.defaultAgentId });
     },
   );
-
-  fastify.get(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.GetMemberDefaultModel,
-        description: "Get the current user's default model and API key",
-        tags: ["Members"],
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ user, organizationId }, reply) => {
-      const selection = await MemberModel.getDefaultModelSelection(
-        user.id,
-        organizationId,
-      );
-      return reply.send(selection);
-    },
-  );
-
-  fastify.put(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.UpdateMemberDefaultModel,
-        description: "Set the current user's default model and API key",
-        tags: ["Members"],
-        body: z.object({
-          modelId: z.string().uuid().nullable(),
-          chatApiKeyId: z.string().uuid().nullable(),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ body, user, organizationId }, reply) => {
-      // The default model and its API key are a pair: persist both or neither.
-      if (
-        !isModelSelectionComplete({
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        })
-      ) {
-        throw new ApiError(
-          400,
-          "The default model and API key must be set together",
-        );
-      }
-
-      // A default runs new chats on any agent, so it needs a key the member
-      // may use; an agent's own key is usable only through that agent.
-      if (body.chatApiKeyId) {
-        const apiKey = await LlmProviderApiKeyModel.findById(body.chatApiKeyId);
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(
-            400,
-            "The selected model or API key no longer exists",
-          );
-        }
-        if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, user.id, []))) {
-          throw new ApiError(403, "You do not have access to this API key");
-        }
-      }
-
-      try {
-        await MemberModel.setDefaultModelSelection({
-          userId: user.id,
-          organizationId,
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        });
-      } catch (error) {
-        // The referenced model or API key can be deleted between the client
-        // loading its options and saving the selection.
-        if (isForeignKeyConstraintError(error)) {
-          throw new ApiError(
-            400,
-            "The selected model or API key no longer exists",
-          );
-        }
-        throw error;
-      }
-
-      return reply.send({
-        modelId: body.modelId,
-        chatApiKeyId: body.chatApiKeyId,
-      });
-    },
-  );
 };
 
 export default agentRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/agents/chat-roster?bootstrap=true` */
+export async function getChatRosterBootstrap(params: {
+  userId: string;
+  organizationId: string;
+}) {
+  const { userId, organizationId } = params;
+  // The bootstrap also carries the caller's and the organization's
+  // default agents, so a chat page can pick its agent without a second,
+  // dependent roster request for them.
+  const [rosterParams, defaultAgentId, organization] = await Promise.all([
+    getPermittedAgentRosterOptions({
+      query: CHAT_ROSTER_QUERY,
+      userId,
+      organizationId,
+    }),
+    MemberModel.getDefaultAgentId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
+  const defaultIds = [
+    ...new Set(
+      [defaultAgentId, organization?.defaultAgentId].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  const [starting, defaults] = await Promise.all([
+    AgentModel.findChatRosterBootstrap(rosterParams),
+    defaultIds.length > 0
+      ? AgentModel.findChatRoster({
+          ...rosterParams,
+          options: { ...rosterParams.options, ids: defaultIds },
+        })
+      : Promise.resolve([]),
+  ]);
+  return [
+    ...new Map(
+      [...starting, ...defaults].map((agent) => [agent.id, agent]),
+    ).values(),
+  ];
+}
+
+/** `GET /api/agents/credential-readiness` */
+export async function getAgentCredentialReadinessForUser(params: {
+  ids: string[] | undefined;
+  userId: string;
+  organizationId: string;
+}) {
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+
+  const agents = await AgentModel.findAll(
+    params.userId,
+    checker.isAdmin("agent"),
+    {
+      agentTypes: ["agent"],
+      excludeBuiltIn: true,
+      onlyEnforcingMissingCredentials: true,
+      includeTools: false,
+      ids: params.ids,
+    },
+  );
+
+  return getAgentCredentialReadiness({ agents, userId: params.userId });
+}
+
+/** `GET /api/agents/:id` */
+export function getReadableAgent(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  return requireReadableAgent(params);
+}
+
+/** `GET /api/agents/:id/default-suggested-prompts` */
+export async function getAgentDefaultSuggestedPrompts(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  // Only the agent's own prompts matter here, not the full agent.
+  const agent = await requireReadableAgent({
+    ...params,
+    load: AgentModel.findByIdForAccess,
+  });
+  const suggestedPrompts =
+    (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(agent.id) ??
+    [];
+  return getDocsSuggestedPrompts({
+    agent: { id: agent.id, suggestedPrompts },
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+}
 
 /**
  * Resolve a live agent and enforce the full read-access path shared by

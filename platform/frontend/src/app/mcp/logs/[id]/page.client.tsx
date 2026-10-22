@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ToolCallPayload } from "@/app/llm/logs/[id]/_parts/tool-call-details";
 import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -15,6 +16,7 @@ import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display
 import { CallExcerpt } from "./_parts/call-excerpt";
 import { ToolCallFacts } from "./_parts/tool-call-facts";
 import {
+  ToolCallHeaderIcon,
   ToolCallHeaderTitle,
   ToolCallIdentityLine,
 } from "./_parts/tool-call-header";
@@ -34,10 +36,10 @@ export function McpToolCallDetailPage({ id }: { id: string }) {
 // ============================================================================
 
 /**
- * One logged MCP call: what it was, how it went, and — the part a lone record
- * cannot say — what happened around it. The excerpt below the facts is the
- * session page's own request list, trimmed to the records on either side of
- * this call, with its details pane open on the call.
+ * One logged MCP call: what it was, how it went, its arguments and result,
+ * and then what happened around it. The excerpt at the bottom is the session
+ * page's own request list, trimmed to the records on either side of this
+ * call; picking one of them previews it there.
  */
 function McpToolCallDetail({ id }: { id: string }) {
   const {
@@ -97,13 +99,10 @@ function McpToolCallDetail({ id }: { id: string }) {
   return (
     <PageLayout
       denseContent
-      title={
-        <ToolCallHeaderTitle
-          display={display}
-          title={title}
-          method={content.method}
-        />
-      }
+      // Laid out like every other detail page: back arrow, the server's mark
+      // in its tile, then the title over its one-line description.
+      icon={<ToolCallHeaderIcon display={display} />}
+      title={<ToolCallHeaderTitle title={title} method={content.method} />}
       documentTitle={title}
       stackHeaderOnMobile
       backLink={<PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>}
@@ -121,6 +120,11 @@ function McpToolCallDetail({ id }: { id: string }) {
           status={content.status}
           message={content.outcomeMessage}
         />
+        {/* The call's own payload comes first: it is what this page was
+            opened for. The records around it follow, as context. */}
+        <div className="overflow-hidden rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)]">
+          <ToolCallPayload call={mcpToolCall} outcomeNotice={false} />
+        </div>
         <CallExcerpt call={mcpToolCall} agentName={agentName} />
       </div>
     </PageLayout>

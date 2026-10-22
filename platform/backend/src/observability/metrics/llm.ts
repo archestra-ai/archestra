@@ -714,6 +714,7 @@ export function getObservableFetch(
   provider: SupportedProvider,
   profile: GatewayAgent,
   source: InteractionSource,
+  options?: { reportTokens?: boolean },
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -811,6 +812,7 @@ export function getObservableFetch(
 
     // Record token metrics
     if (
+      options?.reportTokens !== false &&
       response.ok &&
       response.headers.get("content-type")?.includes("application/json")
     ) {

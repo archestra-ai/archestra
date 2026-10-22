@@ -2,13 +2,26 @@ import { parsePublicHostSchemes, resolvePublicScheme } from "@archestra/shared";
 
 /** Public document links must use the ingress origin, not Next.js's bind address. */
 export function requestOrigin(request: Request): string {
-  const fallback = applyConfiguredScheme(new URL(request.url).origin);
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const protocol =
-    request.headers.get("x-forwarded-proto") ??
-    new URL(request.url).protocol.slice(0, -1);
-  if (!host || !["http", "https"].includes(protocol)) return fallback;
+  const url = new URL(request.url);
+  return (
+    originFromHeaders(request.headers, url.protocol.slice(0, -1)) ??
+    applyConfiguredScheme(url.origin)
+  );
+}
+
+/**
+ * The public origin the request's headers name (the forwarded host and
+ * protocol, else the Host header), or null when they name none. A server
+ * render, which has the headers but no request URL, reads the origin the
+ * browser shows as `window.location.origin` this way.
+ */
+export function originFromHeaders(
+  headers: { get(name: string): string | null },
+  observedProtocol = "http",
+): string | null {
+  const host = headers.get("x-forwarded-host") ?? headers.get("host");
+  const protocol = headers.get("x-forwarded-proto") ?? observedProtocol;
+  if (!host || !["http", "https"].includes(protocol)) return null;
   try {
     const candidate = new URL(`${protocol}://${host}`);
     // Accept an authority only: no credentials, paths, queries, or fragments.
@@ -20,11 +33,37 @@ export function requestOrigin(request: Request): string {
       candidate.search ||
       candidate.hash
     )
-      return fallback;
+      return null;
     return applyConfiguredScheme(candidate.origin);
   } catch {
-    return fallback;
+    return null;
   }
+}
+
+/**
+ * Whether the request's headers say which scheme the browser used, so the
+ * origin they name is the one the page shows as `window.location.origin`: a
+ * forwarded protocol, a loopback host, or a host the operator named in a
+ * public URL (its scheme is configured). Behind a TLS-terminating proxy that
+ * sends no X-Forwarded-Proto the scheme is a guess, and a setup prepared for
+ * a guessed origin is one the page cannot use.
+ */
+export function originSchemeKnown(headers: {
+  get(name: string): string | null;
+}): boolean {
+  const host = (
+    headers.get("x-forwarded-host") ?? headers.get("host")
+  )?.toLowerCase();
+  if (!host) return false;
+  const protocol = headers.get("x-forwarded-proto");
+  if (protocol === "http" || protocol === "https") return true;
+  const hostname = host.replace(/:\d+$/, "").replace(/^\[(.*)\]$/, "$1");
+  if (["localhost", "127.0.0.1", "::1"].includes(hostname)) return true;
+  return parsePublicHostSchemes([
+    process.env.ARCHESTRA_FRONTEND_URL,
+    process.env.ARCHESTRA_API_BASE_URL,
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL,
+  ]).has(host);
 }
 
 /**

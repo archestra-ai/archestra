@@ -15,12 +15,14 @@ import {
   lt,
   // SPDX-SnippetEnd
   ne,
+  notExists,
   notInArray,
   or,
   type SQL,
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -442,16 +444,58 @@ class McpServerModel {
   }
 
   /**
-   * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
+   * Installations that have recorded no per-installation tool descriptions
+   * yet, in catalogs with more than one installation (only there can
+   * installations disagree). A random sample, so installations that keep
+   * failing cannot hold the rest back. Skips installations whose OAuth refresh
+   * failed and local installations that are not running.
    */
-  static async getFirstCreatedAt(): Promise<Date | null> {
-    const [row] = await db
-      .select({ createdAt: schema.mcpServersTable.createdAt })
+  static async findMissingToolDescriptions(params: {
+    limit: number;
+  }): Promise<McpServer[]> {
+    const sibling = alias(schema.mcpServersTable, "sibling");
+    return db
+      .select()
       .from(schema.mcpServersTable)
-      .orderBy(asc(schema.mcpServersTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
+      .where(
+        and(
+          notDeleted(schema.mcpServersTable),
+          ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.mcpServersTable.serverType, "remote"),
+            and(
+              eq(schema.mcpServersTable.serverType, "local"),
+              eq(schema.mcpServersTable.localInstallationStatus, "success"),
+            ),
+          ),
+          isNull(schema.mcpServersTable.oauthRefreshError),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.mcpServerToolDescriptionsTable)
+              .where(
+                eq(
+                  schema.mcpServerToolDescriptionsTable.mcpServerId,
+                  schema.mcpServersTable.id,
+                ),
+              ),
+          ),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(sibling)
+              .where(
+                and(
+                  eq(sibling.catalogId, schema.mcpServersTable.catalogId),
+                  ne(sibling.id, schema.mcpServersTable.id),
+                  isNull(sibling.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(sql`random()`)
+      .limit(params.limit);
   }
 
   /**
@@ -793,7 +837,8 @@ class McpServerModel {
    */
   static credentialUsableCondition(userId: string): SQL {
     const server = schema.mcpServersTable;
-    return or(
+    // A nullable owner or team makes the bare OR NULL instead of false.
+    return sql`coalesce(${or(
       eq(server.ownerId, userId),
       exists(
         db
@@ -814,7 +859,7 @@ class McpServerModel {
         }),
       ),
       eq(server.scope, "org"),
-    ) as SQL;
+    )}, false)`;
   }
 
   /**
@@ -2295,6 +2340,7 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
       _meta?: Record<string, unknown>;
       annotations?: Record<string, unknown>;
+      outputSchema?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -2336,6 +2382,7 @@ class McpServerModel {
         inputSchema: tool.inputSchema,
         _meta: tool._meta,
         annotations: tool.annotations,
+        outputSchema: tool.outputSchema,
       }));
     } catch (error) {
       logger.error(

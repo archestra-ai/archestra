@@ -53,6 +53,7 @@ interface SearchableSelectProps {
    */
   pinnedItems?: Array<SearchableSelectItem>;
   className?: string;
+  size?: "default" | "sm";
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
@@ -93,6 +94,7 @@ export function SearchableSelect({
   items,
   pinnedItems,
   className,
+  size = "default",
   disabled = false,
   allowCustom = false,
   showSearchIcon = true,
@@ -217,6 +219,7 @@ export function SearchableSelect({
         <Button
           id={id}
           variant="outline"
+          size={size}
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
@@ -228,7 +231,7 @@ export function SearchableSelect({
           className={cn(
             multiline
               ? "border-input h-auto min-h-9 w-[200px] justify-between bg-transparent py-2 font-normal shadow-xs hover:bg-transparent hover:text-foreground"
-              : "border-input h-9 w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+              : "border-input w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
             !value && "text-muted-foreground",
             className,
           )}

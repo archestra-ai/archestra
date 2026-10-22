@@ -41,6 +41,10 @@ beforeEach(() => {
   vi.mocked(postConnected).mockClear();
   archestraApiClient.setConfig({ baseUrl: origin });
   server.use(
+    http.get(`${origin}/api/bootstrap`, () => HttpResponse.json({})),
+    http.get(`${origin}/api/organization/appearance-settings`, () =>
+      HttpResponse.json({}),
+    ),
     http.get(`${origin}/api/client-connections/request`, () =>
       HttpResponse.json({
         clientId: "cursor",
@@ -91,8 +95,14 @@ function show(
         setupProblem={setupProblem}
         clientId={clientId}
         platform="linux"
-        gatewayName="My Gateway"
-        {...resources}
+        gateway={
+          resources.gatewaySelected
+            ? { id: "gateway-id", name: "My Gateway" }
+            : null
+        }
+        mcpServerName="My Gateway"
+        proxySelected={resources.proxySelected}
+        skillsSelected={resources.skillsSelected}
       />
     </QueryClientProvider>,
   );
@@ -199,9 +209,7 @@ test("a pending decision disables both actions and waits for the result", async 
       platform: "linux",
     }),
   );
-  await screen.findByText(
-    "Connection approved. Return to your terminal to finish setup.",
-  );
+  await screen.findByRole("heading", { name: "Switch back to your terminal" });
 });
 
 test("a failed decision keeps confirmation visible and permits retry", async () => {
@@ -228,7 +236,9 @@ test("a failed decision keeps confirmation visible and permits retry", async () 
     ).toBeEnabled(),
   );
   expect(screen.getByText("ABCD-1234")).toBeVisible();
-  expect(screen.queryByText(/Connection approved\./)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Switch back to your terminal" }),
+  ).not.toBeInTheDocument();
 });
 
 test("approval requires matching the terminal code, then submits the reviewed setup", async () => {
@@ -240,9 +250,7 @@ test("approval requires matching the terminal code, then submits the reviewed se
   fireEvent.click(screen.getByRole("checkbox"));
   expect(approve).toBeEnabled();
   fireEvent.click(approve);
-  await screen.findByText(
-    "Connection approved. Return to your terminal to finish setup.",
-  );
+  await screen.findByRole("heading", { name: "Switch back to your terminal" });
   expect(
     screen.getByText(
       "In Cursor, open Customize → MCPs and authenticate the gateway.",
@@ -269,9 +277,7 @@ test("approval only shows steps for selected Cursor resources", async () => {
   await screen.findByText("ABCD-1234");
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
-  await screen.findByText(
-    "Connection approved. Return to your terminal to finish setup.",
-  );
+  await screen.findByRole("heading", { name: "Switch back to your terminal" });
   expect(
     screen.getByText(
       "In Cursor, open Customize → MCPs and authenticate the gateway.",
@@ -298,6 +304,11 @@ test("Claude Desktop approval points to its connector step", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
   expect(await screen.findByText(/After Desktop restarts, open/)).toBeVisible();
   expect(screen.getByText(/Ask Claude to list the tools/)).toBeVisible();
+  // Desktop asks nothing in the terminal: its setup restarts the app itself.
+  expect(
+    screen.getByRole("heading", { name: "Finish in the setup terminal" }),
+  ).toBeVisible();
+  expect(screen.queryByText(/now\? \[Y\/n\]/)).not.toBeInTheDocument();
 });
 
 test("a mismatched client cannot be approved but can be denied", async () => {

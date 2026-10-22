@@ -102,9 +102,22 @@ export const RouteId = {
   SyncAgentA2aDelegations: "syncAgentA2aDelegations",
   GetAllDelegationConnections: "getAllDelegationConnections",
 
+  // Dev Feedback Routes
+  GetDevFeedbackSetup: "getDevFeedbackSetup",
+  ListDevFeedbackBots: "listDevFeedbackBots",
+  ListDevFeedbackChannels: "listDevFeedbackChannels",
+  SaveDevFeedbackSetup: "saveDevFeedbackSetup",
+  GetDevFeedbackComments: "getDevFeedbackComments",
+  CreateDevFeedbackComment: "createDevFeedbackComment",
+  GetDevFeedbackReplies: "getDevFeedbackReplies",
+  CreateDevFeedbackReply: "createDevFeedbackReply",
+  ResolveDevFeedbackComment: "resolveDevFeedbackComment",
+
   // Config Routes
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
+  GetNewChatBootstrap: "getNewChatBootstrap",
+  GetConversationBootstrap: "getConversationBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -429,6 +442,10 @@ export const RouteId = {
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
+  AzureRealtimeTurnWithDefaultAgent: "azureRealtimeTurnWithDefaultAgent",
+  AzureRealtimeTurnWithAgent: "azureRealtimeTurnWithAgent",
+  AzureImagesWithDefaultAgent: "azureImagesWithDefaultAgent",
+  AzureImagesWithAgent: "azureImagesWithAgent",
   AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
   AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 
@@ -611,7 +628,6 @@ export const RouteId = {
   MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
   GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
   SubmitOnboardingSurvey: "submitOnboardingSurvey",
-  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -701,8 +717,6 @@ export const RouteId = {
   // Member Routes
   GetMemberDefaultAgent: "getMemberDefaultAgent",
   UpdateMemberDefaultAgent: "updateMemberDefaultAgent",
-  GetMemberDefaultModel: "getMemberDefaultModel",
-  UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
   GetUserPermissionSources: "getUserPermissionSources",
@@ -754,7 +768,9 @@ export const RouteId = {
   ApplyChatOpsBindingPlan: "applyChatOpsBindingPlan",
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
+  GetMsTeamsChatOpsConfig: "getMsTeamsChatOpsConfig",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  GetSlackChatOpsConfig: "getSlackChatOpsConfig",
   ListSlackAgentBots: "listSlackAgentBots",
   UpdateSlackAgentBot: "updateSlackAgentBot",
   DeleteSlackAgentBot: "deleteSlackAgentBot",
@@ -768,6 +784,7 @@ export const RouteId = {
   ListSlackRouterBotChannels: "listSlackRouterBotChannels",
   JoinSlackRouterBotChannel: "joinSlackRouterBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
+  GetTelegramChatOpsConfig: "getTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
@@ -887,6 +904,7 @@ export const RouteId = {
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
   GetOpenappaEffectivePolicy: "getOpenappaEffectivePolicy",
   GetOpenappaBatteryMatches: "getOpenappaBatteryMatches",
+  GetOpenappaBatteryInstall: "getOpenappaBatteryInstall",
   CreateOpenappaBatteryInstall: "createOpenappaBatteryInstall",
   UpdateOpenappaBatteryInstall: "updateOpenappaBatteryInstall",
   DeleteOpenappaBatteryInstall: "deleteOpenappaBatteryInstall",
@@ -894,6 +912,8 @@ export const RouteId = {
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
+  GetOpenappaCredentialBindings: "getOpenappaCredentialBindings",
+  GetOpenappaCredentialBinding: "getOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
@@ -1007,6 +1027,7 @@ export const RouteId = {
   GetConnectionInstructions: "getConnectionInstructions",
   GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
+  RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
   GetConnectedClientLog: "getConnectedClientLog",

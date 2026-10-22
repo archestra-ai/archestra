@@ -47,7 +47,7 @@ vi.mock("@/utils/llm-resolution", async () => {
   );
   return {
     ...actual,
-    resolveConversationLlmSelectionForAgent: (...args: unknown[]) =>
+    resolveForkParentSelection: (...args: unknown[]) =>
       mockResolveConversationLlmSelectionForAgent(...args),
   };
 });

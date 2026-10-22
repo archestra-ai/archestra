@@ -13,7 +13,6 @@ import {
   QueryChip,
   Segmented,
   SummaryTable,
-  ViewPills,
 } from "../(costs)/costs/cost-explorer-parts";
 import { fmtMetric, KpiTile } from "../(costs)/costs/cost-overview";
 import type { UsageViewProps } from "./usage-data";
@@ -84,6 +83,9 @@ export function UsageContent(props: UsageViewProps) {
     })),
   };
   const { statistics } = props;
+  const activeView = VIEWS.find(
+    (v) => v.group === group && v.metric === metric,
+  );
   const tiles = [
     {
       id: "billed",
@@ -133,10 +135,6 @@ export function UsageContent(props: UsageViewProps) {
                     : "text-chart-1"
             }
             estimate={t.id === "subscription"}
-            active={metric === t.id}
-            onClick={() =>
-              select(supportsUsage(group, t.id) ? group : "model", t.id)
-            }
           />
         ))}
         <KpiTile
@@ -149,20 +147,32 @@ export function UsageContent(props: UsageViewProps) {
           }
         />
       </section>
-      <ViewPills
-        label="Usage views"
-        items={VIEWS.map((v) => ({
-          id: v.label,
-          label: v.label,
-          active: group === v.group && metric === v.metric,
-          onSelect: () => select(v.group, v.metric),
-        }))}
-      />
       <section
         aria-label="Usage explorer"
         className="min-w-0 overflow-hidden rounded-xl border bg-card"
       >
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+          {/* A view is a preset of the controls beside it; changing any of
+              them makes the view custom. */}
+          <QueryChip
+            label="View"
+            className="max-sm:grow"
+            value={activeView?.label ?? CUSTOM_VIEW}
+            options={[
+              ...VIEWS.map((v) => ({ id: v.label, label: v.label })),
+              ...(activeView
+                ? []
+                : [{ id: CUSTOM_VIEW, label: "Custom", disabled: true }]),
+            ]}
+            onChange={(id) => {
+              const view = VIEWS.find((v) => v.label === id);
+              if (view) select(view.group, view.metric);
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className="mx-0.5 h-5 w-px bg-border max-sm:hidden"
+          />
           <QueryChip
             label="Show"
             className="max-sm:grow"
@@ -332,3 +342,5 @@ export function UsageContent(props: UsageViewProps) {
     </div>
   );
 }
+
+const CUSTOM_VIEW = "custom";

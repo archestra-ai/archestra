@@ -87,6 +87,13 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+const { mockPreloadResponseMarkdown } = vi.hoisted(() => ({
+  mockPreloadResponseMarkdown: vi.fn(async () => {}),
+}));
+vi.mock("@/components/ai-elements/response", () => ({
+  preloadResponseMarkdown: mockPreloadResponseMarkdown,
+}));
+
 vi.mock("sonner", () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast, Toaster: () => null };
@@ -978,6 +985,18 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("starts loading the reply's markdown renderer on the first key press", () => {
+      mockPreloadResponseMarkdown.mockClear();
+      render(<ArchestraPromptInput {...defaultProps} />);
+      expect(mockPreloadResponseMarkdown).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "h",
+      });
+
+      expect(mockPreloadResponseMarkdown).toHaveBeenCalled();
+    });
+
     it("should reset slash command selection when the menu reopens", () => {
       const onCompactConversation = vi.fn();
       mockControllerState.value = "/";
@@ -1100,7 +1119,7 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows compact privacy details and a usable attach button after the encrypted chat starts", () => {
+    it("keeps the privacy details visible and the attach button usable after the encrypted chat starts", () => {
       mockConversationState.conversation = { encryptedChat: true };
 
       render(
@@ -1112,11 +1131,8 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(
-        screen.queryByTestId(E2eTestId.EncryptedChatNotice),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Encrypted chat privacy details" }),
-      ).toBeInTheDocument();
+        screen.getByTestId(E2eTestId.EncryptedChatNotice),
+      ).toHaveTextContent("Use this mode for highly sensitive work.");
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
@@ -1177,9 +1193,7 @@ describe("ArchestraPromptInput", () => {
         screen.getByRole("link", { name: /Learn how to enable it/ }),
       ).toHaveAttribute(
         "href",
-        expect.stringContaining(
-          "/docs/admin/security/content-encryption#key-escrow",
-        ),
+        expect.stringContaining("/docs/admin/content-encryption#key-escrow"),
       );
       expect(onEncryptedChatChange).not.toHaveBeenCalled();
     });

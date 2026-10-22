@@ -28,8 +28,8 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
   YELL_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -128,6 +128,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
@@ -157,6 +158,7 @@ import {
   MAX_INPUT_ROUNDS,
 } from "./mrtr";
 import {
+  buildGatewayInstructions,
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
@@ -324,7 +326,10 @@ export async function buildAgentMcpToolList(params: {
   tokenAuth?: Pick<
     TokenAuthContext,
     "userId" | "organizationId" | "isSessionAuth" | "serviceAccountId"
-  >;
+  > &
+    Partial<
+      Pick<TokenAuthContext, "teamId" | "isOrganizationToken" | "isExternalIdp">
+    >;
   lookups?: RequestLookups;
 }): Promise<{
   tools: McpListTool[];
@@ -373,13 +378,20 @@ export async function buildAgentMcpToolList(params: {
   // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
   // be excluded from tools/list (with a warning), so one malformed upstream
   // definition cannot poison the rest of the list.
-  const mcpTools = fetchedMcpTools.filter(
-    (tool) =>
-      !isToolRejectedForMcpHeaders({
-        toolName: tool.name,
-        inputSchema: tool.parameters,
-      }),
-  );
+  //
+  // Each tool is then described the way the installation its tools/call would
+  // run through describes it, not as whichever installation synced last.
+  const mcpTools = await describeToolsForCaller({
+    tools: fetchedMcpTools.filter(
+      (tool) =>
+        !isToolRejectedForMcpHeaders({
+          toolName: tool.name,
+          inputSchema: tool.parameters,
+        }),
+    ),
+    agentId,
+    tokenAuth,
+  });
 
   // A tools/list is served to one of two surfaces, and the whole gateway/chat
   // difference lives in this policy. An internal chat (agentType "agent") is
@@ -436,7 +448,7 @@ export async function buildAgentMcpToolList(params: {
     mcpTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
+        TOOL_START_AGENT_RUN_SHORT_NAME,
     );
   // A session can arrive from another client even if this gateway cannot
   // start work. Advertise lifecycle controls for runtime handoffs and dynamic
@@ -642,6 +654,7 @@ export async function buildAgentMcpToolList(params: {
                 description ??
                 undefined),
       inputSchema: parameters,
+      ...advertisedOutputSchema(meta?.outputSchema),
       annotations: meta?.annotations || {},
       _meta: ALWAYS_LOADED_SHORT_NAMES.has(
         archestraMcpBranding.getToolShortName(name) ?? "",
@@ -729,6 +742,15 @@ export async function createAgentServer(params: {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
     });
+
+  // Slim lookup: this runs on every stateless gateway request, and the tool
+  // handlers below only read scalar agent config plus labels — never the
+  // tools/teams/knowledge/connector hydration `findById` performs.
+  const agent = params.lookups
+    ? await params.lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -741,17 +763,10 @@ export async function createAgentServer(params: {
       // deliberately passes the negotiated revision instead and may advertise
       // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
+      instructions: buildGatewayInstructions(agent.description),
     },
   );
   const { server } = mcpServer;
-
-  // Slim lookup: this runs on every stateless gateway request, and the tool
-  // handlers below only read scalar agent config plus labels — never the
-  // tools/teams/knowledge/connector hydration `findById` performs.
-  const agent = params.lookups
-    ? await params.lookups.gatewayAgent(agentId)
-    : await AgentModel.findGatewayAgentById(agentId);
-  if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
@@ -1461,7 +1476,11 @@ export async function createAgentServer(params: {
       // Clients using protocol 2026-07-28 reject results without this property.
       // `InputRequiredResult` includes its own `resultType`.
       execute: async (signal) => {
-        const result = await executeCallToolRequest(signal);
+        const result = await withoutPlatformErrorEnvelopeForSchemaTool({
+          result: await executeCallToolRequest(signal),
+          agentId,
+          toolName: name,
+        });
         return "resultType" in result ? result : complete(result);
       },
     });
@@ -2349,6 +2368,7 @@ async function authenticateExternalIdpToken(
       !(await AgentTeamModel.userHasAgentAccess({
         userId: user.id,
         agentId: profileId,
+        agentAccessContext: agent,
         isAgentAdmin: isAdmin,
         action: "use",
       }))
@@ -2574,6 +2594,8 @@ type McpListToolCandidate = {
   meta?: {
     annotations?: McpListTool["annotations"];
     _meta?: McpListTool["_meta"];
+    /** The upstream tool's declared `outputSchema`, kept at sync time. */
+    outputSchema?: unknown;
   };
   /** A platform built-in by catalog provenance, never by name. */
   builtIn: boolean;
@@ -2588,6 +2610,7 @@ function toMcpListTool(tool: {
   meta?: {
     annotations?: Record<string, unknown>;
     _meta?: Record<string, unknown>;
+    outputSchema?: unknown;
   } | null;
   builtIn?: boolean;
   annotations?: Record<string, unknown>;
@@ -2837,9 +2860,10 @@ async function buildSearchToolsDescription(params: {
   });
   const runtimeInstruction = params.availableBuiltInToolNames.some(
     (name) =>
-      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_STEER_AGENT_RUN_SHORT_NAME,
   )
-    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_agent_run only when this work has no run yet. Otherwise steer_agent_run continues the existing run by its run_id. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
@@ -2995,7 +3019,7 @@ function summarizeDeferredBuiltIns(params: {
     ["read_file", "read file"],
     ["load_skill", "load skill"],
     ["run_command", "run command"],
-    ["list_runs", "list runs"],
+    ["list_agent_runs", "list agent runs"],
     ["get_guardrails_policy", "get guardrails policy"],
   ].flatMap(([shortName, query]) =>
     deferredShortNames.has(shortName) ? [`'${query}'`] : [],
@@ -3033,6 +3057,51 @@ export function normalizeToolInputSchema(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Clients validate any `structuredContent` against the tool's advertised
+ * `outputSchema`, error results included (the TypeScript SDK throws on a
+ * mismatch). The platform's error envelope (`structuredContent.archestraError`,
+ * mirrored in `_meta`) never matches an upstream tool's schema, so for a tool
+ * that advertises one the envelope travels in `_meta` and `content` only.
+ * Otherwise the client would surface a schema-validation failure in place of
+ * the actual refusal or upstream error.
+ */
+async function withoutPlatformErrorEnvelopeForSchemaTool(params: {
+  result: Record<string, unknown>;
+  agentId: string;
+  toolName: string;
+}): Promise<Record<string, unknown>> {
+  const { result } = params;
+  if (
+    !result.isError ||
+    !isRecord(result.structuredContent) ||
+    !("archestraError" in result.structuredContent) ||
+    !(await ToolModel.assignedToolDeclaresOutputSchema({
+      agentId: params.agentId,
+      name: params.toolName,
+    }))
+  ) {
+    return result;
+  }
+  const { structuredContent: _platformEnvelope, ...rest } = result;
+  return rest;
+}
+
+/**
+ * The `outputSchema` field for a tools/list entry, or nothing. An upstream
+ * tool's schema is advertised as-is so clients can validate the
+ * `structuredContent` tools/call relays unchanged. Only an object schema is
+ * valid MCP: anything else would make a client reject the whole list, so it
+ * is dropped rather than passed through.
+ */
+function advertisedOutputSchema(
+  schema: unknown,
+): Pick<McpListTool, "outputSchema"> {
+  return isRecord(schema) && schema.type === "object"
+    ? { outputSchema: schema as McpListTool["outputSchema"] }
+    : {};
 }
 
 function isArchestraMetaTool(toolName: string) {

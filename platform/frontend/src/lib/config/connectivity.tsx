@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { useReadiness } from "@/lib/config/health.query";
+import { useShellReady } from "@/lib/shell-deferral";
 
 const HEALTHY_POLL_MS = 30_000;
 const FAILING_POLL_MS = 5_000;
@@ -48,8 +49,13 @@ export function ConnectivityProvider({ children }: { children: ReactNode }) {
 
   // `/ready` is unauthenticated and probes the database. It distinguishes a
   // reachable backend with a failed database from an unreachable backend.
+  // The first probe waits for the page's first wave of requests: a page that
+  // is loading already learns whether the backend answers, and the probe
+  // would only queue in front of the data the page is waiting for.
+  const shellReady = useShellReady();
   const { refetch, data, isSuccess, isError, dataUpdatedAt, errorUpdatedAt } =
     useReadiness({
+      enabled: shellReady,
       refetchOnReconnect: false,
       // Poll speed follows the query's own error status (immediate), so a failing
       // backend is re-probed quickly. The unreachable *threshold* below is a

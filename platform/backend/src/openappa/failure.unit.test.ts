@@ -1,14 +1,18 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import logger from "@/logging";
+import { ApiError } from "@/types/api";
 import {
-  OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
   unansweredAnnotationNotice,
 } from "./failure";
 
+vi.mock("@/logging");
+
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
-    const cause = new Error(
+    const cause = runtimeFailure(
+      "policy_refused",
       'unsupported policy: tool "grain__*" has an invalid qualified identity',
     );
 
@@ -24,22 +28,73 @@ describe("openappaFailure", () => {
   });
 
   test("keeps runtime and storage diagnostics out of the message and allows a retry", () => {
-    for (const cause of [
-      new Error(
-        "storage failure: connect postgresql://app:secret@db.internal/archestra",
-      ),
-      new Error("private native database error"),
-      "not even an error",
-    ]) {
+    for (const [cause, detail] of [
+      [
+        runtimeFailure(
+          "storage",
+          "storage failure: connect postgresql://app:secret@db.internal/archestra",
+        ),
+        "the policy runtime is unavailable (code: storage).",
+      ],
+      [
+        runtimeFailure(
+          "panicked",
+          "OpenAPPA panicked; operation was not released",
+        ),
+        "the policy runtime is unavailable (code: panicked).",
+      ],
+      [
+        runtimeFailure(
+          "replay_timed_out",
+          "OpenAPPA replay exceeded its 120 second limit",
+        ),
+        "the policy runtime is unavailable (code: replay_timed_out).",
+      ],
+      [
+        new Error("private native database error"),
+        "the policy runtime is unavailable (code: unknown).",
+      ],
+      [
+        "not even an error",
+        "the policy runtime is unavailable (code: unknown).",
+      ],
+    ] as const) {
       const failure = openappaFailure(cause);
 
       expect(failure.statusCode).toBe(503);
       expect(failure.shouldRetry).toBe(true);
       expect(failure.retryAfterSeconds).toBeGreaterThan(0);
       expect(failure.message).toBe(
-        "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+        `OpenAPPA could not safely complete this operation: ${detail}`,
       );
     }
+  });
+
+  test("logs the cause and its code without URL credentials", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(
+      runtimeFailure(
+        "storage",
+        "storage failure: connect postgresql://app:secret@db.internal/archestra",
+      ),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        code: "storage",
+        cause: "storage failure: connect postgresql://db.internal/archestra",
+      },
+      "OpenAPPA could not safely complete an operation",
+    );
+  });
+
+  test("does not log a failure the client caused", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(runtimeFailure("untrusted_log", "stored batch 7"));
+
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   test("tells a conversation whose stored record no longer decodes to start again, without retrying", () => {
@@ -87,12 +142,14 @@ describe("openappaFailure", () => {
 
   test("names an exhausted connection pool without its internals", () => {
     const failure = openappaFailure(
-      new Error(
+      runtimeFailure(
+        "pool_exhausted",
         "OpenAPPA had no free PostgreSQL connection in time; retry later",
       ),
     );
 
     expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
     expect(failure.message).toBe(
       "OpenAPPA could not safely complete this operation: the policy runtime has no free database connection.",
     );
@@ -110,7 +167,7 @@ describe("openappaFailure", () => {
 
   test.each([
     "OpenAPPA processing interrupted: annotator unavailable",
-    "OpenAPPA remedy awaiting an answer: consult pending",
+    "OpenAPPA remedy interrupted: storage unavailable",
     "OpenAPPA remedy is still executing; retry later",
     "OpenAPPA result refused: transport unavailable",
   ])("keeps an interrupted native operation retryable: %s", (message) => {
@@ -121,20 +178,23 @@ describe("openappaFailure", () => {
     expect(failure.shouldRetry).toBe(true);
     expect(failure.retryAfterSeconds).toBeGreaterThan(0);
     expect(failure.message).toBe(
-      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable (code: unknown).",
     );
     expect(failure.cause).toBe(cause);
   });
 
-  test("a session whose annotator the policy retired is not retried", () => {
-    const cause = new OpenappaRetiredAnnotatorError("jev.tool-call");
+  test("a conversation opened under the earlier policy model is refused once, not retried", () => {
+    const cause = runtimeFailure(
+      "legacy_family",
+      "this trajectory family was opened before live policy revisions; open a new one",
+    );
     const failure = openappaFailure(cause);
 
     expect(failure.statusCode).toBe(409);
     expect(failure.shouldRetry).toBe(false);
     expect(failure.retryAfterSeconds).toBeUndefined();
     expect(failure.message).toBe(
-      'OpenAPPA could not safely complete this operation: this conversation started under a policy that no longer declares annotator "jev.tool-call". Start a new conversation, or an administrator can declare "jev.tool-call" again on the Guardrails page.',
+      "OpenAPPA could not safely complete this operation: This conversation was opened under an earlier policy model. Start a new conversation.",
     );
     expect(failure.cause).toBe(cause);
   });
@@ -192,10 +252,6 @@ describe("openappaFailure", () => {
         "policy_moved",
         "OpenAPPA published a newer policy revision for this organization; retry the request",
       ),
-      // A runtime that does not class the refusal yet reports it in text.
-      new Error(
-        "OpenAPPA published a newer policy revision for this organization; retry the request",
-      ),
       // The runtime's own refusal, should it reach the host unconverted.
       new Error(
         "OpenAPPA processing interrupted: deployment org-1 moved to policy revision 4 while this event was decided; retry it",
@@ -215,7 +271,8 @@ describe("openappaFailure", () => {
 
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
-      new Error(
+      runtimeFailure(
+        "policy_refused",
         `configuration refused: annotator at https://user:token@example.com/annotate ${"x".repeat(400)}`,
       ),
     );
@@ -226,13 +283,49 @@ describe("openappaFailure", () => {
     expect(failure.message.length).toBeLessThan(420);
   });
 
+  test("a missing deployment setting is not retried and leaks no credential", () => {
+    const failure = openappaFailure(
+      runtimeFailure(
+        "runtime_misconfigured",
+        `annotator judge names the builtin "archestra", but the host supplies no archestra endpoint at https://user:token@example.com ${"x".repeat(400)}`,
+      ),
+    );
+
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).not.toContain("user:token");
+    expect(failure.message.length).toBeLessThan(500);
+  });
+
+  test("a request the binding cannot read is not retried and its detail stays out", () => {
+    const failure = openappaFailure(
+      runtimeFailure("invalid_input", "invalid session identity: secret-id"),
+    );
+
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).not.toContain("secret-id");
+  });
+
+  test("a refusal's wording without its code stays a retryable outage", () => {
+    const failure = openappaFailure(
+      new Error("unsupported policy: tool x has an invalid qualified identity"),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+  });
+
   test("a policy with no composition that ever opened is refused, not retried", () => {
     for (const cause of [
       new OpenappaRootOnlyError(
         "policy refused: tool mcp/acme/list names annotator nobody.declares",
       ),
       // What the runtime says if a root text alone still reaches it.
-      new Error(
+      runtimeFailure(
+        "policy_refused",
         "a hosted document declares \"include\", which is the host's to declare, not the policy's",
       ),
     ]) {
@@ -248,9 +341,19 @@ describe("openappaFailure", () => {
   });
 
   test("does not wrap a failure twice", () => {
-    const first = openappaFailure(new Error("unsupported policy: x"));
+    const cause = runtimeFailure("policy_refused", "unsupported policy: x");
+    const first = openappaFailure(cause);
 
+    expect(first).toBeInstanceOf(ApiError);
     expect(openappaFailure(first)).toBe(first);
+    expect(first.cause).toBe(cause);
+  });
+
+  test("an ApiError raised elsewhere is classified, not passed through", () => {
+    const failure = openappaFailure(new ApiError(400, "bad request"));
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
   });
 });
 

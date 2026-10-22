@@ -15,7 +15,10 @@ import {
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
+import { appInteractive } from "@/lib/app-interactive";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
@@ -24,10 +27,15 @@ import {
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
 import {
+  conversationQueryKey,
+  conversationsQueryKey,
+} from "@/lib/chat/conversations-query-key";
+import {
   ENCRYPTED_CHAT_KEY_HEADER,
   encryptedChatRequestHeaders,
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -53,9 +61,7 @@ const {
   bulkAssignTools,
   cancelChatMcpTask,
   stopChatStream,
-  getMemberDefaultModel,
   resolveChatMcpElicitation,
-  updateMemberDefaultModel,
   deleteChatAttachment,
   deleteSkillSandboxArtifact,
 } = archestraApiSdk;
@@ -142,26 +148,6 @@ const CONVERSATION_STALE_TIME_MS = 30_000;
 const SCHEDULE_SEED_POLL_MS = 1_000;
 const SCHEDULE_SEED_MAX_POLLS = 120;
 
-/**
- * Recent conversations the sidebar loads: it shows up to 15 and the rest go
- * through search, so this leaves a margin without paying for 250 rows.
- */
-const SIDEBAR_CONVERSATION_LIMIT = 50;
-
-/**
- * The cache key of one conversation list read. Mutations update every list
- * through the `["conversations"]` prefix.
- */
-export function conversationsQueryKey({
-  search,
-  limit = SIDEBAR_CONVERSATION_LIMIT,
-}: {
-  search?: string;
-  limit?: number;
-} = {}) {
-  return ["conversations", search, limit] as const;
-}
-
 export function useConversation(
   conversationId?: string,
   options?: {
@@ -176,10 +162,24 @@ export function useConversation(
   },
 ) {
   return useQuery({
-    queryKey: ["conversation", conversationId],
-    queryFn: () => (conversationId ? fetchConversation(conversationId) : null),
+    queryKey: conversationQueryKey(conversationId),
+    queryFn: async ({ client }) => {
+      if (!conversationId) return null;
+      // A server-seeded document holds only the end of a long conversation.
+      // The rest is not on screen, so it loads once the page is interactive.
+      const seeded = client.getQueryData<{ olderMessageCount?: number }>(
+        conversationQueryKey(conversationId),
+      );
+      if (seeded?.olderMessageCount) await appInteractive.whenIdle();
+      return fetchConversation(conversationId);
+    },
     enabled: !!conversationId,
-    staleTime: CONVERSATION_STALE_TIME_MS,
+    // The end of a long conversation is a placeholder for the whole of it.
+    staleTime: (query) =>
+      (query.state.data as { olderMessageCount?: number } | null | undefined)
+        ?.olderMessageCount
+        ? 0
+        : CONVERSATION_STALE_TIME_MS,
     refetchOnMount: options?.refetchOnMount ?? true,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
@@ -376,22 +376,25 @@ export function useBulkDeleteConversationFiles(conversationId?: string) {
 export function useConversations({
   enabled = true,
   search,
-  limit = SIDEBAR_CONVERSATION_LIMIT,
+  limit,
 }: {
   enabled?: boolean;
   search?: string;
   /** Recent conversations to load when not searching; pinned ones always come. */
   limit?: number;
 }) {
+  const queryKey = conversationsQueryKey({ search, limit });
   return useQuery({
-    queryKey: conversationsQueryKey({ search, limit }),
+    queryKey,
     queryFn: async () => {
       const trimmedSearch = search?.trim();
       // List rows never show the artifact or todo list.
       const { data, error } = await getChatConversations({
         query: {
           includeArtifacts: false,
-          ...(trimmedSearch ? { search: trimmedSearch } : { limit }),
+          ...(trimmedSearch
+            ? { search: trimmedSearch }
+            : { limit: queryKey[2] }),
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -408,6 +411,9 @@ export function useConversations({
     // landed, refocusing or reconnecting still refreshes the unread indicators.
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    // The sidebar's list (not a search) comes back on refresh, so its rows
+    // show at once; titles are on screen already and the list revalidates.
+    meta: search ? undefined : PERSISTED_QUERY_META,
   });
 }
 
@@ -678,45 +684,6 @@ export function useUpdateConversation() {
         queryClient.invalidateQueries({
           queryKey: ["conversation", variables.id, "enabled-tools"],
         });
-      }
-    },
-  });
-}
-
-/**
- * The current user's default (model, key) pair — the "member" level of the
- * model-resolution chain. Used to preselect the model when opening a new chat.
- */
-export function useMemberDefaultModel() {
-  return useQuery({
-    queryKey: ["member-default-model"],
-    queryFn: () =>
-      callApi(() => getMemberDefaultModel(), {
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    // Changing the model in chat writes the new default into this query, so
-    // remounts and refocuses within 30 s need no request.
-    staleTime: 30_000,
-  });
-}
-
-/**
- * Persist the current user's default (model, key) pair. Fired whenever the
- * user changes the model in chat so the next new chat reuses their choice
- * (the "member" level of the model-resolution chain).
- */
-export function useUpdateMemberDefaultModel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (body: {
-      modelId: string | null;
-      chatApiKeyId: string | null;
-    }) => callApi(() => updateMemberDefaultModel({ body }), null),
-    onSuccess: (data) => {
-      if (data) {
-        queryClient.setQueryData(["member-default-model"], data);
       }
     },
   });
@@ -1211,13 +1178,7 @@ export function useHasPlaywrightMcpTools(
   // Only the Playwright catalog's tools: the full list carries every tool's
   // schema and can run to megabytes for a well-equipped agent.
   const toolsQuery = useQuery({
-    queryKey: [
-      "agents",
-      agentId,
-      "tools",
-      "catalog",
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    ],
+    queryKey: agentCatalogToolsQueryKey(agentId, PLAYWRIGHT_MCP_CATALOG_ID),
     queryFn: () =>
       callApi(
         () =>

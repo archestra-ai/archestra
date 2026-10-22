@@ -1389,7 +1389,7 @@ export class LimitValidationService {
         await LimitValidationService.prefetchEntityLimits(entitiesToCheck);
 
       if (params.unpricedMediaModel) {
-        const applies = (models: string[] | null) =>
+        const applies = (models?: string[] | null) =>
           !models?.length || models.includes(params.unpricedMediaModel ?? "");
         const limits = [...prefetch.limitsByEntity.values()].flat();
         let budgeted = limits.some((limit) => applies(limit.model));

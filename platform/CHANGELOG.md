@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.5.0-rc.5](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.4...platform-v1.5.0-rc.5) (2026-10-22)
+
+
+### Features
+
+* **agent-runtime:** run and ship a project from the public agent image ([#9438](https://github.com/archestra-ai/archestra/issues/9438)) ([971714f](https://github.com/archestra-ai/archestra/commit/971714fea07450fa21a2369c1540fad0714f76e1))
+* **agents:** run forked subagents on fast/normal/smart model trios ([#8721](https://github.com/archestra-ai/archestra/issues/8721)) ([6fc7c7c](https://github.com/archestra-ai/archestra/commit/6fc7c7c4dddd25cf595175757a1df524659cf6c1))
+* **guardrails:** add OpenCode and Kilo review dialogs ([#9471](https://github.com/archestra-ai/archestra/issues/9471)) ([4f7cc8b](https://github.com/archestra-ai/archestra/commit/4f7cc8bb8cc3f67be95ef628ee954e1c4037d1d4))
+* **llm:** preserve request labels for cost attribution ([#9460](https://github.com/archestra-ai/archestra/issues/9460)) ([8521799](https://github.com/archestra-ai/archestra/commit/85217996079090b7d669a1e1644fbd22378d22f9))
+* **mcp:** redesign agent run tools and cover them in OpenAPPA ([#9402](https://github.com/archestra-ai/archestra/issues/9402)) ([6322e58](https://github.com/archestra-ai/archestra/commit/6322e58f6cc703fac8f57b5d5b55aee61941a69b))
+
+
+### Bug Fixes
+
+* **guardrails:** send the managed key for Kilo subagents and close failed spawns ([#9476](https://github.com/archestra-ai/archestra/issues/9476)) ([569caf0](https://github.com/archestra-ai/archestra/commit/569caf0171600390a20be358fd3966994fd1a6f9))
+
+
+### Performance Improvements
+
+* **proxy:** share caller lookups and skip decrypting the interaction just written ([#9422](https://github.com/archestra-ai/archestra/issues/9422)) ([be2333e](https://github.com/archestra-ai/archestra/commit/be2333eff933bbaf933dd9963c50fff4e4ad6f99))
+
+
+### Documentation
+
+* modernize admin and integration guides ([#9483](https://github.com/archestra-ai/archestra/issues/9483)) ([0544884](https://github.com/archestra-ai/archestra/commit/054488432bcba2764d0a0a30378fea7aee9c5f2c))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#9477](https://github.com/archestra-ai/archestra/issues/9477)) ([93d77bf](https://github.com/archestra-ai/archestra/commit/93d77bf6a5a439c410de5937c3de7bd01fce9b14))
+
 ## [1.5.0-rc.4](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.3...platform-v1.5.0-rc.4) (2026-10-22)
 
 

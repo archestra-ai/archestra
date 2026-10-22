@@ -407,6 +407,7 @@ describe("managed catalog plugin", () => {
           ...output.headers,
           Authorization: `Bearer native-${providerId}-token`,
           "ChatGPT-Account-Id": "acct",
+          "x-api-key": `native-${providerId}-key`,
         },
         body: "{}",
       });
@@ -418,12 +419,14 @@ describe("managed catalog plugin", () => {
     expect(alias.url).toBe(`${managedRoute}/responses`);
     expect(alias.headers.get("authorization")).toBe("Bearer managed-secret");
     expect(alias.headers.get("chatgpt-account-id")).toBeNull();
+    expect(alias.headers.get("x-api-key")).toBeNull();
     expect(alias.headers.get("x-opencode-session")).toBe("ses_child");
     expect(alias.headers.get("x-archestra-managed-alias")).toBeNull();
     // A provider on its own native route keeps the user's credential.
     expect(native.headers.get("authorization")).toBe(
       "Bearer native-openai-token",
     );
+    expect(native.headers.get("x-api-key")).toBe("native-openai-key");
     expect(native.headers.get("x-archestra-virtual-key")).toBe(
       "passthrough-secret",
     );

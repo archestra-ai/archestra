@@ -118,6 +118,9 @@ const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 // Names the managed alias that sent a request. The fetch guard removes it
 // before the request leaves the client.
 const managedAliasHeader = "x-archestra-managed-alias";
+// A managed route takes only the managed key, so every credential the client
+// set goes before it is added.
+const clientCredentialHeaders = ["Authorization", "ChatGPT-Account-Id", "x-goog-api-key", "x-api-key", openAiOAuthBridgeHeader];
 const openAiApiBaseUrl = "https://api.openai.com/v1";
 const clientLabel = ${JSON.stringify(label)};
 const clientDir = ${JSON.stringify(dir)};
@@ -175,11 +178,7 @@ const managedAuth = (id) => ({ apiKey: aliasKeys.get(id), baseURL: activeRoutes[
     const suffix = ["/chat/completions", "/responses", "/models"].find((path) => url.pathname.endsWith(path));
     if (!suffix) throw new Error("Unsupported managed authentication request.");
     const headers = new Headers(request.headers);
-    headers.delete("Authorization");
-    headers.delete("ChatGPT-Account-Id");
-    headers.delete("x-goog-api-key");
-    headers.delete(openAiOAuthBridgeHeader);
-    headers.delete(managedAliasHeader);
+    for (const name of [...clientCredentialHeaders, managedAliasHeader]) headers.delete(name);
     headers.set("Authorization", "Bearer " + aliasKeys.get(id));
     for (const [name, value] of Object.entries(headersFor(id))) headers.set(name, value);
     return directFetch(new Request(activeRoutes[id] + suffix, { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
@@ -194,7 +193,7 @@ const withManagedAliasKey = (request, url, alias) => {
   const route = aliasKeys.has(alias) ? activeRoutes[alias] : undefined;
   const base = route ? new URL(route) : undefined;
   if (base && base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/")) {
-    for (const name of ["Authorization", "ChatGPT-Account-Id", "x-goog-api-key", openAiOAuthBridgeHeader]) headers.delete(name);
+    for (const name of clientCredentialHeaders) headers.delete(name);
     const key = aliasKeys.get(alias);
     if (key) headers.set("Authorization", "Bearer " + key);
   }

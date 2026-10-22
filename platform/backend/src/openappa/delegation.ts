@@ -251,8 +251,15 @@ export function collectReleasedSpawnCalls(params: {
 }): string[] {
   const released: string[] = [];
   const read = (name: unknown, args: unknown) => {
-    const record =
-      typeof args === "string" ? asRecord(parseJson(args)) : asRecord(args);
+    let parsed = args;
+    if (typeof args === "string") {
+      try {
+        parsed = JSON.parse(args);
+      } catch {
+        return;
+      }
+    }
+    const record = asRecord(parsed);
     for (const field of spawnFields(name)) {
       const prompt = record?.[field];
       const marked =
@@ -628,12 +635,4 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function asArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return undefined;
-  }
 }

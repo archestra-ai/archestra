@@ -2820,17 +2820,16 @@ async function approveChildReturnCarriers(params: {
   // error before its first request. The runtime closes that spawn and
   // withholds the text, so the parent can go on and spawn again. A spawn this
   // session never released, or one a fork carries, is still refused below.
-  const released = new Set(
-    (params.binding.request.releasedSpawnCalls ?? []).map(
-      withoutTrajectoryStamp,
-    ),
-  );
+  const released = new Set(params.binding.request.releasedSpawnCalls);
+  // Display-only echoes name no return, as in the matching above.
   const named = new Set(
-    completions.flatMap((completion) =>
-      [completion.envelopeId, completion.spawnCallId].flatMap((id) =>
-        id ? [withoutTrajectoryStamp(id)] : [],
+    completions
+      .filter((completion) => !completion.assistantOrigin)
+      .flatMap((completion) =>
+        [completion.envelopeId, completion.spawnCallId].flatMap((id) =>
+          id ? [withoutTrajectoryStamp(id)] : [],
+        ),
       ),
-    ),
   );
   for (const result of completionResults) {
     const id = withoutTrajectoryStamp(result.id);

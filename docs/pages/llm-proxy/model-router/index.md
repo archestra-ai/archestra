@@ -2,12 +2,12 @@
 title: Model Router
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Use one OpenAI-compatible URL for every provider. Any app built on the OpenAI SDK can reach Anthropic, Gemini, Bedrock, or your own vLLM server. To change the model, change the model name. The app code stays the same. Every request still gets Guardrails, costs, and logs.
+Use one OpenAI-compatible URL for every provider. Any app built on the OpenAI SDK can reach Anthropic, Gemini, Bedrock, or your own vLLM server. To change the model, change the model name. The app code stays the same. Requests use the same credential permissions, applicable Guardrails, accounting, and logs.
 
 ## Connect an App
 
@@ -50,8 +50,33 @@ The router speaks the OpenAI API. It supports these endpoints:
 | `/responses` | All router providers |
 | `/models` | Lists only the models your credential can reach |
 | `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
+| `/images/generations` | OpenAI, Azure, and Gemini image models |
+| `/images/edits` | Azure image models, using multipart reference images and masks |
+| `/audio/speech` | OpenAI and Azure speech models |
+| `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The router does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
+
+## Images and Audio
+
+Use the same OpenAI SDK client, base URL, and virtual key for text, image generation, and audio. The mapped provider key must have access to the requested model.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="https://<archestra-host>/v1/model-router", api_key="<virtual-key>")
+image = client.images.generate(model="azure:<image-deployment>", prompt="Draw a blue circle.")
+with open("speech.wav", "rb") as audio:
+    transcript = client.audio.transcriptions.create(model="openai:<transcription-model>", file=audio)
+```
+
+The image result contains the provider's image data; the transcription result has a `text` field. Audio speech responses retain their native bytes, and supported transcription streaming retains its SSE events. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
+
+- **Provider parameters:** OpenAI and Azure retain native image parameters. Image generation streaming is rejected. Gemini accepts one base64 image with automatic sizing; unsupported quality, size, output-format, and other conversions are rejected.
+- **Uploads and logs:** audio uploads are bounded to 25 MiB per file. Logs retain file metadata and usage rather than audio bytes or transcription text.
+- **Unavailable pricing:** media cost remains unknown when authoritative pricing is unavailable. Enforced accounting and applicable cost budgets reject these requests before contacting the provider.
+
+File lifecycle operations use the provider-specific Azure proxy URL. A common router model name cannot select a file account, and uploaded file handles cannot replace multipart image inputs.
 
 ## Fix a Failed Request
 

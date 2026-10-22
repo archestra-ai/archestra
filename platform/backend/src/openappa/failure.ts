@@ -277,7 +277,7 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
     // The database refuses the content itself, so the same request fails the
     // same way on every retry. Any other storage failure can pass.
     case "storage": {
-      const state = DATA_EXCEPTION.exec(message)?.[1];
+      const state = REFUSED_CHARACTER.exec(message)?.[1];
       return state ? refusedContent(state) : unavailable(code);
     }
     case "panicked":
@@ -312,10 +312,11 @@ const POLICY_MOVED: Failure = {
 };
 
 /**
- * A PostgreSQL data exception (SQLSTATE class 22), such as a character the
- * database cannot store: the stored content, not the database, is the cause.
+ * A character the database cannot store: 22021 in `text`, 22P05 in `jsonb`.
+ * The stored content, not the database, is the cause. Any other data
+ * exception can come from the host, so it is not blamed on the content.
  */
-const DATA_EXCEPTION = /\bSQLSTATE (22[0-9A-Z]{3})\b/;
+const REFUSED_CHARACTER = /\bSQLSTATE (22021|22P05)\b/;
 
 function refusedContent(state: string): Failure {
   return {

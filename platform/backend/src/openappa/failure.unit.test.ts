@@ -92,6 +92,7 @@ describe("openappaFailure", () => {
 
     for (const message of [
       "receipt storage failed: PostgreSQL ERROR (SQLSTATE 40001)",
+      "receipt storage failed: PostgreSQL ERROR (SQLSTATE 22P02)",
       "PostgreSQL storage failure: error performing TLS handshake",
     ]) {
       const failure = openappaFailure(runtimeFailure("storage", message));

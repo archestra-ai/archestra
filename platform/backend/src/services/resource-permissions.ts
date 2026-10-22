@@ -26,6 +26,7 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
+import { canSeeAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
@@ -714,6 +715,11 @@ export class ResourcePermissions {
     context: PermissionContext & { lookups?: PrincipalSource },
   ): Promise<ScopedPermission[]> {
     if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
+    if (
+      context.resource === "agent" &&
+      !(await canSeeAgent({ ...context, agentId: context.scope }))
+    )
+      return [];
     const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];

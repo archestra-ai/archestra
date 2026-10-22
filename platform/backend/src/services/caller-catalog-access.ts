@@ -1,10 +1,9 @@
 import { isBuiltInCatalogId } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { splitGatedCatalogs } from "@/auth/permission-gated";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
-import { userHasPermission } from "@/auth/utils";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import type { PrincipalSource } from "@/models/resource-permission-subject";
-import { SRE_CATALOG_ID } from "@/services/sre-agent/definition";
 
 /** The identity an agent's tools are listed to or run for. */
 export interface CatalogAccessCaller {
@@ -29,25 +28,18 @@ export interface CatalogAccessCaller {
  * service accounts are configured by an administrator and keep the agent's full
  * assigned tool set.
  *
- * The SRE catalog is reached by the `sre:read` role permission alone, which
+ * A permission-gated catalog is reached by its role permission alone, which
  * only a user or service account can hold: without it the catalog is in
  * `denied`, which overrides `accessible`.
  */
 export async function getCallerAccessibleCatalogIds(
   caller: CatalogAccessCaller,
-  /** The catalogs about to be checked; `sre:read` is looked up only for SRE's. */
+  /** The catalogs about to be checked; permissions are looked up for gated ones only. */
   catalogIds: Iterable<string | null>,
 ): Promise<CallerCatalogAccess> {
   const { userId, organizationId, lookups } = caller;
-  const canUseSre =
-    new Set(catalogIds).has(SRE_CATALOG_ID) &&
-    !!userId &&
-    !!organizationId &&
-    userId !== "system" &&
-    (await userHasPermission(userId, organizationId, "sre", "read"));
-  const denied: ReadonlySet<string> = new Set(
-    canUseSre ? [] : [SRE_CATALOG_ID],
-  );
+  const gated = await splitGatedCatalogs(catalogIds, caller);
+  const denied: ReadonlySet<string> = new Set(gated.denied);
   if (
     !userId ||
     !organizationId ||
@@ -69,7 +61,7 @@ export async function getCallerAccessibleCatalogIds(
       lookups,
     }),
   );
-  if (canUseSre) accessible.add(SRE_CATALOG_ID);
+  for (const id of gated.usable) accessible.add(id);
   return { accessible, denied };
 }
 

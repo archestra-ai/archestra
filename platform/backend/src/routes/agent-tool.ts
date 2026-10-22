@@ -13,6 +13,7 @@ import {
   requireAgentModifyPermission,
   requireAgentTypePermission,
 } from "@/auth";
+import { dropHiddenCatalogIds } from "@/auth/permission-gated";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
 import {
@@ -1000,12 +1001,17 @@ export async function getAgentToolsForUser(params: {
   // A user who can only use the agent sees the tools the gateway would
   // serve them: an assigned tool whose MCP server they cannot access is
   // left out, as it is from their tools/list.
-  return isAgentTypeAdmin
-    ? tools
-    : await filterToolsByCallerCatalogAccess(tools, {
-        userId,
-        organizationId,
-      });
+  if (!isAgentTypeAdmin)
+    return filterToolsByCallerCatalogAccess(tools, { userId, organizationId });
+  const usable = new Set(
+    await dropHiddenCatalogIds(
+      [...new Set(tools.flatMap(({ catalogId }) => catalogId ?? []))],
+      { userId, organizationId },
+    ),
+  );
+  return tools.filter(
+    ({ catalogId }) => catalogId === null || usable.has(catalogId),
+  );
 }
 
 /** `GET /api/agents/:agentId/delegations` */

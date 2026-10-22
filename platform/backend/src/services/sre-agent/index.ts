@@ -375,7 +375,8 @@ export const sreAgentService = new SreAgentService();
 /**
  * The SRE tools can read other installs' pod specs, whose arguments may carry
  * resolved credentials, so the agent, its catalog item, and its environment
- * are shared with Admins only. Calling the tools also takes `sre:read`.
+ * are shared with Admins only. Seeing the agent and calling the tools also
+ * take `sre:read`.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
   { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },

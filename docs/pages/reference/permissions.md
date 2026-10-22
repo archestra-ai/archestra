@@ -174,7 +174,7 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="skill:read"></span>`skill:read` | Open Skills |
 | <span id="skill:create"></span>`skill:create` | Create new agent skills |
 | <span id="skill:delete"></span>`skill:delete` | Permanently delete skills from the trash |
-| <span id="sre:read"></span>`sre:read` | Call the SRE agent's Kubernetes tools, which read this installation's pods, logs, and specs |
+| <span id="sre:read"></span>`sre:read` | Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs |
 | <span id="team:read"></span>`team:read` | View teams and their members |
 | <span id="team:create"></span>`team:create` | Create new teams |
 | <span id="team:update"></span>`team:update` | Modify team settings |

@@ -22,6 +22,10 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import {
+  gatedAgentsFence,
+  gatedCatalogToolsFence,
+} from "@/auth/permission-gated";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -1249,6 +1253,16 @@ class AgentToolModel {
     } = params;
     // Build WHERE conditions
     const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
+    if (userId) {
+      for (const fence of await Promise.all([
+        gatedAgentsFence({
+          userId,
+          organizationIds: organizationId ? [organizationId] : [],
+        }),
+        gatedCatalogToolsFence({ userId, organizationId }),
+      ]))
+        if (fence) whereConditions.push(fence);
+    }
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {

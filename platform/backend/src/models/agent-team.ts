@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ScopedResource } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { canSeeAgent } from "@/auth/permission-gated";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
@@ -99,6 +100,14 @@ class AgentTeamModel {
     if (!agent) {
       return false;
     }
+    if (
+      !(await canSeeAgent({
+        agentId,
+        userId,
+        organizationId: agent.organizationId,
+      }))
+    )
+      return false;
 
     const table = schema.agentsTable;
     const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(

@@ -6,12 +6,14 @@ import {
 } from "@archestra/shared";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
 import type * as k8s from "@kubernetes/client-node";
+import { eq } from "drizzle-orm";
 import { beforeEach } from "vitest";
 import { getAppVersion } from "@/app-version";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { buildDaggerEgressPolicies } from "@/k8s/dagger-environment-runtime/network-policy";
 import {
@@ -439,17 +441,22 @@ describe("sreAgentService", () => {
       { userId, organizationId },
     );
     expect(listed.map(({ id }) => id)).toEqual(canUseSre ? [podsLog.id] : []);
-    if (canUseSre) return;
-    expect(
-      await mcpClient.executeToolCallForOwner(
-        { id: "call_pods_log", name: podsLog.name, arguments: {} },
-        agentOwner(agent.id),
-        tokenAuth,
-      ),
-    ).toMatchObject({
-      isError: true,
-      _meta: { archestraError: { code: "unknown_tool" } },
-    });
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "call_pods_log", name: podsLog.name, arguments: {} },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+    // With sre:read the call is dispatched and fails only because the test
+    // runs no server; without it the catalog gate refuses it after validation
+    // resolved the tool, which logs the call under the server's name.
+    expect(result._meta?.archestraError).toMatchObject(
+      canUseSre ? { type: "generic" } : { code: "unknown_tool" },
+    );
+    const [logged] = await db
+      .select({ mcpServerName: schema.mcpToolCallsTable.mcpServerName })
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agent.id));
+    expect(logged.mcpServerName).toBe(SRE_SERVER_NAME);
   });
 
   test("version 1 of the agent already has its tools", async ({

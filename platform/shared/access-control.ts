@@ -437,7 +437,7 @@ export const permissionDescriptions: Record<string, string> = {
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
   "sre:read":
-    "Call the SRE agent's Kubernetes tools, which read this installation's pods, logs, and specs",
+    "Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",

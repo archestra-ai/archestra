@@ -122,6 +122,14 @@ const AskUserSchema = z.object({
 });
 
 const AskUserExecutionSchema = AskUserSchema.extend({
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The proxy can replace the question with a complete HITL review. Its size
+  // is not bounded by the ordinary question limit; the handler resolves the
+  // scoped, server-held review before allowing that exception.
+  question: z.string().min(1),
+  // SPDX-SnippetEnd
   // Earlier proxy versions rewrote a staged review's ask_user call with option
   // previews for Claude Code. They are not advertised to models, and the
   // handler uses the server-held review, so a preview is ignored here.
@@ -192,6 +200,13 @@ const registry = defineArchestraTools([
             offerIds: liveOffers,
           })
         : undefined;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An offer ID or trajectory alone must not relax ordinary validation.
+      // Only a live review supplies the canonical text shown to the user.
+      if (!hitlArgs) AskUserSchema.parse(args);
+      // SPDX-SnippetEnd
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;

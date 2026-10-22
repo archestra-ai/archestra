@@ -166,7 +166,7 @@
     {"source": "/docs/contributing/adding-llm-providers", "destination": "/docs/contributing/extending-archestra#adding-llm-providers", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-connectors", "destination": "/docs/contributing/extending-archestra#adding-knowledge-connectors", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-retrieval-backends", "destination": "/docs/contributing/extending-archestra#adding-knowledge-retrieval-backends", "permanent": true},
-    {"source": "/docs/admin/usage-accounting", "destination": "/docs/llm-proxy/costs-and-limits", "permanent": true},
+    {"source": "/docs/admin/usage-accounting", "destination": "/docs/admin/deployment/upgrades", "permanent": true},
     {"source": "/docs/admin/security/credentials", "destination": "/docs/admin/credentials", "permanent": true},
     {"source": "/docs/admin/security/content-encryption", "destination": "/docs/admin/content-encryption", "permanent": true},
     {"source": "/docs/admin/security", "destination": "/docs/admin", "permanent": true},

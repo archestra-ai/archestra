@@ -79,7 +79,7 @@ Open <http://localhost:3000>, sign in, and [connect a client](/docs/get-started/
 
 <span id="upgrade-oauth-clients"></span>
 
-Before exposing the instance publicly, configure [TLS and public URLs](/docs/admin/deployment/networking). [Managed agents](/docs/agents/runtime/setup) have additional cluster requirements.
+Before exposing the instance publicly, configure [TLS and public URLs](/docs/admin/deployment/networking). [Agent Runtime](/docs/agents/runtime/setup) have additional cluster requirements.
 
 <span id="scaling"></span>
 

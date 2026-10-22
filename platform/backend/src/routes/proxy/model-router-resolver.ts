@@ -164,7 +164,10 @@ export async function listRoutableModels(params: {
           (params.includeMedia &&
             !model.ignored &&
             ["azure", "openai", "gemini"].includes(model.provider) &&
-            model.outputModalities?.includes("image"))),
+            (model.outputModalities?.includes("image") ||
+              (model.provider === "openai" &&
+                (model.inputModalities?.includes("audio") ||
+                  model.outputModalities?.includes("audio")))))),
     );
   const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
     modelIds: candidateModels.map((model) => model.id),

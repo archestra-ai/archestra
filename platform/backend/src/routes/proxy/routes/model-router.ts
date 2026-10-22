@@ -114,6 +114,16 @@ import {
   type ModelRouterResolution,
   resolveModelRoute,
 } from "../model-router-resolver";
+import { registerMediaMultipartParser } from "../utils/media-multipart";
+import {
+  AudioMultipartBodySchema,
+  type AudioProxyBody,
+  AudioSpeechRequestSchema,
+  handleAudioProxy,
+  parseAudioUploadRequest,
+} from "./audio";
+
+const mediaAuth = new WeakMap<FastifyRequest, ModelRouterAuth>();
 
 type OpenAiWireProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsRequest,
@@ -322,6 +332,74 @@ const ModelListResponseSchema = z.object({
 const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   logger.debug("[ModelRouterProxy] Registering model router routes");
 
+  await registerMediaMultipartParser(fastify);
+  for (const operation of [
+    "speech",
+    "transcriptions",
+    "translations",
+  ] as const) {
+    for (const withAgent of [false, true]) {
+      fastify.post(
+        `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/audio/${operation}`,
+        {
+          bodyLimit: PROXY_BODY_LIMIT,
+          // Authenticate before buffering multipart bytes, including agent access.
+          onRequest: async (request) => {
+            mediaAuth.set(request, await authenticateMediaRequest(request));
+          },
+          schema: {
+            operationId: AUDIO_ROUTE_IDS[operation][withAgent ? 1 : 0],
+            description:
+              "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.",
+            tags: ["LLM Proxy"],
+            ...(withAgent
+              ? { params: z.object({ agentId: UuidIdSchema }) }
+              : {}),
+            headers: OpenAi.API.ChatCompletionsHeadersSchema,
+            ...(operation === "speech"
+              ? { body: AudioSpeechRequestSchema }
+              : {
+                  consumes: ["multipart/form-data"],
+                  body: AudioMultipartBodySchema,
+                }),
+          },
+        },
+        async (request, reply) => {
+          const body =
+            operation === "speech"
+              ? (request.body as AudioProxyBody)
+              : await parseAudioUploadRequest(request, operation);
+          const auth = mediaAuth.get(request);
+          if (!auth)
+            throw new ApiError(401, "Model Router authentication is required.");
+          const resolution = await resolveModelRoute({
+            requestedModel: body.model,
+            capability: "media",
+            allowedProviders: getMappedProviders(auth),
+            allowedApiKeyIds: getMappedApiKeyIds(auth),
+          });
+          if (
+            resolution.provider !== "azure" &&
+            resolution.provider !== "openai"
+          ) {
+            throw new ApiError(
+              400,
+              `Provider "${resolution.provider}" does not support the Model Router audio endpoint.`,
+            );
+          }
+          await applyModelRouterAuthOverride({ request, auth, resolution });
+          return handleAudioProxy({
+            body: { ...body, model: resolution.modelId },
+            request,
+            reply,
+            provider: resolution.provider,
+            operation,
+          });
+        },
+      );
+    }
+  }
+
   for (const withAgent of [false, true]) {
     fastify.post(
       `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/generations`,
@@ -516,6 +594,33 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default modelRouterProxyRoutes;
+
+const AUDIO_ROUTE_IDS = {
+  speech: [
+    RouteId.ModelRouterAudioSpeechWithDefaultAgent,
+    RouteId.ModelRouterAudioSpeechWithAgent,
+  ],
+  transcriptions: [
+    RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent,
+    RouteId.ModelRouterAudioTranscriptionsWithAgent,
+  ],
+  translations: [
+    RouteId.ModelRouterAudioTranslationsWithDefaultAgent,
+    RouteId.ModelRouterAudioTranslationsWithAgent,
+  ],
+} as const;
+
+async function authenticateMediaRequest(
+  request: FastifyRequest,
+): Promise<ModelRouterAuth> {
+  const auth = await getModelRouterAuth(request);
+  const { agentId } = request.params as { agentId?: string };
+  const agent = agentId
+    ? await getModelRouterAgent(agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  return auth;
+}
 
 async function routeImageGeneration(
   request: FastifyRequest,

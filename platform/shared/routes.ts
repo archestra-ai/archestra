@@ -283,6 +283,17 @@ export const RouteId = {
   ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
   ModelRouterImagesWithDefaultAgent: "modelRouterImagesWithDefaultAgent",
   ModelRouterImagesWithAgent: "modelRouterImagesWithAgent",
+  ModelRouterAudioSpeechWithDefaultAgent:
+    "modelRouterAudioSpeechWithDefaultAgent",
+  ModelRouterAudioSpeechWithAgent: "modelRouterAudioSpeechWithAgent",
+  ModelRouterAudioTranscriptionsWithDefaultAgent:
+    "modelRouterAudioTranscriptionsWithDefaultAgent",
+  ModelRouterAudioTranscriptionsWithAgent:
+    "modelRouterAudioTranscriptionsWithAgent",
+  ModelRouterAudioTranslationsWithDefaultAgent:
+    "modelRouterAudioTranslationsWithDefaultAgent",
+  ModelRouterAudioTranslationsWithAgent:
+    "modelRouterAudioTranslationsWithAgent",
 
   // Proxy Routes - Gemini
   GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",

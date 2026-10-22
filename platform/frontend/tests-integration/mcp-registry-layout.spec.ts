@@ -269,13 +269,16 @@ test.describe("MCP Registry layout", () => {
   }) => {
     await seed(mswControl);
     await mcpRegistryPage.goto();
+    await page
+      .getByRole("textbox", { name: "Search MCP servers by name" })
+      .click();
     // Page time stands still, so only a filter that needs no pause can apply.
+    // A paused clock also stops animation frames, which actionability checks
+    // wait on, so the query is typed with a raw keyboard insert.
     await page.clock.install();
     await page.clock.pauseAt(new Date(Date.now() + 1_000));
 
-    await page
-      .getByRole("textbox", { name: "Search MCP servers by name" })
-      .fill("not-installed");
+    await page.keyboard.insertText("not-installed");
     await page.clock.runFor(1);
 
     await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(

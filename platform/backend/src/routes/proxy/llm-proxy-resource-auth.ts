@@ -175,8 +175,7 @@ export async function resolveProxyResourceCredential(params: {
         limitContext.llmOauthClientId = oauth.authenticatedApp?.id;
         limitContext.billingTeamId ??= oauth.billingTeamId;
       } else if (passthrough) {
-        // A changing bearer token is not a stable provider-account identity.
-        // Configured keyless rows are supported through managed credentials.
+        // A changing caller bearer token is not a stable provider-account identity.
         if (isJwtLike(token))
           throw new ApiError(
             401,
@@ -244,8 +243,13 @@ export async function resolveProxyResourceCredential(params: {
         400,
         "Subscription credentials do not support provider resource APIs.",
       );
-    if (!apiKey && !(provider === "azure" && config.llm.azure.entraIdEnabled))
-      throw new ApiError(401, "The provider account has no usable credential.");
+    // Inference can refresh workload tokens, but resource handles must bind a
+    // stable upstream identity. A configured row alone cannot prove that identity.
+    if (!apiKey)
+      throw new ApiError(
+        401,
+        "Provider resource APIs require an API-key credential with a stable account binding.",
+      );
     const configuredBase =
       row.inferenceBaseUrl ||
       row.baseUrl ||
@@ -293,7 +297,7 @@ export async function resolveProxyResourceCredential(params: {
           providerApiKeyId,
           endpoint: accountEndpoint,
           headers: row.extraHeaders ?? {},
-          credential: apiKey ?? "configured-workload-identity",
+          credential: apiKey,
         }),
       )
       .digest("hex");

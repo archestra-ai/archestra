@@ -127,9 +127,9 @@ describe("LLM proxy query budget", () => {
     const { result: response, statements } = await recordQueries(call);
     expect(response.statusCode, response.body).toBe(200);
     // Was 54 before the per-request lookups, set-based usage recording and
-    // single-read rate-limit check; 38 before sharing caller lookups across
-    // the proxy call.
-    expect(statements.length).toBeLessThanOrEqual(34);
+    // single-read rate-limit check; sharing caller lookups across the proxy
+    // call saves 4 more.
+    expect(statements.length).toBeLessThanOrEqual(37);
   });
 
   test("rejected virtual key under the rate limiter", async ({

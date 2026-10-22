@@ -56,6 +56,50 @@ async function upload(
 }
 
 describe("bounded multipart parsing", () => {
+  test.each([
+    "__proto__",
+    "constructor",
+    "toString",
+    "epilogue",
+    "oversized-boundary",
+  ])("handles adversarial multipart %s without parser crashes or event-loop stalls", async (kind) => {
+    const app = Fastify();
+    await registerMediaMultipartParser(app);
+    app.post(
+      "/",
+      async (request) =>
+        (
+          await parseMediaMultipart(request, {
+            fileFields: ["file"],
+            maxFiles: 1,
+            maxFileBytes: 64,
+            maxTotalFileBytes: 64,
+          })
+        ).fields,
+    );
+    const boundary =
+      kind === "oversized-boundary" ? "x".repeat(252) : "safe-boundary";
+    const extra = ["__proto__", "constructor", "toString"].includes(kind)
+      ? `${kind}: synthetic\r\n`
+      : "";
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/",
+        headers: {
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+        },
+        payload: `--${boundary}\r\n${extra}Content-Disposition: form-data; name="model"\r\n\r\nalias\r\n--${boundary}--\r\n${kind === "epilogue" ? "synthetic epilogue" : ""}`,
+      });
+      expect(response.statusCode).toBe(
+        kind === "oversized-boundary" ? 400 : 200,
+      );
+      if (kind !== "oversized-boundary")
+        expect(response.json()).toEqual({ model: "alias" });
+    } finally {
+      await app.close();
+    }
+  }, 2000);
   test("accepts the exact per-file bound", async () => {
     const form = new FormData();
     form.append("file", new File([bytes], "input.wav"));

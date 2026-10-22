@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import Busboy from "@fastify/busboy";
+import Busboy, { type BusboyInstance } from "@fastify/busboy";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 export interface MediaMultipartFile {
@@ -34,6 +34,19 @@ export async function registerMediaMultipartParser(
         .startsWith("multipart/form-data")
     )
       return done();
+    const boundaries = [
+      ...request.headers["content-type"].matchAll(
+        /;\s*boundary\s*=\s*(?:"([^"]*)"|([^;\s]*))/gi,
+      ),
+    ];
+    const boundary = boundaries[0]?.[1] ?? boundaries[0]?.[2];
+    if (
+      boundaries.length !== 1 ||
+      !boundary ||
+      !/^[0-9A-Za-z'()+_,\-./:=? ]{1,70}$/.test(boundary) ||
+      boundary.endsWith(" ")
+    )
+      return done(new MediaMultipartError(400, "Invalid multipart boundary"));
     const cleanup = () => {
       clearTimeout(timer);
       request.raw.removeListener("end", cleanup);
@@ -85,7 +98,7 @@ export async function parseMediaMultipart(
   const arrays = new Set(limits.arrayFields ?? []);
   let total = 0;
   return new Promise((resolve, reject) => {
-    let parser: Busboy;
+    let parser: BusboyInstance;
     try {
       parser = new Busboy({
         headers: {

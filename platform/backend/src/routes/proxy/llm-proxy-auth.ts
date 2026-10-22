@@ -377,6 +377,7 @@ export async function validatePassthroughVirtualKey(params: {
   const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
     userId: virtualKey.authorId,
     agentId: agent.id,
+    agentAccessContext: agent,
     isAgentAdmin: ownerIsAgentAdmin,
     action: "use",
   });
@@ -944,6 +945,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     !(await AgentTeamModel.userHasAgentAccess({
       userId: serviceAccountUserId(account.id),
       agentId: params.agent.id,
+      agentAccessContext: params.agent,
       action: "use",
       isAgentAdmin: await ResourcePermissions.allows({
         userId: serviceAccountUserId(account.id),
@@ -1050,6 +1052,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
     userId: params.userId,
     agentId: params.agent.id,
+    agentAccessContext: params.agent,
     isAgentAdmin: false,
     action: "use",
   });

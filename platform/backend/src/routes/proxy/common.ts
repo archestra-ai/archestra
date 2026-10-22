@@ -1,7 +1,6 @@
 import config from "@/config";
 
-export const PROXY_API_PREFIX = "/v1";
-export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
+export { MODEL_ROUTER_PREFIX, PROXY_API_PREFIX } from "@/routes/route-paths";
 export const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 export const RESPONSES_SUFFIX = "/responses";
 export const RESPONSES_COMPACT_SUFFIX = "/responses/compact";

@@ -81,7 +81,7 @@ Realtime turns require a Foundry v1 URL. For translation, send `target_language`
 
 Let Archestra sign in to Azure as itself, so no Azure key is stored anywhere. It uses Azure's `DefaultAzureCredential`: a workload identity, a managed identity, a service principal, or your local Azure CLI sign-in.
 
-1. Set [`ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED).
+1. Set [`ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED).
 2. Give that identity a role on the Azure resource: **Cognitive Services OpenAI User** for Azure OpenAI, or **Cognitive Services User** for Foundry Models.
 3. Add Azure as above, with the API key empty.
 
@@ -140,8 +140,8 @@ The subject must match your Helm release's namespace and service account. See Mi
 | Deployments appear, but inference returns 401 or 403 | Discovery access does not grant inference access. Check the identity's inference role on the configured resource, or use its existing API key. |
 | An image or realtime model rejects a text endpoint | Use the matching endpoint above, or select the model in Chat. |
 | A Claude model fails | Claude on Foundry uses Anthropic's API. Add it as the [Anthropic provider](/docs/llm-proxy/providers/anthropic#anthropic-on-microsoft-foundry). |
-| `'max_tokens' is not supported with this model` | Use a Foundry v1 URL, or set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION) to `2024-09-01` or later. Archestra then sends `max_completion_tokens` to OpenAI model deployments. |
-| An Azure API version error | Set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION), or [`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`](/docs/reference/configuration#ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION) for `/responses`. Foundry v1 URLs use neither. |
+| `'max_tokens' is not supported with this model` | Use a Foundry v1 URL, or set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/admin/deployment/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION) to `2024-09-01` or later. Archestra then sends `max_completion_tokens` to OpenAI model deployments. |
+| An Azure API version error | Set [`ARCHESTRA_AZURE_OPENAI_API_VERSION`](/docs/admin/deployment/configuration#ARCHESTRA_AZURE_OPENAI_API_VERSION), or [`ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION`](/docs/admin/deployment/configuration#ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION) for `/responses`. Foundry v1 URLs use neither. |
 
 ## What to Know
 

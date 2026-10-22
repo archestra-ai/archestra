@@ -104,6 +104,34 @@ describe("provider resource authentication", () => {
     expect((await call()).json().account.credentialBinding).toBe(first);
   });
 
+  test("a mapped provider account from another organization is rejected", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const secret = await makeSecret({
+      secret: { apiKey: "foreign-provider-key" },
+    });
+    const other = await makeLlmProviderApiKey(otherOrg.id, secret.id, {
+      provider: "azure",
+      baseUrl: "https://other.example/openai",
+    });
+    const mapped = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Mismatched account",
+      providerApiKeys: [{ provider: "azure", providerApiKeyId: other.id }],
+    });
+    expect((await call(mapped.value)).statusCode).toBe(403);
+    expect(resolved).toBeUndefined();
+  });
+
+  test("a mapped account that changes provider is rejected", async () => {
+    await LlmProviderApiKeyModel.update(keyId, { provider: "openai" });
+    expect((await call()).statusCode).toBe(403);
+    expect(resolved).toBeUndefined();
+  });
+
   test("personal virtual keys retain both owner and key billing identities", async ({
     makeUser,
     makeMember,

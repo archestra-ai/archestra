@@ -217,13 +217,9 @@ export async function validateVirtualApiKey(params: {
       `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
   }
-  const mappedRow = await LlmProviderApiKeyModel.findById(
-    mappedProviderKey.providerApiKeyId,
-  );
   if (
-    !mappedRow ||
-    mappedRow.organizationId !== resolved.virtualKey.organizationId ||
-    mappedRow.provider !== expectedProvider
+    mappedProviderKey.organizationId !== resolved.virtualKey.organizationId ||
+    mappedProviderKey.providerApiKeyProvider !== expectedProvider
   )
     throw new ApiError(
       403,

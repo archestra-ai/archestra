@@ -161,17 +161,12 @@ test("a message to an Agent Runtime agent starts a run in its runtime and report
 test.each([
   "mention",
   "dm",
-  "continued",
 ] as const)("Slack acknowledges a %s with a usable chat link before runtime startup finishes", async (kind) => {
-  const previous =
-    kind === "continued" ? await retainedRun({ state: "idle" }) : null;
   const launchGate = deferred();
-  const launch = vi
-    .spyOn(backend, previous ? "continueRun" : "launch")
-    .mockImplementation(async () => {
-      await launchGate.promise;
-      throw new Error("Startup stopped by test");
-    });
+  const launch = vi.spyOn(backend, "launch").mockImplementation(async () => {
+    await launchGate.promise;
+    throw new Error("Startup stopped by test");
+  });
   vi.spyOn(backend, "getWorkspaceConnection").mockResolvedValue(null);
   vi.spyOn(backend, "getStartupProgress").mockRejectedValue(
     new Error("No pod yet"),
@@ -196,7 +191,7 @@ test.each([
     await expect.poll(() => launch.mock.calls.length).toBe(1);
     await expect.poll(() => replies.length).toBe(1);
     const run = await latestRun();
-    const sessionId = previous?.taskId ?? run?.taskId;
+    const sessionId = run?.taskId;
     expect(replies[0]).toMatchObject({
       text: "I'm on it.",
       conversationUrl: `https://platform.example.test/chat/runs/${sessionId}`,
@@ -246,6 +241,37 @@ test.each([
       .toBe(true);
     await app.close();
   }
+});
+
+test("a follow-up that continues the thread's workspace is not acknowledged again", async () => {
+  const previous = await retainedRun({ state: "idle" });
+  const continueGate = deferred();
+  const continueRun = vi
+    .spyOn(backend, "continueRun")
+    .mockImplementation(async () => {
+      await continueGate.promise;
+      throw new Error("Startup stopped by test");
+    });
+  vi.spyOn(backend, "getWorkspaceConnection").mockResolvedValue(null);
+  vi.spyOn(backend, "getStartupProgress").mockRejectedValue(
+    new Error("No pod yet"),
+  );
+  const incoming = message("And check the other test too");
+  incoming.metadata = { botMentioned: true };
+  const result = await chatOpsManager.processMessage({
+    message: incoming,
+    provider,
+  });
+  expect(result.success).toBe(true);
+  await expect.poll(() => continueRun.mock.calls.length).toBe(1);
+  expect((await latestRun())?.taskId).not.toBe(previous.taskId);
+  continueGate.resolve();
+  await expect
+    .poll(() =>
+      replies.some((reply) => reply.text.includes("Startup stopped by test")),
+    )
+    .toBe(true);
+  expect(replies.map((reply) => reply.text)).not.toContain("I'm on it.");
 });
 
 test("runtime updates report transport failures and respect a thread stopped mid-run", async () => {
@@ -340,7 +366,8 @@ test.each([
   false,
   true,
 ])("a slow Slack acknowledgment does not block startup or lose the final reply (delivery fails: %s)", async (failAcknowledgement) => {
-  const previous = await retainedRun({ state: "idle" });
+  // The thread holds an earlier answer, but its workspace has expired.
+  const previous = await retainedRun({ state: "idle", expired: true });
   await chatOpsManager.notifyBindingThread({
     taskId: previous.taskId,
     bindingId: binding.id,
@@ -360,7 +387,7 @@ test.each([
       return "reply-id";
     });
   const launch = vi
-    .spyOn(backend, "continueRun")
+    .spyOn(backend, "launch")
     .mockRejectedValue(new Error("Runtime startup failed"));
   const incoming = message("Continue the investigation");
   incoming.metadata = { botMentioned: true };
@@ -389,9 +416,7 @@ test.each([
   await expect.poll(() => replies.length).toBe(failAcknowledgement ? 1 : 2);
   expect(replies.at(-1)?.text).toContain("Runtime startup failed");
   if (!failAcknowledgement) {
-    expect(replies[0].conversationUrl).toContain(
-      `/chat/runs/${previous.taskId}`,
-    );
+    expect(replies[0].conversationUrl).not.toContain(previous.taskId);
     expect(replies[0].hint).toBeUndefined();
   }
 });
@@ -486,6 +511,9 @@ test.each([
   expect(prompt).toContain(incoming.text);
   expect(prompt).not.toContain("You are replying via");
   expect(prompt.includes(TOOL_POST_RUN_MESSAGE_FULL_NAME)).toBe(
+    providerId === "slack",
+  );
+  expect(prompt.includes("proactively send brief updates")).toBe(
     providerId === "slack",
   );
   expect(prompt).not.toContain("Reply by default");
@@ -617,6 +645,9 @@ test.each([
     `${providerId === "slack" ? "Slack" : "MS Teams"}: Help me with this`,
   );
   const prompt = JSON.stringify(launch.mock.calls[0][0]);
+  expect(prompt.includes("proactively send brief updates")).toBe(
+    providerId === "slack",
+  );
   expect(prompt).toContain("You are replying via");
   expect(prompt).toContain("Your final answer is posted");
   expect(prompt).toContain("Reply by default");
@@ -674,8 +705,15 @@ test.each([
   expect(replies[0]).toMatchObject({
     text: "First answer",
     conversationUrl: expect.stringContaining(`/chat/runs/${first.taskId}`),
-    hint: THREAD_MUTE_HINT,
   });
+  expect(replies[0].hint).toContain(THREAD_MUTE_HINT);
+  if (providerId === "slack") {
+    expect(replies[0].hint).toMatch(
+      /Press Stop to cancel only the current answer/,
+    );
+  } else {
+    expect(replies[0].hint).not.toContain("Stop");
+  }
   expect(replies[1]).toMatchObject({ text: "Follow-up answer" });
   expect(replies[1].conversationUrl).toBeUndefined();
   expect(replies[1].hint).toBeUndefined();
@@ -698,7 +736,8 @@ test("a rejected first post preserves the anchor for its retry", async () => {
   await notify();
   expect(replies).toHaveLength(1);
   expect(replies[0].conversationUrl).toContain(`/chat/runs/${run.taskId}`);
-  expect(replies[0].hint).toBe(THREAD_MUTE_HINT);
+  expect(replies[0].hint).toContain(THREAD_MUTE_HINT);
+  expect(replies[0].hint).toContain("Press Stop");
 });
 
 test("a final reply retries when the acknowledgment gate cannot be read", async () => {
@@ -716,7 +755,7 @@ test("a final reply retries when the acknowledgment gate cannot be read", async 
 });
 
 test("a startup link is delivered while an earlier answer owns the thread footer", async () => {
-  const previous = await retainedRun({ state: "idle" });
+  const previous = await retainedRun({ state: "idle", expired: true });
   const firstReplyGate = deferred();
   const launchGate = deferred();
   const send = vi
@@ -726,7 +765,7 @@ test("a startup link is delivered while an earlier answer owns the thread footer
       replies.push(options);
       return "reply-id";
     });
-  vi.spyOn(backend, "continueRun").mockImplementation(async () => {
+  vi.spyOn(backend, "launch").mockImplementation(async () => {
     await launchGate.promise;
     throw new Error("Startup stopped by test");
   });
@@ -742,9 +781,10 @@ test("a startup link is delivered while an earlier answer owns the thread footer
     incoming.metadata = { botMentioned: true };
     await chatOpsManager.processMessage({ message: incoming, provider });
     await expect.poll(() => replies.length).toBe(1);
+    const run = await latestRun();
     expect(replies[0]).toMatchObject({
       bestEffort: true,
-      conversationUrl: `https://platform.example.test/chat/runs/${previous.taskId}`,
+      conversationUrl: `https://platform.example.test/chat/runs/${run?.taskId}`,
     });
     expect(replies[0].hint).toBeUndefined();
   } finally {
@@ -1109,7 +1149,10 @@ async function latestRun() {
 }
 
 /** A finished run from this thread whose workspace is still retained. */
-async function retainedRun(params: { state: "idle" | "active" }) {
+async function retainedRun(params: {
+  state: "idle" | "active";
+  expired?: boolean;
+}) {
   const context = await A2AContextModel.create({
     actorKind: "user",
     actorId: userId,
@@ -1148,7 +1191,7 @@ async function retainedRun(params: { state: "idle" | "active" }) {
     state: params.state,
     activeTaskId: params.state === "active" ? task.id : null,
     lastTaskId: task.id,
-    expiresAt: new Date(Date.now() + 3600_000),
+    expiresAt: new Date(Date.now() + (params.expired ? -1 : 1) * 3600_000),
   });
   return run;
 }

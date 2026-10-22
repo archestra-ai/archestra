@@ -506,12 +506,34 @@ describe("OpenAPPA child-return markers", () => {
     const marker = requiredMarker(RETURN);
 
     expect(marker).toMatch(
-      /^▄█▄▄▄█▄\n██▄█▄██ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
+      /^▄█▄▄▄█▄ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
     expect(requiredMarker({ ...RETURN, format: "inline" })).toMatch(
       /^finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
     expect(marker).not.toContain("[appa]");
+  });
+
+  test("strips legacy two-line and space-collapsed child return markers", () => {
+    const marker = requiredMarker(RETURN);
+    const legacyTwoLine = marker.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄\n██▄█▄██");
+    const legacyCollapsed = marker.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄ ██▄█▄██");
+
+    for (const candidate of [legacyTwoLine, legacyCollapsed]) {
+      const body = {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [nativeToolCall("direct", "Task")],
+          },
+          { role: "tool", tool_call_id: "direct", content: carrier(candidate) },
+        ],
+      };
+      const collected = collectAndStripChildReturns(body);
+      expect(collected.completions).toHaveLength(1);
+      expect(collected.completions[0]?.value).toBe(RETURN.value);
+      expect(body.messages[1].content).toBe(RETURN.value);
+    }
   });
 
   test("strips direct, JSON, and Claude notification carriers", () => {

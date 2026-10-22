@@ -12,6 +12,40 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 
+All targets inherit the same tools from `agent-base`:
+
+| Capability | Included tools |
+| --- | --- |
+| Repository and PR work | Git, GitHub CLI 2.100.0, SSH client, jq, ripgrep |
+| Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
+| Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
+| Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
+| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, C/C++ build tools, tmux |
+
+Browser tools live in `/opt/agent-tools`, with their commands exposed on PATH.
+Python scripts importing Playwright can use `/opt/agent-tools/bin/python`;
+project-specific Python dependencies belong in their own virtual environment.
+The matching Chromium binaries live at `$PLAYWRIGHT_BROWSERS_PATH`
+(`/opt/playwright`), outside the writable home/workspace mounts. Projects using
+a different Playwright version must install its matching browser into a writable
+cache, or prepare it in a derived image.
+
+Skills supply Nitpicker configuration, review procedures, recording scripts,
+and delivery behavior. The image contains no repository selection, organization
+prompts, promotion workflow, model credentials, or messaging destinations.
+Configure these on the Agent and load the relevant skills through its gateway.
+Sending generated media to Slack, email, or another service uses the Agent's
+authorized integrations; installing recording tools does not grant delivery access.
+
+A fresh runtime starts in `/home/node/workspace` without selecting or cloning a
+repository. Name the repository and setup procedure in the Agent's prompt,
+task, or assigned skill. A derived image can prepare a checkout before invoking
+the maintained launcher when deterministic startup is needed.
+
+Browser dependencies are pinned with hashes in `requirements.lock`; regenerate
+it from `requirements.in` using the command in the lock header after reviewing
+updates.
+
 On stable platform releases, the templates use the approved `:latest` aliases.
 Release candidates and development deployments keep matching fixed tags, so
 they do not pull a CLI from an older stable release. Agent Runtime
@@ -33,7 +67,9 @@ The native wrappers create client configuration at run time under `/var/run/arch
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
-In delegated runs, Claude Code ends a turn while its background subagents or workflows still run, and starts a new turn when they report back. The wrapper completes the run only after a turn ends with none of them running. Background shells do not keep the run open.
+Delegated Claude Code assignments stay open until registered background work finishes and the main agent handles its result. This includes shells, subagents and native scheduled monitors. Stop background servers and delete recurring monitors when the assignment is done. Unregistered detached processes are not detected. See the [background-work contract](runtime-contract.md#background-work-in-maintained-images) for lifecycle and failure rules. Codex and OpenCode adapters are not included.
+
+`tests/claude-background-work.py` exercises the pinned Claude binary and retained tmux runtime with scripted model and MCP HTTP endpoints. Image builds run all six short cases. For the ten-minute check, run `BackgroundWorkTest.test_background_review_keeps_turn_open` inside a maintained Claude image with `ARCHESTRA_TEST_BACKGROUND_SECONDS=600`.
 
 Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 

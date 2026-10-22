@@ -216,7 +216,12 @@ it("shows calm APPA without labels before a new chat has a session", async () =>
 it.each([
   [
     "asleep for a chat that started while enforcement was off",
-    { messages: [{ id: "m1", role: "assistant", parts: [] }] },
+    {
+      messages: [
+        { id: "u1", role: "user", parts: [] },
+        { id: "m1", role: "assistant", parts: [] },
+      ],
+    },
     "Guardrails don't check this chat",
     "It started while enforcement was off.",
   ],
@@ -224,6 +229,7 @@ it.each([
     "in shades once a yell broke the glass in the chat",
     {
       messages: [
+        { id: "u1", role: "user", parts: [] },
         {
           id: "m1",
           role: "assistant",
@@ -266,6 +272,37 @@ it("stays calm, not asleep, before the first reply opens a session", async () =>
     messages: [{ id: "m1", role: "user", parts: [] }],
   });
   const { client, view } = renderPeek("first-turn");
+  expect(
+    await screen.findByRole("button", { name: "Guardrails are enabled" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Guardrails don't check this chat" }),
+  ).toBeNull();
+  view.unmount();
+  client.clear();
+});
+
+it("stays calm, not asleep, in an opened app before anyone writes", async () => {
+  respondWith(null);
+  respondWithConversation({
+    messages: [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "archestra__render_app",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { appId: "app-1" },
+            output: { content: [] },
+          },
+        ],
+      },
+    ],
+  });
+  const { client, view } = renderPeek("opened-app");
   expect(
     await screen.findByRole("button", { name: "Guardrails are enabled" }),
   ).toBeInTheDocument();

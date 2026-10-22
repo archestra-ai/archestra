@@ -105,6 +105,7 @@ import {
   CHATOPS_SESSION_RESET_REPLY,
   CHATOPS_SESSION_ROLLOVER_HINT,
   SLACK_DEFAULT_CONNECTION_MODE,
+  SLACK_THREAD_MUTE_HINT,
   THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
@@ -168,6 +169,21 @@ export class ChatOpsManager {
   getSlackProvider(agentId?: string): SlackProvider | null {
     if (agentId) return this.slackAgentBots.get(agentId) ?? null;
     return this.slackProvider;
+  }
+
+  /** Workers send notices without starting inbound Slack listeners or sockets. */
+  async getSlackRuntimeNoticeProvider(
+    pinnedAgentId?: string,
+  ): Promise<SlackProvider | null> {
+    if ((await getHiddenMessagingChannels()).has("slack")) return null;
+    const slackConfig = pinnedAgentId
+      ? (await ChatOpsConfigModel.getSlackAgentBots()).find(
+          (bot) => bot.agentId === pinnedAgentId,
+        )
+      : await ChatOpsConfigModel.getSlackConfig();
+    if (!slackConfig) return null;
+    const provider = new SlackProvider(slackConfig, { pinnedAgentId });
+    return provider.isConfigured() ? provider : null;
   }
 
   getTelegramProvider(): TelegramProvider | null {
@@ -381,7 +397,7 @@ export class ChatOpsManager {
           conversationUrl: includeAnchor ? conversationUrl : undefined,
           hint:
             nativeRuntimeReply && includeAnchor && !binding.isDm
-              ? THREAD_MUTE_HINT
+              ? this.threadMuteHint(provider)
               : undefined,
           conversationReference: params.conversationReference,
         });
@@ -1818,7 +1834,7 @@ export class ChatOpsManager {
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
       ...(provider.providerId === "slack"
         ? [
-            `You can send concise updates to this Slack thread before your turn ends: for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable. If needed, discover it through the gateway's tool search. Sending a message does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. Avoid narrating every action. Your final answer is posted automatically; do not send it with this tool.`,
+            `As the primary agent responding directly to this Slack thread, proactively send brief updates after meaningful milestones, when the plan materially changes, or when blocked or awaiting a user decision. During long-running work, occasionally explain what is still running or being waited on. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable, only while that task is active. If needed, discover it through the gateway's tool search. Keep updates to one or two sentences covering the result and next step; avoid narrating individual commands, repeating unchanged status, or duplicating acknowledgments or input notices already sent by the platform. Continue working after posting; sending a message does not end the turn or wait for a reply. Collect input and approvals through the available question or approval interface. Your final answer is posted automatically; do not send it with this tool. Delegated subagents must report internally to their parent and never post externally.`,
           ]
         : []),
       ...(isGroup
@@ -2768,8 +2784,11 @@ export class ChatOpsManager {
         }),
       };
       let acknowledgementDelivery = Promise.resolve();
+      // Only a new workspace is acknowledged: the thread already holds the
+      // link to a continued one, and its follow-ups go straight to work.
       const acknowledgeSession =
         sendReply &&
+        !resumeFromTaskId &&
         provider.providerId === "slack" &&
         (message.metadata?.conversationType === "personal" ||
           message.metadata?.botMentioned === true);
@@ -2832,7 +2851,7 @@ export class ChatOpsManager {
                         hint:
                           includeAnchor &&
                           message.metadata?.conversationType !== "personal"
-                            ? THREAD_MUTE_HINT
+                            ? this.threadMuteHint(provider)
                             : undefined,
                         bestEffort: true,
                       }),
@@ -3203,7 +3222,7 @@ export class ChatOpsManager {
           ...(session?.rolledOver
             ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
             : (await this.shouldHintThreadMute(provider, message)) && {
-                hint: THREAD_MUTE_HINT,
+                hint: this.threadMuteHint(provider),
               }),
           conversationReference: message.metadata?.conversationReference,
         },
@@ -3243,6 +3262,12 @@ export class ChatOpsManager {
       agentResponse,
       interactionId: resultMessage.messageId,
     };
+  }
+
+  private threadMuteHint(provider: ChatOpsProvider): string {
+    return provider.providerId === "slack"
+      ? SLACK_THREAD_MUTE_HINT
+      : THREAD_MUTE_HINT;
   }
 
   /**

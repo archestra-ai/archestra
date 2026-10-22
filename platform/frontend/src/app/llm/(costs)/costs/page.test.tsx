@@ -72,6 +72,12 @@ function show() {
     </QueryClientProvider>,
   );
 }
+async function view(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^View / }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("menuitem", { name }));
+}
 async function group(name: string) {
   fireEvent.keyDown(screen.getByRole("button", { name: /^by / }), {
     key: "Enter",
@@ -249,8 +255,12 @@ describe("OrganizationCostsPage", () => {
       screen.getByText("Usage at API rates, not a bill"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Active people 1/ }),
-    ).toBeInTheDocument();
+      screen.getByText("Active people").parentElement?.parentElement,
+    ).toHaveTextContent(/^Active people1/);
+    // The totals only summarize; the explorer's controls pick what it shows.
+    expect(
+      screen.queryByRole("button", { name: /API spend/ }),
+    ).not.toBeInTheDocument();
   });
   it("uses the selected custom timeframe for all requested data", async () => {
     const timeframe =
@@ -301,7 +311,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    fireEvent.click(screen.getByRole("button", { name: "Who is using it" }));
+    await view("Who is using it");
     await within(await screen.findByRole("table")).findByText("Example User A");
     await split("Model");
     fireEvent.click(
@@ -391,7 +401,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    fireEvent.click(screen.getByRole("button", { name: "Who is using it" }));
+    await view("Who is using it");
     const identity = await within(await screen.findByRole("table")).findByText(
       "Example User C with a long identity",
     );
@@ -559,7 +569,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    fireEvent.click(screen.getByRole("button", { name: "Skills by reach" }));
+    await view("Skills by reach");
     expect(
       await within(await screen.findByRole("table")).findByText(
         "PDF Extraction",

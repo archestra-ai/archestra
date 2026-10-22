@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.4.0-rc.54",
+  "version": "1.5.0-rc.3",
   "description": "",
   "author": "",
   "private": true,
@@ -110,7 +110,7 @@
     "@microsoft/msgraph-sdk-users": "1.0.0-preview.80",
     "@microsoft/teams.api": "2.0.14",
     "@modelcontextprotocol/ext-apps": "^1.1.1",
-    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@ngrok/ngrok": "^1.7.0",
     "@notionhq/client": "^5.16.0",
     "@octokit/rest": "^22.0.1",

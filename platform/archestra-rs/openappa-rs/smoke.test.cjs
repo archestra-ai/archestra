@@ -520,8 +520,11 @@ builtin = "hitl"
     const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
-    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
+    // No ruling is an answer for the model, not a runtime failure, and it replays.
+    for (const unanswered of [await human(), await human()]) {
+      assert.equal(unanswered.result.isError, true);
+      assert.match(unanswered.result.content[0].text, /gave no answer|cannot be reached/);
+    }
     assert.notEqual(
       (await call(session, 'email-without-ruling', 'send_email', { to: 'recipient@example.com' })).decision,
       'allow_call',

@@ -10,6 +10,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
+import { ensureToolCallsHaveResults } from "@/agents/tool-call-results";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
@@ -538,8 +539,9 @@ export class A2AManager {
       const contextUiMessages = coerceMalformedToolInputs(
         contextDbMessages.map((m) => m.content as UIMessage),
       );
-      const requestMessages: ModelMessage[] =
-        await convertToModelMessages(contextUiMessages);
+      const requestMessages: ModelMessage[] = ensureToolCallsHaveResults(
+        await convertToModelMessages(contextUiMessages),
+      );
 
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the

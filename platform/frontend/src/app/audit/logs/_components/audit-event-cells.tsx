@@ -26,7 +26,6 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { PersonAvatar } from "@/app/llm/logs/_parts/hue-avatar";
 import {
   Tooltip,
   TooltipContent,
@@ -36,7 +35,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { AuditLog } from "@/lib/audit-log/audit-log.query";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { type AuditActor, describeAuditActor } from "./audit-actor-cell";
 import {
   formatAction,
   formatResourceType,
@@ -47,9 +45,9 @@ import {
 type AuditEventRow = Omit<AuditLog, "action"> & { action: string };
 
 /**
- * What happened to what: the resource type's tile with the actor pinned to
- * its corner, then the resource over "Updated · Agent". Only a failure or a
- * denial colors the row.
+ * What happened, then to what: "Agent updated" over "Support bot · Agent".
+ * The actor has its own column, so the tile carries only the resource type;
+ * only a failure or a denial colors it.
  */
 export function AuditEventCell({ event }: { event: AuditEventRow }) {
   const typeLabel = formatResourceType(event.resourceType ?? "");
@@ -58,65 +56,41 @@ export function AuditEventCell({ event }: { event: AuditEventRow }) {
       ? resourceDisplayName(event)
       : null;
   const failed = event.outcome !== "success";
-  const OutcomeIcon = event.outcome === "denied" ? ShieldBan : X;
-  const actor = describeAuditActor(event);
+  const action = formatAction(event.action);
 
   return (
-    <div className="flex min-w-0 items-center gap-3.5">
+    <div className="flex min-w-0 items-center gap-3">
       <Tooltip>
         <TooltipTrigger asChild>
           <UnstyledButton
-            aria-label={`${OUTCOME_LABEL[event.outcome]}: ${formatAction(event.action)} by ${actor.name}`}
-            className="relative block size-9 shrink-0 cursor-default"
+            aria-label={`${action}: ${event.action}`}
+            className="block shrink-0 cursor-default"
           >
             <ResourceTile type={event.resourceType} failed={failed} />
-            <span className="absolute -right-1.5 -bottom-1.5 flex">
-              <ActorBadge actor={actor} />
-            </span>
           </UnstyledButton>
         </TooltipTrigger>
-        <TooltipContent className="px-2 py-1.5">
-          <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
-            <dt className="text-muted-foreground">Event</dt>
-            <dd className="text-right font-mono text-[11px]">{event.action}</dd>
-            <dt className="text-muted-foreground">Outcome</dt>
-            <dd className="text-right">{OUTCOME_LABEL[event.outcome]}</dd>
-            <dt className="text-muted-foreground">By</dt>
-            <dd className="text-right">{actor.name}</dd>
-          </dl>
+        <TooltipContent className="font-mono text-[11px]">
+          {event.action}
         </TooltipContent>
       </Tooltip>
       <div className="min-w-0 flex-1">
-        <div
-          className="truncate text-sm leading-5 font-medium"
-          title={name ?? undefined}
-        >
-          {name ?? typeLabel}
+        <div className="truncate text-sm leading-5 font-medium" title={action}>
+          {action}
         </div>
         {/* One inline run that truncates as a whole, so a narrow column cuts
             the line short instead of pushing it into the next cell. */}
-        <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
-          {failed ? (
-            <>
-              <span className="font-medium text-destructive">
-                <OutcomeIcon
-                  className="mr-0.5 inline size-3 align-[-2px]"
-                  aria-hidden="true"
-                />
-                {OUTCOME_LABEL[event.outcome]}
-              </span>{" "}
-              <Dot />{" "}
-            </>
-          ) : null}
-          <span className="text-foreground/80">
-            {verbOf(event.action, typeLabel)}
-          </span>
+        <div
+          className="h-4 truncate text-xs leading-4 text-muted-foreground"
+          title={name ?? undefined}
+        >
           {name ? (
             <>
-              {" "}
-              <Dot /> {typeLabel}
+              <span className="text-foreground/80">{name}</span> <Dot />{" "}
+              {typeLabel}
             </>
-          ) : null}
+          ) : (
+            typeLabel
+          )}
         </div>
       </div>
     </div>
@@ -124,28 +98,53 @@ export function AuditEventCell({ event }: { event: AuditEventRow }) {
 }
 
 /**
- * The HTTP method and status that carried the change. Client network details
- * (route, source IP, request ID) stay in the tooltip and the detail dialog.
+ * Whether the change went through, over the HTTP request that carried it.
+ * Background changes have no request, and say so instead of a bare dash.
  */
-export function AuditRequestCell({ event }: { event: AuditEventRow }) {
-  if (!event.httpMethod) {
-    return <div className="text-right text-xs text-muted-foreground">—</div>;
-  }
+export function AuditStatusCell({ event }: { event: AuditEventRow }) {
+  const failed = event.outcome !== "success";
+  const OutcomeIcon = event.outcome === "denied" ? ShieldBan : X;
   const isError = (event.httpStatus ?? 0) >= 400;
+  const outcome = (
+    <span
+      className={cn(
+        "flex items-center justify-end gap-1.5 text-sm leading-5 whitespace-nowrap",
+        failed ? "font-medium text-destructive" : "text-foreground",
+      )}
+    >
+      {failed ? (
+        <OutcomeIcon className="size-3.5" aria-hidden="true" />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="size-1.5 rounded-full bg-emerald-500"
+        />
+      )}
+      {OUTCOME_LABEL[event.outcome]}
+    </span>
+  );
+  if (!event.httpMethod) {
+    return (
+      <div className="text-right">
+        {outcome}
+        <span className="block text-xs leading-4 whitespace-nowrap text-muted-foreground">
+          Background
+        </span>
+      </div>
+    );
+  }
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <UnstyledButton className="ml-auto block cursor-default text-right tabular-nums">
-          <span className="block text-sm leading-5 font-medium whitespace-nowrap">
-            {event.httpMethod}
-          </span>
+          {outcome}
           <span
             className={cn(
               "block text-xs leading-4 whitespace-nowrap",
               isError ? "text-destructive" : "text-muted-foreground",
             )}
           >
-            {event.httpStatus ?? "—"}
+            {event.httpMethod} · {event.httpStatus ?? "—"}
           </span>
         </UnstyledButton>
       </TooltipTrigger>
@@ -210,18 +209,6 @@ const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
   "team",
 ]);
 
-function ActorBadge({ actor }: { actor: AuditActor }) {
-  if (actor.kind === "person") {
-    return <PersonAvatar name={actor.name} size={18} />;
-  }
-  const Icon = actor.icon;
-  return (
-    <span className="flex size-[18px] items-center justify-center rounded-full bg-muted text-muted-foreground ring-2 ring-background">
-      <Icon className="size-2.5" strokeWidth={2.25} aria-hidden="true" />
-    </span>
-  );
-}
-
 function ResourceTile({
   type,
   failed,
@@ -240,25 +227,6 @@ function ResourceTile({
       <Icon aria-hidden="true" />
     </span>
   );
-}
-
-/**
- * "Agent updated" → "Updated", "Member role changed" → "Role changed": the
- * resource type is already on the line, so the verb carries only the action.
- */
-function verbOf(action: string, typeLabel: string): string {
-  const label = formatAction(action);
-  const actionNoun = action
-    .split(".")[0]
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .toLowerCase();
-  for (const prefix of [typeLabel, actionNoun]) {
-    if (prefix && label.toLowerCase().startsWith(`${prefix.toLowerCase()} `)) {
-      const rest = label.slice(prefix.length + 1);
-      return rest.charAt(0).toUpperCase() + rest.slice(1);
-    }
-  }
-  return label;
 }
 
 function Dot() {

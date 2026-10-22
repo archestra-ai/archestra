@@ -65,6 +65,7 @@ export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentPinsTable } from "./agent-pin";
 export { default as agentRunsTable } from "./agent-run";
+export { default as agentRunAttentionNoticesTable } from "./agent-run-attention-notice";
 export { default as agentRunInputsTable } from "./agent-run-input";
 export {
   agentRunShareTeamsTable,

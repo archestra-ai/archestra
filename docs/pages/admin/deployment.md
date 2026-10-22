@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.54" # x-release-please-version
+export ARCHESTRA_VERSION="1.5.0-rc.3" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -213,7 +213,7 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 1. Back up PostgreSQL and preserve encryption keys.
 2. Read release notes for migration requirements.
 3. Test the selected version in staging.
-4. Apply the Helm upgrade above and check rollout and migration Job status.
+4. Apply the Helm upgrade above and check rollout and migration Job status. The chart's values pin `archestra.imageTag`, so `--reuse-values` or an old `values.yaml` keeps the old image: use `--reset-then-reuse-values`, or update `imageTag` in your file.
 
 On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
 

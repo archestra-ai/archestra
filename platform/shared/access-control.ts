@@ -581,6 +581,7 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  [RouteId.RenderStartupGuard]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
   [RouteId.GetConnectionRuntime]: {},
@@ -1360,7 +1361,6 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   }, // First-login survey - admins only (same gate as appearance settings)
   [RouteId.SubmitOnboardingSurvey]: { organizationSettings: ["update"] }, // First-login survey - admins only
-  [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.BulkDeleteMembers]: { member: ["delete"] },
@@ -1503,6 +1503,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  // Config reads return no secret, only what GetChatOpsStatus shows at read.
+  [RouteId.GetSlackChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.GetMsTeamsChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
   [RouteId.ListSlackAgentBots]: {
     organizationSettings: ["read"],
   },
@@ -1541,6 +1548,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.GetTelegramChatOpsConfig]: {
+    organizationSettings: ["read"],
   },
   // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
@@ -1709,6 +1719,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryInstall]: { guardrailsPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
@@ -1720,6 +1731,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetOpenappaCredentialBinding]: {
     guardrailsPolicy: ["update"],
   },
+  // The variable -> key pairs are readable through GetOpenappaPolicyDeclarations too.
+  [RouteId.GetOpenappaCredentialBindings]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaCredentialBinding]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { guardrailsPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
@@ -2092,6 +2106,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/credentials": { credential: ["read"] },
   "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/appearance/[section]": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
 };

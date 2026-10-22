@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
@@ -527,6 +528,96 @@ describe("createFastifyInstance", () => {
           type: "api_internal_server_error",
         },
       });
+    });
+
+    test("keeps a failed query's SQL and parameters out of the 500 body but logs the query", async () => {
+      const app = createFastifyInstance();
+      const loggerErrorSpy = vi.spyOn(app.log, "error");
+      const pgError = Object.assign(
+        new Error(
+          'insert or update on table "chat_api_keys" violates foreign key constraint',
+        ),
+        { code: "23503" },
+      );
+      app.get("/test-db-query-error", async () => {
+        throw new DrizzleQueryError(
+          'insert into "chat_api_keys" ("secret_id", "user_id") values ($1, $2)',
+          ["secret-id-1", "owner-id-1"],
+          pgError,
+        );
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-query-error",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: {
+          message:
+            "A database query failed. Ask an administrator to check the server logs.",
+          type: "api_internal_server_error",
+        },
+      });
+      expect(response.body).not.toContain("chat_api_keys");
+      expect(response.body).not.toContain("secret-id-1");
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining("Failed query"),
+          statusCode: 500,
+        }),
+        "HTTP 50x request error occurred",
+      );
+
+      loggerErrorSpy.mockRestore();
+      await app.close();
+    });
+
+    test("keeps a failed query's text out of an ApiError built from it", async () => {
+      const app = createFastifyInstance();
+      const queryError = new DrizzleQueryError(
+        'delete from "mcp_server" where "id" = $1',
+        ["server-id-1"],
+        new Error("canceled"),
+      );
+      app.get("/test-api-error-from-query", async () => {
+        throw new ApiError(500, `Hard reset failed: ${queryError.message}`);
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-api-error-from-query",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json().error.message).toBe(
+        "A database query failed. Ask an administrator to check the server logs.",
+      );
+      expect(response.body).not.toContain("server-id-1");
+      await app.close();
+    });
+
+    test("keeps a wrapper's own message when the failed query is only its cause", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-wrapped-query-error", async () => {
+        throw new Error("Could not save the key", {
+          cause: new DrizzleQueryError(
+            'insert into "secret" ("secret") values ($1)',
+            ["value-1"],
+            new Error("violates foreign key constraint"),
+          ),
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-wrapped-query-error",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json().error.message).toBe("Could not save the key");
+      await app.close();
     });
 
     test("handles response serialization errors when response doesn't match schema", async () => {

@@ -30,7 +30,10 @@ import {
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
-import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import {
+  ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
@@ -43,7 +46,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -122,6 +125,7 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
+  type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
@@ -170,6 +174,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
@@ -192,6 +197,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -430,7 +436,7 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
-  const proof = takeInternalCall(request.headers);
+  const proof = internalCallProvenance(request);
   // Credential paths accept either proof; only the guardrail proof reaches
   // OpenAPPA as its bypass.
   const internalCall = proof.inProcess || proof.guardrail;
@@ -1607,12 +1613,19 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
+    const providerRequest =
+      providerName === "anthropic" &&
+      externalAgentId === CLAUDE_DESKTOP_CLIENT_ID &&
+      provider.isSubscriptionCredential?.(apiKey) === true
+        ? withClaudeDesktopSubscriptionPreamble(repairedRequest)
+        : repairedRequest;
+
     // A connection probe is not an agent task. This is request-local and does
     // not alter the client's model, sandbox, approval policy or configuration.
     const finalRequest = (
       connectionVerification
-        ? { ...asRecord(repairedRequest), tool_choice: "none" }
-        : repairedRequest
+        ? { ...asRecord(providerRequest), tool_choice: "none" }
+        : providerRequest
     ) as TRequest;
 
     // The tool names the request declares, in the canonical form tool-call
@@ -1655,6 +1668,7 @@ export async function handleLLMProxy<
     );
     const ctx: LLMProxyContext<TRequest> = {
       usageAccountingMode: config.llmProxy.usageAccountingMode,
+      providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -1938,6 +1952,11 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
+  // Set once a terminal reaches the client, whichever path released it: the
+  // stream loop, the policy release, or a failed generation. An error frame
+  // after it must not end the response a second time.
+  const carriesStreamTerminal = provider.carriesStreamTerminal;
+  let terminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1987,6 +2006,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+    if (carriesStreamTerminal && !terminalSent)
+      terminalSent = carriesStreamTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -2126,6 +2147,7 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -2391,6 +2413,7 @@ async function handleStreaming<
           }
           const cost = await calculateUsageCost({
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
             model: actualModel,
             usage: state.usage,
             provider: providerName,
@@ -2831,21 +2854,37 @@ async function handleStreaming<
       streamError = settlementError;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    // Read once, here: nothing else writes to the client before the error
+    // frame, so `terminalSent` cannot change after this point.
+    const frameContext: StreamErrorFrameContext = {
+      responseId:
+        streamAdapter.clientResponse?.id ??
+        (streamAdapter.state.responseId || undefined),
+      model:
+        streamAdapter.clientResponse?.model ??
+        (streamAdapter.state.model || actualModel),
+      terminalSent,
+    };
     return handleError(
       streamError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      eofError && formatStreamErrorFrame
+      formatStreamErrorFrame
         ? (event: unknown) => {
             const source = asRecord(event);
-            return formatStreamErrorFrame({
-              ...source,
-              error: { ...asRecord(source?.error), code: eofError.code },
-            });
+            return formatStreamErrorFrame(
+              eofError
+                ? {
+                    ...source,
+                    error: { ...asRecord(source?.error), code: eofError.code },
+                  }
+                : event,
+              frameContext,
+            );
           }
-        : formatStreamErrorFrame,
+        : undefined,
       provider.translatesWireFormat,
     );
   } finally {
@@ -2974,6 +3013,7 @@ async function handleNonStreaming<
             usage: error.usage,
             providerName,
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
             agent,
@@ -3110,6 +3150,7 @@ async function handleNonStreaming<
       }
       const cost = await calculateUsageCost({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         model: actualModel,
         usage,
         provider: providerName,
@@ -3296,6 +3337,7 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -3462,6 +3504,7 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     usageAccountingMode: ctx.usageAccountingMode,
+    providerApiKeyId: ctx.providerApiKeyId,
     actualModel,
     usage,
     providerName,

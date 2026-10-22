@@ -626,6 +626,36 @@ describe("ChatSidebarSection", () => {
   });
 
   it.each([
+    { pinned: true, firstLabel: "Pinned" },
+    { pinned: false, firstLabel: "Today" },
+  ])("puts search on the first group label ($firstLabel) and opens the palette from it", ({
+    pinned,
+    firstLabel,
+  }) => {
+    mockConversations = [
+      ...(pinned
+        ? [makeConv("pinned", "Pinned chat", { pinnedAt: daysAgo(0) })]
+        : []),
+      makeConv("today", "Today's chat"),
+      makeConv("older", "Older chat", { lastMessageAt: daysAgo(3) }),
+    ];
+    const onOpen = vi.fn();
+    window.addEventListener("open-conversation-search", onOpen);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    const searchButtons = screen.getAllByRole("button", { name: "Search" });
+    expect(searchButtons).toHaveLength(1);
+    // The label button and search share the label row.
+    expect(
+      screen.getByRole("button", { name: firstLabel }).parentElement,
+    ).toContainElement(searchButtons[0]);
+
+    fireEvent.click(searchButtons[0]);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    window.removeEventListener("open-conversation-search", onOpen);
+  });
+
+  it.each([
     false,
     true,
   ])("shows one task and opens its newest run (pinned: %s)", (pinned) => {

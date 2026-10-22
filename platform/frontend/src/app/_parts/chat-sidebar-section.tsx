@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Search,
   Sparkles,
   Square,
   Trash2,
@@ -24,6 +25,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { AgentIcon } from "@/components/agent-icon";
 import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
@@ -66,6 +68,7 @@ import {
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { SHORTCUT_SEARCH } from "@/consts";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   SIDEBAR_PINNED_RUNS,
@@ -1050,7 +1053,10 @@ export function ChatSidebarSection({
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>
           {pinnedItems.length > 0 && (
-            <CollapsibleSidebarGroup label="Pinned">
+            <CollapsibleSidebarGroup
+              label="Pinned"
+              action={<SearchLabelAction />}
+            >
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1088,7 +1094,16 @@ export function ChatSidebarSection({
           )}
 
           {recentChatGroups.map((group, groupIndex) => (
-            <CollapsibleSidebarGroup key={group.label} label={group.label}>
+            <CollapsibleSidebarGroup
+              key={group.label}
+              label={group.label}
+              // Search rides on whichever label comes first.
+              action={
+                pinnedItems.length === 0 && groupIndex === 0 ? (
+                  <SearchLabelAction />
+                ) : undefined
+              }
+            >
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1174,9 +1189,12 @@ export function ChatSidebarSection({
 
 function CollapsibleSidebarGroup({
   label,
+  action,
   children,
 }: {
   label: string;
+  /** Sits at the label's right end, in the rows' indicator column. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -1187,7 +1205,7 @@ function CollapsibleSidebarGroup({
             <Button
               variant="ghost"
               size="sm"
-              className="group/section w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
+              className="group/section min-w-0 flex-1 justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
             >
               <span>{label}</span>
               <ChevronDown
@@ -1196,10 +1214,41 @@ function CollapsibleSidebarGroup({
               />
             </Button>
           </CollapsibleTrigger>
+          {action}
         </SidebarGroupLabel>
         <CollapsibleContent>{children}</CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+  );
+}
+
+/**
+ * Opens the search palette, which Cmd/Ctrl+K also toggles. Hovering swaps the
+ * magnifier for the shortcut, so the click that would open search teaches the
+ * key instead.
+ */
+function SearchLabelAction() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <UnstyledButton
+      type="button"
+      aria-label="Search"
+      className="group/search mr-1 flex h-5 min-w-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/70 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+      onClick={() => {
+        if (isMobile) setOpenMobile(false);
+        window.dispatchEvent(new CustomEvent("open-conversation-search"));
+      }}
+    >
+      <Search
+        aria-hidden
+        className="size-4 group-hover/search:hidden group-focus-visible/search:hidden"
+      />
+      <ShortcutHint
+        modifier="mod"
+        letter={SHORTCUT_SEARCH.label}
+        className="ml-0 hidden group-hover/search:inline group-focus-visible/search:inline"
+      />
+    </UnstyledButton>
   );
 }
 

@@ -76,12 +76,7 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
     refetchOnMount: false,
   });
   const conversation = conversationQuery.data;
-  const hasReply = (conversation?.messages ?? []).some(
-    (message) =>
-      typeof message === "object" &&
-      message !== null &&
-      (message as { role?: unknown }).role === "assistant",
-  );
+  const hasReply = hasModelReply(conversation?.messages);
   // The session only exists once the chat's first turn reaches the model, so
   // an empty status read before that says nothing. A turn paused on a question
   // never finishes, so nothing re-reads it: re-read it here once the chat has
@@ -320,6 +315,21 @@ function usePopOnTrustDrop(trust: string | undefined) {
     }
   }, [trust]);
   return { active, done: () => setActive(false) };
+}
+
+/**
+ * Whether the model has answered the user: an assistant message after the
+ * first user message. Opening an app seeds its render as an assistant message
+ * before anyone writes; no turn reached the model, so no session exists yet.
+ */
+function hasModelReply(messages: unknown[] | undefined) {
+  const roles = (messages ?? []).map((message) =>
+    typeof message === "object" && message !== null
+      ? (message as { role?: unknown }).role
+      : undefined,
+  );
+  const firstUser = roles.indexOf("user");
+  return firstUser !== -1 && roles.indexOf("assistant", firstUser) !== -1;
 }
 
 const MOOD_ICON = {

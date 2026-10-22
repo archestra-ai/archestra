@@ -700,6 +700,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
+  agentRunAttentionNoticesTable: {
+    audited: false,
+    reason:
+      "internal Slack delivery state; contains only routing, message identity, and attention resolution",
+  },
   agentRunsTable: {
     audited: false,
     reason:

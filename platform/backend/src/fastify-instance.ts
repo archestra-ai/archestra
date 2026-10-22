@@ -4,6 +4,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { internalCallProvenance } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -52,6 +53,7 @@ export const createFastifyInstance = () => {
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
     .addHook("onRequest", (request, _reply, done) => {
+      internalCallProvenance(request);
       incomingRequestAbortTracker.observe(request.raw);
       done();
     })

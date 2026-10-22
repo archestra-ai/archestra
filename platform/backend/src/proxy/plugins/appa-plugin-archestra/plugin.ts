@@ -2204,10 +2204,20 @@ function isDeclaredCall(
   call: { name: string; namespace?: string },
 ): boolean {
   return binding.request.declaredTools.some(
-    (tool) =>
-      tool.name === call.name &&
-      (tool.namespace ?? undefined) === (call.namespace ?? undefined),
+    (tool) => tool.name === call.name && sameNamespace(tool, call),
   );
+}
+
+/**
+ * Whether two tools share a namespace. An empty namespace is none: a declared
+ * local tool has no namespace, and the native question that replaces ask_user
+ * carries an explicit empty one.
+ */
+function sameNamespace(
+  a: { namespace?: string },
+  b: { namespace?: string },
+): boolean {
+  return (a.namespace || undefined) === (b.namespace || undefined);
 }
 
 function notLoadedFeedback(params: {
@@ -2216,7 +2226,7 @@ function notLoadedFeedback(params: {
 }): string {
   const { call } = params;
   const held = params.binding.request.heldTools?.some(
-    (tool) => tool.name === call.name && tool.namespace === call.namespace,
+    (tool) => tool.name === call.name && sameNamespace(tool, call),
   );
   return held
     ? `[appa] ${call.name} cannot be used until ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} are both loaded. Search for the one that is missing with your tool search, then call it again.`

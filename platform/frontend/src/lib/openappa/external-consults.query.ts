@@ -1,7 +1,7 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
@@ -33,6 +33,9 @@ export function useExternalConsults({
 }) {
   return useQuery({
     queryKey: [...EXTERNAL_CONSULTS_QUERY_KEY, { filters, limit, cursor }],
+    // A new page or a minute tick keeps the rows on screen until the
+    // answer lands, so the table never blanks and loses its scroll.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await getOpenappaExternalConsults({
         query: { ...filters, limit, cursor },

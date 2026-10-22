@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.54"
+    "version": "1.5.0-rc.3"
   },
   "components": {
     "schemas": {
@@ -127324,6 +127324,9 @@
                         "onlineMcpCatalogEnabled": {
                           "type": "boolean"
                         },
+                        "defaultPersonalAgentAccessAllTools": {
+                          "type": "boolean"
+                        },
                         "onlineSkillCatalogEnabled": {
                           "type": "boolean"
                         },
@@ -127898,6 +127901,7 @@
                         "theme",
                         "customFont",
                         "onlineMcpCatalogEnabled",
+                        "defaultPersonalAgentAccessAllTools",
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
                         "allowChatFileUploads",
@@ -129785,6 +129789,7 @@
                                 "enum": [
                                   "custom",
                                   "models_dev",
+                                  "provider",
                                   "aws",
                                   "derived_multiplier",
                                   "default"
@@ -129804,6 +129809,7 @@
                                 "enum": [
                                   "custom",
                                   "models_dev",
+                                  "provider",
                                   "aws",
                                   "derived_multiplier",
                                   "default"
@@ -130972,6 +130978,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -130991,6 +130998,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -131186,6 +131194,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -131205,6 +131214,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -132999,6 +133009,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -133018,6 +133029,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -134186,6 +134198,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -134205,6 +134218,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -134400,6 +134414,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -134419,6 +134434,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -153102,6 +153118,292 @@
       }
     },
     "/api/chatops/config/ms-teams": {
+      "get": {
+        "operationId": "getMsTeamsChatOpsConfig",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Get the stored MS Teams chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "appId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "tenantId": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "updatedAt",
+                    "enabled",
+                    "appId",
+                    "tenantId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:read"
+          ]
+        }
+      },
       "put": {
         "operationId": "updateChatOpsConfigInQuickstart",
         "tags": [
@@ -154228,6 +154530,295 @@
       }
     },
     "/api/chatops/config/slack": {
+      "get": {
+        "operationId": "getSlackChatOpsConfig",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Get the stored Slack chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "appId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "connectionMode": {
+                      "type": "string",
+                      "enum": [
+                        "webhook",
+                        "socket"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "updatedAt",
+                    "enabled",
+                    "appId",
+                    "connectionMode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:read"
+          ]
+        }
+      },
       "put": {
         "operationId": "updateSlackChatOpsConfig",
         "tags": [
@@ -158319,6 +158910,282 @@
       }
     },
     "/api/chatops/config/telegram": {
+      "get": {
+        "operationId": "getTelegramChatOpsConfig",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Get the stored Telegram chatops configuration without its bot token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "updatedAt",
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:read"
+          ]
+        }
+      },
       "put": {
         "operationId": "updateTelegramChatOpsConfig",
         "tags": [
@@ -163814,6 +164681,504 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/connection-setups/startup-guard": {
+      "post": {
+        "operationId": "renderStartupGuard",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Render a credential-free startup check without replaying connection setup.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "codex",
+                      "copilot-cli",
+                      "opencode",
+                      "kilo"
+                    ]
+                  },
+                  "platform": {
+                    "type": "string",
+                    "enum": [
+                      "bash",
+                      "windows"
+                    ]
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "appName": {
+                        "type": "string",
+                        "maxLength": 512
+                      },
+                      "healthUrl": {
+                        "nullable": true,
+                        "type": "string",
+                        "maxLength": 2048,
+                        "format": "uri"
+                      },
+                      "mcp": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "serverName": {
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2048,
+                            "format": "uri"
+                          },
+                          "ref": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 512
+                          }
+                        },
+                        "required": [
+                          "serverName",
+                          "url",
+                          "ref"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "proxy": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage",
+                              "jev"
+                            ]
+                          },
+                          "providerLabel": {
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "url": {
+                            "type": "string",
+                            "maxLength": 2048,
+                            "format": "uri"
+                          },
+                          "ref": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "proxyName": {
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "authMode": {
+                            "type": "string",
+                            "enum": [
+                              "provider-key",
+                              "virtual-key",
+                              "primary-providers"
+                            ]
+                          },
+                          "usesModelCatalog": {
+                            "type": "boolean"
+                          },
+                          "passthroughVirtualKey": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "ARCH_GUARD_PRIVATE_KEY"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerLabel",
+                          "url",
+                          "ref",
+                          "proxyName"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "skills": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "marketplaceName": {
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "cloneUrl": {
+                            "type": "string",
+                            "enum": [
+                              "ARCH_GUARD_PRIVATE_CLONE_URL"
+                            ]
+                          },
+                          "hasSkills": {
+                            "type": "boolean"
+                          },
+                          "pluginNames": {
+                            "maxItems": 555,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 512
+                            }
+                          }
+                        },
+                        "required": [
+                          "marketplaceName",
+                          "cloneUrl"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "appName",
+                      "healthUrl",
+                      "mcp",
+                      "proxy",
+                      "skills"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "platform",
+                  "context"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "clientId": {
+                      "type": "string",
+                      "enum": [
+                        "claude-code",
+                        "codex",
+                        "copilot-cli",
+                        "opencode",
+                        "kilo"
+                      ]
+                    },
+                    "platform": {
+                      "type": "string",
+                      "enum": [
+                        "bash",
+                        "windows"
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "version",
+                    "clientId",
+                    "platform",
+                    "source",
+                    "sha256"
                   ],
                   "additionalProperties": false
                 }
@@ -226252,6 +227617,21 @@
                               "app:llm_complete",
                               "app:recording_enhancement"
                             ]
+                          },
+                          "userMessagePreview": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "responseToolNames": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "responseTextPreview": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -226982,6 +228362,11 @@
                           "claudeCodeTitle": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "connectorName": {
+                            "nullable": true,
+                            "description": "Name of the knowledge-base connector a knowledge:* session ran for, when exactly one connector owns it.",
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -227019,7 +228404,8 @@
                           "lastInteractionType",
                           "contentNotStored",
                           "conversationTitle",
-                          "claudeCodeTitle"
+                          "claudeCodeTitle",
+                          "connectorName"
                         ],
                         "additionalProperties": false
                       }
@@ -289063,6 +290449,17 @@
                                           "salesforce"
                                         ]
                                       },
+                                      "authMethod": {
+                                        "type": "string",
+                                        "enum": [
+                                          "oauth_client_credentials",
+                                          "soap_legacy"
+                                        ]
+                                      },
+                                      "clientId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
                                       "loginUrl": {
                                         "default": "https://login.salesforce.com"
                                       },
@@ -290605,6 +292002,17 @@
                               "salesforce"
                             ]
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "oauth_client_credentials",
+                              "soap_legacy"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
                           "loginUrl": {
                             "type": "string"
                           },
@@ -291877,6 +293285,17 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "oauth_client_credentials",
+                                "soap_legacy"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "loginUrl": {
                               "default": "https://login.salesforce.com"
@@ -293375,6 +294794,17 @@
                                     "salesforce"
                                   ]
                                 },
+                                "authMethod": {
+                                  "type": "string",
+                                  "enum": [
+                                    "oauth_client_credentials",
+                                    "soap_legacy"
+                                  ]
+                                },
+                                "clientId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
                                 "loginUrl": {
                                   "default": "https://login.salesforce.com"
                                 },
@@ -294743,6 +296173,17 @@
                               "salesforce"
                             ]
                           },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "oauth_client_credentials",
+                              "soap_legacy"
+                            ]
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
                           "loginUrl": {
                             "type": "string"
                           },
@@ -295881,6 +297322,17 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "oauth_client_credentials",
+                                "soap_legacy"
+                              ]
+                            },
+                            "clientId": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "loginUrl": {
                               "default": "https://login.salesforce.com"
@@ -314360,6 +315812,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "provider",
                               "aws",
                               "derived_multiplier",
                               "default"
@@ -314379,6 +315832,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "provider",
                               "aws",
                               "derived_multiplier",
                               "default"
@@ -315477,6 +316931,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "provider",
                           "aws",
                           "derived_multiplier",
                           "default"
@@ -315496,6 +316951,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "provider",
                           "aws",
                           "derived_multiplier",
                           "default"
@@ -322440,7 +323896,7 @@
                   },
                   "shared": {
                     "default": false,
-                    "description": "Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.",
+                    "description": "Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach. A service account cannot own a key, so it must send true.",
                     "type": "boolean"
                   },
                   "isPrimary": {
@@ -357183,277 +358639,6 @@
         }
       }
     },
-    "/api/onboarding/feedback-popup-activation": {
-      "get": {
-        "operationId": "getFeedbackPopupActivation",
-        "tags": [
-          "Onboarding"
-        ],
-        "description": "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened, and always null on enterprise-licensed instances.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "activatedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-                    }
-                  },
-                  "required": [
-                    "activatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "organizationSettings:update"
-          ]
-        }
-      }
-    },
     "/v1/openai/embeddings": {
       "post": {
         "operationId": "openAiEmbeddingsWithDefaultAgent",
@@ -365201,6 +366386,365 @@
       }
     },
     "/api/openappa/battery-installs/{id}": {
+      "get": {
+        "operationId": "getOpenappaBatteryInstall",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "Get one battery install as the last composition stored it, without recomposing; an install whose battery is no longer available is still returned, with status `unavailable`, though the battery list omits it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "batteryName": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unavailable",
+                        "missing_credentials",
+                        "naming_conflict",
+                        "server_missing",
+                        "unrouted",
+                        "refused",
+                        "active"
+                      ]
+                    },
+                    "target": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "multi-user"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "packageHash": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "credentialBindings": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "batteryName",
+                    "catalogId",
+                    "enabled",
+                    "status",
+                    "target",
+                    "packageHash",
+                    "lastError",
+                    "credentialBindings",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "guardrailsPolicy:read"
+          ]
+        }
+      },
       "patch": {
         "operationId": "updateOpenappaBatteryInstall",
         "tags": [
@@ -366182,7 +367726,601 @@
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
+    "/api/openappa/credential-bindings": {
+      "get": {
+        "operationId": "getOpenappaCredentialBindings",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "List the stored credential bindings; credential values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "variable": {
+                        "type": "string"
+                      },
+                      "credentialKey": {
+                        "type": "string"
+                      },
+                      "hasValue": {
+                        "type": "boolean"
+                      },
+                      "updatedBy": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "variable",
+                      "credentialKey",
+                      "hasValue",
+                      "updatedBy",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "guardrailsPolicy:read"
+          ]
+        }
+      }
+    },
     "/api/openappa/credential-bindings/{variable}": {
+      "get": {
+        "operationId": "getOpenappaCredentialBinding",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "Get one stored credential binding; the credential value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^APPA_PROVIDER_[A-Z0-9_]+$"
+            },
+            "in": "path",
+            "name": "variable",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "variable": {
+                      "type": "string"
+                    },
+                    "credentialKey": {
+                      "type": "string"
+                    },
+                    "hasValue": {
+                      "type": "boolean"
+                    },
+                    "updatedBy": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "variable",
+                    "credentialKey",
+                    "hasValue",
+                    "updatedBy",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "guardrailsPolicy:read"
+          ]
+        }
+      },
       "put": {
         "operationId": "setOpenappaCredentialBinding",
         "tags": [
@@ -383001,6 +385139,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -383575,6 +385716,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -384151,6 +386293,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -384725,6 +386870,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -385542,6 +387688,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -386116,6 +388265,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -386447,6 +388597,9 @@
                   "onlineMcpCatalogEnabled": {
                     "type": "boolean"
                   },
+                  "defaultPersonalAgentAccessAllTools": {
+                    "type": "boolean"
+                  },
                   "mcpIdleHibernationEnabled": {
                     "type": "boolean"
                   }
@@ -386542,6 +388695,9 @@
                       ]
                     },
                     "onlineMcpCatalogEnabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPersonalAgentAccessAllTools": {
                       "type": "boolean"
                     },
                     "onlineSkillCatalogEnabled": {
@@ -387118,6 +389274,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -387546,6 +389703,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -388120,6 +390280,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -388560,6 +390721,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -389134,6 +391298,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -389693,6 +391858,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -390267,6 +392435,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -390810,6 +392979,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -391384,6 +393556,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -391882,6 +394055,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -392456,6 +394632,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -392898,6 +395075,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -393472,6 +395652,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -393945,6 +396126,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -394519,6 +396703,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -394929,6 +397114,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -395503,6 +397691,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -397117,6 +399306,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -397691,6 +399883,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -468384,7 +470577,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it; a key created by a service account with no owner is revealed to that service account.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {

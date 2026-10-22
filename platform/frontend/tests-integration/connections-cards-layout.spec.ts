@@ -100,10 +100,11 @@ test.describe("Agent connections layout", () => {
 
 async function cardBoxes(page: Page) {
   await page.goto("/connections/logs");
+  const summary = page.getByRole("region", { name: "Connection summary" });
   const boxes = [];
   for (const title of ["Users", "Active users", "Calls"]) {
-    const card = page
-      .getByRole("button")
+    const card = summary
+      .locator(":scope > div")
       .filter({ has: page.getByText(title, { exact: true }) });
     await expect(card).toBeVisible();
     const box = await card.boundingBox();

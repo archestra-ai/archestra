@@ -67,7 +67,7 @@ Archestra ships these skills:
 
 - **Archestra Platform Operations:** set up MCP servers, tools, team access, and policies through Archestra's own tools.
 - **Build App:** build an interactive [app](/docs/chat/apps) from chat.
-- **Agent Runtime Handoff:** move work between your machine and [Agent Runtime](/docs/agents/runtime).
+- **Remote Agents Handoff:** move work between your machine and a [Remote Agent](/docs/agents/runtime/handoff) in Archestra.
 - **appa-guide:** configure [Guardrails](/docs/agents/guardrails). It appears only when guardrails are on.
 
 ## Skills vs Agents

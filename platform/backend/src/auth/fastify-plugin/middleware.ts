@@ -26,13 +26,13 @@ import {
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
+  CONNECTION_STARTUP_GUARD_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
-  OAUTH_CALLBACK_PATH,
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
   OPENAPPA_HELPERS_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
@@ -219,10 +219,6 @@ export class Authnz {
       url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)
       url.startsWith("/oauth/") ||
-      // OAuth providers redirect here without a platform session. The one-time
-      // state value is the callback's authentication proof and is validated
-      // by the route before any token exchange.
-      (method === "POST" && url === OAUTH_CALLBACK_PATH) ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Sandbox proxy HTML is a static file with no secrets — must load without
@@ -248,6 +244,8 @@ export class Authnz {
       (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
       // Executable updates have a distinct installation capability and live access checks.
       (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
+      // Pure public code rendering: accepts no credential and grants no access.
+      (method === "POST" && url === CONNECTION_STARTUP_GUARD_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

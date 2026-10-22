@@ -9,16 +9,11 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import type { McpToolCallRow } from "./types";
 
-/** How long the call took, over the MCP method it used. */
+/** How long the call took. */
 export function DurationCell({ row }: { row: McpToolCallRow }) {
   return (
-    <div className="text-right whitespace-nowrap tabular-nums">
-      <div className="text-sm leading-5 font-medium">
-        {row.durationMs == null ? "—" : formatDuration(row.durationMs)}
-      </div>
-      <div className="font-mono text-[11px] leading-4 text-muted-foreground">
-        {row.method || "tools/call"}
-      </div>
+    <div className="text-right text-sm leading-5 whitespace-nowrap tabular-nums">
+      {row.durationMs == null ? "—" : formatDuration(row.durationMs)}
     </div>
   );
 }

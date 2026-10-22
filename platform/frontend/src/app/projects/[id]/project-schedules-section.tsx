@@ -495,9 +495,12 @@ function ScheduleDialog({
       }
     >
       <div className="space-y-1.5">
-        <Label htmlFor="schedule-name">Name</Label>
+        <Label htmlFor="schedule-name">
+          Name <RequiredMark />
+        </Label>
         <Input
           id="schedule-name"
+          aria-required
           value={form.name}
           onChange={(e) => update({ name: e.target.value })}
           placeholder="Weekly summary"
@@ -507,7 +510,9 @@ function ScheduleDialog({
 
       {canReadAgents === true && (
         <div className="space-y-1.5">
-          <Label>Agent</Label>
+          <Label>
+            Agent <RequiredMark />
+          </Label>
           <AgentSelector
             mode="single"
             flat
@@ -523,9 +528,12 @@ function ScheduleDialog({
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="schedule-prompt">Task prompt</Label>
+        <Label htmlFor="schedule-prompt">
+          Task prompt <RequiredMark />
+        </Label>
         <Textarea
           id="schedule-prompt"
+          aria-required
           value={form.messageTemplate}
           onChange={(e) => update({ messageTemplate: e.target.value })}
           placeholder="What should the agent do on each run?"
@@ -550,5 +558,13 @@ function ScheduleDialog({
         />
       </div>
     </StandardFormDialog>
+  );
+}
+
+function RequiredMark() {
+  return (
+    <span className="text-destructive" aria-hidden="true">
+      *
+    </span>
   );
 }

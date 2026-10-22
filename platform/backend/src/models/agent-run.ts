@@ -30,6 +30,7 @@ import type { AgentWorkspace } from "@/types/agent-workspace";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import { escapeLikePattern } from "@/utils/sql-search";
 import A2AMessageModel from "./a2a/message";
+import AgentRunAttentionNoticeModel from "./agent-run-attention-notice";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -327,17 +328,32 @@ class AgentRunModel {
     taskId: string;
     attentionState: AgentRunRecord["attentionState"];
   }): Promise<boolean> {
-    const updated = await db
-      .update(schema.agentRunsTable)
-      .set({ attentionState: params.attentionState })
-      .where(
-        and(
-          eq(schema.agentRunsTable.taskId, params.taskId),
-          isNull(schema.agentRunsTable.endedAt),
-        ),
-      )
-      .returning({ id: schema.agentRunsTable.id });
-    return updated.length > 0;
+    return db.transaction(async (tx) => {
+      const [run] = await tx
+        .select()
+        .from(schema.agentRunsTable)
+        .where(
+          and(
+            eq(schema.agentRunsTable.taskId, params.taskId),
+            isNull(schema.agentRunsTable.endedAt),
+          ),
+        )
+        .for("update");
+      if (!run) return false;
+      const [task] = await tx
+        .select({ state: schema.a2aTasksTable.state })
+        .from(schema.a2aTasksTable)
+        .where(eq(schema.a2aTasksTable.id, params.taskId));
+      if (!task || A2A_TERMINAL_TASK_STATES.includes(task.state)) return false;
+      if (run.attentionState === params.attentionState) return true;
+      const [updated] = await tx
+        .update(schema.agentRunsTable)
+        .set({ attentionState: params.attentionState })
+        .where(eq(schema.agentRunsTable.id, run.id))
+        .returning();
+      await AgentRunAttentionNoticeModel.recordTransition(updated, tx);
+      return true;
+    });
   }
 
   /** Sessions whose pod should still exist, across every organization. */
@@ -689,17 +705,23 @@ class AgentRunModel {
    * caller racing the reconciler can tell whether it owns the teardown.
    */
   static async close(params: { id: string; logs?: string }): Promise<boolean> {
-    const closed = await db
-      .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
-      .where(
-        and(
-          eq(schema.agentRunsTable.id, params.id),
-          isNull(schema.agentRunsTable.endedAt),
-        ),
-      )
-      .returning({ id: schema.agentRunsTable.id });
-    return closed.length > 0;
+    return db.transaction(async (tx) => {
+      const [closed] = await tx
+        .update(schema.agentRunsTable)
+        .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
+        .where(
+          and(
+            eq(schema.agentRunsTable.id, params.id),
+            isNull(schema.agentRunsTable.endedAt),
+          ),
+        )
+        .returning();
+      if (!closed) return false;
+      // Closing already clears attention. Resolve any posted notice as part of
+      // that same write, without changing teardown or task lifecycle decisions.
+      await AgentRunAttentionNoticeModel.recordTransition(closed, tx);
+      return true;
+    });
   }
 
   static async clearVirtualApiKey(id: string): Promise<void> {

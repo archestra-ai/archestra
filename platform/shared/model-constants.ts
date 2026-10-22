@@ -979,6 +979,23 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
 };
 
 /**
+ * Fast-tier models per provider, most- to least-preferred, matched as
+ * substrings of a key's synced model ids like {@link MODEL_MARKER_PATTERNS};
+ * a `pro` variant never matches. For short, latency-bound internal calls such
+ * as guardrail annotation. A provider without an entry has no fast default
+ * and keeps its usual model.
+ */
+export const PROVIDER_FAST_MODEL_PATTERNS: Partial<
+  Record<SupportedProvider, string[]>
+> = {
+  anthropic: ["claude-haiku-5-5"],
+  bedrock: ["claude-haiku-5-5"],
+  openai: ["gpt-6-luna", "gpt-5.6-luna"],
+  openrouter: ["anthropic/claude-haiku-5.5", "openai/gpt-6-luna"],
+  gemini: ["gemini-3.5-flash-lite"],
+};
+
+/**
  * Default model for each provider when no synced "best" model is available.
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */

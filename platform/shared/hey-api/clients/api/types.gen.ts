@@ -61377,7 +61377,7 @@ export type GetInteractionsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'azure:images';
+            type: 'azure:images' | 'openai:images';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -62199,7 +62199,7 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -69555,7 +69555,7 @@ export type GetInteractionResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'azure:images';
+        type: 'azure:images' | 'openai:images';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -92167,6 +92167,780 @@ export type MistralChatCompletionsWithAgentResponses = {
 
 export type MistralChatCompletionsWithAgentResponse = MistralChatCompletionsWithAgentResponses[keyof MistralChatCompletionsWithAgentResponses];
 
+export type ModelRouterImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: string | unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/edits';
+};
+
+export type ModelRouterImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentError = ModelRouterImageEditsWithDefaultAgentErrors[keyof ModelRouterImageEditsWithDefaultAgentErrors];
+
+export type ModelRouterImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentResponse = ModelRouterImageEditsWithDefaultAgentResponses[keyof ModelRouterImageEditsWithDefaultAgentResponses];
+
+export type ModelRouterImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: string | unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/edits';
+};
+
+export type ModelRouterImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithAgentError = ModelRouterImageEditsWithAgentErrors[keyof ModelRouterImageEditsWithAgentErrors];
+
+export type ModelRouterImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithAgentResponse = ModelRouterImageEditsWithAgentResponses[keyof ModelRouterImageEditsWithAgentResponses];
+
+export type ModelRouterAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/images/generations';
+};
+
+export type ModelRouterImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentError = ModelRouterImagesWithDefaultAgentErrors[keyof ModelRouterImagesWithDefaultAgentErrors];
+
+export type ModelRouterImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentResponse = ModelRouterImagesWithDefaultAgentResponses[keyof ModelRouterImagesWithDefaultAgentResponses];
+
+export type ModelRouterImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/images/generations';
+};
+
+export type ModelRouterImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithAgentError = ModelRouterImagesWithAgentErrors[keyof ModelRouterImagesWithAgentErrors];
+
+export type ModelRouterImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithAgentResponse = ModelRouterImagesWithAgentResponses[keyof ModelRouterImagesWithAgentResponses];
+
 export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
@@ -92797,7 +93571,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -92910,7 +93684,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;

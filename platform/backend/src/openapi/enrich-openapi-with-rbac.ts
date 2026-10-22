@@ -243,6 +243,12 @@ const PROVIDER_FILE_ROUTES = new Set<string>([
 ]);
 
 function createLlmProxyAuthenticationSection(operationId?: string): string {
+  if (operationId?.startsWith("modelRouter"))
+    return [
+      "Authentication:",
+      "",
+      "Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+    ].join("\n");
   if (operationId && PROVIDER_FILE_ROUTES.has(operationId))
     return [
       "Authentication:",

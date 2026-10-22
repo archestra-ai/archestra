@@ -4,6 +4,32 @@ import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
   it.each([
+    RouteId.ModelRouterImagesWithDefaultAgent,
+    RouteId.ModelRouterImageEditsWithAgent,
+    RouteId.ModelRouterAudioTranscriptionsWithAgent,
+  ])("documents mapped Bearer credentials for %s", (operationId) => {
+    const spec = {
+      paths: {
+        "/v1/model-router/media": {
+          post: { operationId, tags: ["LLM Proxy"] },
+        },
+      },
+    };
+    const operation = enrichOpenApiWithRbac(spec).paths[
+      "/v1/model-router/media"
+    ].post as { description?: string };
+    expect(operation.description).toContain(
+      "mapped standard Virtual API Key or LLM OAuth access token",
+    );
+    expect(operation.description).toContain(
+      "Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted",
+    );
+    expect(operation.description).not.toContain(
+      "either an LLM provider API key",
+    );
+  });
+
+  it.each([
     RouteId.AzureCreateFile,
     RouteId.AzureFileContentWithAgent,
     RouteId.AzureDeleteFile,

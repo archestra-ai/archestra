@@ -229544,7 +229544,8 @@
                               "type": {
                                 "type": "string",
                                 "enum": [
-                                  "azure:images"
+                                  "azure:images",
+                                  "openai:images"
                                 ]
                               },
                               "model": {
@@ -233872,6 +233873,7 @@
                               "azure:images",
                               "azure:audio",
                               "openai:audio",
+                              "openai:images",
                               "azure:realtime",
                               "github-copilot:chatCompletions",
                               "github-copilot:responses",
@@ -269502,7 +269504,8 @@
                         "type": {
                           "type": "string",
                           "enum": [
-                            "azure:images"
+                            "azure:images",
+                            "openai:images"
                           ]
                         },
                         "model": {
@@ -355083,13 +355086,2855 @@
         }
       }
     },
+    "/v1/model-router/images/edits": {
+      "post": {
+        "operationId": "modelRouterImageEditsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Edit images through a mapped Azure deployment using bounded multipart reference images and masks.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "size": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "quality": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "standard",
+                          "hd"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "background": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "transparent",
+                          "opaque"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "output_format": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "png",
+                          "jpeg",
+                          "webp"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "response_format": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "url",
+                          "b64_json"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "n": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "output_compression": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "input_fidelity": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "high",
+                          "low"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stream": {
+                    "anyOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "image": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "description": "PNG/JPEG/WebP reference files, each smaller than 50 MiB."
+                  },
+                  "mask": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions."
+                  }
+                },
+                "required": [
+                  "model",
+                  "prompt",
+                  "image"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "revised_prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "created"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/model-router/{agentId}/images/edits": {
+      "post": {
+        "operationId": "modelRouterImageEditsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Edit images through a mapped Azure deployment using bounded multipart reference images and masks.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "size": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "quality": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "standard",
+                          "hd"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "background": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "transparent",
+                          "opaque"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "output_format": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "png",
+                          "jpeg",
+                          "webp"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "response_format": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "url",
+                          "b64_json"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "n": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "output_compression": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "input_fidelity": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "high",
+                          "low"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stream": {
+                    "anyOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "image": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "description": "PNG/JPEG/WebP reference files, each smaller than 50 MiB."
+                  },
+                  "mask": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions."
+                  }
+                },
+                "required": [
+                  "model",
+                  "prompt",
+                  "image"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "revised_prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "created"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/model-router/audio/speech": {
+      "post": {
+        "operationId": "modelRouterAudioSpeechWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "input": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "voice": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "opus",
+                      "aac",
+                      "flac",
+                      "wav",
+                      "pcm"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.25,
+                    "maximum": 4
+                  },
+                  "stream_format": {
+                    "type": "string",
+                    "enum": [
+                      "audio",
+                      "sse"
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "input",
+                  "voice"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/{agentId}/audio/speech": {
+      "post": {
+        "operationId": "modelRouterAudioSpeechWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "input": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "voice": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "opus",
+                      "aac",
+                      "flac",
+                      "wav",
+                      "pcm"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.25,
+                    "maximum": 4
+                  },
+                  "stream_format": {
+                    "type": "string",
+                    "enum": [
+                      "audio",
+                      "sse"
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "input",
+                  "voice"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/audio/transcriptions": {
+      "post": {
+        "operationId": "modelRouterAudioTranscriptionsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "language": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "text",
+                      "srt",
+                      "verbose_json",
+                      "vtt",
+                      "diarized_json"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "include": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "timestamp_granularities": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "word",
+                        "segment"
+                      ]
+                    }
+                  },
+                  "known_speaker_names": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "known_speaker_references": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "languages": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "chunking_strategy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "server_vad"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "prefix_padding_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "silence_duration_ms": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file (maximum 25 MiB)"
+                  }
+                },
+                "required": [
+                  "model",
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/{agentId}/audio/transcriptions": {
+      "post": {
+        "operationId": "modelRouterAudioTranscriptionsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "language": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "text",
+                      "srt",
+                      "verbose_json",
+                      "vtt",
+                      "diarized_json"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "include": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "timestamp_granularities": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "word",
+                        "segment"
+                      ]
+                    }
+                  },
+                  "known_speaker_names": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "known_speaker_references": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "languages": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "chunking_strategy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "server_vad"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "prefix_padding_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "silence_duration_ms": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file (maximum 25 MiB)"
+                  }
+                },
+                "required": [
+                  "model",
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/audio/translations": {
+      "post": {
+        "operationId": "modelRouterAudioTranslationsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "language": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "text",
+                      "srt",
+                      "verbose_json",
+                      "vtt",
+                      "diarized_json"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "include": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "timestamp_granularities": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "word",
+                        "segment"
+                      ]
+                    }
+                  },
+                  "known_speaker_names": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "known_speaker_references": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "languages": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "chunking_strategy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "server_vad"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "prefix_padding_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "silence_duration_ms": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file (maximum 25 MiB)"
+                  }
+                },
+                "required": [
+                  "model",
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/{agentId}/audio/translations": {
+      "post": {
+        "operationId": "modelRouterAudioTranslationsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "language": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "text",
+                      "srt",
+                      "verbose_json",
+                      "vtt",
+                      "diarized_json"
+                    ]
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "include": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "timestamp_granularities": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "word",
+                        "segment"
+                      ]
+                    }
+                  },
+                  "known_speaker_names": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "known_speaker_references": {
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "languages": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "chunking_strategy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "server_vad"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "prefix_padding_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "silence_duration_ms": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file (maximum 25 MiB)"
+                  }
+                },
+                "required": [
+                  "model",
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/model-router/images/generations": {
+      "post": {
+        "operationId": "modelRouterImagesWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "size": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
+                  },
+                  "quality": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "standard",
+                      "hd"
+                    ]
+                  },
+                  "background": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "transparent",
+                      "opaque"
+                    ]
+                  },
+                  "output_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "png",
+                      "jpeg",
+                      "webp"
+                    ]
+                  },
+                  "response_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "url",
+                      "b64_json"
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "n": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "output_compression": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "moderation": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "low"
+                    ]
+                  },
+                  "style": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "vivid",
+                      "natural"
+                    ]
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean",
+                    "enum": [
+                      false
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "prompt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "revised_prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "created"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/model-router/{agentId}/images/generations": {
+      "post": {
+        "operationId": "modelRouterImagesWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "size": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^(auto|[1-9]\\d{0,4}x[1-9]\\d{0,4})$"
+                  },
+                  "quality": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "standard",
+                      "hd"
+                    ]
+                  },
+                  "background": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "transparent",
+                      "opaque"
+                    ]
+                  },
+                  "output_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "png",
+                      "jpeg",
+                      "webp"
+                    ]
+                  },
+                  "response_format": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "url",
+                      "b64_json"
+                    ]
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "safety_identifier": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "n": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "output_compression": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "moderation": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "low"
+                    ]
+                  },
+                  "style": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "vivid",
+                      "natural"
+                    ]
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean",
+                    "enum": [
+                      false
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "prompt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "revised_prompt": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "created"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/model-router/models": {
       "get": {
         "operationId": "modelRouterListModelsWithDefaultAgent",
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "List OpenAI-compatible model ids available through the model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -355385,7 +358230,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "parameters": [
           {
             "schema": {
@@ -355693,7 +358538,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create a response through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {
@@ -356280,7 +359125,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {
@@ -356877,7 +359722,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create embeddings through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {
@@ -356966,10 +359811,17 @@
                             ]
                           },
                           "embedding": {
-                            "type": "array",
-                            "items": {
-                              "type": "number"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
                           },
                           "index": {
                             "type": "number"
@@ -357254,7 +360106,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {
@@ -357353,10 +360205,17 @@
                             ]
                           },
                           "embedding": {
-                            "type": "array",
-                            "items": {
-                              "type": "number"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
                           },
                           "index": {
                             "type": "number"
@@ -357641,7 +360500,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {
@@ -358155,7 +361014,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nRequires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
         "requestBody": {
           "required": true,
           "content": {

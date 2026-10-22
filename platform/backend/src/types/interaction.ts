@@ -773,7 +773,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
-    type: z.enum(["azure:images"]),
+    type: z.enum(["azure:images", "openai:images"]),
+
     request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
     processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
       .nullable()

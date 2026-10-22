@@ -1,3 +1,4 @@
+import { azureModelEvidence } from "@archestra/shared/azure-models";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -13,6 +14,7 @@ import {
 } from "@/models";
 import { expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import modelRouterProxyRoutes from "./model-router";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook.
@@ -405,7 +407,28 @@ async function setUpAzureRouter(params: {
   const key = await params.makeLlmProviderApiKey(organization.id, secret.id, {
     provider: "azure",
   });
-  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
+  await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+    key.id,
+    [
+      {
+        id: model.id,
+        modelId: model.modelId,
+        azureCapabilities: {
+          ...azureModelEvidence({
+            underlyingModelName: params.modelId,
+            source: "deployment",
+          })!,
+          configurationHash: azureCapabilityConfigurationHash({
+            baseUrl: config.llm.azure.baseUrl,
+            inferenceBaseUrl: null,
+            extraHeaders: null,
+            secretId: secret.id,
+          }),
+        },
+      },
+    ],
+    "azure",
+  );
   const { value } = await VirtualApiKeyModel.create({
     organizationId: organization.id,
     name: "Azure Model Router test",

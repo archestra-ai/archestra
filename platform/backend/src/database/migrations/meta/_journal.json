@@ -4145,6 +4145,13 @@
       "when": 1792682146439,
       "tag": "0591_exotic_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 592,
+      "version": "7",
+      "when": 1792698005115,
+      "tag": "0592_model-pools",
+      "breakpoints": true
     }
   ]
 }

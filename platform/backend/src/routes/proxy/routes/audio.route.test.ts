@@ -48,6 +48,7 @@ describe.each([
       });
       const received: Array<{
         path: string;
+        apiVersion: string | null;
         model: string;
         filename?: string;
         bytes?: Buffer;
@@ -57,6 +58,10 @@ describe.each([
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         const raw = Buffer.concat(chunks);
         const path = (request.url ?? "").split("?")[0];
+        const apiVersion = new URL(
+          request.url ?? "",
+          "http://upstream.test",
+        ).searchParams.get("api-version");
         expect(
           provider === "azure"
             ? request.headers["api-key"]
@@ -68,7 +73,7 @@ describe.each([
         );
         if (operation === "speech") {
           const body = JSON.parse(raw.toString());
-          received.push({ path, model: body.model });
+          received.push({ path, apiVersion, model: body.model });
           response.writeHead(200, { "content-type": "audio/wav" });
           response.write(audio.subarray(0, 8));
           response.end(audio.subarray(8));
@@ -83,6 +88,7 @@ describe.each([
           const file = form.get("file") as File;
           received.push({
             path,
+            apiVersion,
             model: String(form.get("model")),
             filename: file.name,
             bytes: Buffer.from(await file.arrayBuffer()),
@@ -248,13 +254,24 @@ describe.each([
               }),
         ).rejects.toMatchObject({ status: 400 });
         expect(received).toHaveLength(expectedRequests);
+        expect(
+          received.filter((request) =>
+            request.path.startsWith("/openai/deployments/"),
+          ).length,
+        ).toBe(provider === "azure" ? expectedRequests / 2 : 0);
         for (const request of received) {
           expect(request.model).toBe(
             operation === "speech" ? "tts-alias" : "transcribe-alias",
           );
-          expect(request.path).toBe(
-            `${provider === "azure" ? "/openai/v1" : "/v1"}/audio/${operation}`,
-          );
+          if (request.path.startsWith("/openai/deployments/")) {
+            expect(request.path).toBe(
+              `/openai/deployments/${request.model}/audio/${operation}`,
+            );
+            expect(request.apiVersion).toBe("2025-04-01-preview");
+          } else
+            expect(request.path).toBe(
+              `${provider === "azure" ? "/openai/v1" : "/v1"}/audio/${operation}`,
+            );
           if (operation !== "speech") {
             expect(request.filename).toBe("synthetic.wav");
             expect(request.bytes).toEqual(audio);

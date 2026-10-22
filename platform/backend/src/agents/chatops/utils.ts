@@ -597,4 +597,5 @@ const SKIPPED_REASON_TEXT: Record<SkippedAttachment["reason"], string> = {
   download_failed: "could not be downloaded",
   total_limit_reached: "skipped (total attachment size limit reached)",
   too_many: "skipped (too many files attached)",
+  sign_in_required: "not readable until its sender signs in to the bot",
 };

@@ -81,7 +81,7 @@ Choose what workloads can reach from the environment's namespace. Archestra uses
 | Public destinations | Public internet (`unrestricted`), which blocks private and reserved ranges. |
 | Public destinations plus a private service | Public internet, with that service's range under **Additional allowed CIDRs**. |
 
-Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [managed agent workspaces](/docs/agents/managed-agents#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
+Self-hosted MCP servers, [code sandboxes](/docs/agents#code-sandbox), and [coding agent workspaces](/docs/agents/runtime#environments-and-network-egress) inherit the policy. The cluster must enforce the relevant policy type; creating a policy object alone does not isolate workloads.
 
 Remote MCP servers run elsewhere. Archestra checks its connection to their URL host when the entry is saved and on every connection, but cannot constrain what the remote server reaches downstream. A tightened policy can therefore block calls to an existing remote server.
 

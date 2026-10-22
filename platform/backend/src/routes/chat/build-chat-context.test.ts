@@ -44,6 +44,7 @@ describe("buildChatContext", () => {
       user: params.user,
       organizationId: params.organizationId,
       modelAcceptsImageToolResults: false,
+      parentLlm: undefined,
       hookSessionContext: undefined,
       projectInstructions: undefined,
       openedApp: undefined,

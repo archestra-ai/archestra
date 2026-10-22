@@ -358,6 +358,11 @@ export type OpenAiChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -1948,6 +1953,11 @@ export type CerebrasChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2462,6 +2472,11 @@ export type MistralChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2856,6 +2871,11 @@ export type PerplexityChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3251,6 +3271,11 @@ export type GroqChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3682,6 +3707,11 @@ export type OpenrouterChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -5110,6 +5140,11 @@ export type DeepSeekChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -5505,6 +5540,11 @@ export type ArchestraChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6337,6 +6377,11 @@ export type XaiChatCompletionRequestInput = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6800,6 +6845,11 @@ export type OpenAiChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8390,6 +8440,11 @@ export type CerebrasChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8904,6 +8959,11 @@ export type MistralChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9298,6 +9358,11 @@ export type PerplexityChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9693,6 +9758,11 @@ export type GroqChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -10124,6 +10194,11 @@ export type OpenrouterChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11552,6 +11627,11 @@ export type DeepSeekChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11947,6 +12027,11 @@ export type ArchestraChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -12779,6 +12864,11 @@ export type XaiChatCompletionRequest = {
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    modalities?: Array<'text' | 'audio'> | null;
+    audio?: {
+        voice: string;
+        format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+    } | null;
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -14483,6 +14573,8 @@ export type GetAgentCatalogResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
+                fastModelId: string | null;
+                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -14862,6 +14954,8 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
+            fastModelId: string | null;
+            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -15008,6 +15102,8 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
+        fastModelId?: string | null;
+        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -15273,6 +15369,8 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16535,6 +16633,8 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16833,6 +16933,8 @@ export type ImportAgentResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
+            fastModelId: string | null;
+            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17140,6 +17242,8 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17268,6 +17372,8 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
+        fastModelId?: string | null;
+        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -17435,6 +17541,8 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17847,6 +17955,14 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
+            fastModel: {
+                id: string;
+                externalId: string;
+            } | null;
+            smartModel: {
+                id: string;
+                externalId: string;
+            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -18008,6 +18124,8 @@ export type RestoreAgentVersionResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18244,6 +18362,8 @@ export type CloneAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20719,6 +20839,8 @@ export type RestoreAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        fastModelId: string | null;
+        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -21266,183 +21388,6 @@ export type UpdateMemberDefaultAgentResponses = {
 };
 
 export type UpdateMemberDefaultAgentResponse = UpdateMemberDefaultAgentResponses[keyof UpdateMemberDefaultAgentResponses];
-
-export type GetMemberDefaultModelData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/members/default-model';
-};
-
-export type GetMemberDefaultModelErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetMemberDefaultModelError = GetMemberDefaultModelErrors[keyof GetMemberDefaultModelErrors];
-
-export type GetMemberDefaultModelResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        modelId: string | null;
-        chatApiKeyId: string | null;
-    };
-};
-
-export type GetMemberDefaultModelResponse = GetMemberDefaultModelResponses[keyof GetMemberDefaultModelResponses];
-
-export type UpdateMemberDefaultModelData = {
-    body: {
-        modelId: string | null;
-        chatApiKeyId: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/members/default-model';
-};
-
-export type UpdateMemberDefaultModelErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateMemberDefaultModelError = UpdateMemberDefaultModelErrors[keyof UpdateMemberDefaultModelErrors];
-
-export type UpdateMemberDefaultModelResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        modelId: string | null;
-        chatApiKeyId: string | null;
-    };
-};
-
-export type UpdateMemberDefaultModelResponse = UpdateMemberDefaultModelResponses[keyof UpdateMemberDefaultModelResponses];
 
 export type ReadAgentWorkspaceFileData = {
     body?: never;
@@ -30052,6 +29997,1238 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type AzureRealtimeTurnWithDefaultAgentData = {
+    /**
+     * A bounded realtime audio turn. Translation requires WAV input and target_language; tools are not supported.
+     */
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        target_language?: string;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/realtime/turns';
+};
+
+export type AzureRealtimeTurnWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureRealtimeTurnWithDefaultAgentError = AzureRealtimeTurnWithDefaultAgentErrors[keyof AzureRealtimeTurnWithDefaultAgentErrors];
+
+export type AzureRealtimeTurnWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+            index?: number;
+            logprobs: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+             */
+            message: {
+                content?: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown> | null;
+                audio?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                reasoning_content?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }> | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        server_tier?: string;
+        system_fingerprint?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+             */
+            completion_tokens_details?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+             */
+            prompt_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureRealtimeTurnWithDefaultAgentResponse = AzureRealtimeTurnWithDefaultAgentResponses[keyof AzureRealtimeTurnWithDefaultAgentResponses];
+
+export type AzureRealtimeTurnWithAgentData = {
+    /**
+     * A bounded realtime audio turn. Translation requires WAV input and target_language; tools are not supported.
+     */
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        target_language?: string;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/realtime/turns';
+};
+
+export type AzureRealtimeTurnWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureRealtimeTurnWithAgentError = AzureRealtimeTurnWithAgentErrors[keyof AzureRealtimeTurnWithAgentErrors];
+
+export type AzureRealtimeTurnWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+            index?: number;
+            logprobs: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+             */
+            message: {
+                content?: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown> | null;
+                audio?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                reasoning_content?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }> | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        server_tier?: string;
+        system_fingerprint?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+             */
+            completion_tokens_details?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+             */
+            prompt_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureRealtimeTurnWithAgentResponse = AzureRealtimeTurnWithAgentResponses[keyof AzureRealtimeTurnWithAgentResponses];
+
+export type AzureImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        n?: number;
+        size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+        quality?: 'auto' | 'low' | 'medium' | 'high';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        output_compression?: number;
+        moderation?: 'auto' | 'low';
+        user?: string;
+        stream?: false;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/azure/images/generations';
+};
+
+export type AzureImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureImagesWithDefaultAgentError = AzureImagesWithDefaultAgentErrors[keyof AzureImagesWithDefaultAgentErrors];
+
+export type AzureImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureImagesWithDefaultAgentResponse = AzureImagesWithDefaultAgentResponses[keyof AzureImagesWithDefaultAgentResponses];
+
+export type AzureImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        n?: number;
+        size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+        quality?: 'auto' | 'low' | 'medium' | 'high';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        output_compression?: number;
+        moderation?: 'auto' | 'low';
+        user?: string;
+        stream?: false;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for Azure AI Foundry
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/azure/{agentId}/images/generations';
+};
+
+export type AzureImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AzureImagesWithAgentError = AzureImagesWithAgentErrors[keyof AzureImagesWithAgentErrors];
+
+export type AzureImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type AzureImagesWithAgentResponse = AzureImagesWithAgentResponses[keyof AzureImagesWithAgentResponses];
+
 export type AzureEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -34330,6 +35507,7 @@ export type GetBootstrapResponses = {
             theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
             customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
             onlineMcpCatalogEnabled: boolean;
+            defaultPersonalAgentAccessAllTools: boolean;
             onlineSkillCatalogEnabled: boolean;
             skillMarketplaceAnonymousAccess: boolean;
             allowChatFileUploads: boolean;
@@ -34349,6 +35527,8 @@ export type GetBootstrapResponses = {
             defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             defaultModelId: string | null;
             defaultLlmApiKeyId: string | null;
+            defaultFastModelId: string | null;
+            defaultSmartModelId: string | null;
             defaultUserLimitValue: number | null;
             defaultUserLimitModel: Array<string> | null;
             defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -34518,6 +35698,7 @@ export type GetBootstrapResponses = {
                     redirectUri: string;
                 };
                 mcpGatewaySkillsEnabled: boolean;
+                devFeedbackEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -34566,10 +35747,6 @@ export type GetBootstrapResponses = {
         memberDefaultAgent: {
             defaultAgentId: string | null;
             personalChatAgentId: string | null;
-        };
-        memberDefaultModel: {
-            modelId: string | null;
-            chatApiKeyId: string | null;
         };
     };
 };
@@ -34812,10 +35989,10 @@ export type GetNewChatBootstrapResponses = {
                 pricePerMillionInput: string | null;
                 pricePerMillionOutput: string | null;
                 isCustomPrice: boolean;
-                priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                 pricePerMillionCacheRead: string | null;
                 pricePerMillionCacheWrite: string | null;
-                cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
             };
             isBest?: boolean;
             isFree: boolean;
@@ -34845,6 +36022,8 @@ export type GetNewChatBootstrapResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
+                fastModelId: string | null;
+                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -35022,10 +36201,10 @@ export type GetNewChatBootstrapResponses = {
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
                     isCustomPrice: boolean;
-                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
-                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -35033,37 +36212,6 @@ export type GetNewChatBootstrapResponses = {
                 requiresUserConnection?: boolean;
                 isConnected?: boolean;
             }> | null;
-        } | null;
-        memberDefaultKeyModels: {
-            apiKeyId: string;
-            models: Array<{
-                id: string;
-                dbId: string;
-                displayName: string;
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                createdAt?: string;
-                capabilities?: {
-                    contextLength: number | null;
-                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
-                    supportsToolCalling: boolean | null;
-                    supportsReasoningEffort: boolean | null;
-                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
-                    recommendedForAgents: boolean | null;
-                    pricePerMillionInput: string | null;
-                    pricePerMillionOutput: string | null;
-                    isCustomPrice: boolean;
-                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
-                    pricePerMillionCacheRead: string | null;
-                    pricePerMillionCacheWrite: string | null;
-                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
-                };
-                isBest?: boolean;
-                isFree: boolean;
-                embeddingDimensions?: EmbeddingDimensions | null;
-                requiresUserConnection?: boolean;
-                isConnected?: boolean;
-            }>;
         } | null;
     };
 };
@@ -35392,10 +36540,10 @@ export type GetConversationBootstrapResponses = {
                     pricePerMillionInput: string | null;
                     pricePerMillionOutput: string | null;
                     isCustomPrice: boolean;
-                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
-                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -35425,6 +36573,8 @@ export type GetConversationBootstrapResponses = {
                     llmApiKeyId: string | null;
                     llmModel: string | null;
                     modelId: string | null;
+                    fastModelId: string | null;
+                    smartModelId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {
@@ -35602,10 +36752,10 @@ export type GetConversationBootstrapResponses = {
                         pricePerMillionInput: string | null;
                         pricePerMillionOutput: string | null;
                         isCustomPrice: boolean;
-                        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                        priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                         pricePerMillionCacheRead: string | null;
                         pricePerMillionCacheWrite: string | null;
-                        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                        cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
                     };
                     isBest?: boolean;
                     isFree: boolean;
@@ -35613,37 +36763,6 @@ export type GetConversationBootstrapResponses = {
                     requiresUserConnection?: boolean;
                     isConnected?: boolean;
                 }> | null;
-            } | null;
-            memberDefaultKeyModels: {
-                apiKeyId: string;
-                models: Array<{
-                    id: string;
-                    dbId: string;
-                    displayName: string;
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-                    createdAt?: string;
-                    capabilities?: {
-                        contextLength: number | null;
-                        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
-                        outputModalities: Array<'text' | 'image' | 'audio'> | null;
-                        supportsToolCalling: boolean | null;
-                        supportsReasoningEffort: boolean | null;
-                        supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
-                        recommendedForAgents: boolean | null;
-                        pricePerMillionInput: string | null;
-                        pricePerMillionOutput: string | null;
-                        isCustomPrice: boolean;
-                        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
-                        pricePerMillionCacheRead: string | null;
-                        pricePerMillionCacheWrite: string | null;
-                        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
-                    };
-                    isBest?: boolean;
-                    isFree: boolean;
-                    embeddingDimensions?: EmbeddingDimensions | null;
-                    requiresUserConnection?: boolean;
-                    isConnected?: boolean;
-                }>;
             } | null;
         };
     };
@@ -39445,6 +40564,41 @@ export type PostApiWebhooksChatopsMsTeamsResponses = {
 
 export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
 
+export type GetApiWebhooksChatopsMsTeamsSignInData = {
+    body?: never;
+    path?: never;
+    query?: {
+        key?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+        error_description?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in/callback';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type PostApiWebhooksChatopsSlackData = {
     body: unknown;
     path?: never;
@@ -40436,12 +41590,105 @@ export type ApplyChatOpsBindingPlanResponses = {
 
 export type ApplyChatOpsBindingPlanResponse = ApplyChatOpsBindingPlanResponses[keyof ApplyChatOpsBindingPlanResponses];
 
+export type GetMsTeamsChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ms-teams';
+};
+
+export type GetMsTeamsChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMsTeamsChatOpsConfigError = GetMsTeamsChatOpsConfigErrors[keyof GetMsTeamsChatOpsConfigErrors];
+
+export type GetMsTeamsChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+        appId: string | null;
+        tenantId: string | null;
+        groupChatFileSignIn: boolean;
+        signInRedirectUri: string;
+    };
+};
+
+export type GetMsTeamsChatOpsConfigResponse = GetMsTeamsChatOpsConfigResponses[keyof GetMsTeamsChatOpsConfigResponses];
+
 export type UpdateChatOpsConfigInQuickstartData = {
     body: {
         enabled?: boolean;
         appId?: string;
         appSecret?: string;
         tenantId?: string;
+        groupChatFileSignIn?: boolean;
     };
     path?: never;
     query?: never;
@@ -40789,6 +42036,96 @@ export type ConnectNgrokResponses = {
 };
 
 export type ConnectNgrokResponse = ConnectNgrokResponses[keyof ConnectNgrokResponses];
+
+export type GetSlackChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack';
+};
+
+export type GetSlackChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSlackChatOpsConfigError = GetSlackChatOpsConfigErrors[keyof GetSlackChatOpsConfigErrors];
+
+export type GetSlackChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+        appId: string | null;
+        connectionMode: 'webhook' | 'socket';
+    };
+};
+
+export type GetSlackChatOpsConfigResponse = GetSlackChatOpsConfigResponses[keyof GetSlackChatOpsConfigResponses];
 
 export type UpdateSlackChatOpsConfigData = {
     body: {
@@ -42020,6 +43357,94 @@ export type JoinSlackRouterBotChannelResponses = {
 
 export type JoinSlackRouterBotChannelResponse = JoinSlackRouterBotChannelResponses[keyof JoinSlackRouterBotChannelResponses];
 
+export type GetTelegramChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/telegram';
+};
+
+export type GetTelegramChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTelegramChatOpsConfigError = GetTelegramChatOpsConfigErrors[keyof GetTelegramChatOpsConfigErrors];
+
+export type GetTelegramChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+    };
+};
+
+export type GetTelegramChatOpsConfigResponse = GetTelegramChatOpsConfigResponses[keyof GetTelegramChatOpsConfigResponses];
+
 export type UpdateTelegramChatOpsConfigData = {
     body: {
         enabled?: boolean;
@@ -43161,6 +44586,7 @@ export type GetConfigResponses = {
                 redirectUri: string;
             };
             mcpGatewaySkillsEnabled: boolean;
+            devFeedbackEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -45000,6 +46426,849 @@ export type UpdateDefaultUserLimitResponses = {
 };
 
 export type UpdateDefaultUserLimitResponse = UpdateDefaultUserLimitResponses[keyof UpdateDefaultUserLimitResponses];
+
+export type GetDevFeedbackSetupData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup';
+};
+
+export type GetDevFeedbackSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackSetupError = GetDevFeedbackSetupErrors[keyof GetDevFeedbackSetupErrors];
+
+export type GetDevFeedbackSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        channelName: string | null;
+    };
+};
+
+export type GetDevFeedbackSetupResponse = GetDevFeedbackSetupResponses[keyof GetDevFeedbackSetupResponses];
+
+export type SaveDevFeedbackSetupData = {
+    body: {
+        botId: string;
+        channelId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup';
+};
+
+export type SaveDevFeedbackSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SaveDevFeedbackSetupError = SaveDevFeedbackSetupErrors[keyof SaveDevFeedbackSetupErrors];
+
+export type SaveDevFeedbackSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        channelName: string | null;
+    };
+};
+
+export type SaveDevFeedbackSetupResponse = SaveDevFeedbackSetupResponses[keyof SaveDevFeedbackSetupResponses];
+
+export type ListDevFeedbackBotsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup/bots';
+};
+
+export type ListDevFeedbackBotsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListDevFeedbackBotsError = ListDevFeedbackBotsErrors[keyof ListDevFeedbackBotsErrors];
+
+export type ListDevFeedbackBotsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+    }>;
+};
+
+export type ListDevFeedbackBotsResponse = ListDevFeedbackBotsResponses[keyof ListDevFeedbackBotsResponses];
+
+export type ListDevFeedbackChannelsData = {
+    body?: never;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/setup/bots/{botId}/channels';
+};
+
+export type ListDevFeedbackChannelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListDevFeedbackChannelsError = ListDevFeedbackChannelsErrors[keyof ListDevFeedbackChannelsErrors];
+
+export type ListDevFeedbackChannelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isPrivate: boolean;
+    }>;
+};
+
+export type ListDevFeedbackChannelsResponse = ListDevFeedbackChannelsResponses[keyof ListDevFeedbackChannelsResponses];
+
+export type GetDevFeedbackCommentsData = {
+    body?: never;
+    path?: never;
+    query: {
+        route: string;
+    };
+    url: '/api/dev-feedback/comments';
+};
+
+export type GetDevFeedbackCommentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackCommentsError = GetDevFeedbackCommentsErrors[keyof GetDevFeedbackCommentsErrors];
+
+export type GetDevFeedbackCommentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        id: string;
+        text: string;
+        authorName: string;
+        replyCount: number;
+        permalink: string | null;
+        createdAt: string;
+    }>;
+};
+
+export type GetDevFeedbackCommentsResponse = GetDevFeedbackCommentsResponses[keyof GetDevFeedbackCommentsResponses];
+
+export type CreateDevFeedbackCommentData = {
+    body: {
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        text: string;
+        url: string;
+        viewport: string;
+        screenshot?: {
+            mimeType: 'image/png' | 'image/jpeg';
+            base64: string;
+        };
+        clip?: {
+            mimeType: 'video/mp4' | 'video/webm';
+            base64: string;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/comments';
+};
+
+export type CreateDevFeedbackCommentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDevFeedbackCommentError = CreateDevFeedbackCommentErrors[keyof CreateDevFeedbackCommentErrors];
+
+export type CreateDevFeedbackCommentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        id: string;
+        text: string;
+        authorName: string;
+        replyCount: number;
+        permalink: string | null;
+        createdAt: string;
+    };
+};
+
+export type CreateDevFeedbackCommentResponse = CreateDevFeedbackCommentResponses[keyof CreateDevFeedbackCommentResponses];
+
+export type GetDevFeedbackRepliesData = {
+    body?: never;
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/replies';
+};
+
+export type GetDevFeedbackRepliesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackRepliesError = GetDevFeedbackRepliesErrors[keyof GetDevFeedbackRepliesErrors];
+
+export type GetDevFeedbackRepliesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        authorName: string;
+        text: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetDevFeedbackRepliesResponse = GetDevFeedbackRepliesResponses[keyof GetDevFeedbackRepliesResponses];
+
+export type CreateDevFeedbackReplyData = {
+    body: {
+        text: string;
+    };
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/replies';
+};
+
+export type CreateDevFeedbackReplyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDevFeedbackReplyError = CreateDevFeedbackReplyErrors[keyof CreateDevFeedbackReplyErrors];
+
+export type CreateDevFeedbackReplyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        authorName: string;
+        text: string;
+        createdAt: string;
+    };
+};
+
+export type CreateDevFeedbackReplyResponse = CreateDevFeedbackReplyResponses[keyof CreateDevFeedbackReplyResponses];
+
+export type ResolveDevFeedbackCommentData = {
+    body?: never;
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/resolve';
+};
+
+export type ResolveDevFeedbackCommentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveDevFeedbackCommentError = ResolveDevFeedbackCommentErrors[keyof ResolveDevFeedbackCommentErrors];
+
+export type ResolveDevFeedbackCommentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveDevFeedbackCommentResponse = ResolveDevFeedbackCommentResponses[keyof ResolveDevFeedbackCommentResponses];
 
 export type EnvironmentLabelKeysData = {
     body?: never;
@@ -48255,6 +50524,11 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -48740,6 +51014,11 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -55000,6 +57279,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -55326,6 +57610,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -55797,6 +58086,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -56123,6 +58417,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -56594,6 +58893,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -56920,6 +59224,11 @@ export type GetInteractionsResponses = {
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -57243,6 +59552,935 @@ export type GetInteractionsResponses = {
                 blockedToolCallCount: number;
             } | null;
             type: 'azure:chatCompletions';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            request: {
+                model: string;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+                 */
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                         */
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                         */
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    reasoning_content?: string | null;
+                    refusal?: string | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                /**
+                 *
+                 * A function tool that can be used to generate a response.
+                 *
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+                 *
+                 */
+                tools?: Array<{
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                }>;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+                 */
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                     */
+                    allowed_tools: {
+                        /**
+                         *
+                         * Constrains the tools available to the model to a pre-defined set.
+                         *
+                         * auto allows the model to pick from among the allowed tools and generate a
+                         * message.
+                         *
+                         * required requires the model to call one or more of the allowed tools.
+                         *
+                         */
+                        mode: 'auto' | 'required';
+                        /**
+                         * A list of tool definitions that the model should be allowed to call
+                         */
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                /**
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                                 */
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     *
+                                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                     *
+                                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                     * documentation about the format.
+                                     *
+                                     * Omitting parameters defines a function with an empty parameter list.
+                                     *
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
+                stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
+                target_language?: string;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+                 */
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                         */
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                         */
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    reasoning_content?: string | null;
+                    refusal?: string | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                /**
+                 *
+                 * A function tool that can be used to generate a response.
+                 *
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+                 *
+                 */
+                tools?: Array<{
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                }>;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+                 */
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                     */
+                    allowed_tools: {
+                        /**
+                         *
+                         * Constrains the tools available to the model to a pre-defined set.
+                         *
+                         * auto allows the model to pick from among the allowed tools and generate a
+                         * message.
+                         *
+                         * required requires the model to call one or more of the allowed tools.
+                         *
+                         */
+                        mode: 'auto' | 'required';
+                        /**
+                         * A list of tool definitions that the model should be allowed to call
+                         */
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                /**
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                                 */
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     *
+                                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                     *
+                                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                     * documentation about the format.
+                                     *
+                                     * Omitting parameters defines a function with an empty parameter list.
+                                     *
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+                modalities?: Array<'text' | 'audio'> | null;
+                audio?: {
+                    voice: string;
+                    format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+                } | null;
+                stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
+                target_language?: string;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                choices: Array<{
+                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+                    index?: number;
+                    logprobs: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                     */
+                    message: {
+                        content?: string | null;
+                        refusal?: string | null;
+                        role: 'assistant';
+                        annotations?: Array<unknown> | null;
+                        audio?: unknown;
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                         */
+                        function_call?: {
+                            arguments: string;
+                            name: string;
+                        } | null;
+                        reasoning_content?: string | null;
+                        tool_calls?: Array<{
+                            id: string;
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                             */
+                            function: {
+                                arguments: string;
+                                name: string;
+                            };
+                        } | {
+                            id: string;
+                            type: 'custom';
+                            /**
+                             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                             */
+                            custom: {
+                                input: string;
+                                name: string;
+                            };
+                        }> | null;
+                    };
+                }>;
+                created: number;
+                model: string;
+                object: 'chat.completion';
+                server_tier?: string;
+                system_fingerprint?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+                 */
+                usage?: {
+                    completion_tokens: number;
+                    prompt_tokens: number;
+                    total_tokens: number;
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                     */
+                    completion_tokens_details?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                     */
+                    prompt_tokens_details?: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'azure:realtime';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            request: {
+                model: string;
+                prompt: string;
+                n?: number;
+                size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+                quality?: 'auto' | 'low' | 'medium' | 'high';
+                background?: 'auto' | 'transparent' | 'opaque';
+                output_format?: 'png' | 'jpeg' | 'webp';
+                output_compression?: number;
+                moderation?: 'auto' | 'low';
+                user?: string;
+                stream?: false;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                prompt: string;
+                n?: number;
+                size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+                quality?: 'auto' | 'low' | 'medium' | 'high';
+                background?: 'auto' | 'transparent' | 'opaque';
+                output_format?: 'png' | 'jpeg' | 'webp';
+                output_compression?: number;
+                moderation?: 'auto' | 'low';
+                user?: string;
+                stream?: false;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                created: number;
+                model?: string;
+                data?: Array<{
+                    b64_json?: string;
+                    url?: string;
+                    revised_prompt?: string;
+                }>;
+                usage?: {
+                    input_tokens: number;
+                    output_tokens: number;
+                    total_tokens: number;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'azure:images';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
@@ -58064,7 +61302,7 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -61981,6 +65219,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -62307,6 +65550,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -62778,6 +66026,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -63104,6 +66357,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -63575,6 +66833,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -63901,6 +67164,11 @@ export type GetInteractionResponses = {
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -64224,6 +67492,935 @@ export type GetInteractionResponses = {
             blockedToolCallCount: number;
         } | null;
         type: 'azure:chatCompletions';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        request: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                reasoning_content?: string | null;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
+            stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
+            target_language?: string;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                reasoning_content?: string | null;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+            modalities?: Array<'text' | 'audio'> | null;
+            audio?: {
+                voice: string;
+                format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+            } | null;
+            stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
+            target_language?: string;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            choices: Array<{
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+                index?: number;
+                logprobs: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                 */
+                message: {
+                    content?: string | null;
+                    refusal?: string | null;
+                    role: 'assistant';
+                    annotations?: Array<unknown> | null;
+                    audio?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    reasoning_content?: string | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }> | null;
+                };
+            }>;
+            created: number;
+            model: string;
+            object: 'chat.completion';
+            server_tier?: string;
+            system_fingerprint?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+             */
+            usage?: {
+                completion_tokens: number;
+                prompt_tokens: number;
+                total_tokens: number;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                 */
+                completion_tokens_details?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                 */
+                prompt_tokens_details?: unknown;
+            };
+            [key: string]: unknown;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'azure:realtime';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        request: {
+            model: string;
+            prompt: string;
+            n?: number;
+            size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+            quality?: 'auto' | 'low' | 'medium' | 'high';
+            background?: 'auto' | 'transparent' | 'opaque';
+            output_format?: 'png' | 'jpeg' | 'webp';
+            output_compression?: number;
+            moderation?: 'auto' | 'low';
+            user?: string;
+            stream?: false;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            prompt: string;
+            n?: number;
+            size?: 'auto' | '1024x1024' | '1536x1024' | '1024x1536';
+            quality?: 'auto' | 'low' | 'medium' | 'high';
+            background?: 'auto' | 'transparent' | 'opaque';
+            output_format?: 'png' | 'jpeg' | 'webp';
+            output_compression?: number;
+            moderation?: 'auto' | 'low';
+            user?: string;
+            stream?: false;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            created: number;
+            model?: string;
+            data?: Array<{
+                b64_json?: string;
+                url?: string;
+                revised_prompt?: string;
+            }>;
+            usage?: {
+                input_tokens: number;
+                output_tokens: number;
+                total_tokens: number;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'azure:images';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
@@ -69429,6 +73626,11 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -69914,6 +74116,11 @@ export type KimiChatCompletionsWithAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -71660,6 +75867,8 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
             } | {
                 type: 'salesforce';
+                authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+                clientId?: string;
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
@@ -71894,6 +76103,8 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72201,6 +76412,8 @@ export type CreateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72586,6 +76799,8 @@ export type GetConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72802,6 +77017,8 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -73091,6 +77308,8 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -78178,10 +82397,10 @@ export type GetLlmModelsResponses = {
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+            priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
-            cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+            cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
         };
         isBest?: boolean;
         isFree: boolean;
@@ -78456,10 +82675,10 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
-        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+        priceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
-        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+        cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
         isFree: boolean;
         effectiveContextLength: number | null;
         embeddingClientImageCapable: boolean | null;
@@ -80214,7 +84433,7 @@ export type CreateLlmProviderApiKeyData = {
             [key: string]: string;
         } | null;
         /**
-         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.
+         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach. A service account cannot own a key, so it must send true.
          */
         shared?: boolean;
         isPrimary?: boolean;
@@ -85367,6 +89586,11 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -85852,6 +90076,11 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -90084,92 +94313,6 @@ export type SubmitOnboardingSurveyResponses = {
 
 export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
 
-export type GetFeedbackPopupActivationData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/onboarding/feedback-popup-activation';
-};
-
-export type GetFeedbackPopupActivationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetFeedbackPopupActivationError = GetFeedbackPopupActivationErrors[keyof GetFeedbackPopupActivationErrors];
-
-export type GetFeedbackPopupActivationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        activatedAt: string | null;
-    };
-};
-
-export type GetFeedbackPopupActivationResponse = GetFeedbackPopupActivationResponses[keyof GetFeedbackPopupActivationResponses];
-
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -92473,6 +96616,107 @@ export type DeleteOpenappaBatteryInstallResponses = {
 
 export type DeleteOpenappaBatteryInstallResponse = DeleteOpenappaBatteryInstallResponses[keyof DeleteOpenappaBatteryInstallResponses];
 
+export type GetOpenappaBatteryInstallData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/openappa/battery-installs/{id}';
+};
+
+export type GetOpenappaBatteryInstallErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaBatteryInstallError = GetOpenappaBatteryInstallErrors[keyof GetOpenappaBatteryInstallErrors];
+
+export type GetOpenappaBatteryInstallResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        batteryName: string;
+        catalogId: string | null;
+        enabled: boolean;
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        target: 'multi-user' | null;
+        packageHash: string | null;
+        lastError: string | null;
+        credentialBindings: {
+            [key: string]: string;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOpenappaBatteryInstallResponse = GetOpenappaBatteryInstallResponses[keyof GetOpenappaBatteryInstallResponses];
+
 export type UpdateOpenappaBatteryInstallData = {
     body: {
         enabled?: boolean;
@@ -92668,6 +96912,190 @@ export type DeleteOpenappaBatteryIncludeResponses = {
 };
 
 export type DeleteOpenappaBatteryIncludeResponse = DeleteOpenappaBatteryIncludeResponses[keyof DeleteOpenappaBatteryIncludeResponses];
+
+export type GetOpenappaCredentialBindingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/credential-bindings';
+};
+
+export type GetOpenappaCredentialBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaCredentialBindingsError = GetOpenappaCredentialBindingsErrors[keyof GetOpenappaCredentialBindingsErrors];
+
+export type GetOpenappaCredentialBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        variable: string;
+        credentialKey: string;
+        hasValue: boolean;
+        updatedBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetOpenappaCredentialBindingsResponse = GetOpenappaCredentialBindingsResponses[keyof GetOpenappaCredentialBindingsResponses];
+
+export type GetOpenappaCredentialBindingData = {
+    body?: never;
+    path: {
+        variable: string;
+    };
+    query?: never;
+    url: '/api/openappa/credential-bindings/{variable}';
+};
+
+export type GetOpenappaCredentialBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaCredentialBindingError = GetOpenappaCredentialBindingErrors[keyof GetOpenappaCredentialBindingErrors];
+
+export type GetOpenappaCredentialBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        variable: string;
+        credentialKey: string;
+        hasValue: boolean;
+        updatedBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOpenappaCredentialBindingResponse = GetOpenappaCredentialBindingResponses[keyof GetOpenappaCredentialBindingResponses];
 
 export type SetOpenappaCredentialBindingData = {
     body: {
@@ -97324,6 +101752,7 @@ export type GetOrganizationResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97343,6 +101772,8 @@ export type GetOrganizationResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -97661,6 +102092,7 @@ export type UpdateAppearanceSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97680,6 +102112,8 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -97876,6 +102310,7 @@ export type UpdateSecuritySettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97895,6 +102330,8 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -97995,6 +102432,7 @@ export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[key
 export type UpdateMcpSettingsData = {
     body: {
         onlineMcpCatalogEnabled?: boolean;
+        defaultPersonalAgentAccessAllTools?: boolean;
         mcpIdleHibernationEnabled?: boolean;
     };
     path?: never;
@@ -98088,6 +102526,7 @@ export type UpdateMcpSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98107,6 +102546,8 @@ export type UpdateMcpSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -98300,6 +102741,7 @@ export type UpdateSkillsSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98319,6 +102761,8 @@ export type UpdateSkillsSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -98421,6 +102865,8 @@ export type UpdateAgentSettingsData = {
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
+        defaultFastModelId?: string | null;
+        defaultSmartModelId?: string | null;
     };
     path?: never;
     query?: never;
@@ -98513,6 +102959,7 @@ export type UpdateAgentSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98532,6 +102979,8 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -98748,6 +103197,7 @@ export type UpdateConnectionSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98767,6 +103217,8 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -98996,6 +103448,7 @@ export type UpdateIntegrationSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99015,6 +103468,8 @@ export type UpdateIntegrationSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -99218,6 +103673,7 @@ export type UpdateDefaultEnvironmentResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99237,6 +103693,8 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -99435,6 +103893,7 @@ export type UpdateAuthSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99454,6 +103913,8 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -99654,6 +104115,7 @@ export type UpdateKnowledgeSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99673,6 +104135,8 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -99863,6 +104327,7 @@ export type DropEmbeddingConfigResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99882,6 +104347,8 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
@@ -100434,6 +104901,7 @@ export type CompleteOnboardingResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -100453,6 +104921,8 @@ export type CompleteOnboardingResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultFastModelId: string | null;
+        defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';

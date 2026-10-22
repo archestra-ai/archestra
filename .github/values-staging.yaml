@@ -60,6 +60,9 @@ archestra:
       maxSurge: "50%"
 
   env:
+    # Internal UI feedback overlay: comment on page elements, posted to Slack
+    # as a chatops bot. The bot and channel are picked in the UI on first use.
+    ARCHESTRA_DEV_FEEDBACK_ENABLED: "true"
     # Runtime pods reach this installation through its in-cluster API Service.
     ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
     # Retention stays OFF here on purpose. This deployment is where the
@@ -83,8 +86,6 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
-    ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
-    ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
 
   diagnostics:
     enabled: true

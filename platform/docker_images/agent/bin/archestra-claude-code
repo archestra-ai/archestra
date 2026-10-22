@@ -49,6 +49,7 @@ runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 # The runtime directory outlives the pod. A killed run must not leave a held
 # turn behind for a later continuation.
 rm -f "${runtime_dir}/turn-waiting-background"
+rm -f "${runtime_dir}/claude-background.json" "${runtime_dir}/claude-background.unavailable"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
@@ -105,8 +106,9 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
     exit 78
   fi
 fi
-if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
-  args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
+system_prompt="$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")"
+if [[ -n "${system_prompt}" ]]; then
+  args+=(--append-system-prompt "${system_prompt}")
 fi
 
 # Claude Code knows when it is waiting for a person. Reflect its native hook
@@ -127,7 +129,7 @@ case "${event}:${notification}" in
     label="Permission needed"
     ;;
   Notification:idle_prompt)
-    # A delegated turn that waits for its background agents needs no input.
+    # Waiting for background work or a scheduled wakeup needs no input.
     if [[ -f "${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/turn-waiting-background" ]]; then
       "${attention_command}" clear
       exit 0
@@ -147,8 +149,10 @@ esac
 HOOK
 chmod 0700 "${attention_hook}"
 transcript_hook="${runtime_dir}/transcript-hook.sh"
-cat > "${transcript_hook}" <<'HOOK'
-#!/usr/bin/env bash
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf '#!/usr/bin/env bash\nfailure_command=%q\n' "${script_dir}/archestra-agent-failure" > "${transcript_hook}"
+printf 'background_command=%q\n' "${script_dir}/archestra-claude-background" >> "${transcript_hook}"
+cat >> "${transcript_hook}" <<'HOOK'
 set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
@@ -163,6 +167,13 @@ if [[ -n "${native_session_id}" ]]; then
 fi
 if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "SessionStart" ]]; then
   printf '{}\n'
+  exit 0
+fi
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+if [[ "${event}" == "PostToolUse" || "${event}" == "UserPromptSubmit" || "${event}" == "SubagentStop" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
+    printf '%s' "${payload}" | "${background_command}" >/dev/null
+  fi
   exit 0
 fi
 # API failures fire StopFailure instead of Stop. Without this hook a delegated
@@ -258,27 +269,34 @@ if [[ -n "${transcript}" && -r "${transcript}" ]]; then
   fi
 fi
 
-if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
-  # Claude Code ends a turn to wait for background subagents and workflows,
-  # then starts a new one when they report back. Completing here would kill
-  # them. Like print mode, other background work does not hold the run.
-  if jq -e '[.background_tasks[]? | select(.type == "subagent" or .type == "workflow")] | length > 0' \
-    <<<"${payload}" >/dev/null 2>&1; then
-    touch "${runtime_dir}/turn-waiting-background"
-    exit 0
-  fi
-  rm -f "${runtime_dir}/turn-waiting-background"
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" && ! -f "${runtime_dir}/turn-complete" ]]; then
   # Stop can fire before the final response is flushed to the JSONL file.
-  if [[ -n "${last_assistant_message}" ]]; then
-    printf '%s\n' "${last_assistant_message}" > "${runtime_dir}/final-answer.txt"
-  elif [[ -n "${transcript}" && -r "${transcript}" ]]; then
-    jq -rs '[.[]
+  if [[ -z "${last_assistant_message}" && -n "${transcript}" && -r "${transcript}" ]]; then
+    last_assistant_message="$(jq -rs '[.[]
         | select(.type == "assistant")
         | .message.content
         | if type == "array" then (map(select(.type == "text") | .text) | join("")) else . end
         | select(. != null and . != "")
-      ] | last // ""' "${transcript}" > "${runtime_dir}/final-answer.txt" 2>/dev/null || true
+      ] | last // ""' "${transcript}" 2>/dev/null || true)"
   fi
+  # A finished shell can leave the native inventory before its notification
+  # reaches the agent. Include launched work awaiting native result delivery.
+  pending="$(printf '%s' "${payload}" | "${background_command}")"
+  case "${pending}" in
+    true)
+      touch "${runtime_dir}/turn-waiting-background"
+      exit 0
+      ;;
+    false) ;;
+    *)
+      last_assistant_message="The agent could not determine whether background work is pending. Resume the session to check its work."
+      "${failure_command}" background_state_unavailable "${last_assistant_message}"
+      touch "${runtime_dir}/turn-complete.failed"
+      ;;
+  esac
+  rm -f "${runtime_dir}/turn-waiting-background"
+  # The supervisor observes this marker; publish the answer or failure first.
+  printf '%s\n' "${last_assistant_message}" > "${runtime_dir}/final-answer.txt"
   touch "${runtime_dir}/turn-complete"
 fi
 HOOK
@@ -294,14 +312,14 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
     hooks:[{type:"command",command:$attention_cmd}]
   }],
   SessionStart:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
-  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
-  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
+  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd},{type:"command",command:$transcript_cmd}]}],
+  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd},{type:"command",command:$transcript_cmd}]}],
+  SubagentStop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
   Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
   StopFailure:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]
 }}' > "${settings_file}"
 args+=(--settings "${settings_file}")
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tui_start=(python3 "${script_dir}/archestra-claude-tui-start")
 
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in

@@ -60,6 +60,12 @@ const organizationsTable = pgTable("organization", {
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
+  /** Initial tool mode for automatically provisioned personal agents and gateways. */
+  defaultPersonalAgentAccessAllTools: boolean(
+    "default_personal_agent_access_all_tools",
+  )
+    .notNull()
+    .default(true),
   onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
     .notNull()
     .default(true),
@@ -182,6 +188,16 @@ const organizationsTable = pgTable("organization", {
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  defaultFastModelId: uuid("default_fast_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+  defaultSmartModelId: uuid("default_smart_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
 
   /** Default token-cost limit value applied to every organization member. */
   defaultUserLimitValue: integer("default_user_limit_value"),

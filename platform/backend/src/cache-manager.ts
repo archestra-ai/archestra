@@ -124,6 +124,10 @@ export const CacheKey = {
   KbConnectorIdentity: "kb-connector-identity",
   /** Files of the MS Teams message that triggered an agent-selection card, replayed once the agent is picked */
   TeamsAgentSelectionAttachments: "teams-agent-selection-attachments",
+  /** An MS Teams group-chat message held until its sender signs in so the bot can read its files */
+  TeamsFileSignIn: "teams-file-sign-in",
+  /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
+  TeamsFileSignInState: "teams-file-sign-in-state",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */

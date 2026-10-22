@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-20
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -81,6 +81,7 @@ They come first, before the agent's own instructions. They add to what the agent
 | `@Archestra /select-agent` | Changes the agent for this channel |
 | `@Archestra /status` | Shows the agent for this channel |
 | `@Archestra /help` | Lists the commands |
+| `@Archestra /sign-out` | Removes your Microsoft sign-in for [group-chat files](#read-files-in-group-chats) |
 | `reset` | Starts a new conversation. Direct messages and group chats only. |
 
 <span id="autoprovisioning-ms-teams-users"></span><span id="attachments"></span>
@@ -89,7 +90,7 @@ They come first, before the agent's own instructions. They add to what the agent
 
 Share a PDF in a channel, and the agent reads it. Your Microsoft 365 admin grants the bot read access to the teams you pick, and nothing else. Direct messages need no setup.
 
-1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files in Channels**.
+1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files**, on the **Channels** tab.
 2. Paste each team's SharePoint site, one per line. Find it on the channel's **Files** tab, under **Open in SharePoint**.
 3. Click **Copy request for IT** and send it to your admin.
 
@@ -110,7 +111,24 @@ What to know:
 
 - [`Sites.Selected`](https://learn.microsoft.com/en-us/graph/permissions-selected-overview) alone grants nothing. The bot reads only the sites granted read.
 - The grant needs `Sites.FullControl.All` on the admin's own sign-in. The bot never gets it.
-- Private and shared channels each have their own site. Group-chat files are not read: Teams keeps them in each sender's OneDrive.
+- Private and shared channels each have their own site. Group-chat files live in each sender's OneDrive instead. See [Read Files in Group Chats](#read-files-in-group-chats).
+
+## Read Files in Group Chats
+
+Share a PDF in a group chat, and the agent reads it after you sign in with Microsoft once. Teams keeps group-chat files in the sender's OneDrive, so the bot reads them as that person, and only the files they share with it.
+
+1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files**, on the **Group chats** tab.
+2. In the [Microsoft Entra admin center](https://entra.microsoft.com/), open the bot's app under **App registrations**. On **Authentication**, add a **Web** platform with the redirect URI that the step shows.
+3. On **API permissions**, add **Microsoft Graph → Delegated permissions → Files.Read** and **offline_access**.
+4. Turn on **Ask people to sign in for group-chat files**, then click **Connect** on the last step.
+
+When it works, the first file a person shares with the bot brings a **Sign in with Microsoft** card. After they sign in, the agent answers that message. Their later files are answered right away.
+
+What to know:
+
+- The app manifest does not change, and nobody reinstalls the app. People consent for themselves. Grant admin consent to skip that prompt.
+- Everyone in the chat sees the card, but only the person who shared the file can sign in with it.
+- A sign-in lasts until the person types `/sign-out` to the bot, or Microsoft revokes it. Then the next file brings a new card.
 
 ## Troubleshooting
 
@@ -121,7 +139,10 @@ What to know:
 | **"Could not verify your identity"** | Add the `TeamMember.Read.Group` and `ChatMember.Read.Chat` permissions to the app manifest. Then install the app again. |
 | **No history in a channel thread, or Answer all messages does nothing** | Add the `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` permissions to the manifest. Install the app again, and have the team owner approve them. |
 | **Direct messages do not work** | Upload the latest app manifest. Older manifests do not include the `personal` scope. |
-| **The agent says it could not read a file from a channel** | Ask your admin to grant read access to that team's site, as in [Read Files in Channels](#read-files-in-channels). A private or shared channel needs its own site. In a group chat, send the file in a direct message instead. |
+| **The agent says it could not read a file from a channel** | Ask your admin to grant read access to that team's site, as in [Read Files in Channels](#read-files-in-channels). A private or shared channel needs its own site. |
+| **The agent says it could not read a file from a group chat** | Turn on group-chat file sign-in, as in [Read Files in Group Chats](#read-files-in-group-chats). |
+| **Microsoft says the redirect URI does not match** | Add the redirect URI from **Read Files → Group chats** to the bot's app, on **Authentication**, as a **Web** platform. |
+| **"This sign-in link has expired"** | A card's link works once, for an hour. Send the file to the bot again for a new card. |
 
 ## What to Know
 

@@ -48,12 +48,6 @@ export function newChatSeedQueries(
       data: data.availableApiKeys,
     });
   }
-  if (data.memberDefaultKeyModels) {
-    queries.push({
-      queryKey: llmModelsQueryKey(data.memberDefaultKeyModels.apiKeyId),
-      data: data.memberDefaultKeyModels.models,
-    });
-  }
   const agent = data.agent;
   if (!agent) return queries;
   queries.push(

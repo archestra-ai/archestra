@@ -19,6 +19,7 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import MemberModel from "@/models/member";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OrganizationModel from "@/models/organization";
@@ -107,14 +108,18 @@ class OpenAppaArchestraAnnotator {
         kind: "unconfigured",
         reason: "The OpenAPPA configuration agent is not provisioned.",
       };
-    // The model Guardrails settings pick for annotators, else the organization
-    // default; never a model someone pinned on the configuration agent.
+    // The model Guardrails settings pick for annotators, else the fast tier of
+    // the key the organization default resolves to, else that default; never a
+    // model someone pinned on the configuration agent.
     const { annotatorModelId, annotatorLlmApiKeyId } =
       await GuardrailsDeploymentModel.get();
-    const selection = await resolveAgentLlmOrDefault({
+    const resolved = await resolveAgentLlmOrDefault({
       agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
     });
+    const selection = annotatorModelId
+      ? resolved
+      : await withFastModel(resolved);
     if (isApiKeyRequired(selection.provider, selection.apiKey))
       return {
         kind: "unconfigured",
@@ -274,6 +279,22 @@ async function sessionOwner(
     sessionId: clientSessionId(session.sessionId),
     userId: member?.userId,
   };
+}
+
+/**
+ * The selection on its key's fast-tier model: an annotation is a short,
+ * latency-bound classification the policy waits on. Only a stored key row has
+ * a synced catalog to pick from, so any other credential keeps its model.
+ */
+async function withFastModel(
+  selection: Awaited<ReturnType<typeof resolveAgentLlmOrDefault>>,
+) {
+  if (!selection.chatApiKeyId) return selection;
+  const fast = await LlmProviderApiKeyModelLinkModel.getFastModel({
+    apiKeyId: selection.chatApiKeyId,
+    provider: selection.provider,
+  });
+  return fast ? { ...selection, modelName: fast.modelId } : selection;
 }
 
 function ownerOrganization(owner: CallOwner) {

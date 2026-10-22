@@ -209,6 +209,7 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
 ## Troubleshooting
 
 - **Build failure:** Inspect the failure and re-run failed jobs in the same workflow run.
+- **No release PR after the stable-cut configuration PR:** Release Please counts only commits under `platform/`, and the configuration PR changes only `.github/`. If the new branch has no other `platform/` commit since the RC tag, Release Please skips the release PR. Merge a small change under `platform/` to the branch, then confirm the `X.Y.0` release PR opens.
 - **Testing fails before approval:**
   1. Cancel the workflow run.
   2. Delete the GitHub draft release. Keep the git tag. (Unapproved draft releases block other releases).

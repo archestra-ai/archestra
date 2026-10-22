@@ -31,6 +31,7 @@ export const RuntimeLaunchOutcomeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("launched"),
     session_id: z.string().uuid(),
     state: RuntimeLaunchStateSchema.optional(),
+    reports_to_thread: z.literal(true).optional(),
   }),
   z.object({
     kind: z.literal("failed"),

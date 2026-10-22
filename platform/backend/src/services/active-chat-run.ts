@@ -286,9 +286,9 @@ export class ActiveChatRunService {
         suppressPayloads: params.suppressEventPayloads ?? false,
         encryptedChatAudit: params.encryptedChatAudit ?? null,
         onFlush: () => this.notifyEvent(params.runId),
-        onAsyncFailure: () => {
+        onAsyncFailure: (error) => {
           if (!params.abortController?.signal.aborted) {
-            params.abortController?.abort();
+            params.abortController?.abort(persistenceAbortReason(error));
           }
           void reader.cancel().catch((cancelError) => {
             logger.warn(
@@ -334,7 +334,7 @@ export class ActiveChatRunService {
         });
       } catch (error) {
         if (!params.abortController?.signal.aborted) {
-          params.abortController?.abort();
+          params.abortController?.abort(persistenceAbortReason(error));
         }
         await reader.cancel().catch((cancelError) => {
           logger.warn(
@@ -728,6 +728,26 @@ class ActiveChatRunEventBatcher {
     this.lastRunTouchAt = now;
     return true;
   }
+}
+
+/**
+ * The reason a chat is aborted with when its events can no longer be
+ * persisted, so the response can report the failure instead of ending as if
+ * the user had pressed Stop.
+ */
+export class ActiveChatRunPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super("The chat run could not be saved, so it was stopped.", { cause });
+    this.name = "ActiveChatRunPersistenceError";
+  }
+}
+
+function persistenceAbortReason(
+  error: unknown,
+): ActiveChatRunPersistenceError | undefined {
+  return error instanceof ActiveChatRunGoneError
+    ? undefined
+    : new ActiveChatRunPersistenceError(error);
 }
 
 // Signals that the run row was deleted out from under an in-flight drain, so

@@ -3231,7 +3231,9 @@ class AgentModel {
     lookups?: PrincipalSource;
     includeDetails?: boolean;
   }): Promise<
-    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+    (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
+      hasRuntime: boolean;
+    })[]
   > {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
       params;
@@ -3260,6 +3262,7 @@ class AgentModel {
             params.includeDetails === false
               ? sql<Agent["builtInAgentConfig"]>`NULL`
               : schema.agentsTable.builtInAgentConfig,
+          hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3282,6 +3285,7 @@ class AgentModel {
           params.includeDetails === false
             ? sql<Agent["builtInAgentConfig"]>`NULL`
             : schema.agentsTable.builtInAgentConfig,
+        hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
       })
       .from(schema.agentsTable)
       .where(
@@ -3305,12 +3309,25 @@ class AgentModel {
   static async findDelegationTarget(
     id: string,
     tx?: Transaction,
-  ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
+  ): Promise<Pick<
+    Agent,
+    | "id"
+    | "name"
+    | "agentType"
+    | "llmApiKeyId"
+    | "modelId"
+    | "fastModelId"
+    | "smartModelId"
+  > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        modelId: schema.agentsTable.modelId,
+        fastModelId: schema.agentsTable.fastModelId,
+        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -4507,6 +4524,10 @@ class AgentModel {
     // are the durable marker that they did and chose to delete it.
     if (await AgentModel.hasEverAuthoredPersonalChatAgent(params)) return null;
 
+    const accessAllTools =
+      await OrganizationModel.getDefaultPersonalAgentAccessAllTools(
+        organizationId,
+      );
     const agent = await AgentModel.create(
       {
         organizationId,
@@ -4514,13 +4535,9 @@ class AgentModel {
         agentType: "agent",
         scope: "personal",
         description: "Your personal chat assistant",
-        // The personal assistant should be able to reach every tool the user
-        // can access (e.g. MCP servers they install) without per-tool
-        // assignment. `accessAllTools` grants that dynamic access and, via the
-        // invariant in AgentModel.create, coerces toolExposureMode to
-        // "search_and_run_only" so the search_tools/run_tool dispatch surface
-        // is exposed.
-        accessAllTools: true,
+        // Apply the organization default only on creation. Existing assistants
+        // returned above keep their saved mode and assignments.
+        accessAllTools,
       },
       userId,
     );
@@ -4667,6 +4684,10 @@ class AgentModel {
     );
     if (existing) return existing;
 
+    const accessAllTools =
+      await OrganizationModel.getDefaultPersonalAgentAccessAllTools(
+        organizationId,
+      );
     const [userRow] = await db
       .select({ name: schema.usersTable.name })
       .from(schema.usersTable)
@@ -4686,12 +4707,7 @@ class AgentModel {
           scope: "personal",
           description: PERSONAL_MCP_GATEWAY_DESCRIPTION,
           isPersonalGateway: true,
-          // The personal gateway defaults to "All" mode so it can reach every
-          // tool the user can access without per-tool assignment. Via the
-          // invariant in AgentModel.create, accessAllTools coerces
-          // toolExposureMode to "search_and_run_only" (the search_tools/run_tool
-          // dispatch surface).
-          accessAllTools: true,
+          accessAllTools,
         },
         userId,
       );
@@ -4742,11 +4758,17 @@ class AgentModel {
         userId: schema.membersTable.userId,
         organizationId: schema.membersTable.organizationId,
         userName: schema.usersTable.name,
+        accessAllTools:
+          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
       })
       .from(schema.membersTable)
       .innerJoin(
         schema.usersTable,
         eq(schema.usersTable.id, schema.membersTable.userId),
+      )
+      .innerJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.membersTable.organizationId),
       )
       .leftJoin(
         schema.agentsTable,
@@ -4774,10 +4796,8 @@ class AgentModel {
         agentType: "mcp_gateway" as const,
         scope: "personal" as const,
         isPersonalGateway: true,
-        // Personal gateways default to "All" mode (see ensurePersonalMcpGateway).
-        // This raw INSERT bypasses AgentModel.create, so set both fields here to
-        // preserve the accessAllTools => search_and_run_only invariant.
-        accessAllTools: true,
+        // This path also creates new objects; never rewrite an existing gateway.
+        accessAllTools: m.accessAllTools,
         toolExposureMode: "search_and_run_only" as const,
         slug: `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`,
       };
@@ -4794,13 +4814,15 @@ class AgentModel {
           ],
           where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
         })
-        .returning({ id: schema.agentsTable.id });
+        .returning({
+          id: schema.agentsTable.id,
+          accessAllTools: schema.agentsTable.accessAllTools,
+        });
 
-      // This raw INSERT creates the gateways directly in All-tools mode, so
-      // pre-fill their exclusion lists in the same transaction — none of them
-      // may commit in Auto mode without the pre-fill.
+      // Only All-mode gateways need the exclusion pre-fill. Keep it atomic
+      // with their insert, as in the ordinary create path.
       await AgentExcludedToolModel.prefillManyForAllToolsMode(
-        insertedRows.map((row) => row.id),
+        insertedRows.filter((row) => row.accessAllTools).map((row) => row.id),
         tx,
       );
 

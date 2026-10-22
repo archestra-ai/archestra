@@ -22,10 +22,10 @@ For an existing credential, use **Connect** on its row. Connecting from a conver
 
 | Ownership | Who acts downstream |
 | --- | --- |
-| Each user | The person running a managed agent, or the owner of a personal MCP installation. Each person connects their own value. |
+| Each user | The person running a coding agent, or the owner of a personal MCP installation. Each person connects their own value. |
 | The organization | One shared identity, including unattended skill, plugin, and Knowledge syncs. |
 
-A personal value cannot serve an organization MCP installation. Running a managed agent with an organization credential requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update); service accounts instead need use access to the credential.
+A personal value cannot serve an organization MCP installation. Running a coding agent with an organization credential requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update); service accounts instead need use access to the credential.
 
 ## Credential Types
 
@@ -50,7 +50,7 @@ Adding a shared or organization credential requires [`credential:create`](/docs/
 
 ## Use a Credential
 
-In a managed agent or MCP server's environment editor, choose the credential under **Secret source** and enter the variable name the runtime expects. The same credential can supply `GITHUB_TOKEN` in one resource and `GH_TOKEN` in another. Binding requires **Can use**.
+In a coding agent or MCP server's environment editor, choose the credential under **Secret source** and enter the variable name the runtime expects. The same credential can supply `GITHUB_TOKEN` in one resource and `GH_TOKEN` in another. Binding requires **Can use**.
 
 For repository integrations, follow [Skills](/docs/agents/skills/importing#private-repositories), [Plugins](/docs/agents/plugins), or [GitHub Knowledge](/docs/knowledge/connectors/github). Knowledge connectors require an organization credential.
 
@@ -60,9 +60,9 @@ For repository integrations, follow [Skills](/docs/agents/skills/importing#priva
 
 ## Replace or Disconnect a Value
 
-Replacing a value updates future resolutions. Restart static-secret MCP processes or start a new managed agent run to pick it up.
+Replacing a value updates future resolutions. Restart static-secret MCP processes or start a new coding agent run to pick it up.
 
-Expiring GitHub credentials renew automatically while authorization remains valid. MCP servers drain active calls and restart; managed agent workspaces keep running. Custom images must follow the [credential refresh contract](https://github.com/archestra-ai/archestra/blob/main/platform/docker_images/agent/runtime-contract.md). Expired or revoked authorization requires reconnecting, and failed calls are not replayed.
+Expiring GitHub credentials renew automatically while authorization remains valid. MCP servers drain active calls and restart; coding agent workspaces keep running. Custom images must follow the [credential refresh contract](https://github.com/archestra-ai/archestra/blob/main/platform/docker_images/agent/runtime-contract.md). Expired or revoked authorization requires reconnecting, and failed calls are not replayed.
 
 **Disconnect** removes the value but keeps its definition. Deleting a definition is blocked while resources reference it.
 

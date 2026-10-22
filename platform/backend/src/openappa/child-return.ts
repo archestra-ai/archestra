@@ -304,7 +304,7 @@ const MARKER_PHRASE =
   "(?:finished subagent|finished protected subagent|protected subagent session|protected subagent return|protected delegated return)";
 // Inspects indentation only at line starts to keep text scanning linear.
 const MARKER = new RegExp(
-  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM}[\\t ]{1,8})?${MARKER_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${MARKER_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*(?=\\r?\\n|$)`,
+  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM})?[\\t ]{1,8})?${MARKER_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${MARKER_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*(?=\\r?\\n|$)`,
   "gm",
 );
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
@@ -736,7 +736,7 @@ function formatMarker(params: {
 }): string {
   return params.format === "inline"
     ? `finished subagent ${params.displayCode}`
-    : `${MARK_TOP}\n${MARK_BOTTOM}  finished subagent ${params.displayCode}`;
+    : `${MARK_TOP}  finished subagent ${params.displayCode}`;
 }
 
 function hashValue(value: string): string {

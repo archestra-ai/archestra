@@ -18,6 +18,8 @@ The chart applies this split for `archestra.ingress.hosts`. A complete `archestr
 
 Gateway OAuth discovery uses the configured public URLs. An unconfigured host falls back to the request scheme, which can advertise HTTP behind a TLS-terminating proxy. [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY) does not change that rule.
 
+If a reverse proxy requires sign-in, let `/connect.md`, `/llms.txt`, and setup endpoints under `/api/client-connections` and `/api/connection-setups/script` load without a browser session. Also allow `/v1/connection-instructions` through; it checks the installation credential and current access itself.
+
 ## Streaming Timeouts
 
 Set the ingress response timeout long enough for model responses. If your load balancer's backend idle-connection timeout exceeds Archestra's keep-alive timeout, raise [`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS) above it.
@@ -54,6 +56,6 @@ Public internet mode blocks private, metadata, loopback, and reserved destinatio
 
 ## Code Sandbox Requirements
 
-Managed Dagger engines need Linux nodes that allow privileged root pods with all Linux capabilities and dynamically provisioned `ReadWriteOnce` storage. These engines run separately from managed agent containers.
+Managed Dagger engines need Linux nodes that allow privileged root pods with all Linux capabilities and dynamically provisioned `ReadWriteOnce` storage. These engines run separately from coding agent containers.
 
 If your cluster cannot admit them, configure an external engine with [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or disable the sandbox with [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) or `archestra.codeRuntime.enabled: false` in Helm.

@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Check the connected GitHub credential and attribute commits to its account.
+
+Runs before every turn. A rejected credential stops the run with an actionable
+reason instead of failing at the first push. A token that cannot read a user
+profile (a GitHub App installation token) or an unreachable API leaves the
+identity unset rather than blocking work that may not need GitHub.
+"""
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+FAILURE = Path(__file__).resolve().parent / "archestra-agent-failure"
+ATTEMPTS = 3
+
+
+def request_user():
+    """Return the status, lowercase headers and body of GET /user, or None."""
+    env = dict(os.environ, GH_DEBUG="", GH_FORCE_TTY="", GH_PROMPT_DISABLED="1", NO_COLOR="1")
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--hostname", "github.com", "--include", "user"],
+            capture_output=True, text=True, timeout=20, env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, {}, ""
+    head, _, body = result.stdout.replace("\r\n", "\n").partition("\n\n")
+    status_line, *header_lines = head.split("\n")
+    match = re.match(r"HTTP/[\d.]+ (\d{3})", status_line)
+    if not match:
+        return None, {}, ""
+    headers = {}
+    for line in header_lines:
+        key, _, value = line.partition(":")
+        headers[key.strip().lower()] = value.strip()
+    return int(match.group(1)), headers, body
+
+
+def account_identity(body):
+    """Return the author name and noreply email GitHub links to the account."""
+    try:
+        account = json.loads(body)
+    except ValueError:
+        return None
+    login, account_id = account.get("login"), account.get("id")
+    if not (isinstance(login, str) and re.fullmatch(r"[A-Za-z0-9-]+", login)
+            and type(account_id) is int and account_id > 0):
+        return None
+    name = account.get("name")
+    name = name.strip() if isinstance(name, str) and name.strip() else login
+    return name, f"{account_id}+{login}@users.noreply.github.com"
+
+
+def main():
+    for attempt in range(ATTEMPTS):
+        status, headers, body = request_user()
+        if status == 200:
+            identity = account_identity(body)
+            if identity is None:
+                break
+            for key, value in zip(("user.name", "user.email"), identity):
+                subprocess.run(["git", "config", "--global", key, value], check=True)
+            return 0
+        if status == 401:
+            message = ("GitHub rejected the Agent's GitHub credential. Reconnect GitHub "
+                       "or replace the token, then start a new run.")
+            subprocess.run([str(FAILURE), "github_credential_rejected", message], check=False)
+            print(f"archestra: {message}", file=sys.stderr)
+            return 78
+        rate_limited = headers.get("x-ratelimit-remaining") == "0" or "retry-after" in headers
+        if status is not None and status < 500 and not rate_limited:
+            # Installation tokens act as an App, which has no user profile.
+            return 0
+        if attempt + 1 < ATTEMPTS:
+            time.sleep(2 * (attempt + 1))
+    print("archestra: GitHub account unavailable; Git commit identity is not set for this turn",
+          file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

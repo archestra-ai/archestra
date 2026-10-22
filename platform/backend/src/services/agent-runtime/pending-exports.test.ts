@@ -24,7 +24,7 @@ import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
-import type { Agent } from "@/types";
+import { type Agent, ApiError } from "@/types";
 import { pendingExports } from "./pending-exports";
 import { runtimeOpenAppaSession } from "./runtime-identity";
 import { workspaceTransferTickets } from "./workspace-transfers";
@@ -740,6 +740,54 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(pod.snapshots).toBe(17);
     expect(pod.discarded).toEqual(["pinned-1"]);
   });
+
+  test("a file the runtime's helper refuses tells the parent nothing about it", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const missing = new ApiError(
+      400,
+      "[Errno 2] No such file or directory: 'reports'",
+    );
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockRejectedValue(
+      missing,
+    );
+    vi.spyOn(backend, "runWorkspaceTransferCommand").mockRejectedValue(missing);
+    const crossing = vi.spyOn(openappa, "returnRuntimeValue");
+
+    const read = await readFile(seeded, "reports/missing.md");
+    const download = await transfer(seeded, "reports/missing.md");
+
+    expect(read).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Error: An internal error occurred while reading workspace file",
+        },
+      ],
+    });
+    expect(download).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Error: An internal error occurred while authorizing a workspace file transfer",
+        },
+      ],
+    });
+    expect(crossing).not.toHaveBeenCalled();
+  });
 });
 
 // =============================================================================
@@ -820,7 +868,7 @@ function readFile(
 ) {
   return executeArchestraTool(
     READ,
-    { task_id: seeded.taskId, path },
+    { run_id: seeded.taskId, path },
     seeded.context,
   );
 }
@@ -829,7 +877,7 @@ function transfer(seeded: Seeded, path = "out/report.txt") {
   return executeArchestraTool(
     TRANSFER,
     {
-      task_id: seeded.taskId,
+      run_id: seeded.taskId,
       direction: "download",
       path,
       local_path: "/tmp/report.txt",

@@ -2,7 +2,7 @@
 
 <img src="logo.svg" alt="Archestra" width="520" />
 
-**The all-in-one open-source enterprise AI platform.**
+**Secure AI Platform**
 
 *Built on a strong security and observability foundation: SSO and RBAC,
 sandboxed code execution, Lethal-Trifecta guardrails,

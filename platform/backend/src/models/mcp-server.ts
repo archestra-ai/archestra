@@ -444,19 +444,6 @@ class McpServerModel {
   }
 
   /**
-   * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
-   */
-  static async getFirstCreatedAt(): Promise<Date | null> {
-    const [row] = await db
-      .select({ createdAt: schema.mcpServersTable.createdAt })
-      .from(schema.mcpServersTable)
-      .orderBy(asc(schema.mcpServersTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
-  }
-
-  /**
    * Installations that have recorded no per-installation tool descriptions
    * yet, in catalogs with more than one installation (only there can
    * installations disagree). A random sample, so installations that keep
@@ -850,7 +837,8 @@ class McpServerModel {
    */
   static credentialUsableCondition(userId: string): SQL {
     const server = schema.mcpServersTable;
-    return or(
+    // A nullable owner or team makes the bare OR NULL instead of false.
+    return sql`coalesce(${or(
       eq(server.ownerId, userId),
       exists(
         db
@@ -871,7 +859,7 @@ class McpServerModel {
         }),
       ),
       eq(server.scope, "org"),
-    ) as SQL;
+    )}, false)`;
   }
 
   /**

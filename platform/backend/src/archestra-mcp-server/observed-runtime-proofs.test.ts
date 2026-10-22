@@ -1,5 +1,5 @@
 import {
-  TOOL_GET_RUN_FULL_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
@@ -174,7 +174,7 @@ describe("runtime calls signed while enforcement was off, beyond reads", () => {
     });
     await recordMade(seeded, "observed-write");
     const args = {
-      task_id: seeded.taskId,
+      run_id: seeded.taskId,
       path: "notes.txt",
       content: "written while off",
     };
@@ -217,7 +217,7 @@ describe("runtime calls signed while enforcement was off, beyond reads", () => {
     });
     await recordMade(seeded, "observed-upload");
     const args = {
-      task_id: seeded.taskId,
+      run_id: seeded.taskId,
       direction: "upload",
       path: "in/data.csv",
       local_path: "/tmp/data.csv",
@@ -259,12 +259,12 @@ describe("runtime calls signed while enforcement was off, beyond reads", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
-    const args = { task_id: seeded.taskId };
+    const args = { run_id: seeded.taskId };
     // Signed long ago: the call sat behind a slow tool, and the proof expired.
     const stale = signRuntimeToolProof({
       session: seeded.parent,
       toolCallId: "stale-get-run",
-      action: "get_run",
+      action: "get_agent_run",
       arguments: args,
       spawn: false,
       observed: true,
@@ -273,7 +273,7 @@ describe("runtime calls signed while enforcement was off, beyond reads", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
+      TOOL_GET_AGENT_RUN_FULL_NAME,
       { ...args, runtime_proof: stale },
       seeded.context,
     );
@@ -301,11 +301,11 @@ async function recordMade(seeded: Seeded, toolCallId: string): Promise<void> {
 }
 
 function getRun(seeded: Seeded, params: { callId: string; spawn?: boolean }) {
-  const args = { task_id: seeded.taskId };
+  const args = { run_id: seeded.taskId };
   const proof = signRuntimeToolProof({
     session: seeded.parent,
     toolCallId: params.callId,
-    action: "get_run",
+    action: "get_agent_run",
     arguments: args,
     spawn: params.spawn ?? false,
     observed: true,
@@ -313,7 +313,7 @@ function getRun(seeded: Seeded, params: { callId: string; spawn?: boolean }) {
   });
   if (!proof) throw new Error("The fixture has no source proof");
   return executeArchestraTool(
-    TOOL_GET_RUN_FULL_NAME,
+    TOOL_GET_AGENT_RUN_FULL_NAME,
     { ...args, runtime_proof: proof },
     seeded.context,
   );

@@ -132,6 +132,7 @@ const ANSWER_OPENINGS = [
 const NO_ANSWER = new Map<string, "unanswered" | "declined">([
   ["The user did not answer the questions.", "unanswered"],
   ["User has declined to answer your questions.", "declined"],
+  ["User dismissed the question.", "declined"],
 ]);
 
 // Claude Code's answer when its question auto-continue timeout

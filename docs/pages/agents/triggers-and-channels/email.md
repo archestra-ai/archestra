@@ -66,4 +66,4 @@ What to know:
 - **The prompt:** the email body, up to 100 KB. A reply also brings the earlier messages in its thread.
 - **Files:** images, PDFs, and text files such as CSV and JSON. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives.
 - Skipped files, without a notice to the sender: past 20 per email, over 10 MB each, past 25 MB in total, and images under 2 KB. Small images are usually broken images in forwarded mail.
-- **Long runs:** with a [dedicated runtime](/docs/agents/managed-agents), the reply goes out when the run finishes, even after Archestra restarts.
+- **Long runs:** with a [dedicated runtime](/docs/agents/runtime), the reply goes out when the run finishes, even after Archestra restarts.

@@ -140,10 +140,10 @@ export function IntegrationAvailabilitySection({
                   shownItemIds={allowed}
                   onShownItemIdsChange={setAllowed}
                   onOrderChange={setAllowed}
-                  label="Managed agents"
-                  emptyMessage="No managed agents added."
+                  label="Agent Runtimes"
+                  emptyMessage="No Agent Runtimes added."
                   inlineAdd
-                  inlineAddLabel="Add managed agent"
+                  inlineAddLabel="Add Agent Runtime"
                   disabled={
                     disabled ||
                     !organization ||

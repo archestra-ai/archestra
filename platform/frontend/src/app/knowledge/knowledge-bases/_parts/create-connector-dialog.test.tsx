@@ -660,14 +660,12 @@ describe("CreateConnectorDialog", () => {
       return { ...result, user };
     }
 
-    it("shows login URL and email/token fields for salesforce", async () => {
+    it("shows My Domain and OAuth app credential fields for Salesforce", async () => {
       await renderSalesforceConfigureStep();
 
-      expect(screen.getByLabelText(/^Login URL$/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^Email$/)).toBeInTheDocument();
-      expect(
-        screen.getByLabelText(/^Password \+ Security Token$/),
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^My Domain URL$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Consumer Key$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Consumer Secret$/)).toBeInTheDocument();
     });
 
     it("does not expose batch size in the salesforce UI", async () => {
@@ -688,14 +686,14 @@ describe("CreateConnectorDialog", () => {
       fireEvent.change(screen.getByLabelText(/^Name$/), {
         target: { value: "Salesforce Connector" },
       });
-      fireEvent.change(screen.getByLabelText(/^Login URL$/), {
-        target: { value: "https://login.salesforce.com" },
+      fireEvent.change(screen.getByLabelText(/^My Domain URL$/), {
+        target: { value: "https://example.my.salesforce.com" },
       });
-      fireEvent.change(screen.getByLabelText(/^Email$/), {
-        target: { value: "admin@example.com" },
+      fireEvent.change(screen.getByLabelText(/^Consumer Key$/), {
+        target: { value: "consumer-key" },
       });
-      fireEvent.change(screen.getByLabelText(/^Password \+ Security Token$/), {
-        target: { value: "passwordAndToken" },
+      fireEvent.change(screen.getByLabelText(/^Consumer Secret$/), {
+        target: { value: "consumer-secret" },
       });
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
@@ -719,13 +717,14 @@ describe("CreateConnectorDialog", () => {
         name: "Salesforce Connector",
         connectorType: "salesforce",
         credentials: {
-          email: "admin@example.com",
-          apiToken: "passwordAndToken",
+          apiToken: "consumer-secret",
         },
       });
       expect(call[0].config).toMatchObject({
         type: "salesforce",
-        loginUrl: "https://login.salesforce.com",
+        authMethod: "oauth_client_credentials",
+        clientId: "consumer-key",
+        loginUrl: "https://example.my.salesforce.com",
         objects: ["Account", "Contact", "Opportunity"],
       });
     });
@@ -1322,11 +1321,7 @@ describe("CreateConnectorDialog", () => {
       ["Asana", "Personal Access Token", "asana-auto-sync-permissions"],
       ["Outline", "API Key", "outline-auto-sync-permissions"],
       ["OneDrive", "Client Secret", "onedrive-auto-sync-permissions"],
-      [
-        "Salesforce",
-        "Password + Security Token",
-        "salesforce-auto-sync-permissions",
-      ],
+      ["Salesforce", "Consumer Secret", "salesforce-auto-sync-permissions"],
       // Perforce's own credential is the *content* identity's login ticket;
       // permission sync signs in as the admin account in its own section.
       [

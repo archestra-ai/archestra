@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,7 +40,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_INTERNAL_API_BASE_URL`** - URL the backend listens on inside the container. In-cluster workloads use it to reach the backend.
   - Default: `http://127.0.0.1:9000`
   - The port in this URL sets the API listen port.
-  - [Managed agent](#managed-agents) pods use it to reach the API unless [`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL) is set.
+  - [Agent Runtime](#agent-runtime) pods use it to reach the API unless [`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL) is set.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Public URL of the Archestra web app. Setting it restricts CORS and sign-in to the configured origins.
   - Default: unset (only same-origin requests to the host the app is opened on are accepted)
@@ -561,7 +561,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
   - Default: `off`
   - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
-  - Set it on both web and worker pods. Requests retain their starting mode.
+  - Set it on both web and worker pods. Requests retain their starting mode. See [Roll Out Usage Accounting](/docs/llm-proxy/costs-and-limits).
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
@@ -659,14 +659,6 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Ignored unless [`ARCHESTRA_ARCHESTRA_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_ARCHESTRA_BASE_URL) is set.
 
 ### Defaults and Limits
-
-- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Provider of the last-resort default model, used when the organization has no default model, no synced models, and no provider API key variable.
-  - Default: `anthropic`
-  - Values: a provider ID, for example `anthropic`, `openai`, `gemini`, `bedrock`, `azure`, `ollama`. An unknown value falls back to `anthropic`.
-
-- **`ARCHESTRA_CHAT_DEFAULT_MODEL`** - Model ID of the last-resort default model.
-  - Default: the default Anthropic model of your Archestra release
-  - Set it together with [`ARCHESTRA_CHAT_DEFAULT_PROVIDER`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_DEFAULT_PROVIDER).
 
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper limit on output tokens for one agent turn, in chat and in A2A runs.
   - Default: `32768`
@@ -950,9 +942,9 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)
 
-## Managed Agents
+## Agent Runtime
 
-Managed Agents turn on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Managed Agents](/docs/agents/managed-agents) for cluster setup.
+Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
@@ -960,7 +952,7 @@ Managed Agents turn on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
   - Default: `latest` on stable releases, otherwise the platform version
-  - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/managed-agents/setup#upgrades).
+  - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
@@ -999,7 +991,7 @@ Managed Agents turn on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`** - Spare containers kept ready per group of Agents with matching container settings, so new runs start faster.
   - Default: `0` (warm pools off)
-  - Spare containers reserve CPU, memory, and storage while idle. See [Managed Agents](/docs/agents/managed-agents).
+  - Spare containers reserve CPU, memory, and storage while idle. See [Agent Runtime](/docs/agents/runtime).
 
 - **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum number of warm pools. Agents outside them start containers on demand.
   - Default: `4`

@@ -33,8 +33,8 @@ export interface BillingUsage {
 }
 
 export interface TokenPrices {
-  input: string;
-  output: string;
+  input: string | null;
+  output: string | null;
   cacheRead: string | null;
   cacheWrite: string | null;
   cacheWrite1h: string | null;
@@ -249,6 +249,8 @@ export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
 export function componentCacheCosts(component: PricedComponent) {
   const prices = {
     ...component.prices,
+    input: component.prices.input ?? "0",
+    output: component.prices.output ?? "0",
     cacheRead: component.prices.cacheRead ?? "0",
     cacheWrite: component.prices.cacheWrite ?? "0",
     cacheWrite1h: component.prices.cacheWrite1h ?? "0",
@@ -287,6 +289,12 @@ export function componentCacheCosts(component: PricedComponent) {
     },
     prices,
   );
+  if (component.prices.input === null)
+    return {
+      cacheCost: Number(cacheCost),
+      cacheSavings: 0,
+      cacheReadSavings: 0,
+    };
   return {
     cacheCost: Number(cacheCost),
     cacheSavings: Number(

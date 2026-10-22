@@ -44,6 +44,7 @@ import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtim
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
+import { clientErrorMessage } from "@/utils/db";
 
 /**
  * A2A (Agent-to-Agent) Protocol routes
@@ -853,7 +854,7 @@ function jsonRpcErrorParts(error: unknown): { code: number; message: string } {
   }
   return {
     code: -32603,
-    message: error instanceof Error ? error.message : "Internal error",
+    message: clientErrorMessage(error, "Internal error"),
   };
 }
 
@@ -884,7 +885,7 @@ function buildJsonRpcErrorEnvelope(id: A2AJsonRpcId, error: unknown) {
       code: -32603,
       message: "Internal error",
       data: {
-        reason: error instanceof Error ? error.message : String(error),
+        reason: clientErrorMessage(error, String(error)),
       },
     },
   };

@@ -23,11 +23,11 @@ const member = pgTable(
     defaultAgentId: uuid("default_agent_id").references(() => agentsTable.id, {
       onDelete: "set null",
     }),
-    /** Per-member default model. FK to models(id) ON DELETE SET NULL. */
+    /** @deprecated The /chat sticky model is gone. Retained, no longer read or written. */
     defaultModelId: uuid("default_model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
-    /** Per-member default chat API key. FK to chat_api_keys(id) ON DELETE SET NULL. */
+    /** @deprecated See `defaultModelId`. Retained, no longer read or written. */
     defaultChatApiKeyId: uuid("default_chat_api_key_id").references(
       () => llmProviderApiKeysTable.id,
       { onDelete: "set null" },

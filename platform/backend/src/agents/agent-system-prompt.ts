@@ -199,6 +199,8 @@ export async function buildAgentSystemPrompt(params: {
    * answer it there, so their prompt never steers the model toward it.
    */
   canAskUser?: boolean;
+  /** This run is a fork of the agent, which may not fork or delegate to itself. */
+  isFork?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -212,6 +214,7 @@ export async function buildAgentSystemPrompt(params: {
     openedApp,
     projectFileNames,
     canAskUser = false,
+    isFork = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -294,6 +297,7 @@ export async function buildAgentSystemPrompt(params: {
     [
       toolLoadingInstructions,
       renderedPrompt,
+      isFork ? FORK_RUN_INSTRUCTION : null,
       projectInstructionsPrompt,
       projectFilesPrompt,
       openedAppPrompt,
@@ -341,6 +345,9 @@ function buildAskUserChoiceInstruction(): string {
   const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
   return buildElicitationMandateInstruction({ askUserToolName: askUser });
 }
+
+const FORK_RUN_INSTRUCTION =
+  "You are running as a fork: a fresh copy of this agent, started to do one task and report back. You cannot fork or delegate to yourself, so do the task with your own tools, even where the instructions above say to delegate.";
 
 const INVISIBLE_CHARACTERS = /[\p{Cf}\u2028\u2029]/gu;
 
@@ -671,7 +678,7 @@ function buildFileHandlingInstruction(
 
   if (hasSandbox) {
     paragraphs.push(
-      `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace at \`${SKILL_SANDBOX_HOME}\`. Use it to compute, transform files, run scripts, or fetch data when the other tools don't cover the task. Files there persist across commands within this conversation but the user cannot see them. Files the user attached are staged under \`${SKILL_SANDBOX_ATTACHMENTS_DIR}/\` — the on-disk name may be sanitized, so \`ls\` that directory to find them.`,
+      `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace at \`${SKILL_SANDBOX_HOME}\`. Use it to compute, transform files, run scripts, or fetch data yourself. Prefer it over delegating to another agent unless the work needs that agent's tools or runtime. Files there persist across commands within this conversation but the user cannot see them. Files the user attached are staged under \`${SKILL_SANDBOX_ATTACHMENTS_DIR}/\` — the on-disk name may be sanitized, so \`ls\` that directory to find them.`,
     );
     paragraphs.push(
       `Skill scripts and instructions may assume packages or system binaries this workspace does not have. When a command fails on a missing module or binary, install it or work around it — for example, compute the values directly in Python instead of relying on the missing tool — and make sure the deliverable reflects the workaround, not the broken intermediate state.`,

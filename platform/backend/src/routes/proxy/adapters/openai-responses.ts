@@ -53,7 +53,10 @@ import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
 } from "./openai-codex-responses-client";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import {
   customToolInput,
   firstHostedOutputIndex,
@@ -112,6 +115,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   // The Responses parser drops a chat-completions-shaped error frame as an
   // unknown chunk, turning an upstream failure into a blank turn.
   formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+  carriesStreamTerminal: carriesResponsesTerminal,
 
   createRequestAdapter(
     request: OpenAiResponsesRequest,

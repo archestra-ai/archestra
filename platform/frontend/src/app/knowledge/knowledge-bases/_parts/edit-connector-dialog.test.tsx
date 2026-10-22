@@ -791,3 +791,145 @@ describe("EditConnectorDialog - SharePoint publication status", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("EditConnectorDialog - Salesforce OAuth migration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+      typeof useTeams
+    >);
+  });
+  function salesforceConnector(oauth: boolean): ConnectorFixture {
+    return {
+      ...makeAsanaConnector(),
+      connectorType: "salesforce",
+      config: {
+        type: "salesforce",
+        loginUrl: oauth
+          ? "https://example.my.salesforce.com"
+          : "https://login.salesforce.com",
+        ...(oauth
+          ? { authMethod: "oauth_client_credentials", clientId: "consumer-key" }
+          : {}),
+        objects: ["Account"],
+      },
+    } as ConnectorFixture;
+  }
+  it("preserves legacy authentication and stored credentials when saving an existing connector", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(false));
+    expect(
+      screen.getByRole("combobox", { name: "Authentication" }),
+    ).toHaveTextContent("Username/password (legacy)");
+    expect(screen.queryByLabelText("Consumer Key")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body).toMatchObject({
+      config: {
+        authMethod: "soap_legacy",
+        loginUrl: "https://login.salesforce.com",
+        objects: ["Account"],
+      },
+    });
+    expect(mockMutateAsync.mock.calls[0][0].body.credentials).toBeUndefined();
+  });
+  it("can return to legacy after exploring OAuth and keep stored credentials", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(false));
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "OAuth client credentials (recommended)",
+      }),
+    );
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      screen.getByRole("option", { name: "Username/password (legacy)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
+      authMethod: "soap_legacy",
+      loginUrl: "https://login.salesforce.com",
+    });
+    expect(mockMutateAsync.mock.calls[0][0].body.credentials).toBeUndefined();
+  });
+  it("clears typed legacy credentials when switching to OAuth", async () => {
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(false));
+    fireEvent.change(screen.getByLabelText(/^Password/), {
+      target: { value: "legacy-password" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Username/), {
+      target: { value: "legacy@example.com" },
+    });
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "OAuth client credentials (recommended)",
+      }),
+    );
+    expect(screen.getByLabelText("Consumer Secret")).toHaveValue("");
+    expect(screen.getByLabelText("My Domain URL")).toHaveValue("");
+    expect(screen.queryByLabelText(/^Username/)).not.toBeInTheDocument();
+  });
+  it("requires a replacement secret and submits an explicit OAuth configuration for a legacy connector", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(false));
+    expect(screen.getByText("Migrate before Summer ’27")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Username/)).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(
+      screen.getByRole("option", {
+        name: "OAuth client credentials (recommended)",
+      }),
+    );
+    expect(
+      screen.getByPlaceholderText(
+        "Enter a new Salesforce OAuth consumer secret",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Email/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^My Domain URL$/), {
+      target: { value: "https://example.my.salesforce.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Consumer Key$/), {
+      target: { value: "consumer-key" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "Enter a new OAuth consumer secret to migrate this connector",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Consumer Secret$/), {
+      target: { value: "consumer-secret" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body).toMatchObject({
+      config: {
+        authMethod: "oauth_client_credentials",
+        clientId: "consumer-key",
+        loginUrl: "https://example.my.salesforce.com",
+        objects: ["Account"],
+      },
+      credentials: { apiToken: "consumer-secret" },
+    });
+  });
+  it("keeps the stored OAuth secret when editing a migrated connector", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(true));
+    expect(
+      screen.queryByRole("combobox", { name: "Authentication" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body.credentials).toBeUndefined();
+  });
+});

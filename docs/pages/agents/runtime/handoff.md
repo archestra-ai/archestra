@@ -24,9 +24,9 @@ With a [dedicated runtime](/docs/agents/runtime), the task runs in its own conta
 The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can also call them yourself.
 
 - **Find an agent:** [`list_agents`](/docs/reference/archestra-mcp-server#list_agents).
-- **Start a run:** [`start_run`](/docs/reference/archestra-mcp-server#start_run).
-- **Check progress:** [`get_run`](/docs/reference/archestra-mcp-server#get_run) or [`list_runs`](/docs/reference/archestra-mcp-server#list_runs).
-- **Change course:** [`steer_run`](/docs/reference/archestra-mcp-server#steer_run) or [`cancel_run`](/docs/reference/archestra-mcp-server#cancel_run). Steering a finished run starts a new turn with the same files.
+- **Start a run:** [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run). It returns a `run_id` and a link to the run page. The other tools take that `run_id`.
+- **Check progress:** [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run), or [`list_agent_runs`](/docs/reference/archestra-mcp-server#list_agent_runs) with `mine_only` for your own runs.
+- **Change course:** [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run) or [`cancel_agent_run`](/docs/reference/archestra-mcp-server#cancel_agent_run). Steering a finished run starts a new turn with the same files.
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.

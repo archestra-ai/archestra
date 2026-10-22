@@ -2551,6 +2551,63 @@ describe("APPA feature boundary", () => {
     ).rejects.toMatchObject({ statusCode: 503 });
   });
 
+  test("rules an agent__ spawn as the host Agent tool and keeps the model's spelling", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+    for (const wrapped of [false, true]) {
+      const call = {
+        id: `spawn-${wrapped}`,
+        name: wrapped ? "archestra__run_tool" : "agent__research",
+        arguments: wrapped
+          ? { tool_name: "agent__research", tool_args: { message: "Research" } }
+          : { message: "Research" },
+      };
+      await evaluateToolCalls(session, [call], {
+        canonicalize: (name) => name,
+        spawnCallIds: new Set([call.id]),
+      });
+      expect(
+        JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+      ).toMatchObject({
+        event: "tool_call",
+        tool: "Agent",
+        spelling: "agent__research",
+        spawn: true,
+        arguments: { message: "Research" },
+      });
+    }
+    // A policy that rules the agent__ tool by name keeps ruling it.
+    for (const name of ["agent__research", 'agent__research(message="x")']) {
+      await evaluateToolCalls(
+        session,
+        [{ id: `named-${name}`, name: "agent__research", arguments: {} }],
+        {
+          canonicalize: (toolName) => toolName,
+          spawnCallIds: new Set([`named-${name}`]),
+        },
+        async () => ({
+          content: `[policy]\nversion = 2\n\n[[policy.tool]]\nname = '${name}'\ndelta = {}\n`,
+          credentials: {},
+        }),
+      );
+      const event = JSON.parse(
+        native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}",
+      );
+      expect(event).toMatchObject({ tool: "agent__research", spawn: true });
+      expect(event).not.toHaveProperty("spelling");
+    }
+    // An outbound A2A call is no spawn and keeps its own name.
+    await evaluateToolCalls(
+      session,
+      [{ id: "outbound", name: "agent__remote", arguments: { message: "Hi" } }],
+      { canonicalize: (name) => name },
+    );
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({ tool: "agent__remote", spawn: false });
+  });
+
   test.each([
     "agent__research",
     "skill__research",

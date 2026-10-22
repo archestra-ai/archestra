@@ -112,6 +112,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";
 import { getAskUserOutcome } from "./ask-user-outcome";
 import {
+  AttachmentAudio,
   AttachmentImage,
   AttachmentLink,
   AttachmentVideo,
@@ -1221,6 +1222,8 @@ export function ChatMessages({
                           };
                           const isImage =
                             filePart.mediaType?.startsWith("image/");
+                          const isAudio =
+                            filePart.mediaType?.startsWith("audio/");
                           const isVideo =
                             filePart.mediaType?.startsWith("video/");
                           const isPdf =
@@ -1238,6 +1241,12 @@ export function ChatMessages({
                                     conversationId={conversationId}
                                     alt={filePart.filename || "Attached image"}
                                     className="max-w-full max-h-64 rounded-lg object-contain"
+                                  />
+                                )}
+                                {isAudio && (
+                                  <AttachmentAudio
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                   />
                                 )}
                                 {isVideo && (
@@ -1267,7 +1276,7 @@ export function ChatMessages({
                                     </span>
                                   </AttachmentLink>
                                 )}
-                                {!isImage && !isVideo && !isPdf && (
+                                {!isImage && !isVideo && !isPdf && !isAudio && (
                                   <AttachmentLink
                                     url={filePart.url}
                                     conversationId={conversationId}

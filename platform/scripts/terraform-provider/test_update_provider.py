@@ -172,14 +172,13 @@ elif a[:1] == ['api'] and '--paginate' in a: print('[]')
     def test_generation_failure_retains_one_line_error_artifact(self):
         self.use_v3_layout()
         (self.seed/'Makefile').write_text(
-            'codegen-api-client:\n\tmkdir -p .codegen\n'
-            '\tcp "$$OPENAPI_SPEC" .codegen/openapi.raw.json\n\tfalse\n')
-        self.commit(self.seed, 'generator fails on selected spec')
+            'codegen-api-client:\n\tfalse\n')
+        self.commit(self.seed, 'generator fails before it writes the selected spec')
         updater.git(self.seed, 'push', 'origin', 'main')
         out = self.root/'failed-artifact'
         args = SimpleNamespace(provider=self.clone('failed-candidate'), tools=self.seed,
                                spec=self.spec, output=out, platform_commit='a'*40)
-        with self.assertRaises(updater.runner.ClientGenerationError) as error:
+        with self.assertRaises(updater.ClientGenerationError) as error:
             updater.prepare(args)
         self.assertEqual((out/'error.txt').read_text(), str(error.exception)+'\n')
         self.assertEqual(len((out/'error.txt').read_text().splitlines()), 1)

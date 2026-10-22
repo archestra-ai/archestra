@@ -18,6 +18,12 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+### Background work in maintained images
+
+One delegated assignment may span several model turns. A turn ending to wait for background results does not mean that assignment is complete. The maintained TUI supervisor can publish the assignment result while retaining the native client for later interaction, so a live process alone does not establish that reporting is still active.
+
+Claude Code supplies both `background_tasks` and `session_crons` from its Stop hook. Every registered entry holds the assignment, without a task-type allowlist. Its adapter also tracks native background launches through result delivery: a finished shell or agent can leave the running inventory before its notification reaches the main agent. This delivery state is scoped to the current assignment and reset at wrapper startup. Completion requires a fresh main-agent Stop with no pending work. Missing or invalid inventory fails the assignment explicitly. Waiting suppresses idle-input attention; permission requests remain visible. Cancellation, API failure and the workspace hard deadline still end the run. A quiet recurring monitor must be deleted when no longer needed. Unregistered detached processes are outside this contract. Interactive sessions retain their existing lifecycle. Other harnesses still need verified native adapters before adopting this policy.
+
 ## Failure Reasons
 
 Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.
@@ -175,9 +181,9 @@ Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime re
 
 Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
 
-Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
+Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_agent_run_file` without a supported external-egress crossing.
 
-To post a file from the workspace to the run's thread, call `post_run_file` with `path`: the file's path relative to `/home/node/workspace`, or absolute under it. The platform reads it from this run's workspace, so its bytes never pass through the model. Copy a file saved elsewhere into the workspace first. Paths that leave the workspace, symlinks, directories, and files over 40 MB are refused.
+To post a file from the workspace to the run's thread, call `post_agent_run_file` with `path`: the file's path relative to `/home/node/workspace`, or absolute under it. The platform reads it from this run's workspace, so its bytes never pass through the model. Copy a file saved elsewhere into the workspace first. Paths that leave the workspace, symlinks, directories, and files over 40 MB are refused.
 
 A session that a person superyelled, whose parent was superyelled, or that started while Guardrails enforcement was off gets no source proof, because Guardrails no longer check it. Its proofless calls to its own runtime tools are accepted. A governed session's proofless calls are refused, including a script that calls the gateway directly: make the call as a tool call from the run's model instead.
 

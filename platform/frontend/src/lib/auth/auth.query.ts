@@ -229,10 +229,18 @@ export function useAllPermissions() {
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
 ): Record<Key, boolean> | null {
+  const { isPending: isSessionPending } = useSession();
   const { data: userPermissions, isLoading } = useAllPermissions();
   const capabilities = useScopedCapabilities();
 
-  if (isLoading || (userPermissions === undefined && capabilities.isLoading)) {
+  // Both queries sit disabled — not loading — until the session resolves, so
+  // without the session check a fresh page load briefly reads as "no
+  // permissions" and guards acting on that answer redirect a reader who has them.
+  if (
+    isSessionPending ||
+    isLoading ||
+    (userPermissions === undefined && capabilities.isLoading)
+  ) {
     return null;
   }
 

@@ -176,6 +176,7 @@ class ChatOpsConfigModel {
             hasAppId: Boolean(ms.appId),
             hasAppSecret: Boolean(ms.appSecret),
             hasTenantId: Boolean(ms.tenantId),
+            groupChatFileSignIn: ms.groupChatFileSignIn ?? false,
           }
         : null,
       slack: slack

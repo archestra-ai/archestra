@@ -393,7 +393,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   write_workspace_file: {
     resourceType: "agentRun",
     action: "agentRun.updated",
-    idFromArgs: (args) => str(args.task_id),
+    idFromArgs: (args) => str(args.run_id),
     beforeFromArgs: (args) => ({
       workspaceFile: { path: args.path, writeApplied: false },
     }),
@@ -409,7 +409,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   delete_workspace: {
     resourceType: "agentRun",
     action: "agentRun.updated",
-    idFromArgs: (args) => str(args.task_id),
+    idFromArgs: (args) => str(args.run_id),
     fetchById: async (id, organizationId) => {
       const run = await AgentRunModel.findByTaskId(id);
       if (run?.organizationId !== organizationId) return null;
@@ -421,17 +421,20 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
         : null;
     },
   },
-  steer_run: {
+  steer_agent_run: {
     resourceType: "agentRun",
     action: "agentRun.created",
-    // Steering a live terminal creates no run. A retained-workspace
-    // continuation returns both the old and newly created task IDs.
+    // Steering a live terminal creates no run turn; continuing a finished
+    // run in its retained workspace does.
     recordWhen: (result) =>
-      !result.isError &&
-      typeof result.structuredContent?.previous_task_id === "string",
-    idFromResult: (result) => str(result?.task_id),
+      !result.isError && result.structuredContent?.status === "continued",
+    idFromResult: (result) => str(result?.run_id),
     fetchById: async (id, organizationId) => {
-      const task = await A2ATaskModel.findById(id);
+      const taskId = await AgentRunModel.findCurrentTurnTaskId({
+        runId: id,
+        organizationId,
+      });
+      const task = taskId ? await A2ATaskModel.findById(taskId) : null;
       if (!task?.agentId) return null;
       const agent = await AgentModel.findById(task.agentId);
       if (agent?.organizationId !== organizationId) return null;

@@ -3231,7 +3231,9 @@ class AgentModel {
     lookups?: PrincipalSource;
     includeDetails?: boolean;
   }): Promise<
-    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+    (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
+      hasRuntime: boolean;
+    })[]
   > {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
       params;
@@ -3260,6 +3262,7 @@ class AgentModel {
             params.includeDetails === false
               ? sql<Agent["builtInAgentConfig"]>`NULL`
               : schema.agentsTable.builtInAgentConfig,
+          hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3282,6 +3285,7 @@ class AgentModel {
           params.includeDetails === false
             ? sql<Agent["builtInAgentConfig"]>`NULL`
             : schema.agentsTable.builtInAgentConfig,
+        hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
       })
       .from(schema.agentsTable)
       .where(

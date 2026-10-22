@@ -28,6 +28,14 @@ import {
 
 const SPAWN_TOOLS = new Set(["spawn_agent"]);
 const CHILD_ID_KEYS = ["agent_id", "thread_id", "receiver_thread_id"] as const;
+/** Native fields that place a Codex request under a parent thread. */
+const CODEX_CHILD_CARRIER_FIELDS = [
+  "agent_id",
+  "parent_thread_id",
+  "child_thread_id",
+  "parent_id",
+  "x-codex-parent-thread-id",
+] as const;
 const LAUNCH_AGENT_ID = /^[A-Za-z0-9_.:-]{1,512}$/;
 const LAUNCH_TASK_NAME = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 
@@ -298,22 +306,14 @@ export class AppaCodexAdapter implements AppaClientAdapter {
   stripCarrierMetadata(request: unknown): void {
     const body = asRecord(request);
     if (!body) return;
-    stripRecordFields(asRecord(body.client_metadata), [
-      "agent_id",
-      "parent_thread_id",
-      "child_thread_id",
-      "parent_id",
-      "x-codex-parent-thread-id",
-      "x-codex-turn-metadata",
-    ]);
-    stripRecordFields(asRecord(body.metadata), [
-      "agent_id",
-      "parent_thread_id",
-      "child_thread_id",
-      "parent_id",
-      "x-codex-parent-thread-id",
-      "x-codex-turn-metadata",
-    ]);
+    for (const metadata of [
+      asRecord(body.client_metadata),
+      asRecord(body.metadata),
+    ]) {
+      if (!metadata) continue;
+      stripRecordFields(metadata, CODEX_CHILD_CARRIER_FIELDS);
+      stripTurnMetadataCarriers(metadata);
+    }
   }
 }
 
@@ -523,6 +523,30 @@ function turnMetadataRecord(
 ): Record<string, unknown> | undefined {
   if (typeof value === "string") return parseTurnMetadataJson(value);
   return asRecord(value);
+}
+
+/**
+ * Removes the child carriers from Codex's turn metadata and keeps the rest of
+ * it: the Codex backend reads other turn state there, such as the user's
+ * decision to continue a chat that its misalignment monitor paused. Metadata
+ * that cannot be read is dropped whole, so no carrier can hide in it.
+ */
+function stripTurnMetadataCarriers(metadata: Record<string, unknown>): void {
+  const value = metadata["x-codex-turn-metadata"];
+  if (value === undefined) return;
+  let turn: Record<string, unknown> | undefined;
+  try {
+    turn = turnMetadataRecord(value);
+  } catch {
+    turn = undefined;
+  }
+  if (!turn) {
+    delete metadata["x-codex-turn-metadata"];
+    return;
+  }
+  stripRecordFields(turn, CODEX_CHILD_CARRIER_FIELDS);
+  metadata["x-codex-turn-metadata"] =
+    typeof value === "string" ? JSON.stringify(turn) : turn;
 }
 
 function childThreadId(

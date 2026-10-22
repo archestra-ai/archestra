@@ -15,6 +15,7 @@ import {
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  getAzureModelKind,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
   PROVIDER_BASE_URL_HEADER,
@@ -45,6 +46,7 @@ import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
+import { createAzureMediaLanguageModel } from "@/clients/azure-media-language-model";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
@@ -964,6 +966,36 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       const requestHeaders = normalizedApiKey
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
+
+      const kind = getAzureModelKind(modelName);
+      if (direct && (kind === "realtime" || kind === "translation")) {
+        throw new ApiError(
+          400,
+          "Azure realtime media models require the LLM proxy or Chat. Select a text model for direct model tasks.",
+        );
+      }
+      if (
+        kind === "image" ||
+        kind === "audio" ||
+        kind === "realtime" ||
+        kind === "translation"
+      ) {
+        return createAzureMediaLanguageModel({
+          modelId: modelName,
+          baseURL: direct
+            ? (buildAzureDeploymentBaseUrl({
+                baseUrl: baseURL,
+                deploymentName: modelName,
+              }) ?? baseURL)
+            : baseURL,
+          headers: {
+            ...requestHeaders,
+            ...(sdkApiKey ? { authorization: `Bearer ${sdkApiKey}` } : {}),
+          },
+          fetch: fetchWithVersion,
+          kind,
+        });
+      }
 
       // Classic Responses endpoints are resource-scoped; Chat Completions
       // endpoints are deployment-scoped. V1 URLs pass through unchanged.

@@ -1,4 +1,5 @@
 import { priceBillingUsage } from "@/services/billable-usage";
+import { asRecord } from "@/utils/as-record";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -355,12 +356,20 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (params.usageAccountingMode === "enforce")
     return Number(
-      (await priceBillingUsage({ model, usage, provider, mode: "enforce" }))
-        .cost,
+      (
+        await priceBillingUsage({
+          model,
+          usage,
+          provider,
+          mode: "enforce",
+          providerApiKeyId: params.providerApiKeyId,
+        })
+      ).cost,
     );
   if (usage.providerReportedCost !== undefined) {
     return usage.providerReportedCost;
@@ -371,6 +380,7 @@ export async function calculateUsageCost(params: {
     usage.outputTokens,
     provider,
     {
+      providerApiKeyId: params.providerApiKeyId,
       readTokens: usage.cacheReadTokens ?? 0,
       writeTokens: usage.cacheWriteTokens ?? 0,
       write1hTokens: usage.cacheWrite1hTokens ?? 0,
@@ -386,6 +396,7 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
   actualCost: number | undefined;
@@ -400,6 +411,7 @@ export async function calculateInteractionCosts(params: {
           usage: params.usage,
           provider: params.providerName,
           mode: params.usageAccountingMode,
+          providerApiKeyId: params.providerApiKeyId,
         })
       : undefined;
   const actualCost =
@@ -409,6 +421,7 @@ export async function calculateInteractionCosts(params: {
           model: params.actualModel,
           usage: params.usage,
           provider: params.providerName,
+          providerApiKeyId: params.providerApiKeyId,
         });
   const cacheBreakdown =
     billingUsage?.mode === "enforce"
@@ -419,6 +432,7 @@ export async function calculateInteractionCosts(params: {
           params.usage.cacheReadTokens ?? 0,
           params.usage.cacheWriteTokens ?? 0,
           params.usage.cacheWrite1hTokens ?? 0,
+          params.providerApiKeyId,
         );
   const componentsCache =
     billingUsage?.mode === "enforce"
@@ -904,11 +918,15 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type (and details) so native
-        // streaming clients classify the failure correctly. This uses
-        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // Keep the provider's own error object (its code, details, policy
+        // review data) so native streaming clients classify and recover from
+        // the failure as they would talking to the provider directly. This
+        // uses upstreamBody, not upstreamPassthroughBody: the status (200) is
         // already sent, so the status checks of the passthrough do not apply,
-        // and the type and details are all the client has to go on.
+        // and the error object is all the client has to go on.
+        ...(upstreamBody !== undefined
+          ? providerErrorFields(upstreamBody)
+          : {}),
         // A transport failure has no provider body: frame it as a server
         // error with its own code, so a client that classifies by type
         // (the AI SDK's Responses parser, OpenCode, Kilo Code) treats it as
@@ -921,9 +939,6 @@ export function handleError(
           "api_error",
         ...(transportFailure ? { code: transportFailure.code } : {}),
         message: errorMessage,
-        ...(upstreamBody !== undefined
-          ? providerErrorDetails(upstreamBody)
-          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -1236,10 +1251,9 @@ function extractTrustedProviderErrorBody(error: unknown): object | undefined {
     : undefined;
 }
 
-/** The provider's `details` member of its error object, for mid-stream frames. */
-function providerErrorDetails(body: object): { details?: unknown } {
-  const details = (body as { error?: { details?: unknown } }).error?.details;
-  return details && typeof details === "object" ? { details } : {};
+/** The provider's own error object, for mid-stream frames. */
+function providerErrorFields(body: object): Record<string, unknown> {
+  return asRecord((body as { error?: unknown }).error) ?? {};
 }
 
 /**

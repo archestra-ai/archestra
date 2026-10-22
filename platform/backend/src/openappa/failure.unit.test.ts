@@ -626,6 +626,16 @@ describe("openappaFailure: the model's requests", () => {
     expect(empty.message).toBe(
       "Guardrails refused this message. Change the request and try again.",
     );
+
+    const asked = openappaFailure(
+      runtimeFailure(
+        "peer_message",
+        "OpenAPPA processing interrupted: did you mean the held message?",
+      ),
+    );
+    expect(asked.message).toBe(
+      "Guardrails refused this message: did you mean the held message? Change the request and try again.",
+    );
   });
 
   test.each([

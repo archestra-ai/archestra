@@ -474,9 +474,9 @@ function modelRefusal(head: string, message: string): Failure {
   };
 }
 
-/** Ends `text` with one period, unless it is empty or already cut short. */
+/** Ends `text` with a period, unless it is empty, punctuated or cut short. */
 function sentence(text: string): string {
-  return text === "" || /[.…]$/.test(text) ? text : `${text}.`;
+  return text === "" || /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
 function defect(code: RuntimeFailureCode): Failure {

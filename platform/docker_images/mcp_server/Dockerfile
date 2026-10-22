@@ -152,7 +152,8 @@ RUN apk add --no-cache \
    # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
    apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
-   # fixes. Require the 9.20.30-r0 release that fixes its latest HIGH CVEs.
+   # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
+   # CVE-2026-96888 and CVE-2026-19630 in addition to the earlier fixes.
    apk add --no-cache --upgrade "bind>=9.20.30-r0" && \
    apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
        "util-linux>=2.41.6-r1" && \
@@ -175,10 +176,7 @@ RUN apk add --no-cache \
    # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
    # package layer, which otherwise retains the vulnerable 10.48-r0 build.
    apk add --no-cache --upgrade "pcre2>=10.49-r0" && \
-   # CVE-2026-81736, CVE-2026-81563, CVE-2026-80274, CVE-2026-77692, CVE-2026-76163,
-   # CVE-2026-19667, CVE-2026-19666: BIND vulnerabilities (HIGH) fixed in 9.20.29-r0.
-   # CVE-2026-94300, CVE-2026-97313, CVE-2026-96888, CVE-2026-19630: BIND
-   # vulnerabilities (HIGH) fixed in 9.20.30-r0.
+   # Match the fixed bind version above for its installed tools and libraries.
    # `bind` in the bare `apk upgrade` above has the same cached-layer problem as openssl,
    # so both installed bind-origin packages get explicit floors.
    apk add --no-cache --upgrade "bind-tools>=9.20.30-r0" "bind-libs>=9.20.30-r0" && \

@@ -1,6 +1,6 @@
 # LLM Proxy Benchmarks
 
-Measure client latency through the real production backend against a deterministic HTTP upstream. The upstream returns synthetic OpenAI chat completions. No inference provider or provider key is required.
+Measure gateway latency, gateway overhead and client latency through the real production backend against a deterministic HTTP upstream. The upstream returns synthetic OpenAI chat completions. No inference provider or provider key is required.
 
 ## Run Locally
 
@@ -57,13 +57,18 @@ Additional flags: `--output=path`, `--proxy-url=URL`, and `--mock-url=URL`. URL 
 `results.json` contains every measured request, failures, block summaries, environment metadata, and the tested commit. `summary.md` contains a compact three-workload report at the highest tested concurrency. `report.json` is its machine-readable form; `details.md` retains every concurrency and repeat. Percentiles pool successful request samples across repeats; throughput divides their combined success count by combined measured duration. Results are ignored by Git. The [recorded local baseline](baselines/local-authenticated.json) retains block summaries and environment details without individual samples.
 
 - Total latency ends when the complete validated response arrives.
+- Gateway latency starts in the server's first request hook, before authentication and body parsing, and ends in `onSend`, after response serialization and before socket delivery. It includes upstream time, authentication, routing, policy checks and persistence awaited before replying. It excludes client connection/upload time before the hook and socket delivery after it.
+- Upstream duration times each awaited non-streaming provider SDK call, including transport and decoding. Gateway overhead is gateway latency minus that request's upstream durations. Retry backoff between calls remains gateway overhead. Background work after responding is outside this window. Overlapping calls deliberately omit timing rather than summing concurrent wall time.
+- The non-streaming proxy returns these three durations in `Server-Timing` (`archestra_gateway`, `archestra_upstream`, `archestra_overhead`, in milliseconds). The runner requires complete, consistent timing on every successful non-streaming proxy response. Missing timing fails the run; it never becomes zero. P50/P95/P99 pool individual durations, not differences between percentiles.
 - First-byte latency starts at request submission and ends at the first response body bytes.
 - Streaming first-content latency excludes role-only and usage events.
 - Streaming gaps measure decoded content events, including events combined in one network read. They are event-weighted, not token timings.
 - P50/P95/P99 use nearest-rank quantiles of successful requests. Failures remain in raw output and counts.
 - Throughput is successful requests divided by measured block duration. Warmup is excluded.
 
-The difference between proxy and direct P50 estimates added median latency. These are separate request populations, not paired per-request measurements. Subtracting P99s does not give the P99 of overhead. Local loopback timings include client scheduling, mock processing, backend work, and database access.
+Streaming reports client time to first content and complete-response latency separately. Its headers precede stream completion, so it does not advertise complete gateway latency or overhead. Response timing for streaming is unmeasured, shown as `—` in the summary. Do not compare that row with a mixed streaming/non-streaming server-latency distribution.
+
+The direct/mock P50 difference remains a diagnostic estimate in `details.md`, not the gateway-overhead metric. These are separate request populations. Local client timings include client scheduling, loopback transport, mock processing, backend work, and database access. Workloads use a short prompt (request bytes are recorded), `max_tokens: 32`, and separate chat/tool-definition/streaming blocks, not a mixed-traffic capacity test. Match those settings, auth, persistence, cache/budget settings, and timing boundaries before comparing deployments.
 
 The runner stops scheduling after the first measured failure, lets in-flight requests settle, saves partial results, and exits unsuccessfully. Warmup failures also stop the run. This is a closed-loop concurrency sweep, not an arrival-rate test or a production capacity guarantee. Short streaming runs provide limited tail samples.
 

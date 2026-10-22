@@ -7,7 +7,7 @@ lastUpdated: 2026-10-22
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra's LLM proxy benchmark separates gateway performance from model inference. It sends requests through the production backend to a local mock model, with request persistence enabled.
+Measure time inside Archestra separately from upstream model calls and client delivery. This benchmark uses the production backend, virtual-key authentication and request persistence with a local mock model.
 
 <span id="local-baseline"></span>
 <span id="complete-non-streaming-responses"></span>
@@ -15,32 +15,38 @@ Archestra's LLM proxy benchmark separates gateway performance from model inferen
 
 ## Results
 
-The reference local run handled 128 chat requests per second with 50 requests in flight.
+The reference local run handled 143 chat requests per second with 50 requests in flight and 100% successful responses.
 
-| Metric | Result |
-| --- | ---: |
-| Successful requests | 100% |
-| Chat requests per second | 128 |
-| Complete response latency, P50 | 371 ms |
-| Complete response latency, P99 | 492 ms |
-| Streaming first content, P50 | 309 ms |
+| Non-Streaming Chat Latency | P50 | P95 | P99 |
+| --- | ---: | ---: | ---: |
+| Gateway request latency | 333 ms | 396 ms | 407 ms |
+| Gateway overhead | 316 ms | 378 ms | 394 ms |
+| Complete client response | 342 ms | 406 ms | 417 ms |
 
-Streaming first content is measured separately from complete responses. The mock sends 20 content events, spaced 10 ms apart.
+Streaming time to first content was 445 ms at P50, measured separately. The mock sends 20 content events, spaced 10 ms apart.
+
+## What the Timings Mean
+
+Compare the same metric when evaluating gateway performance.
+
+- **Gateway request latency:** server receipt through response serialization, including authentication, routing, upstream calls and awaited persistence. Client networking and response delivery are outside this window.
+- **Gateway overhead:** gateway latency minus that request's upstream SDK-call duration, including transport and decoding. Percentiles come from individual overhead measurements, not subtraction between percentiles.
+- **Client latency:** request submission through complete response delivery. Streaming time to first content measures when the client receives its first content event; complete-stream gateway timing is not collected.
 
 <span id="environment"></span>
 <span id="method"></span>
 
 ## Test Setup
 
-These results come from one production web process on an Apple M5 Pro with 64 GiB RAM, Node.js 24 and PostgreSQL 17. The client, proxy and mock run locally. Authentication validates a passthrough virtual key, paired with a synthetic provider key. No real inference provider is called.
+These results come from one production web process on an Apple M5 Pro with 64 GiB RAM, Node.js 24 and PostgreSQL 17. The client, proxy and mock run locally. Authentication validates a passthrough virtual key paired with a synthetic provider key; no real inference provider is called.
 
-The test covers OpenAI chat completions, with and without a tool definition, plus streaming. It uses fixed concurrency and measures successful responses after warmup. It does not measure model generation time or virtual-key budget enforcement.
+The test runs OpenAI chat completions, tool definitions and streaming as separate workloads, using a short prompt and an output limit of 32 tokens. It uses fixed concurrency and measures successful responses after warmup. Response caching and configured virtual-key budgets are not enabled.
 
 Compare throughput only when hardware, prompt size, streaming mix, concurrency and enabled features match. A local result is not a production capacity guarantee.
 
 ## Release Benchmarks
 
-Each platform release PR runs the same mock workloads and updates one benchmark comment with throughput, success rate and latency. The linked workflow retains the detailed measurements and diagnostics for 14 days.
+Each platform release PR runs the same mock workloads and updates one comment with throughput, success rate, gateway latency, overhead and client latency. The linked workflow retains the detailed measurements and diagnostics for 14 days.
 
 Use those results to compare release candidates on the same runner configuration. Shared-runner timing can vary; failed requests fail the benchmark rather than disappearing from its report.
 

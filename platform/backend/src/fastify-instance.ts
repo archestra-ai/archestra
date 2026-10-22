@@ -20,6 +20,7 @@ import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
+import { llmProxyTiming } from "./server/llm-proxy-timing";
 import { parseLoadedSourceMaps } from "./server/source-maps";
 
 const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
@@ -121,6 +122,7 @@ export const createFastifyInstance = () => {
     })
     .setErrorHandler<ApiError | Error>(handleServerError);
 
+  llmProxyTiming.register(fastify);
   registerLlmProxyDrain(fastify);
   return fastify;
 };

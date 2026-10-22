@@ -111,6 +111,7 @@ import {
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
@@ -3021,7 +3022,10 @@ async function handleNonStreaming<
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
         result = await openUpstreamWithRetry({
-          open: () => provider.execute(client, request),
+          open: () =>
+            llmProxyTiming.upstream(reply, () =>
+              provider.execute(client, request),
+            ),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&

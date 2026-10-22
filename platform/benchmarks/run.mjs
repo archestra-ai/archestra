@@ -116,7 +116,7 @@ const report = {
     scenarios,
     mock: mockHealth,
     methodology:
-      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Median difference is an estimate, not a per-request overhead distribution. Streaming first content excludes non-content SSE events.",
+      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Non-streaming gateway latency is server request receipt through response serialization; overhead excludes timed upstream SDK calls, per request. Client latency includes complete body delivery. Streaming first content excludes non-content SSE events; streaming server timing is not collected.",
   },
   blocks: [],
 };
@@ -162,6 +162,7 @@ try {
             url: target === "direct" ? mockUrl : proxyUrl,
             body,
             headers: target === "proxy" ? headers : {},
+            requireGatewayTiming: target === "proxy" && scenario !== "stream",
             expectedContent,
             count: scenario === "stream" ? streamCount : count,
             concurrency,

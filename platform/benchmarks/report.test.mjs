@@ -30,6 +30,14 @@ function report() {
             ok: true,
             totalMs: target === "direct" ? i : repeat === 1 ? i * 10 : i * 100,
             firstContentMs: null,
+            gatewayTiming:
+              target === "proxy"
+                ? {
+                    gatewayMs: i * 9,
+                    upstreamMs: i === 1 ? 8 : 1,
+                    overheadMs: i === 1 ? 1 : 17,
+                  }
+                : null,
           })),
         })),
       ),
@@ -49,6 +57,9 @@ test("release summary pools samples and weights throughput by measured duration"
   assert.equal(row.successPercent, 100);
   assert.equal(row.addedMedianMs, 19);
   assert.equal(row.firstContentP50Ms, null);
+  assert.equal(row.gatewayMs.p50, 9);
+  assert.equal(row.overheadMs.p50, 1); // Not gateway P50 - upstream P50 (8).
+  assert.equal(row.overheadMs.p99, 17);
 });
 
 test("a failed or truncated run stays incomplete and includes unsuccessful requests", () => {
@@ -77,16 +88,28 @@ test("no completed requests produces no fabricated success or latency", () => {
   assert.doesNotMatch(renderSummary(summary), /100\.00%/);
 });
 
+test("successful non-streaming responses without gateway timing cannot produce a complete report", () => {
+  const source = report();
+  source.blocks.find((b) => b.target === "proxy").samples[0].gatewayTiming =
+    null;
+  assert.equal(createSummary(source).complete, false);
+});
+
 test("streaming time to first content remains separate from total response latency", () => {
   const source = report();
   source.metadata.scenarios = ["stream"];
   for (const block of source.blocks) {
     block.scenario = "stream";
-    for (const sample of block.samples) sample.firstContentMs = 3;
+    for (const sample of block.samples) {
+      sample.firstContentMs = 3;
+      sample.gatewayTiming = null;
+    }
   }
   const row = createSummary(source).rows[0];
   assert.equal(row.firstContentP50Ms, 3);
   assert.equal(row.p50Ms, 20);
+  assert.equal(row.gatewayMs, null);
+  assert.equal(row.overheadMs, null);
 });
 
 test("untrusted artifact strings cannot become a result-table row", () => {

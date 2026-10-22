@@ -247,6 +247,7 @@ export async function resolveProxyResourceCredential(params: {
     if (!apiKey && !(provider === "azure" && config.llm.azure.entraIdEnabled))
       throw new ApiError(401, "The provider account has no usable credential.");
     const configuredBase =
+      row.inferenceBaseUrl ||
       row.baseUrl ||
       (provider === "azure"
         ? config.llm.azure.baseUrl

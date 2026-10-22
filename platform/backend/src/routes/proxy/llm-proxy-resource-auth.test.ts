@@ -206,6 +206,31 @@ describe("provider resource authentication", () => {
     expect(resolved).toBeUndefined();
   });
 
+  test("resource calls and bindings use the selected account runtime endpoint", async () => {
+    const initial = await call();
+    expect(initial.statusCode, initial.body).toBe(200);
+    await LlmProviderApiKeyModel.update(keyId, {
+      baseUrl: "https://discovery.example/catalog",
+      inferenceBaseUrl: "https://runtime.example/openai/v1",
+    });
+    const changed = await call();
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect(resolved?.providerAccount.baseUrl).toBe(
+      "https://runtime.example/openai/v1",
+    );
+    expect(resolved?.providerAccount.credentialBinding).not.toBe(
+      initial.json().account.credentialBinding,
+    );
+    await LlmProviderApiKeyModel.update(keyId, {
+      baseUrl: "https://other-discovery.example/catalog",
+    });
+    const discoveryOnlyChange = await call();
+    expect(discoveryOnlyChange.statusCode, discoveryOnlyChange.body).toBe(200);
+    expect(resolved?.providerAccount.credentialBinding).toBe(
+      changed.json().account.credentialBinding,
+    );
+  });
+
   test("multiple mapped accounts require a validated explicit selector", async ({
     makeSecret,
     makeLlmProviderApiKey,

@@ -208,6 +208,39 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
   );
 });
 
+test.for([
+  false,
+  true,
+])("multipart image[] with only a virtual-key bearer reaches Azure (agent path: %s)", async (withAgent, {
+  media,
+}) => {
+  const form = new FormData();
+  form.set("model", "gpt-image-1");
+  form.set("prompt", "Add a friendly robot behind the subject.");
+  form.append(
+    "image[]",
+    new Blob([new Uint8Array(media.image)], { type: "image/png" }),
+    "edit.png",
+  );
+  const response = await fetch(
+    `${media.baseUrl}${withAgent ? `/${media.agentId}` : ""}/images/edits`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${media.key}` },
+      body: form,
+    },
+  );
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect((await response.json()).data[0].b64_json).toBe(
+    media.image.toString("base64"),
+  );
+  expect(media.requests).toHaveLength(1);
+  expect(media.requests[0]).toMatchObject({
+    apiKey: "fixture-image-provider-key",
+    files: [{ hash: createHash("sha256").update(media.image).digest("hex") }],
+  });
+});
+
 test("current external JavaScript and Python SDKs work with only URL/key changes when installed for a smoke run", async ({
   media,
 }) => {

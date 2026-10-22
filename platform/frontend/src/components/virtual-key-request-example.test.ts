@@ -6,6 +6,66 @@ const base = "https://archestra.example.com/v1";
 const key = "arch_test123";
 
 describe("buildCurlExample", () => {
+  it.each([
+    "standard",
+    "passthrough",
+    "token",
+  ] as const)("shows native Azure image generation and multipart edits for %s credentials", (keyType) => {
+    const params = {
+      connectionBaseUrl: base,
+      target: { kind: "provider" as const, provider: "azure" as const },
+      keyType,
+      keyValue: key,
+      model: "gpt-image-1",
+    };
+    const generation = buildCurlExample({
+      ...params,
+      imageOperation: "generate",
+    });
+    expect(generation).toContain(`${base}/azure/images/generations`);
+    expect(generation).toContain('"prompt":');
+    expect(generation).not.toContain('"messages"');
+    const edit = buildCurlExample({ ...params, imageOperation: "edit" });
+    expect(edit).toContain(`${base}/azure/images/edits`);
+    expect(edit).toContain("--form-string 'model=gpt-image-1'");
+    expect(edit).toContain('-F "image[]=@edit.png"');
+    expect(edit).not.toContain("Content-Type:");
+    expect(edit).toContain(
+      `Authorization: Bearer ${keyType === "passthrough" ? "$AZURE_API_KEY" : key}`,
+    );
+    if (keyType === "passthrough")
+      expect(edit).toContain(`X-Archestra-Virtual-Key: ${key}`);
+  });
+
+  it("does not advertise an Azure image request on the Model Router or another provider", () => {
+    for (const target of [
+      { kind: "model-router" as const },
+      { kind: "provider" as const, provider: "openai" as const },
+    ]) {
+      expect(
+        buildCurlExample({
+          connectionBaseUrl: base,
+          target,
+          keyType: "standard",
+          keyValue: key,
+          model: "gpt-image-1",
+          imageOperation: "edit",
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("quotes deployment names as literal multipart fields", () => {
+    const edit = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "azure" },
+      keyType: "standard",
+      keyValue: key,
+      model: "studio's-image",
+      imageOperation: "edit",
+    });
+    expect(edit).toContain("--form-string 'model=studio'\\''s-image'");
+  });
   it("sends a standard key as the bearer token on the Model Router", () => {
     expect(
       buildCurlExample({

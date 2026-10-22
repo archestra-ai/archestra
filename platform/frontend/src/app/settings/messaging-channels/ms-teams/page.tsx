@@ -5,7 +5,11 @@ import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
@@ -95,17 +99,20 @@ export default function MsTeamsPage() {
         ) : (
           <InlineNotice variant="info">
             <Info />
-            <span className="font-medium">
-              {configuredAppName}'s webhook must be reachable from the Internet
-            </span>
-            <InlineNoticeText>
-              The webhook endpoint{" "}
-              <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
-              </code>{" "}
-              must be publicly accessible so {channelLabel} can deliver messages
-              to {configuredAppName}
-            </InlineNoticeText>
+            <InlineNoticeBody>
+              <span className="font-medium">
+                {configuredAppName}'s webhook must be reachable from the
+                Internet
+              </span>
+              <InlineNoticeText>
+                The webhook endpoint{" "}
+                <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                  POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
+                </code>{" "}
+                must be publicly accessible so {channelLabel} can deliver
+                messages to {configuredAppName}
+              </InlineNoticeText>
+            </InlineNoticeBody>
           </InlineNotice>
         )}
         <SetupStep

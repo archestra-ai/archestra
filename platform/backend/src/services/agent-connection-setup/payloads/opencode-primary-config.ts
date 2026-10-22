@@ -200,6 +200,8 @@ function openCodeModelCapabilities(
 ): OpenCodeModelCapabilities {
   if (!inputModalities?.length) return {};
   return {
+    // V1 needs both lists once `modalities` is set. The catalog lists only
+    // text chat models, so the output list is always text.
     modalities: { input: [...inputModalities], output: ["text"] },
     attachment: inputModalities.some((modality) => modality !== "text"),
   };

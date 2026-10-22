@@ -24,6 +24,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  createAzureFetchWithRequestQuery,
   isAzureOpenAiFirstPartyModelName,
   isAzureThinkingModelName,
   normalizeAzureApiKey,
@@ -320,22 +321,34 @@ export const azureAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): AzureClient {
-    const customFetch = options.agent
+    const baseUrl = options.azureRequest?.deployment
+      ? (buildAzureDeploymentBaseUrl({
+          baseUrl: options.baseUrl,
+          deploymentName: options.azureRequest.deployment,
+          overrideDeployment: true,
+        }) ?? options.baseUrl)
+      : options.baseUrl;
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
+    const customFetch = createAzureFetchWithRequestQuery({
+      fetch: observableFetch,
+      rawQuery: options.azureRequest?.rawQuery,
+      abortSignal: options.abortSignal,
+    });
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       const client = new OpenAIProvider({
         maxRetries: PROXY_SDK_MAX_RETRIES,
-        apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
-        baseURL: options.baseUrl,
-        defaultQuery: getAzureDefaultQuery(options.baseUrl),
+        apiKey: getAzureOpenAiBearerTokenProvider(baseUrl),
+        baseURL: baseUrl,
+        defaultQuery: getAzureDefaultQuery(baseUrl),
         fetch: customFetch,
         defaultHeaders: options.defaultHeaders,
       });
       return {
         apiKey,
-        baseUrl: options.baseUrl,
+        baseUrl: baseUrl,
         defaultHeaders: options.defaultHeaders,
         fetch: customFetch,
         openai: client,
@@ -359,15 +372,15 @@ export const azureAdapterFactory: LLMProvider<
     const client = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: normalizedApiKey,
-      baseURL: options.baseUrl,
-      defaultQuery: getAzureDefaultQuery(options.baseUrl),
+      baseURL: baseUrl,
+      defaultQuery: getAzureDefaultQuery(baseUrl),
       fetch: customFetch,
       defaultHeaders,
     });
 
     return {
       apiKey: normalizedApiKey,
-      baseUrl: options.baseUrl,
+      baseUrl: baseUrl,
       defaultHeaders,
       fetch: customFetch,
       openai: client,

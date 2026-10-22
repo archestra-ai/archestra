@@ -68,6 +68,8 @@ export type HostedToolCall = {
  * Options for creating an LLM provider client
  */
 export interface CreateClientOptions {
+  /** Request-local native Azure SDK deployment and original query. */
+  azureRequest?: Readonly<{ deployment?: string; rawQuery: string }>;
   /** Base URL override for the provider API */
   baseUrl?: string;
   /**

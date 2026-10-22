@@ -174,6 +174,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
@@ -817,6 +818,8 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
+        providerKey.organizationId !== resolvedAgent.organizationId ||
+        personalToken.organizationId !== resolvedAgent.organizationId ||
         (!internalCall &&
           !(await LlmProviderApiKeyModel.canUseKey(
             providerKey,
@@ -1548,11 +1551,15 @@ export async function handleLLMProxy<
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
       providerName === "microsoft-365-copilot" ||
+      providerName === "azure" ||
       provider.interactionType === "azure:realtime" ||
       proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
+      ...(providerName === "azure"
+        ? { azureRequest: getAzureProxyIngress(request) }
+        : {}),
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
       abortSignal,

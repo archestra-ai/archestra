@@ -52,6 +52,7 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         upstream: config.llm.azure.baseUrl,
         providerName: "Azure AI Foundry",
         authenticate: createPassthroughAuthenticator("azure"),
+        rejectUnhandledPaths: true,
       }),
     });
   }

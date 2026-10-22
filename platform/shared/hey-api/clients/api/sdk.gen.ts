@@ -7993,7 +7993,7 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 export const getModelPools = <ThrowOnError extends boolean = false>(options?: Options<GetModelPoolsData, ThrowOnError>) => (options?.client ?? client).get<GetModelPoolsResponses, GetModelPoolsErrors, ThrowOnError>({ url: '/api/model-pools', ...options });
 
 /**
- * Create a model pool: provider keys that serve one model, tried by priority and split by weight
+ * Create a model pool: a model name served by provider keys on any provider, each with its own model id, tried by priority and split by weight
  *
  * Authentication:
  *

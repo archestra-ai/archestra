@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { PoolEditor, ProviderName } from "./_parts/pool-editor";
 
 const DESCRIPTION =
-  "Send one model's traffic to several provider keys. Requests go to members by priority and weight, and move to the next member on rate limits and outages.";
+  "Serve one model from several provider keys, on one provider or several. Clients ask for the pool's name; requests go to members by priority and weight, and move to the next member on rate limits and outages.";
 
 /** "new" is a pool being created; otherwise the selected pool's id. */
 type Selection = "new" | string | null;
@@ -105,15 +105,15 @@ export default function ModelPoolsPage() {
               <PoolRow
                 key={pool.id}
                 active={selection !== "new" && pool.id === selected?.id}
-                title={pool.name}
+                title={<span className="font-mono">{pool.name}</span>}
                 subtitle={
                   <span className="flex flex-wrap items-center gap-x-1.5">
-                    <span className="font-mono">{pool.modelId}</span>
-                    <span>·</span>
                     <span>{memberSummary(pool)}</span>
                   </span>
                 }
-                provider={pool.provider}
+                providers={[
+                  ...new Set(pool.members.map((member) => member.provider)),
+                ]}
                 onSelect={() => setSelection(pool.id)}
               />
             ))}
@@ -135,13 +135,13 @@ export default function ModelPoolsPage() {
 function PoolRow({
   title,
   subtitle,
-  provider,
+  providers = [],
   active,
   onSelect,
 }: {
-  title: string;
+  title: React.ReactNode;
   subtitle: React.ReactNode;
-  provider?: string;
+  providers?: string[];
   active: boolean;
   onSelect: () => void;
 }) {
@@ -156,7 +156,9 @@ function PoolRow({
     >
       <span className="truncate text-sm font-medium">{title}</span>
       <span className="grid gap-1 text-xs text-muted-foreground">
-        {provider ? <ProviderName provider={provider} /> : null}
+        {providers.map((provider) => (
+          <ProviderName key={provider} provider={provider} />
+        ))}
         {subtitle}
       </span>
     </UnstyledButton>

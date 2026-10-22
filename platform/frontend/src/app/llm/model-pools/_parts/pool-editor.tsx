@@ -37,10 +37,9 @@ import { MemberStatus } from "./member-status";
 
 type PoolFormValues = {
   name: string;
-  provider: SupportedProvider | "";
-  modelId: string;
   members: {
     providerApiKeyId: string;
+    modelId: string;
     priority: number;
     weight: number;
     enabled: boolean;
@@ -71,30 +70,40 @@ export function PoolEditor({
     form.reset(toFormValues(pool));
   }, [pool, form]);
 
-  const provider = form.watch("provider");
-  const modelId = form.watch("modelId");
+  const name = form.watch("name").trim();
   const members = form.watch("members");
 
   const { data: allKeys = [] } = useLlmProviderApiKeys();
   // Personal keys belong to one user, so only shared keys can be members.
   const sharedKeys = useMemo(
-    () => allKeys.filter((key) => key.userId === null),
+    () =>
+      allKeys
+        .filter((key) => key.userId === null)
+        .sort(
+          (a, b) =>
+            a.provider.localeCompare(b.provider) ||
+            a.name.localeCompare(b.name),
+        ),
     [allKeys],
   );
-  const providers = useMemo(
-    () => [...new Set(sharedKeys.map((key) => key.provider))].sort(),
-    [sharedKeys],
-  );
-  const providerKeys = sharedKeys.filter((key) => key.provider === provider);
+  const keysById = new Map(sharedKeys.map((key) => [key.id, key]));
 
   const { data: models = [] } = useModelsWithApiKeys({
     includeAssignments: false,
   });
-  const providerModels = models.filter((model) => model.provider === provider);
-  const keysListingModel = new Set(
-    providerModels
-      .find((model) => model.modelId === modelId)
-      ?.apiKeys.map((key) => key.id) ?? [],
+  // The model ids each key lists, to suggest and check a member's model id.
+  const modelIdsByKey = useMemo(() => {
+    const byKey = new Map<string, string[]>();
+    for (const model of models) {
+      for (const key of model.apiKeys) {
+        byKey.set(key.id, [...(byKey.get(key.id) ?? []), model.modelId]);
+      }
+    }
+    return byKey;
+  }, [models]);
+  const modelNames = useMemo(
+    () => [...new Set(models.map((model) => model.modelId))].sort(),
+    [models],
   );
 
   const createPool = useCreateModelPool();
@@ -104,12 +113,12 @@ export function PoolEditor({
   const saving = createPool.isPending || updatePool.isPending;
 
   const onSubmit = form.handleSubmit((values) => {
-    if (!values.provider) return;
     const body: ModelPoolInput = {
-      name: values.name.trim() || values.modelId,
-      provider: values.provider,
-      modelId: values.modelId,
-      members: values.members,
+      name: values.name.trim(),
+      members: values.members.map((member) => ({
+        ...member,
+        modelId: member.modelId.trim(),
+      })),
     };
     const onSuccess = (saved: { id: string } | undefined) => {
       if (saved) onSaved(saved.id);
@@ -118,22 +127,27 @@ export function PoolEditor({
     else createPool.mutate(body, { onSuccess });
   });
 
-  const usedKeyIds = new Set(members.map((member) => member.providerApiKeyId));
-  const nextKey = providerKeys.find((key) => !usedKeyIds.has(key.id));
-  // One pool per model: the proxy has to know which pool a request is for.
+  const memberKeys = members.map(
+    (member) => `${member.providerApiKeyId}|${member.modelId.trim()}`,
+  );
+  const repeated = memberKeys.some(
+    (key, index) => memberKeys.indexOf(key) !== index,
+  );
+  const nextKey =
+    sharedKeys.find(
+      (key) => !members.some((member) => member.providerApiKeyId === key.id),
+    ) ?? sharedKeys[0];
+  // One pool per name: the name is what a request asks for.
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   const otherPool = pools.find(
-    (other) =>
-      other.id !== pool?.id &&
-      other.provider === provider &&
-      other.modelId === modelId.trim(),
+    (other) => other.id !== pool?.id && other.name === name,
   );
   const canSave =
-    Boolean(provider) &&
-    modelId.trim().length > 0 &&
+    name.length > 0 &&
     !otherPool &&
+    !repeated &&
     members.length > 0 &&
-    members.every((member) => member.providerApiKeyId);
+    members.every((member) => member.providerApiKeyId && member.modelId.trim());
 
   return (
     <form
@@ -142,12 +156,41 @@ export function PoolEditor({
     >
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid min-w-56 flex-1 gap-1.5">
-          <Label htmlFor="pool-name">Name</Label>
-          <Input
-            id="pool-name"
-            placeholder={modelId || "e.g. claude-opus pool"}
-            disabled={!canEdit}
-            {...form.register("name")}
+          <Label htmlFor="pool-name">Model name</Label>
+          <Controller
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <SearchableSelect
+                id="pool-name"
+                value={field.value}
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  // Members still on the old name follow the new one.
+                  form.setValue(
+                    "members",
+                    form.getValues("members").map((member) =>
+                      !member.modelId || member.modelId === field.value
+                        ? {
+                            ...member,
+                            modelId: suggestModelId(
+                              value,
+                              modelIdsByKey.get(member.providerApiKeyId),
+                            ),
+                          }
+                        : member,
+                    ),
+                  );
+                }}
+                disabled={!canEdit}
+                placeholder="e.g. glm-5"
+                ariaLabel="Model name"
+                searchPlaceholder="Search or type a model name"
+                allowCustom
+                className="w-full max-w-md font-mono"
+                items={modelNames.map((value) => ({ value, label: value }))}
+              />
+            )}
           />
         </div>
         <div className="flex gap-2">
@@ -172,73 +215,20 @@ export function PoolEditor({
         </div>
       </div>
 
-      <Step number={1} title="Model">
-        <p className="text-sm text-muted-foreground">
-          A request for this model on any member key is balanced across the
-          members. Clients keep sending the same model ID.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Controller
-            control={form.control}
-            name="provider"
-            render={({ field }) => (
-              <Select
-                value={field.value}
-                disabled={!canEdit}
-                onValueChange={(value) => {
-                  field.onChange(value);
-                  form.setValue("modelId", "");
-                  form.setValue("members", []);
-                }}
-              >
-                <SelectTrigger className="w-52" aria-label="Provider">
-                  <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      <ProviderName provider={value} />
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="modelId"
-            render={({ field }) => (
-              <SearchableSelect
-                value={field.value}
-                onValueChange={field.onChange}
-                disabled={!canEdit || !provider}
-                placeholder="Model ID"
-                ariaLabel="Model ID"
-                searchPlaceholder="Search or type a model ID"
-                allowCustom
-                className="w-80 font-mono"
-                items={providerModels.map((model) => ({
-                  value: model.modelId,
-                  label: model.modelId,
-                  description: `${model.apiKeys.length} key${model.apiKeys.length === 1 ? "" : "s"}`,
-                }))}
-              />
-            )}
-          />
-        </div>
-        {otherPool ? (
-          <InlineNotice>
-            <TriangleAlert />
-            <span className="font-medium">This model already has a pool</span>
-            <InlineNoticeText>
-              {otherPool.name} serves {otherPool.modelId}. Add the keys there
-              instead.
-            </InlineNoticeText>
-          </InlineNotice>
-        ) : null}
-      </Step>
+      <p className="-mt-3 text-sm text-muted-foreground">
+        Clients ask for this name. A request for it, on any key or through the
+        Model Router, is balanced across the members below, whichever provider
+        each one is on.
+      </p>
+      {otherPool ? (
+        <InlineNotice>
+          <TriangleAlert />
+          <span className="font-medium">This name already has a pool</span>
+          <InlineNoticeText>Add the members there instead.</InlineNoticeText>
+        </InlineNotice>
+      ) : null}
 
-      <Step number={2} title="Routing">
+      <Step number={1} title="Routing">
         <div className="grid gap-2 sm:grid-cols-2">
           <ModeCard
             selected
@@ -253,13 +243,14 @@ export function PoolEditor({
         </div>
       </Step>
 
-      <Step number={3} title="Members">
+      <Step number={2} title="Members">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Priority</th>
                 <th className="py-2 pr-3 font-medium">Provider key</th>
+                <th className="py-2 pr-3 font-medium">Model ID</th>
                 <th className="py-2 pr-3 font-medium">Weight</th>
                 <th className="py-2 pr-3 font-medium">On</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
@@ -272,19 +263,24 @@ export function PoolEditor({
               {fields.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="py-3 text-sm text-muted-foreground"
                   >
-                    Add the provider keys that serve this model. Priority 1
-                    takes traffic first; higher numbers are standbys.
+                    Add the provider keys that serve this model, on any
+                    provider. Priority 1 takes traffic first; higher numbers are
+                    standbys.
                   </td>
                 </tr>
               ) : null}
               {fields.map((field, index) => {
                 const member = members[index];
                 const saved = pool?.members.find(
-                  (row) => row.providerApiKeyId === member?.providerApiKeyId,
+                  (row) =>
+                    row.providerApiKeyId === member?.providerApiKeyId &&
+                    row.modelId === member?.modelId,
                 );
+                const keyModels =
+                  modelIdsByKey.get(member?.providerApiKeyId ?? "") ?? [];
                 return (
                   <tr key={field.id} className="border-b last:border-b-0">
                     <td className="py-2 pr-3">
@@ -307,37 +303,63 @@ export function PoolEditor({
                         render={({ field: keyField }) => (
                           <Select
                             value={keyField.value}
-                            onValueChange={keyField.onChange}
+                            onValueChange={(value) => {
+                              keyField.onChange(value);
+                              form.setValue(
+                                `members.${index}.modelId`,
+                                suggestModelId(name, modelIdsByKey.get(value)),
+                              );
+                            }}
                             disabled={!canEdit}
                           >
                             <SelectTrigger
-                              className="w-60"
+                              className="w-64"
                               aria-label="Provider key"
                             >
                               <SelectValue placeholder="Choose a key" />
                             </SelectTrigger>
                             <SelectContent>
-                              {providerKeys.map((key) => (
-                                <SelectItem
-                                  key={key.id}
-                                  value={key.id}
-                                  disabled={
-                                    key.id !== keyField.value &&
-                                    usedKeyIds.has(key.id)
-                                  }
-                                >
-                                  {key.name}
+                              {sharedKeys.map((key) => (
+                                <SelectItem key={key.id} value={key.id}>
+                                  <span className="flex items-center gap-2">
+                                    <ProviderName provider={key.provider} />
+                                    <span className="text-muted-foreground">
+                                      {key.name}
+                                    </span>
+                                  </span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         )}
                       />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.modelId`}
+                        render={({ field: modelField }) => (
+                          <SearchableSelect
+                            value={modelField.value}
+                            onValueChange={modelField.onChange}
+                            disabled={!canEdit || !member?.providerApiKeyId}
+                            placeholder="Model ID"
+                            ariaLabel="Member model ID"
+                            searchPlaceholder="Search or type a model ID"
+                            allowCustom
+                            className="w-56 font-mono"
+                            items={keyModels.map((value) => ({
+                              value,
+                              label: value,
+                            }))}
+                          />
+                        )}
+                      />
                       {member?.providerApiKeyId &&
-                      modelId &&
-                      !keysListingModel.has(member.providerApiKeyId) ? (
+                      member.modelId &&
+                      !keyModels.includes(member.modelId) ? (
                         <p className="mt-1 text-xs text-muted-foreground">
-                          This key doesn't list {modelId}.
+                          This key doesn't list {member.modelId}.
                         </p>
                       ) : null}
                     </td>
@@ -402,11 +424,12 @@ export function PoolEditor({
             type="button"
             variant="outline"
             size="sm"
-            disabled={!canEdit || !provider || !nextKey}
+            disabled={!canEdit || !nextKey}
             onClick={() =>
               nextKey &&
               append({
                 providerApiKeyId: nextKey.id,
+                modelId: suggestModelId(name, modelIdsByKey.get(nextKey.id)),
                 priority: nextPriority(members),
                 weight: 1,
                 enabled: true,
@@ -416,15 +439,28 @@ export function PoolEditor({
             <Plus />
             <span>Add member</span>
           </Button>
-          {provider && providerKeys.length === 0 ? (
+          {sharedKeys.length === 0 ? (
             <span className="text-xs text-muted-foreground">
-              No shared keys for this provider yet.
+              No shared provider keys yet.
+            </span>
+          ) : null}
+          {repeated ? (
+            <span className="text-xs text-destructive">
+              A key and model ID can be a member only once.
+            </span>
+          ) : null}
+          {members.some(
+            (member) =>
+              keysById.get(member.providerApiKeyId)?.provider === "bedrock",
+          ) ? (
+            <span className="text-xs text-muted-foreground">
+              Anthropic-style clients such as Claude Code skip Bedrock members.
             </span>
           ) : null}
         </div>
       </Step>
 
-      <Step number={4} title="Reliability">
+      <Step number={3} title="Reliability">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {RELIABILITY_RULES.map((rule) => (
             <div
@@ -444,7 +480,7 @@ export function PoolEditor({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete this pool?"
-        description="Requests for its model go back to the caller's own key."
+        description="Requests for its name go back to the caller's own key."
         isPending={deletePool.isPending}
         onConfirm={async () => {
           if (!pool) return;
@@ -561,16 +597,30 @@ export function ProviderName({ provider }: { provider: string }) {
 function toFormValues(pool: ModelPool | null): PoolFormValues {
   return {
     name: pool?.name ?? "",
-    provider: pool?.provider ?? "",
-    modelId: pool?.modelId ?? "",
     members:
       pool?.members.map((member) => ({
         providerApiKeyId: member.providerApiKeyId,
+        modelId: member.modelId,
         priority: member.priority,
         weight: member.weight,
         enabled: member.enabled,
       })) ?? [],
   };
+}
+
+/**
+ * The model id a key most likely serves `name` under: the name itself, else
+ * the one id that ends with it (Bedrock's `zai.glm-5` for `glm-5`).
+ */
+function suggestModelId(name: string, keyModels: string[] = []): string {
+  if (!name || keyModels.includes(name)) return name;
+  const endingWithName = keyModels.filter(
+    (modelId) =>
+      modelId.endsWith(`.${name}`) ||
+      modelId.endsWith(`/${name}`) ||
+      modelId.endsWith(`:${name}`),
+  );
+  return endingWithName.length === 1 ? endingWithName[0] : name;
 }
 
 /** A new member goes one priority below the last, as a standby. */

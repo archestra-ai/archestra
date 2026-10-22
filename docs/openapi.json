@@ -352298,38 +352298,6 @@
                       "name": {
                         "type": "string"
                       },
-                      "provider": {
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "ollama-native",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "kimi",
-                          "azure",
-                          "github-copilot",
-                          "microsoft-365-copilot",
-                          "archestra",
-                          "voyage",
-                          "jev"
-                        ]
-                      },
-                      "modelId": {
-                        "type": "string"
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -352358,6 +352326,9 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
+                            "modelId": {
+                              "type": "string"
+                            },
                             "priority": {
                               "type": "integer",
                               "minimum": -2147483648,
@@ -352378,6 +352349,35 @@
                             "providerApiKeyName": {
                               "type": "string"
                             },
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
                             "benchedUntil": {
                               "nullable": true,
                               "type": "string",
@@ -352393,11 +352393,13 @@
                             "id",
                             "poolId",
                             "providerApiKeyId",
+                            "modelId",
                             "priority",
                             "weight",
                             "enabled",
                             "createdAt",
                             "providerApiKeyName",
+                            "provider",
                             "benchedUntil",
                             "benchReason"
                           ],
@@ -352409,8 +352411,6 @@
                       "id",
                       "organizationId",
                       "name",
-                      "provider",
-                      "modelId",
                       "createdAt",
                       "updatedAt",
                       "members"
@@ -352666,7 +352666,7 @@
         "tags": [
           "Model Pools"
         ],
-        "description": "Create a model pool: provider keys that serve one model, tried by priority and split by weight\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Sync the model catalog and see every model, including ones not shared with you",
+        "description": "Create a model pool: a model name served by provider keys on any provider, each with its own model id, tried by priority and split by weight\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Sync the model catalog and see every model, including ones not shared with you",
         "requestBody": {
           "required": true,
           "content": {
@@ -352675,40 +352675,6 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "openai",
-                      "gemini",
-                      "anthropic",
-                      "bedrock",
-                      "cohere",
-                      "cerebras",
-                      "mistral",
-                      "perplexity",
-                      "groq",
-                      "xai",
-                      "openrouter",
-                      "vllm",
-                      "ollama",
-                      "ollama-native",
-                      "zhipuai",
-                      "deepseek",
-                      "minimax",
-                      "kimi",
-                      "azure",
-                      "github-copilot",
-                      "microsoft-365-copilot",
-                      "archestra",
-                      "voyage",
-                      "jev"
-                    ]
-                  },
-                  "modelId": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 512
@@ -352724,6 +352690,11 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
                         },
                         "priority": {
                           "default": 1,
@@ -352743,15 +352714,14 @@
                         }
                       },
                       "required": [
-                        "providerApiKeyId"
+                        "providerApiKeyId",
+                        "modelId"
                       ]
                     }
                   }
                 },
                 "required": [
                   "name",
-                  "provider",
-                  "modelId",
                   "members"
                 ]
               }
@@ -352775,38 +352745,6 @@
                       "type": "string"
                     },
                     "name": {
-                      "type": "string"
-                    },
-                    "provider": {
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "ollama-native",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "kimi",
-                        "azure",
-                        "github-copilot",
-                        "microsoft-365-copilot",
-                        "archestra",
-                        "voyage",
-                        "jev"
-                      ]
-                    },
-                    "modelId": {
                       "type": "string"
                     },
                     "createdAt": {
@@ -352837,6 +352775,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "modelId": {
+                            "type": "string"
+                          },
                           "priority": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -352856,17 +352797,48 @@
                           },
                           "providerApiKeyName": {
                             "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage",
+                              "jev"
+                            ]
                           }
                         },
                         "required": [
                           "id",
                           "poolId",
                           "providerApiKeyId",
+                          "modelId",
                           "priority",
                           "weight",
                           "enabled",
                           "createdAt",
-                          "providerApiKeyName"
+                          "providerApiKeyName",
+                          "provider"
                         ],
                         "additionalProperties": false
                       }
@@ -352876,8 +352848,6 @@
                     "id",
                     "organizationId",
                     "name",
-                    "provider",
-                    "modelId",
                     "createdAt",
                     "updatedAt",
                     "members"
@@ -353145,40 +353115,6 @@
                   "name": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "openai",
-                      "gemini",
-                      "anthropic",
-                      "bedrock",
-                      "cohere",
-                      "cerebras",
-                      "mistral",
-                      "perplexity",
-                      "groq",
-                      "xai",
-                      "openrouter",
-                      "vllm",
-                      "ollama",
-                      "ollama-native",
-                      "zhipuai",
-                      "deepseek",
-                      "minimax",
-                      "kimi",
-                      "azure",
-                      "github-copilot",
-                      "microsoft-365-copilot",
-                      "archestra",
-                      "voyage",
-                      "jev"
-                    ]
-                  },
-                  "modelId": {
-                    "type": "string",
-                    "minLength": 1,
                     "maxLength": 512
                   },
                   "members": {
@@ -353192,6 +353128,11 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
                         },
                         "priority": {
                           "default": 1,
@@ -353211,15 +353152,14 @@
                         }
                       },
                       "required": [
-                        "providerApiKeyId"
+                        "providerApiKeyId",
+                        "modelId"
                       ]
                     }
                   }
                 },
                 "required": [
                   "name",
-                  "provider",
-                  "modelId",
                   "members"
                 ]
               }
@@ -353257,38 +353197,6 @@
                     "name": {
                       "type": "string"
                     },
-                    "provider": {
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "ollama-native",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "kimi",
-                        "azure",
-                        "github-copilot",
-                        "microsoft-365-copilot",
-                        "archestra",
-                        "voyage",
-                        "jev"
-                      ]
-                    },
-                    "modelId": {
-                      "type": "string"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -353317,6 +353225,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "modelId": {
+                            "type": "string"
+                          },
                           "priority": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -353336,17 +353247,48 @@
                           },
                           "providerApiKeyName": {
                             "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage",
+                              "jev"
+                            ]
                           }
                         },
                         "required": [
                           "id",
                           "poolId",
                           "providerApiKeyId",
+                          "modelId",
                           "priority",
                           "weight",
                           "enabled",
                           "createdAt",
-                          "providerApiKeyName"
+                          "providerApiKeyName",
+                          "provider"
                         ],
                         "additionalProperties": false
                       }
@@ -353356,8 +353298,6 @@
                     "id",
                     "organizationId",
                     "name",
-                    "provider",
-                    "modelId",
                     "createdAt",
                     "updatedAt",
                     "members"

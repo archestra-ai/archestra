@@ -14,6 +14,8 @@ function savedMember(overrides: {
     poolId: "pool",
     providerApiKeyId: "key",
     providerApiKeyName: "Key",
+    provider: "zhipuai" as const,
+    modelId: "glm-5",
     priority: 1,
     weight: 1,
     enabled: true,

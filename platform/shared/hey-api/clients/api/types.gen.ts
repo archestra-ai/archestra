@@ -91655,19 +91655,19 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        modelId: string;
         createdAt: string;
         updatedAt: string;
         members: Array<{
             id: string;
             poolId: string;
             providerApiKeyId: string;
+            modelId: string;
             priority: number;
             weight: number;
             enabled: boolean;
             createdAt: string;
             providerApiKeyName: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             benchedUntil: string | null;
             benchReason: string | null;
         }>;
@@ -91679,10 +91679,9 @@ export type GetModelPoolsResponse = GetModelPoolsResponses[keyof GetModelPoolsRe
 export type CreateModelPoolData = {
     body: {
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        modelId: string;
         members: Array<{
             providerApiKeyId: string;
+            modelId: string;
             priority?: number;
             weight?: number;
             enabled?: boolean;
@@ -91769,19 +91768,19 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        modelId: string;
         createdAt: string;
         updatedAt: string;
         members: Array<{
             id: string;
             poolId: string;
             providerApiKeyId: string;
+            modelId: string;
             priority: number;
             weight: number;
             enabled: boolean;
             createdAt: string;
             providerApiKeyName: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         }>;
     };
 };
@@ -91879,10 +91878,9 @@ export type DeleteModelPoolResponse = DeleteModelPoolResponses[keyof DeleteModel
 export type UpdateModelPoolData = {
     body: {
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        modelId: string;
         members: Array<{
             providerApiKeyId: string;
+            modelId: string;
             priority?: number;
             weight?: number;
             enabled?: boolean;
@@ -91971,19 +91969,19 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        modelId: string;
         createdAt: string;
         updatedAt: string;
         members: Array<{
             id: string;
             poolId: string;
             providerApiKeyId: string;
+            modelId: string;
             priority: number;
             weight: number;
             enabled: boolean;
             createdAt: string;
             providerApiKeyName: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         }>;
     };
 };

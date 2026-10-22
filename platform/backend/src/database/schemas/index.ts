@@ -102,6 +102,7 @@ export {
   chatActiveRunsTable,
 } from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsMsTeamsUserConnectionsTable } from "./chatops-ms-teams-user-connection";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export { default as chatopsUserAdmissionsTable } from "./chatops-user-admission";

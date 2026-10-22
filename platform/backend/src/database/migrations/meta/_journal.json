@@ -4117,6 +4117,13 @@
       "when": 1792615407451,
       "tag": "0587_salty_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 588,
+      "version": "7",
+      "when": 1792631709775,
+      "tag": "0588_cool_raza",
+      "breakpoints": true
     }
   ]
 }

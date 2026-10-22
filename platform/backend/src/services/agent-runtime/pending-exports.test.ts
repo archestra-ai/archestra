@@ -898,7 +898,7 @@ async function downloaded(
   const token = /Bearer ([A-Za-z0-9_-]+)/.exec(command)?.[1];
   if (!ticketId || !token) throw new Error("no ticket in the command");
   const stream = await workspaceTransferTickets.read({
-    ticket: workspaceTransferTickets.resolve(ticketId, token),
+    ticket: await workspaceTransferTickets.resolve(ticketId, token),
     offset: 0,
     length: -1,
   });

@@ -36,6 +36,7 @@ import {
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -49,6 +50,8 @@ vi.mock("@/services/agent-runtime/start-task", () => ({
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const oauthServer = useMswServer();
+// Transfer tickets live in the shared cache so any replica can redeem them.
+setupTestCacheManager();
 
 describe("Agent Runtime routes", () => {
   let app: FastifyInstanceWithZod;
@@ -2389,6 +2392,71 @@ describe("Agent Runtime routes", () => {
       "retained transcript",
     );
   });
+  test("a content request with the wrong token, no bearer or the wrong direction is not found", async () => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const bytes = Buffer.from("probe");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const helper = vi
+      .spyOn(agentRuntimeManager, "runWorkspaceTransferCommand")
+      .mockImplementation(async ({ args }) => {
+        if (args[0] === "stat")
+          return { ok: true, path: args[1], present: false };
+        throw new Error(`unexpected helper call: ${args.join(" ")}`);
+      });
+    const started = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/workspace/transfers`,
+      payload: {
+        direction: "upload",
+        path: "probe/hello.txt",
+        size: bytes.length,
+        sha256,
+      },
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const { token, contentUrl } = started.json();
+
+    const refused = [
+      { method: "PUT" as const, authorization: `Bearer ${token.slice(1)}` },
+      { method: "PUT" as const, authorization: undefined },
+      { method: "GET" as const, authorization: `Bearer ${token}` },
+    ];
+    for (const attempt of refused) {
+      const response = await app.inject({
+        method: attempt.method,
+        url: contentUrl,
+        headers: {
+          ...(attempt.authorization
+            ? { authorization: attempt.authorization }
+            : {}),
+          ...(attempt.method === "PUT"
+            ? { "content-type": "application/octet-stream" }
+            : {}),
+        },
+        ...(attempt.method === "PUT" ? { payload: bytes } : {}),
+      });
+      expect(response.statusCode, response.body).toBe(404);
+      expect(response.json()).toMatchObject({
+        error: { message: "Transfer not found" },
+      });
+    }
+    // None of them reached the workspace.
+    expect(helper).toHaveBeenCalledTimes(1);
+  });
+
   async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",

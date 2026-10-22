@@ -3,7 +3,7 @@ import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { finished } from "node:stream/promises";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
-import { LRUCacheManager } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
@@ -82,18 +82,16 @@ type WorkspaceTransferTicket = {
  * and it never widens what its owner could already reach. Every request it
  * accompanies re-runs the workspace gate, so ownership, lifecycle and
  * retention are revalidated rather than captured once at mint.
+ *
+ * The tool or API call that mints a ticket and the public content request
+ * that redeems it reach whichever replica the load balancer picks, so tickets
+ * live in the shared cache and this class keeps no state of its own. The
+ * only large field, a protected export's admitted bytes, is bounded by
+ * `PROTECTED_EXPORT_CHUNK_BYTES` per ticket and expires with it.
+ *
+ * @public — exported for testability (one instance per simulated replica)
  */
-class WorkspaceTransferTickets {
-  private readonly tickets = new LRUCacheManager<StoredTicket>({
-    maxSize: 1000,
-    maxBytes: 64 * 1024 * 1024,
-    sizeOf: (ticket) =>
-      (ticket.admittedBytes?.byteLength ?? 0) +
-      (ticket.chunkDigests?.length ?? 0) * 64 +
-      1024,
-    defaultTtl: WORKSPACE_TRANSFER_TICKET_TTL_MS,
-  });
-
+export class WorkspaceTransferTickets {
   /**
    * Authorizes one download. With a crossing, the pinned bytes must first pass
    * the parent's guardrail. A runtime that is mid-call cannot return anything
@@ -164,7 +162,7 @@ class WorkspaceTransferTickets {
         }
         assertAdmittedUnchanged({ result, value, child: crossing.child });
         // HTTP ranges must serve the exact admitted copy, never the mutable file.
-        return this.store({ ...download, admittedBytes: bytes });
+        return await this.store({ ...download, admittedBytes: bytes });
       }
       const advanced = await advanceExportOn({
         driver,
@@ -189,7 +187,7 @@ class WorkspaceTransferTickets {
       // A larger file is served from its snapshot, chunk by chunk against the
       // admitted digests.
       keepSnapshot = true;
-      return this.store({
+      return await this.store({
         ...download,
         chunkDigests: advanced.progress.digests,
       });
@@ -396,9 +394,15 @@ class WorkspaceTransferTickets {
   }
 
   /** Resolve a presented ticket. Unknown, expired and wrong tokens are
-   * indistinguishable, so a ticket id alone reveals nothing. */
-  resolve(id: string, token: string): StoredTicket {
-    const stored = this.tickets.get(id);
+   * indistinguishable, so a ticket id alone reveals nothing. A cache that
+   * cannot answer is an outage, not a missing ticket. */
+  async resolve(id: string, token: string): Promise<StoredTicket> {
+    const persisted = TICKET_ID.test(id)
+      ? await cacheManager.get<PersistedTicket>(ticketKey(id), {
+          throwOnError: true,
+        })
+      : undefined;
+    const stored = persisted && revive(persisted);
     const presented = hashToken(token);
     if (
       !stored ||
@@ -510,13 +514,13 @@ class WorkspaceTransferTickets {
         }
         throw error;
       });
-    this.tickets.delete(params.ticket.id);
+    await this.forget(params.ticket.id);
     return { ...(camelize(result) as object), path: ticketPath(params.ticket) };
   }
 
   /** Remove a staging entry so an abandoned transfer leaves nothing behind. */
   async discard(ticket: StoredTicket): Promise<void> {
-    this.tickets.delete(ticket.id);
+    await this.forget(ticket.id);
     const session = await authorizeAgentWorkspaceAccess(ticket);
     await resolveAgentRuntimeBackendDriver(
       session.backend,
@@ -527,7 +531,7 @@ class WorkspaceTransferTickets {
     });
   }
 
-  private store(
+  private async store(
     fields: Omit<WorkspaceTransferTicket, "id"> & {
       actor: A2AActor;
       taskId: string;
@@ -539,7 +543,7 @@ class WorkspaceTransferTickets {
         operationId: string;
       };
     },
-  ): { ticket: WorkspaceTransferTicket; token: string } {
+  ): Promise<{ ticket: WorkspaceTransferTicket; token: string }> {
     const id = randomBytes(16).toString("hex");
     // The plaintext leaves here once. Only its hash is retained, so a dump of
     // cache state cannot be replayed against a workspace.
@@ -549,7 +553,12 @@ class WorkspaceTransferTickets {
       id,
       tokenHash: hashToken(token),
     };
-    this.tickets.set(id, stored);
+    // A ticket that was not written is not minted: `set` throws on failure.
+    await cacheManager.set(
+      ticketKey(id),
+      persist(stored),
+      WORKSPACE_TRANSFER_TICKET_TTL_MS,
+    );
     return {
       ticket: {
         id,
@@ -563,6 +572,13 @@ class WorkspaceTransferTickets {
       },
       token,
     };
+  }
+
+  /** A redeemed or abandoned ticket is gone on every replica. Best effort:
+   * a ticket that outlives this check still cannot replace a destination
+   * that moved on, and it expires with its TTL. */
+  private async forget(id: string): Promise<void> {
+    await cacheManager.delete(ticketKey(id));
   }
 }
 
@@ -585,6 +601,41 @@ type StoredTicket = WorkspaceTransferTicket & {
     operationId: string;
   };
 };
+
+/** The ticket as the shared cache holds it: buffers travel as text. */
+type PersistedTicket = Omit<StoredTicket, "tokenHash" | "admittedBytes"> & {
+  tokenHash: string;
+  admittedBytes?: string;
+};
+
+/** Ticket ids are minted here, so anything else is not found without a lookup. */
+const TICKET_ID = /^[0-9a-f]{32}$/;
+
+function ticketKey(id: string): AllowedCacheKey {
+  return `${CacheKey.AgentWorkspaceTransferTicket}-${id}`;
+}
+
+function persist(ticket: StoredTicket): PersistedTicket {
+  const { tokenHash, admittedBytes, ...rest } = ticket;
+  return {
+    ...rest,
+    tokenHash: tokenHash.toString("hex"),
+    ...(admittedBytes === undefined
+      ? {}
+      : { admittedBytes: admittedBytes.toString("base64") }),
+  };
+}
+
+function revive(ticket: PersistedTicket): StoredTicket {
+  const { tokenHash, admittedBytes, ...rest } = ticket;
+  return {
+    ...rest,
+    tokenHash: Buffer.from(tokenHash, "hex"),
+    ...(admittedBytes === undefined
+      ? {}
+      : { admittedBytes: Buffer.from(admittedBytes, "base64") }),
+  };
+}
 
 /**
  * Largest protected export kept on the host, and the chunk size above it.

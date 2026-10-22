@@ -1317,10 +1317,13 @@ class ModelModel {
     return true;
   }
 
-  static supportsEmbeddings(model: Model): boolean {
+  static supportsEmbeddings(model: ProviderPricedModel): boolean {
     if (model.ignored) {
       return false;
     }
+
+    if (model.provider === "azure" && model.azureCapabilities)
+      return model.azureCapabilities.kind === "embedding";
 
     return model.embeddingDimensions !== null;
   }

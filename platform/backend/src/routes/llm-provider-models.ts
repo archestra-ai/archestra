@@ -720,8 +720,8 @@ export async function getAvailableLlmModels(params: {
   if (isEmbedding !== undefined) {
     filteredModels = filteredModels.filter(({ model }) =>
       isEmbedding
-        ? model.embeddingDimensions !== null
-        : model.embeddingDimensions === null,
+        ? ModelModel.supportsEmbeddings(model)
+        : !ModelModel.supportsEmbeddings(model),
     );
   }
 

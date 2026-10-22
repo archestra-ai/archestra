@@ -473,8 +473,16 @@ export async function createLLMModelForAgent(params: {
           modelId: modelName,
         })
       : undefined;
-  if (azureCapabilities && azureCapabilities.status !== "known") {
+  if (azureCapabilities?.status === "stale") {
     throw new ApiError(400, azureCapabilities.reason);
+  }
+  // Unknown metadata retains the explicitly selected standard Chat surface.
+  // It cannot select a native media transport or borrow another key's facts.
+  if (azureCapabilities?.status === "unknown") {
+    logger.debug(
+      { reason: azureCapabilities.reason },
+      "Azure Chat capabilities unknown; using the explicit Chat surface",
+    );
   }
 
   const model = createLLMModel({

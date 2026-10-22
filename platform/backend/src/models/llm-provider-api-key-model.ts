@@ -21,6 +21,7 @@ import type {
   ProviderModelPricing,
   ProviderPricedModel,
 } from "@/types/provider-model-pricing";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import ModelModel from "./model";
 
 /**
@@ -227,13 +228,33 @@ class LlmProviderApiKeyModelLinkModel {
       azureCapabilities?: typeof schema.llmProviderApiKeyModelsTable.$inferInsert.azureCapabilities;
     }>,
     provider: SupportedProvider,
-    options: { overwriteRecommendedForAgents?: boolean } = {},
+    options: {
+      overwriteRecommendedForAgents?: boolean;
+      azureConfiguration?: { hash: string; defaultBaseUrl: string };
+    } = {},
   ): Promise<void> {
     const uniqueModels = Array.from(
       new Map(models.map((model) => [model.id, model])).values(),
     );
 
     await withDbTransaction(async (tx) => {
+      // A discovery request may finish after the operator changes its endpoint.
+      // Lock the key through this write so stale evidence cannot overwrite a new configuration.
+      if (provider === "azure" && options.azureConfiguration) {
+        const [key] = await tx
+          .select()
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, apiKeyId))
+          .for("update");
+        if (
+          !key ||
+          azureCapabilityConfigurationHash({
+            ...key,
+            baseUrl: key.baseUrl || options.azureConfiguration.defaultBaseUrl,
+          }) !== options.azureConfiguration.hash
+        )
+          return;
+      }
       // Delete links to models the provider no longer serves. Kept links are
       // updated in place below so their last known verdict can survive a
       // sync that learned nothing.

@@ -211,7 +211,17 @@ class ModelSyncService {
         // A tag is mutable (`ollama create` can repoint it), so the full
         // refresh overwrites the verdict verbatim to self-correct; a normal
         // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
-        { overwriteRecommendedForAgents: forceRefresh === true },
+        {
+          overwriteRecommendedForAgents: forceRefresh === true,
+          ...(provider === "azure" && configurationHash
+            ? {
+                azureConfiguration: {
+                  hash: configurationHash,
+                  defaultBaseUrl: config.llm.azure.baseUrl,
+                },
+              }
+            : {}),
+        },
       );
 
       logger.info(

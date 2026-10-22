@@ -1,6 +1,7 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -85,8 +86,11 @@ describe("MsTeamsSetupDialog group-chat files", () => {
       </QueryClientProvider>,
     );
 
+    await userEvent.click(
+      await screen.findByRole("tab", { name: /group chats/i }),
+    );
     const toggle = await screen.findByRole("switch", {
-      name: /sign in to read their group-chat files/i,
+      name: /sign in for group-chat files/i,
     });
     // The config arrives after the first render; the switch must follow it.
     await waitFor(() => expect(toggle).toBeChecked());

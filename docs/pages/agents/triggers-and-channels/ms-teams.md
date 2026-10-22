@@ -90,7 +90,7 @@ They come first, before the agent's own instructions. They add to what the agent
 
 Share a PDF in a channel, and the agent reads it. Your Microsoft 365 admin grants the bot read access to the teams you pick, and nothing else. Direct messages need no setup.
 
-1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files in Channels**.
+1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files**, on the **Channels** tab.
 2. Paste each team's SharePoint site, one per line. Find it on the channel's **Files** tab, under **Open in SharePoint**.
 3. Click **Copy request for IT** and send it to your admin.
 
@@ -117,10 +117,10 @@ What to know:
 
 Share a PDF in a group chat, and the agent reads it after you sign in with Microsoft once. Teams keeps group-chat files in the sender's OneDrive, so the bot reads them as that person, and only the files they share with it.
 
-1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files in Group Chats**.
+1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files**, on the **Group chats** tab.
 2. In the [Microsoft Entra admin center](https://entra.microsoft.com/), open the bot's app under **App registrations**. On **Authentication**, add a **Web** platform with the redirect URI that the step shows.
 3. On **API permissions**, add **Microsoft Graph → Delegated permissions → Files.Read** and **offline_access**.
-4. Turn on **Ask people to sign in to read their group-chat files**, then click **Connect** on the last step.
+4. Turn on **Ask people to sign in for group-chat files**, then click **Connect** on the last step.
 
 When it works, the first file a person shares with the bot brings a **Sign in with Microsoft** card. After they sign in, the agent answers that message. Their later files are answered right away.
 
@@ -141,7 +141,7 @@ What to know:
 | **Direct messages do not work** | Upload the latest app manifest. Older manifests do not include the `personal` scope. |
 | **The agent says it could not read a file from a channel** | Ask your admin to grant read access to that team's site, as in [Read Files in Channels](#read-files-in-channels). A private or shared channel needs its own site. |
 | **The agent says it could not read a file from a group chat** | Turn on group-chat file sign-in, as in [Read Files in Group Chats](#read-files-in-group-chats). |
-| **Microsoft says the redirect URI does not match** | Add the redirect URI from **Read Files in Group Chats** to the bot's app, on **Authentication**, as a **Web** platform. |
+| **Microsoft says the redirect URI does not match** | Add the redirect URI from **Read Files → Group chats** to the bot's app, on **Authentication**, as a **Web** platform. |
 | **"This sign-in link has expired"** | A card's link works once, for an hour. Send the file to the bot again for a new card. |
 
 ## What to Know

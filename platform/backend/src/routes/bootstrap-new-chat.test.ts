@@ -106,65 +106,9 @@ describe("new-chat bootstrap route", () => {
         defaultSuggestedPrompts: null,
         keyModels: await get(`/api/llm-models/available?apiKeyId=${apiKey.id}`),
       },
-      memberDefaultKeyModels: null,
     });
     expect(bootstrap.models).toHaveLength(1);
     expect(bootstrap.agent.detail.suggestedPrompts).toHaveLength(1);
-  });
-
-  test("carries the models of the member's saved default key when it is not the agent's", async ({
-    makeAgent,
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const secret = await makeSecret();
-    const agentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-    });
-    const memberKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "anthropic",
-    });
-    const memberModel = await ModelModel.create({
-      provider: "anthropic",
-      modelId: "claude-test",
-      externalId: "claude-test",
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-    });
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(memberKey.id, [
-      memberModel.id,
-    ]);
-    const agent = await makeAgent({
-      organizationId,
-      agentType: "agent",
-      llmApiKeyId: agentKey.id,
-    });
-    await MemberModel.setDefaultAgent(user.id, organizationId, agent.id);
-    await MemberModel.setDefaultModelSelection({
-      userId: user.id,
-      organizationId,
-      modelId: memberModel.id,
-      apiKeyId: memberKey.id,
-    });
-
-    const bootstrap = await get("/api/bootstrap/new-chat");
-
-    expect(bootstrap.memberDefaultKeyModels).toEqual({
-      apiKeyId: memberKey.id,
-      models: await get(`/api/llm-models/available?apiKeyId=${memberKey.id}`),
-    });
-    expect(bootstrap.memberDefaultKeyModels.models).toHaveLength(1);
-
-    // The agent's own key needs no second copy.
-    await MemberModel.setDefaultModelSelection({
-      userId: user.id,
-      organizationId,
-      modelId: memberModel.id,
-      apiKeyId: agentKey.id,
-    });
-    expect((await get("/api/bootstrap/new-chat")).memberDefaultKeyModels).toBe(
-      null,
-    );
   });
 
   test("an agent without prompts carries the platform's default prompts", async ({

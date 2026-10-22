@@ -1,3 +1,4 @@
+import type { ModelSelection } from "@archestra/shared";
 import type { Tool } from "ai";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import {
@@ -32,6 +33,8 @@ export async function buildChatContext(params: {
   organizationId: string;
   /** Whether tool-result images may be forwarded into this model's context. */
   modelAcceptsImageToolResults: boolean;
+  /** The conversation's model and key, which `agent__self` forks start from. */
+  parentLlm: ModelSelection | undefined;
   /** Context injected by SessionStart hooks, appended to the system prompt. */
   hookSessionContext: string | undefined;
   /** The project's instructions, when this chat belongs to a project. */
@@ -78,6 +81,7 @@ export async function buildChatContext(params: {
     user,
     organizationId,
     modelAcceptsImageToolResults,
+    parentLlm,
     hookSessionContext,
     projectInstructions,
     openedApp,
@@ -115,6 +119,7 @@ export async function buildChatContext(params: {
       openedAppId: openedApp?.kind === "owned" ? openedApp.id : undefined,
       organizationId,
       modelAcceptsImageToolResults,
+      parentLlm,
       // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
       sessionId: conversationId,
       // Pass agentId as initial delegation chain (will be extended by delegated agents)

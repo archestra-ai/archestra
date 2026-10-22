@@ -603,6 +603,7 @@ function TeamSection(props: {
           <ReadOnlyAdvancedLabels labels={props.labels} />
         ) : (
           <AdvancedLabelsSection
+            attributionSource="billingTeam"
             ref={props.labelsRef}
             labels={props.labels}
             onLabelsChange={props.onLabelsChange}

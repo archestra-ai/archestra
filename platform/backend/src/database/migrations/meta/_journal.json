@@ -4131,6 +4131,20 @@
       "when": 1792671812526,
       "tag": "0589_rename-agent-run-tools",
       "breakpoints": true
+    },
+    {
+      "idx": 590,
+      "version": "7",
+      "when": 1792675102727,
+      "tag": "0590_brave_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 591,
+      "version": "7",
+      "when": 1792682146439,
+      "tag": "0591_exotic_excalibur",
+      "breakpoints": true
     }
   ]
 }

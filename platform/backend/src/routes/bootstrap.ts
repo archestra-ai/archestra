@@ -84,18 +84,6 @@ const NewChatBootstrapSchema = z.object({
       keyModels: z.array(LlmModelSchema).nullable(),
     })
     .nullable(),
-  /**
-   * `GET /api/llm-models/available?apiKeyId=:chatApiKeyId` for the
-   * member's saved default key, when it is set and is not the
-   * starting agent's key: the composer then picks its model from
-   * that key's list.
-   */
-  memberDefaultKeyModels: z
-    .object({
-      apiKeyId: z.string().uuid(),
-      models: z.array(LlmModelSchema),
-    })
-    .nullable(),
 });
 
 /** How many of its last messages a seeded conversation document carries. */
@@ -108,7 +96,7 @@ const CONVERSATION_SEED_TAIL = 30;
  * second wave of requests. Each part is exactly what its own endpoint returns
  * (`/api/user/permissions`, `/api/resource-permissions`, `/api/organization`,
  * `/api/config`, `/api/config/public`, `/api/organization/appearance-settings`,
- * `/api/members/default-agent`, `/api/members/default-model`).
+ * `/api/members/default-agent`).
  */
 const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -138,10 +126,6 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
               defaultAgentId: z.string().uuid().nullable(),
               personalChatAgentId: z.string().uuid().nullable(),
             }),
-            memberDefaultModel: z.object({
-              modelId: z.string().uuid().nullable(),
-              chatApiKeyId: z.string().uuid().nullable(),
-            }),
           }),
         ),
       },
@@ -155,7 +139,6 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         appearance,
         defaultAgentId,
         personalChatAgentId,
-        memberDefaultModel,
       ] = await Promise.all([
         getUserPermissions({ userId: user.id, organizationId }),
         // SPDX-SnippetBegin
@@ -175,7 +158,6 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
         }),
-        MemberModel.getDefaultModelSelection(user.id, organizationId),
       ]);
 
       return reply.send({
@@ -186,7 +168,6 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         publicConfig,
         appearance,
         memberDefaultAgent: { defaultAgentId, personalChatAgentId },
-        memberDefaultModel,
       });
     },
   );
@@ -296,7 +277,6 @@ async function getNewChatComposer(params: {
     models,
     memberDefaultAgentId,
     organization,
-    memberDefaultModel,
   ] = await Promise.all([
     getChatRosterBootstrap({ userId, organizationId }),
     getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
@@ -318,7 +298,6 @@ async function getNewChatComposer(params: {
     getAvailableLlmModels({ query: {}, userId, organizationId }),
     MemberModel.getDefaultAgentId(userId, organizationId),
     OrganizationModel.getById(organizationId),
-    MemberModel.getDefaultModelSelection(userId, organizationId),
   ]);
 
   const candidates = roster.filter((agent) => !agent.builtIn);
@@ -332,39 +311,26 @@ async function getNewChatComposer(params: {
         candidates.find((agent) => agent.scope === "personal") ??
         candidates[0]);
 
-  const memberKeyId = memberDefaultModel.chatApiKeyId;
-  const [agent, memberDefaultKeyModels] = await Promise.all([
-    startingAgent
-      ? getNewChatAgentParts({
-          agentId: startingAgent.id,
-          llmApiKeyId: startingAgent.llmApiKeyId,
-          userId,
-          organizationId,
-          withPlatformPrompts: params.agent === undefined,
-        }).catch((error) => {
-          // A given agent the caller cannot read (a shared chat's agent)
-          // leaves the part empty; its endpoints refuse the caller too.
-          if (
-            params.agent &&
-            error instanceof ApiError &&
-            error.statusCode === 404
-          ) {
-            return null;
-          }
-          throw error;
-        })
-      : null,
-    memberKeyId && memberKeyId !== startingAgent?.llmApiKeyId
-      ? getAvailableLlmModels({
-          query: { apiKeyId: memberKeyId },
-          userId,
-          organizationId,
-        }).then((keyModels) => ({
-          apiKeyId: memberKeyId,
-          models: keyModels,
-        }))
-      : null,
-  ]);
+  const agent = startingAgent
+    ? await getNewChatAgentParts({
+        agentId: startingAgent.id,
+        llmApiKeyId: startingAgent.llmApiKeyId,
+        userId,
+        organizationId,
+        withPlatformPrompts: params.agent === undefined,
+      }).catch((error) => {
+        // A given agent the caller cannot read (a shared chat's agent)
+        // leaves the part empty; its endpoints refuse the caller too.
+        if (
+          params.agent &&
+          error instanceof ApiError &&
+          error.statusCode === 404
+        ) {
+          return null;
+        }
+        throw error;
+      })
+    : null;
 
   return {
     roster,
@@ -372,7 +338,6 @@ async function getNewChatComposer(params: {
     availableApiKeys,
     models,
     agent,
-    memberDefaultKeyModels,
   };
 }
 

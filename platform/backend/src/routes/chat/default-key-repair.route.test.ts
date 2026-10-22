@@ -1,25 +1,23 @@
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
-import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 /**
- * The organization and member defaults name a key someone chose. A member who
- * may not use that key never runs through it — the send path falls back to a
- * key they may use — so the conversation must store that key, not the one in
- * the default. Saving a member default needs a key the member may use.
+ * The organization default names a key someone chose. A member who may not
+ * use that key never runs through it — the send path falls back to a key they
+ * may use — so the conversation must store that key, not the one in the
+ * default.
  */
-describe("member and organization default keys the member cannot use", () => {
+describe("organization default keys the member cannot use", () => {
   let app: FastifyInstanceWithZod;
   let member: User;
   let organizationId: string;
   let modelId: string;
   let usableKeyId: string;
-  let readOnlyKeyId: string;
   let adminOnlyKeyId: string;
   let agentId: string;
 
@@ -51,7 +49,6 @@ describe("member and organization default keys the member cannot use", () => {
         ),
       );
       usableKeyId = usable.id;
-      readOnlyKeyId = readOnly.id;
       adminOnlyKeyId = adminOnly.id;
 
       const model = await ModelModel.create({
@@ -111,38 +108,5 @@ describe("member and organization default keys the member cannot use", () => {
       modelId,
       chatApiKeyId: usableKeyId,
     });
-  });
-
-  test("re-pairs a saved member default whose key became read-only", async () => {
-    await MemberModel.setDefaultModelSelection({
-      userId: member.id,
-      organizationId,
-      modelId,
-      apiKeyId: readOnlyKeyId,
-    });
-
-    const response = await startChat();
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      modelId,
-      chatApiKeyId: usableKeyId,
-    });
-  });
-
-  test("refuses to save a member default with a key the member cannot use", async () => {
-    const refused = await app.inject({
-      method: "PUT",
-      url: "/api/members/default-model",
-      payload: { modelId, chatApiKeyId: readOnlyKeyId },
-    });
-    expect(refused.statusCode).toBe(403);
-
-    const saved = await app.inject({
-      method: "PUT",
-      url: "/api/members/default-model",
-      payload: { modelId, chatApiKeyId: usableKeyId },
-    });
-    expect(saved.statusCode).toBe(200);
   });
 });

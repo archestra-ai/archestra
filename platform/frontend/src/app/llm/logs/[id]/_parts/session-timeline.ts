@@ -1,5 +1,8 @@
 import type { archestraApiTypes, InteractionSource } from "@archestra/shared";
-import { sourceLabel } from "@/app/llm/logs/_parts/logs-table-format";
+import {
+  sessionTitleOf,
+  sourceLabel,
+} from "@/app/llm/logs/_parts/logs-table-format";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import { formatElapsed } from "@/lib/utils/format-duration";
 
@@ -246,13 +249,22 @@ export function spanKind(
 
 /**
  * A request's name in the list: the sub-agent's label, what a side request
- * did, or who made a main-thread turn. ChatOps and chat turns are the
- * agent's own, so they carry its name rather than "Slack" or "Chat".
+ * did, or for a main-thread request what it produced (the tools it called,
+ * else the start of its reply). One prompt drives every request of an agent
+ * loop, so naming them by it repeated one line down the whole list; the
+ * prompt is the fallback for requests logged before their output was kept,
+ * then the agent's name.
  */
 export function requestLabel(
   row: Pick<
     InteractionSummary,
-    "requestType" | "source" | "externalAgentIdLabel" | "externalAgentId"
+    | "requestType"
+    | "source"
+    | "externalAgentIdLabel"
+    | "externalAgentId"
+    | "userMessagePreview"
+    | "responseToolNames"
+    | "responseTextPreview"
   >,
   profileName: string | null | undefined,
 ): string {
@@ -260,8 +272,28 @@ export function requestLabel(
   if (kind === "subagent") return row.externalAgentIdLabel || "Sub-agent";
   if (kind === "auxiliary" && row.source) return sourceLabel(row.source);
   return (
-    row.externalAgentIdLabel || row.externalAgentId || profileName || "Main"
+    requestOutcome(row) ||
+    requestPrompt(row) ||
+    row.externalAgentIdLabel ||
+    row.externalAgentId ||
+    profileName ||
+    "Main"
   );
+}
+
+/** The prompt a request served, when one was captured. */
+export function requestPrompt(
+  row: Pick<InteractionSummary, "userMessagePreview">,
+): string | null {
+  return sessionTitleOf({ lastUserMessagePreview: row.userMessagePreview });
+}
+
+/**
+ * A client's own prefix on an MCP tool (`mcp__<gateway>__`) names where the
+ * client reached it, not the tool: `linear__get_issue` says it.
+ */
+export function shortToolName(name: string): string {
+  return name.replace(/^mcp__.+?__/, "");
 }
 
 export const SPAN_KINDS: Record<
@@ -335,3 +367,20 @@ const AUXILIARY_SOURCES = new Set<InteractionSource>([
   "app:llm_complete",
   "app:recording_enhancement",
 ]);
+
+/** "Called Grep, Read" for a tool step, or the reply's first line. */
+function requestOutcome(
+  row: Pick<InteractionSummary, "responseToolNames" | "responseTextPreview">,
+): string | null {
+  const tools = row.responseToolNames ?? [];
+  if (tools.length > 0) {
+    const names = tools.map(shortToolName);
+    const shown = names.slice(0, MAX_LABEL_TOOLS).join(", ");
+    const more = names.length - MAX_LABEL_TOOLS;
+    return `Called ${shown}${more > 0 ? ` +${more}` : ""}`;
+  }
+  // Replies carry the same markdown and client tags as prompts do.
+  return sessionTitleOf({ lastUserMessagePreview: row.responseTextPreview });
+}
+
+const MAX_LABEL_TOOLS = 3;

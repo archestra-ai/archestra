@@ -13,7 +13,7 @@
 // without calling `iterator.return()` — an early `for await` break would cancel
 // the underlying generation and break the subsequent `toUIMessageStream` merge.
 
-import { streamText } from "ai";
+import { type ModelMessage, streamText } from "ai";
 import { isReasoningSummaryVerificationError } from "@/agents/openai-reasoning-summary";
 import logger from "@/logging";
 import {
@@ -124,6 +124,12 @@ export async function runAgentStream(params: {
   // whole request; retrying once without the option recovers the turn (minus
   // the thinking block). The strip is deterministic, so a second cannot help.
   const MAX_REASONING_SUMMARY_STRIP_ATTEMPTS = 1;
+  // Anthropic thinking signatures are bound to the system prompt they were
+  // produced under, so a prompt that changed since an earlier turn (template
+  // helpers, skill or tool changes, prompt edits) invalidates that turn's
+  // replayed thinking. Dropping the replayed reasoning is deterministic, so one
+  // retry is enough.
+  const MAX_REPLAYED_REASONING_STRIP_ATTEMPTS = 1;
   // One refit is enough: the budget is recomputed from the allowance the
   // provider itself reported, so a second rejection means something other than
   // the reservation is over the limit.
@@ -133,6 +139,7 @@ export async function runAgentStream(params: {
   let contextTrimAttempts = 0;
   let abortiveToolCallAttempts = 0;
   let reasoningSummaryStripAttempts = 0;
+  let replayedReasoningStripAttempts = 0;
 
   // Capture only the committed attempt's stream error. Reset before each
   // streamText call so a discarded retry's error never leaks into the mapping.
@@ -278,6 +285,28 @@ export async function runAgentStream(params: {
           );
         }
         currentConfig = withoutOpenAiReasoningSummary(currentConfig);
+        result = runAttempt();
+        continue;
+      }
+
+      const messagesWithoutReplayedReasoning =
+        replayedReasoningStripAttempts <
+          MAX_REPLAYED_REASONING_STRIP_ATTEMPTS &&
+        Array.isArray(currentConfig.messages) &&
+        isThinkingSignatureRejection(probe.error)
+          ? withoutReplayedReasoning(currentConfig.messages)
+          : null;
+      if (messagesWithoutReplayedReasoning !== null) {
+        replayedReasoningStripAttempts++;
+        logger.warn(
+          logContext,
+          "[ReplayedReasoning] provider rejected a replayed thinking signature, retrying without earlier reasoning",
+        );
+        currentConfig = {
+          ...currentConfig,
+          prompt: undefined,
+          messages: messagesWithoutReplayedReasoning,
+        };
         result = runAttempt();
         continue;
       }
@@ -496,6 +525,64 @@ function configRequestsOpenAiReasoningSummary(
 ): boolean {
   return config.providerOptions?.openai?.reasoningSummary != null;
 }
+
+function isThinkingSignatureRejection(error: unknown): boolean {
+  // SDK wrappers can nest the provider rejection under `cause`.
+  let current: unknown = error;
+  for (
+    let depth = 0;
+    depth < MAX_ERROR_CAUSE_DEPTH &&
+    current !== null &&
+    typeof current === "object";
+    depth++
+  ) {
+    const { message, responseBody } = current as {
+      message?: unknown;
+      responseBody?: unknown;
+    };
+    if (
+      [message, responseBody].some(
+        (text) =>
+          typeof text === "string" &&
+          THINKING_SIGNATURE_REJECTION_PATTERN.test(text),
+      )
+    ) {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Drops reasoning parts from assistant messages, and assistant messages left
+ * empty by that. Null when there is nothing to drop, so a retry that cannot
+ * change the request is skipped.
+ */
+function withoutReplayedReasoning(
+  messages: ModelMessage[],
+): ModelMessage[] | null {
+  let stripped = false;
+  const result = messages.flatMap((message): ModelMessage[] => {
+    if (message.role !== "assistant" || typeof message.content === "string") {
+      return [message];
+    }
+    const content = message.content.filter((part) => part.type !== "reasoning");
+    if (content.length === message.content.length) {
+      return [message];
+    }
+    stripped = true;
+    return content.length === 0 ? [] : [{ ...message, content }];
+  });
+  return stripped ? result : null;
+}
+
+// "Invalid `signature` in `thinking` block", returned by Anthropic and by
+// Bedrock for Anthropic models.
+const THINKING_SIGNATURE_REJECTION_PATTERN =
+  /invalid `?signature`? in `?thinking`? block/i;
+
+const MAX_ERROR_CAUSE_DEPTH = 5;
 
 function withoutOpenAiReasoningSummary(
   config: StreamTextConfig,

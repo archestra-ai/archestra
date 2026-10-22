@@ -150,7 +150,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let events: Array<Record<string, unknown>>;
   let block: boolean;
   let fail: boolean;
-  let failure: string;
+  let failure: Error;
   /** A tool whose annotator gives no answer, as the runtime reports it. */
   let unruled: string | undefined;
   let unregisterAppaPlugin: () => void;
@@ -244,7 +244,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       events = [];
       block = false;
       fail = false;
-      failure = "private native database error";
+      failure = new Error("private native database error");
       unruled = undefined;
       native.initializeOpenappa.mockResolvedValue(undefined);
       // Mirrors the real binding closely enough to be regression coverage: the
@@ -274,7 +274,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             .onConflictDoNothing();
         }
         if (event.event === "tool_call") {
-          if (fail) throw new Error(failure);
+          if (fail) throw failure;
           if (event.tool === unruled)
             throw new Error(
               "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
@@ -1506,7 +1506,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
-        newSessionPolicy: "live",
         annotatorModelId: null,
         annotatorLlmApiKeyId: null,
       });
@@ -1727,21 +1726,45 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     const response = await post(payload(false));
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["x-should-retry"]).toBe("false");
     expect(response.body).not.toContain("private native database error");
-    expect(response.body).toContain("OpenAPPA could not safely complete");
+    expect(response.body).toContain("Guardrails failed unexpectedly");
   });
 
   test("a refused policy names what to fix and is not a retryable outage", async () => {
     fail = true;
-    failure =
-      'unsupported policy: tool "grain__*" has an invalid qualified identity';
+    failure = Object.assign(
+      new Error(
+        'unsupported policy: tool "grain__*" has an invalid qualified identity',
+      ),
+      { code: "policy_refused" },
+    );
 
     const response = await post(payload(false));
 
     expect(response.statusCode).toBe(500);
     expect(response.json().error.message).toContain(
-      'the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+      'Guardrails refused the organization\'s policy (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+    );
+  });
+
+  test("a conversation whose content the policy runtime cannot store fails once, with what to do", async () => {
+    fail = true;
+    failure = Object.assign(
+      new Error(
+        "OpenAPPA processing interrupted: storage failure: receipt storage failed: PostgreSQL ERROR (SQLSTATE 22P05)",
+      ),
+      { code: "storage" },
+    );
+
+    const response = await post(payload(false));
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-should-retry"]).toBe("false");
+    expect(response.headers["retry-after"]).toBeUndefined();
+    expect(response.json().error.message).toMatch(
+      /^Guardrails cannot store this conversation because it contains a NUL character \(U\+0000\), usually from a tool that printed binary data\. Every retry sends the same conversation and fails the same way\. Rewind the conversation to before that tool output, or start a new conversation\./,
     );
   });
 
@@ -2288,7 +2311,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "Guardrails do not recognize this client",
+      "OpenAPPA does not recognize this client",
     );
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
@@ -2485,7 +2508,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json().error.message).toBe(
-      "The subagent binding is invalid or expired",
+      "OpenAPPA subagent binding is invalid or expired",
     );
     expect(providerRequests).toEqual([]);
   });
@@ -2576,7 +2599,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
-            newSessionPolicy: "live",
             annotatorModelId: null,
             annotatorLlmApiKeyId: null,
           };
@@ -2783,6 +2805,377 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ],
     });
     expect(JSON.stringify(question.input)).not.toContain(modelCopy);
+  });
+
+  // Claude Code with tool search on declares `ToolSearch` and a
+  // `defer_loading` placeholder, and the proxy refuses a call to any tool the
+  // request does not declare. The question it writes in place of ask_user is
+  // one the client declares, so it must reach the user.
+  describe("a Claude Code session that defers its tools to a tool search", () => {
+    const claudeSession = "c6d2a8e4-1f3b-4a7c-8e5d-9b0f2c4e6a18";
+    const claudeCode = () => ({
+      ...externalClientHeaders(),
+      "user-agent": "claude-code/2.1.303",
+      "x-claude-code-session-id": claudeSession,
+    });
+    const deferring = (body: ReturnType<typeof payload>) => {
+      body.tools.push(
+        {
+          name: "ToolSearch",
+          description: "Search for deferred tools",
+          input_schema: { type: "object", properties: {} },
+        },
+        {
+          name: "DeferredToolPlaceholder",
+          description: "Deferred",
+          input_schema: { type: "object", properties: {} },
+          defer_loading: true,
+        } as (typeof body.tools)[number],
+        {
+          name: "archestra__ask_user",
+          description: "Ask the user",
+          input_schema: { type: "object", properties: {} },
+        },
+        {
+          name: "AskUserQuestion",
+          description: "Ask the user a question",
+          input_schema: { type: "object", properties: {} },
+        },
+      );
+      return body as Record<string, unknown>;
+    };
+
+    test.each([
+      true,
+      false,
+    ])("presents ask_user with a staged HITL review as AskUserQuestion (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const offerId = "offer-hitl-deferred";
+      await stageHitlReview({
+        session: {
+          organization_id: agent.organizationId,
+          caller_id: `user:${userId}`,
+          session_id: `user:${userId}|${claudeSession}`,
+        },
+        review: {
+          offerId,
+          text: 'Approve this call?\nmcp/example/write {"value":1}',
+        },
+      });
+      const noticeId = "toolu_denied_weather";
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Model-authored copy",
+          options: [{ label: "Yes" }, { label: "No" }],
+          remedy_offer_ids: [offerId],
+        },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: askUser,
+        streamingToolUse: askUser,
+      };
+      const body = payload(stream, [
+        { role: "user", content: "Check the weather" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: noticeId,
+              name: "archestra__get_remedy_plans",
+              input: buildNoticeArguments({
+                id: noticeId,
+                tool: "get_weather",
+                arguments: { location: "SF" },
+                result: "[appa] Blocked",
+              }),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: noticeId,
+              content: "rendered for the user",
+            },
+          ],
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(body),
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain("is not loaded in this session");
+      const question = noticeFrom(response.body, stream);
+      expect(question.name).toBe("AskUserQuestion");
+      expect(question.input).toEqual({
+        questions: [
+          {
+            question: 'Approve this call?\nmcp/example/write {"value":1}',
+            header: "Tool call",
+            options: [
+              { label: "Allow", description: "This exact call." },
+              { label: "Deny", description: "Keep it blocked." },
+              {
+                label: "Inspect",
+                description: "Show the full review in chat.",
+              },
+            ],
+            multiSelect: false,
+          },
+        ],
+      });
+    });
+
+    test.each([
+      true,
+      false,
+    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Which report format?",
+          header: "Format",
+          options: [
+            { label: "Short", preview: "model-written preview" },
+            { label: "Long" },
+          ],
+        },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: askUser,
+        streamingToolUse: askUser,
+      };
+      const opening = [{ role: "user", content: "Write the report" }];
+
+      const asked = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(payload(stream, opening)),
+      });
+
+      expect(asked.statusCode, asked.body).toBe(200);
+      expect(asked.body).not.toContain("is not loaded in this session");
+      const question = noticeFrom(asked.body, stream);
+      expect(question.name).toBe("AskUserQuestion");
+      // The model wrote these options, so they carry no preview.
+      expect(question.input).toEqual({
+        questions: [
+          {
+            question: "Which report format?",
+            header: "Format",
+            options: [
+              { label: "Short", description: "Short" },
+              { label: "Long", description: "Long" },
+            ],
+            multiSelect: false,
+          },
+        ],
+      });
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      providerRequests.length = 0;
+      const answer =
+        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answered = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(
+          payload(stream, [
+            ...opening,
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: question.id,
+                  name: question.name,
+                  input: question.input,
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: question.id,
+                  content: answer,
+                },
+              ],
+            },
+          ]),
+        ),
+      });
+
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { role: string; content: unknown }[];
+      };
+      // The model receives the user's answer as the result of its question.
+      expect(sent.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          expect.objectContaining({
+            type: "tool_result",
+            tool_use_id: question.id,
+            content: answer,
+          }),
+        ],
+      });
+    });
+
+    test.each([
+      true,
+      false,
+    ])("shows the complete review after Inspect and records the ruling on Allow, each card reaching the user (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const offerId = "offer-hitl-deferred-inspect";
+      const session = {
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: `user:${userId}|${claudeSession}`,
+      };
+      // Longer than the card's preview shows, so only Inspect delivers it.
+      const command = `echo ${"exact-payload ".repeat(400)}`;
+      await stageHitlReview({
+        session,
+        review: {
+          offerId,
+          text: [
+            "[OpenAPPA] Approve this call?",
+            "",
+            "What this ruling would cover:",
+            "  - the readers must be the public audience",
+            "",
+          ].join("\n"),
+          tool: "Bash",
+          arguments: JSON.stringify({ command, cmd: command }),
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Open the pending HITL review.",
+          header: "Approval",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+        },
+      };
+      const send = (history: unknown[]) => {
+        providerRequests.length = 0;
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...internalCallHeader(), ...claudeCode() },
+          payload: deferring(payload(stream, history)),
+        });
+      };
+      const ask = async (history: unknown[]) => {
+        options = {
+          includeToolUse: true,
+          streamStopReason: "tool_use",
+          nonStreamingToolUse: askUser,
+          streamingToolUse: askUser,
+        };
+        const response = await send(history);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toContain("is not loaded in this session");
+        const card = noticeFrom(response.body, stream);
+        expect(card.name).toBe("AskUserQuestion");
+        const [question] = (
+          card.input as {
+            questions: Array<{
+              question: string;
+              options: Array<{ label: string }>;
+            }>;
+          }
+        ).questions;
+        expect(question.options.map((option) => option.label)).toEqual([
+          "Allow",
+          "Deny",
+          "Inspect",
+        ]);
+        return { body: response.body, card, question: question.question };
+      };
+      const answered = (
+        card: ReturnType<typeof noticeFrom>,
+        question: string,
+        label: string,
+      ) => [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: card.id,
+              name: card.name,
+              input: card.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: card.id,
+              content: `Your questions have been answered: "${question}"="${label}". You can now continue with these answers in mind.`,
+            },
+          ],
+        },
+      ];
+      const opening = [{ role: "user", content: "Run the command" }];
+
+      const first = await ask(opening);
+      expect(first.body).not.toContain("exact-payload");
+
+      // Inspect: the complete review precedes the same card, and the model
+      // reads the instruction to ask again in place of the answer.
+      const inspecting = [
+        ...opening,
+        ...answered(first.card, first.question, "Inspect"),
+      ];
+      const second = await ask(inspecting);
+      expect(second.body).toContain("exact-payload");
+      expect(JSON.stringify(providerRequests.at(-1))).toContain(
+        "the platform will place the complete, authoritative review",
+      );
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+
+      // Allow on the card issued again records the ruling.
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const approved = await send([
+        ...inspecting,
+        ...answered(second.card, second.question, "Allow"),
+      ]);
+      expect(approved.statusCode, approved.body).toBe(200);
+      expect(approved.body).not.toContain("is not loaded in this session");
+      expect(JSON.stringify(providerRequests.at(-1))).toContain(
+        "approved OpenAPPA offer IDs",
+      );
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
   });
 
   test.each([
@@ -7717,9 +8110,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(providerRequests).toHaveLength(0);
         const { message } = response.json().error;
         expect(message).toContain(
-          "this subagent did not start through a checked spawn",
+          "this subagent because it did not start through a checked spawn",
         );
-        expect(message).toContain("start a new subagent");
+        expect(message).toContain("Start a new subagent");
       });
     });
 
@@ -10432,6 +10825,109 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events.filter((event) => event.spawned_id)).toEqual([]);
     });
 
+    test.for([
+      false,
+      true,
+    ])("a Claude Code subagent that failed before it returned closes its spawn, and the parent goes on (is_error=%s)", async (isError) => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "3c1d9e2a-6f4b-4a8e-9d2c-5e7f8a9b0c1d";
+      native.loadChildReturns.mockImplementation(async () => []);
+      // The runtime closes a spawn that returned nothing and withholds the
+      // client's text.
+      const reason =
+        "the spawn did not take: no prepared fork to open this child";
+      const fallback = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_result" || event.outcome !== "failure")
+          return fallback?.(raw);
+        events.push(event);
+        return JSON.stringify({
+          decision: "block",
+          reason,
+          approved_output: `[appa] Tool output withheld: ${reason}`,
+          output_source: "runtime",
+        });
+      });
+      const send = (messages: unknown[]) => {
+        const body = payload(false, messages);
+        body.tools.push({
+          name: "Agent",
+          description: "Launch a subagent",
+          input_schema: { type: "object", properties: {} },
+        });
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.285 (external, cli)",
+            "x-claude-code-session-id": session,
+          },
+          payload: body,
+        });
+      };
+      // OpenAPPA releases the spawn and marks its prompt.
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { description: "lint", prompt: spawnPrompt },
+        },
+      };
+      const root = await send([{ role: "user", content: "Lint" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const call = noticeFrom(root.body, false);
+      expect(String(call.input.prompt)).toContain(
+        "[appa] delegated trajectory",
+      );
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await send([
+        { role: "user", content: "Lint" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: call.id,
+              name: call.name,
+              input: call.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          // The client's own text: the child failed before it returned, so
+          // the result carries no return marker.
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: call.id,
+              ...(isError ? { is_error: true } : {}),
+              content: [{ type: "text", text: "API Error: 401 CHILD FAILED" }],
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "tool_result",
+          outcome: "failure",
+        }),
+      );
+      const forwarded = JSON.stringify(providerRequests.at(-1));
+      expect(forwarded).toContain(`[appa] Tool output withheld: ${reason}`);
+      expect(forwarded).not.toContain("CHILD FAILED");
+    });
+
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({
       makeAgent,
     }) => {
@@ -12172,7 +12668,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       const text = first.json().content[0].text;
       const footer = text.match(
-        /▄█▄▄▄█▄\n██▄█▄██\s+started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\./,
+        /▄█▄▄▄█▄\s+started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\./,
       )?.[0];
       expect(footer).toBeDefined();
       options = {
@@ -12820,7 +13316,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("NATIVE REFUSAL");
       expect(response.body).not.toContain("defers its tools");
       expect(response.body).not.toContain(
-        "Guardrails do not recognize this client",
+        "OpenAPPA does not recognize this client",
       );
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
@@ -12844,7 +13340,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }) => {
       expect(response.statusCode, response.body).toBe(400);
       expect(response.body).toContain(
-        "Guardrails do not recognize this client",
+        "OpenAPPA does not recognize this client",
       );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
@@ -13031,7 +13527,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           400,
         );
         expect(response.body, item.label).toContain(
-          "Guardrails do not recognize this client",
+          "OpenAPPA does not recognize this client",
         );
         expect(providerRequests, item.label).toHaveLength(0);
         expect(events, item.label).toEqual([]);

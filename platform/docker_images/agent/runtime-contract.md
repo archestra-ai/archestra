@@ -12,11 +12,18 @@ This reference is for custom image authors. For maintained image targets and bui
 | Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
+| Machine description | Optional. `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` already says which files persist and which ports the user can forward. Describe what your image installs, and where to work, in your client's instructions. The maintained launchers append `/etc/archestra/agent-environment.md` for this. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
+
+### Background work in maintained images
+
+One delegated assignment may span several model turns. A turn ending to wait for background results does not mean that assignment is complete. The maintained TUI supervisor can publish the assignment result while retaining the native client for later interaction, so a live process alone does not establish that reporting is still active.
+
+Claude Code supplies both `background_tasks` and `session_crons` from its Stop hook. Every registered entry holds the assignment, without a task-type allowlist. Its adapter also tracks native background launches through result delivery: a finished shell or agent can leave the running inventory before its notification reaches the main agent. This delivery state is scoped to the current assignment and reset at wrapper startup. Completion requires a fresh main-agent Stop with no pending work. Missing or invalid inventory fails the assignment explicitly. Waiting suppresses idle-input attention; permission requests remain visible. Cancellation, API failure and the workspace hard deadline still end the run. A quiet recurring monitor must be deleted when no longer needed. Unregistered detached processes are outside this contract. Interactive sessions retain their existing lifecycle. Other harnesses still need verified native adapters before adopting this policy.
 
 ## Failure Reasons
 
@@ -46,7 +53,7 @@ The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON
 
 Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
 
-The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity and GitHub setup failures. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
+The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode and OpenClaw wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity failures, GitHub setup failures, and GitHub credentials that GitHub rejects. Codex, Hermes, OpenCode, and OpenClaw publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
 
 The Codex wrapper reads terminal `task_complete.error` events from the main session's structured rollout. Failed delegated turns publish the upstream message after credential redaction and settle as failed. Interactive sessions request attention. Earlier resumed turns, subagent errors, and transient retries cannot fail the current turn. Rebuild maintained Codex images and advance derived-image pins to receive this behavior.
 
@@ -175,7 +182,11 @@ Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime re
 
 Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
 
-Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
+Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_agent_run_file` without a supported external-egress crossing.
+
+To post a file from the workspace to the run's thread, call `post_agent_run_file` with `path`: the file's path relative to `/home/node/workspace`, or absolute under it. The platform reads it from this run's workspace, so its bytes never pass through the model. Copy a file saved elsewhere into the workspace first. Paths that leave the workspace, symlinks, directories, and files over 40 MB are refused.
+
+A session that a person superyelled, whose parent was superyelled, or that started while Guardrails enforcement was off gets no source proof, because Guardrails no longer check it. Its proofless calls to its own runtime tools are accepted. A governed session's proofless calls are refused, including a script that calls the gateway directly: make the call as a tool call from the run's model instead.
 
 Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
 

@@ -116,6 +116,33 @@ describe("thread state rules", () => {
     });
   });
 
+  test("a tool input holding a NUL is stored and read back exactly", async () => {
+    const organizationId = randomUUID();
+    const sessionId = randomUUID();
+    const messageId = randomUUID();
+    const nulCall = {
+      id: "toolu_nul",
+      name: "Bash",
+      input: { command: "printf 'head\u0000tail'" },
+    };
+    await threadStates.record({
+      record: { organizationId, sessionId, tools },
+      messageId,
+      calls: [nulCall],
+      diverged: false,
+    });
+
+    const [stored] = await db.select().from(schema.openappaThreadStatesTable);
+    expect(JSON.stringify(stored.calls)).not.toContain("\\u0000");
+    expect(
+      await threadStates.forContinue({
+        organizationId,
+        sessionId,
+        previousMessageId: messageId,
+      }),
+    ).toMatchObject({ ok: true, tools, calls: [nulCall] });
+  });
+
   test("retains original contracts through JSON storage and continuation hydration", async () => {
     const tools = threadToolsOf({
       declarations: [

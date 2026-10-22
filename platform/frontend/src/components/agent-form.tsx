@@ -30,7 +30,6 @@ import {
 import {
   AlertTriangle,
   Bot,
-  CheckIcon,
   ChevronRight,
   Globe,
   InfoIcon,
@@ -110,6 +109,11 @@ import {
 } from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
+import {
+  EMPTY_MODEL_TIERS,
+  ModelTierPickers,
+  type ModelTierSelection,
+} from "@/components/model-tier-pickers";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { SettingIcon } from "@/components/setting-icon";
 import {
@@ -148,7 +152,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -212,21 +215,18 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
+import { AccessModeCards, accessModeCountStat } from "./access-mode-cards";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
-  assignedSubagentsSummary,
-  assignedToolsSummary,
   excludedSourcesSummary,
-  excludedSubagentsSummary,
-  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
-  publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
@@ -1292,6 +1292,21 @@ export function AgentForm({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
+  // Fast/smart models belong to the key they were picked for; any other key
+  // sees them as unset.
+  const [keyedModelTiers, setKeyedModelTiers] = useState<{
+    keyId: string | null;
+    tiers: ModelTierSelection;
+  }>({ keyId: null, tiers: EMPTY_MODEL_TIERS });
+  const modelTiers =
+    keyedModelTiers.keyId === llmApiKeyId
+      ? keyedModelTiers.tiers
+      : EMPTY_MODEL_TIERS;
+  const { data: organization } = useOrganization();
+  const organizationModelTiers: ModelTierSelection = {
+    fast: organization?.defaultFastModelId ?? null,
+    smart: organization?.defaultSmartModelId ?? null,
+  };
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1684,6 +1699,10 @@ export function AgentForm({
             labels: agentData.labels,
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
+            modelTiers: {
+              fast: agentData.fastModelId ?? null,
+              smart: agentData.smartModelId ?? null,
+            },
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1714,6 +1733,7 @@ export function AgentForm({
             labels: [],
             llmApiKeyId: null,
             llmModel: null,
+            modelTiers: EMPTY_MODEL_TIERS,
             identityProviderId: undefined,
             environmentId: undefined,
             knowledgeBaseIds: [],
@@ -1738,6 +1758,10 @@ export function AgentForm({
       setSuggestedPromptsOpen(false);
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
+      setKeyedModelTiers({
+        keyId: nextValues.llmApiKeyId,
+        tiers: nextValues.modelTiers,
+      });
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
@@ -1877,9 +1901,6 @@ export function AgentForm({
   const disabledSubagentCount = disabledSubagentIds.length;
   const delegationTargetIdsToSave = selectedDelegationTargetIds;
   const disabledSubagentIdsToSave = disabledSubagentIds;
-  const handleSubagentModeChange = (value: string) =>
-    setAccessAllSubagents(value === "auto");
-
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
@@ -2137,7 +2158,9 @@ export function AgentForm({
   const llmSelectionChanged =
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-      (llmModel ?? null) !== (persistedAgent.modelId ?? null));
+      (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
+      modelTiers.fast !== (persistedAgent.fastModelId ?? null) ||
+      modelTiers.smart !== (persistedAgent.smartModelId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2253,6 +2276,8 @@ export function AgentForm({
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
+              fastModelId: modelTiers.fast,
+              smartModelId: modelTiers.smart,
             }),
           },
         });
@@ -2288,6 +2313,8 @@ export function AgentForm({
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
+                  fastModelId: modelTiers.fast,
+                  smartModelId: modelTiers.smart,
                 }),
               }),
             }),
@@ -2353,6 +2380,8 @@ export function AgentForm({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
+            fastModelId: modelTiers.fast,
+            smartModelId: modelTiers.smart,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2653,6 +2682,7 @@ export function AgentForm({
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
     runtimeHasLocalChanges,
+    modelTiers,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2742,6 +2772,7 @@ export function AgentForm({
     labels,
     llmApiKeyId,
     llmModel,
+    modelTiers,
     identityProviderId,
     environmentId,
     knowledgeBaseIds,
@@ -3081,10 +3112,26 @@ export function AgentForm({
               }
             />
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <div className="min-w-0">{providerKeyControl}</div>
-              <div className="min-w-0">{modelControl}</div>
-            </div>
+            <>
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="min-w-0">{providerKeyControl}</div>
+                <div className="min-w-0">{modelControl}</div>
+              </div>
+              {selectedApiKey && (
+                <div className="sm:max-w-sm">
+                  <ModelTierPickers
+                    apiKeyId={selectedApiKey.id}
+                    provider={selectedApiKey.provider}
+                    value={modelTiers}
+                    onChange={(tiers) =>
+                      setKeyedModelTiers({ keyId: selectedApiKey.id, tiers })
+                    }
+                    inherited={organizationModelTiers}
+                    disabled={readOnly}
+                  />
+                </div>
+              )}
+            </>
           )}
           {runtimeModelIncompatibility &&
             !needsClaudeProviderKey &&
@@ -3373,42 +3420,52 @@ export function AgentForm({
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">
-                    {/* What the mode means, beside the control that sets it.
-                        A full-width tab bar over the whole panel read as the
-                        page's own navigation rather than this block's switch,
-                        and the count it governed sat somewhere else entirely.
-                        Both panels stay mounted, so the sentence is resolved
-                        here rather than inside either of them. */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-muted-foreground">
-                        {autoToolsMode
-                          ? excludedToolsSummary(
-                              exclusionsState
-                                ? exclusionsState.current.excludedToolIds.length
-                                : null,
-                            )
-                          : assignedToolsSummary(assignedToolCount)}
-                      </p>
-                      {!isBuiltIn && (
-                        <Tabs
-                          value={autoToolsMode ? "auto" : "custom"}
-                          onValueChange={(value) => {
-                            const auto = value === "auto";
-                            setAccessAllTools(auto);
-                            // Dynamic access only works through the search/run
-                            // dispatch surface, so picking it enables that mode.
-                            if (auto) {
-                              setToolExposureMode("search_and_run_only");
-                            }
-                          }}
-                        >
-                          <TabsList size="sm">
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      )}
-                    </div>
+                    {/* Each card states what the list below it means: in All
+                        it blocks tools, in Manual it allows them. Both panels
+                        stay mounted, so the counts are resolved here rather
+                        than inside either of them. */}
+                    <AccessModeCards
+                      label="Tool access"
+                      mode={autoToolsMode ? "all" : "manual"}
+                      readOnly={isBuiltIn}
+                      onModeChange={(mode) => {
+                        const auto = mode === "all";
+                        setAccessAllTools(auto);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (auto) setToolExposureMode("search_and_run_only");
+                      }}
+                      all={{
+                        title: "All tools",
+                        rule: "Everything is on, including tools added later. Disable the ones you don't want.",
+                        stat: accessModeCountStat(
+                          exclusionsState
+                            ? exclusionsState.current.excludedToolIds.length
+                            : null,
+                          "disabled",
+                        ),
+                      }}
+                      manual={{
+                        title: "Manual",
+                        rule: "Only the tools you pick. New tools stay off.",
+                        stat: accessModeCountStat(
+                          assignedToolCount,
+                          "assigned",
+                        ),
+                      }}
+                      footnote={
+                        autoToolsMode ? (
+                          <p>
+                            To save context, the{" "}
+                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
+                            sees only{" "}
+                            <code className="font-mono">search_tools</code> and{" "}
+                            <code className="font-mono">run_tool</code>, and
+                            looks up the rest when it needs one.
+                          </p>
+                        ) : null
+                      }
+                    />
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
                         they carry the same order, the same widgets and the same
@@ -3656,22 +3713,29 @@ export function AgentForm({
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {accessAllSubagents
-                            ? excludedSubagentsSummary(disabledSubagentCount)
-                            : assignedSubagentsSummary(delegationTargetCount)}
-                        </p>
-                        <Tabs
-                          value={accessAllSubagents ? "auto" : "custom"}
-                          onValueChange={handleSubagentModeChange}
-                        >
-                          <TabsList size="sm">
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
+                      <AccessModeCards
+                        label="Subagent access"
+                        mode={accessAllSubagents ? "all" : "manual"}
+                        onModeChange={(mode) =>
+                          setAccessAllSubagents(mode === "all")
+                        }
+                        all={{
+                          title: "All agents",
+                          rule: "Every local agent, including ones added later. Exclude the ones you don't want.",
+                          stat: accessModeCountStat(
+                            disabledSubagentCount,
+                            "excluded",
+                          ),
+                        }}
+                        manual={{
+                          title: "Manual",
+                          rule: "Only the agents you pick. New agents stay off.",
+                          stat: accessModeCountStat(
+                            delegationTargetCount,
+                            "assigned",
+                          ),
+                        }}
+                      />
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
@@ -3788,11 +3852,15 @@ export function AgentForm({
                       onModeChange={(mode) =>
                         setAccessAllSkills(mode === "all")
                       }
-                      summary={publishedSkillsSummary({
-                        publishesAll: accessAllSkills,
-                        excludedCount: excludedSkillIds.length,
-                        assignedCount: assignedSkillIds.length,
-                      })}
+                      allRule="Every organization-wide skill in this environment, including new ones. Exclude the ones you don't want."
+                      allStat={accessModeCountStat(
+                        excludedSkillIds.length,
+                        "excluded",
+                      )}
+                      manualStat={accessModeCountStat(
+                        assignedSkillIds.length,
+                        "assigned",
+                      )}
                       availableSkillsView={
                         <AvailableSkillsDialog
                           source={{
@@ -3804,20 +3872,10 @@ export function AgentForm({
                       }
                       allEditor={
                         <div className="space-y-2">
-                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Publishes skills with organization-wide use
-                              permission in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}
-                              's environment — new ones included automatically
-                            </li>
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Other skills require permission to share them and
-                              a manual assignment
-                            </li>
-                          </ul>
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Other skills need permission to share them and a
+                            manual assignment.
+                          </p>
                           <div className="space-y-1.5">
                             <AgentSkillsEditor
                               availableSkills={availableSkillsForExclusion}
@@ -4278,6 +4336,7 @@ type AgentFormFields = {
   labels: ProfileLabel[];
   llmApiKeyId: string | null;
   llmModel: string | null;
+  modelTiers: ModelTierSelection;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   knowledgeBaseIds: string[];

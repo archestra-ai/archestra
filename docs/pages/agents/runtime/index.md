@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,12 +14,12 @@ Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sa
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Coding agents](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Coding agents**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
+2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -29,9 +29,9 @@ Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Run
 
 From a connected client, ask your agent to create one. [`create_agent`](/docs/reference/archestra-mcp-server#create_agent) takes the same choice as `runtime: { "template": "claude-code" }`, or a custom `image`. [`list_llm_models`](/docs/reference/archestra-mcp-server#list_llm_models) finds a model to pin.
 
-### Choose and Order Coding Agents
+### Choose and Order Agent Runtimes
 
-With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Coding agents** to choose the agents offered during creation.
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Agent Runtimes** to choose the agents offered during creation.
 
 1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
@@ -61,18 +61,18 @@ What to know:
 
 ### Clone a Private GitHub Repository
 
-The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands, including `git clone`.
+Give a built-in coding agent a `GITHUB_TOKEN`, and it can clone, commit, push, and open pull requests as that token's GitHub account.
 
-1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
+1. Save a GitHub token in [Credentials](/docs/admin/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
 3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
-4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the Agent's container.
+4. Save the agent, start a new run, and ask it to clone the repository, make a change, and open a pull request. The pull request's commits show the token's GitHub account as their author. If GitHub rejects the token, the run stops before the agent starts.
 
 What to know:
 
 - For a token used only by this agent, choose **Resource-specific secret** instead. Secret values are provided after saving; turn on **Required variable** to have Chat prompt for a missing value before a run.
 - **Accept credentials from a connected client** controls [credential transfers during handoff](/docs/agents/runtime/handoff#pass-a-credential). It is not required for secrets configured under **Environment**.
-- To compile code with an additional toolchain, such as Go, [extend the agent image](/docs/agents/runtime/custom-images#add-a-toolchain).
+- The built-in images include Node.js, Python, Rust, and PostgreSQL with pgvector. To compile code with another toolchain, such as Go, [extend the agent image](/docs/agents/runtime/custom-images#add-a-toolchain).
 
 ## Run a Task
 
@@ -99,7 +99,7 @@ What to know:
 
 ### Limits
 
-Set these under **Limits** on the agent's **Agent Runtime** tab. A field you leave empty uses the [deployment default](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS).
+Set these under **Limits** on the agent's **Agent Runtime** tab. A field you leave empty uses the [deployment default](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS).
 
 | Setting | What It Does |
 | --- | --- |
@@ -130,7 +130,7 @@ What to know:
 
 ## Start Runs From Elsewhere
 
-- **Your coding agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
+- **Remote Agents:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
@@ -140,6 +140,10 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
-- **A model call fails with HTTP 500 and `x-should-retry: false`:** the organization's [Guardrails](/docs/agents/guardrails) policy is invalid. An administrator must fix it. Retrying does not help.
+- **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
+  - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.
+  - `409`: the conversation cannot continue. Start a new one.
+  - `500` with `x-should-retry: false`: an administrator must fix the policy or the deployment setting the message names, or report the reference it carries.
+  - `503`: a short outage. The client retries on its own.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

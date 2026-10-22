@@ -14,6 +14,7 @@ import {
   openappaActor,
   scopedSessionId,
 } from "@/openappa/actor";
+import { openPlainJson, openPlainText } from "@/openappa/plaintext-envelope";
 import { mintReceiptCode } from "@/openappa/session-token";
 import { ApiError } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -67,24 +68,6 @@ class OpenAppaSessionModel {
       )
       .limit(1);
     return row?.parentId ?? null;
-  }
-
-  /** The runtime root a started session decides under. Null before its first event. */
-  static async root(params: {
-    organizationId: string;
-    sessionId: string;
-  }): Promise<string | null> {
-    const [row] = await db
-      .select({ root: table.root })
-      .from(table)
-      .where(
-        and(
-          eq(table.actor, openappaActor(params.sessionId)),
-          eq(table.organizationId, params.organizationId),
-        ),
-      )
-      .limit(1);
-    return row?.root ?? null;
   }
 
   /**
@@ -346,7 +329,10 @@ class OpenAppaSessionModel {
         ),
       );
     return new Map(
-      rows.map((row) => [row.operationId.slice("call:".length), row.decision]),
+      rows.map((row) => [
+        row.operationId.slice("call:".length),
+        openPlainJson(row.decision),
+      ]),
     );
   }
 
@@ -376,7 +362,7 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return row?.approvedOutput ?? null;
+    return openPlainText(row?.approvedOutput ?? null);
   }
 
   /**
@@ -409,7 +395,10 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return peerReadReceipt(row?.decision, row?.approvedOutput ?? null);
+    return peerReadReceipt(
+      openPlainJson(row?.decision),
+      openPlainText(row?.approvedOutput ?? null),
+    );
   }
 
   /**
@@ -532,7 +521,7 @@ class OpenAppaSessionModel {
     if (!scoped && ownRows.length > 1) {
       throw new ApiError(
         409,
-        `Session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
+        `OpenAPPA session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
       );
     }
     const [own] = ownRows;

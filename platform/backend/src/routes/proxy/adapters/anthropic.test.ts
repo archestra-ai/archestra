@@ -2160,7 +2160,7 @@ describe("AnthropicStreamAdapter carries cache usage to the end of the turn", ()
   }
 
   test("the synthesized message_delta reports the turn's cumulative usage", () => {
-    expect(endEventUsage(streamCachedTurn().formatEndSSE())).toEqual({
+    expect(endEventUsage(streamCachedTurn().formatEndSSE())).toMatchObject({
       input_tokens: 4,
       output_tokens: 55,
       cache_read_input_tokens: 90_000,
@@ -2214,4 +2214,79 @@ describe("AnthropicStreamAdapter carries cache usage to the end of the turn", ()
       cache_creation_input_tokens: 0,
     });
   });
+});
+
+describe("AnthropicRequestAdapter replayed tool-call ids", () => {
+  test("fits a foreign call id after the result update looked it up", () => {
+    const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+    const request = createMockRequest([
+      { role: "user", content: "Read a.txt" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: geminiCallId, name: "read", input: {} },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: geminiCallId, content: "SECRET" },
+        ],
+      },
+    ] as Anthropic.Types.MessagesRequest["messages"]);
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ [geminiCallId]: "sanitized" });
+    const messages = adapter.toProviderRequest().messages;
+
+    const [toolUse] = messages[1].content as Array<{ id: string }>;
+    const [toolResult] = messages[2].content as Array<{
+      tool_use_id: string;
+    }>;
+    expect(toolUse.id).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(toolResult.tool_use_id).toBe(toolUse.id);
+    expect(JSON.stringify(messages)).toContain("sanitized");
+    expect(JSON.stringify(messages)).not.toContain("SECRET");
+  });
+
+  test("keeps an id Anthropic minted", () => {
+    const request = createMockRequest([
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "toolu_01AbC", name: "read", input: {} },
+        ],
+      },
+    ] as Anthropic.Types.MessagesRequest["messages"]);
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+
+    expect(adapter.toProviderRequest().messages).toEqual(request.messages);
+  });
+});
+
+test("retains unknown usage and cache fields while marking unsupported cache accounting incomplete", () => {
+  const adapter = anthropicAdapterFactory.createStreamAdapter();
+  adapter.processChunk({
+    type: "message_start",
+    message: {
+      id: "msg_usage",
+      model: "executor",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cache_creation_input_tokens: 50,
+        provider_accounting_note: "retained",
+        cache_creation: {
+          ephemeral_5m_input_tokens: 50,
+          future_ttl_tokens: 12,
+        },
+      },
+    },
+  } as never);
+  expect(adapter.toProviderResponse().usage).toMatchObject({
+    provider_accounting_note: "retained",
+    cache_creation: { future_ttl_tokens: 12 },
+  });
+  expect(adapter.state.usage?.billingUsage?.status).toBe("incomplete");
 });

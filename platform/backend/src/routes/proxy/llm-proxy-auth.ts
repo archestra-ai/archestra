@@ -18,7 +18,7 @@ import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -43,7 +43,10 @@ import { assertSubscriptionCredentialForProvider } from "@/services/subscription
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
+import {
+  type ProviderKeySelection,
+  selectMappedProviderKey,
+} from "@/utils/provider-key-mappings";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -174,6 +177,7 @@ export async function validateVirtualApiKey(params: {
    * serves the model. Without it the key's preferred endpoint answers.
    */
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -204,6 +208,7 @@ export async function validateVirtualApiKey(params: {
         ),
         provider: expectedProvider,
         modelId: params.requestedModel,
+        selection: params.providerKeySelection,
       })
     : undefined;
   if (!mappedProviderKey) {
@@ -212,6 +217,14 @@ export async function validateVirtualApiKey(params: {
       `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
   }
+  if (
+    mappedProviderKey.organizationId !== resolved.virtualKey.organizationId ||
+    mappedProviderKey.providerApiKeyProvider !== expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "Virtual API key references an unavailable provider account.",
+    );
 
   // Resolve the real provider API key from the secret first — the per-user
   // check below needs it to recognize a ChatGPT-subscription (Codex) credential.
@@ -360,6 +373,7 @@ export async function validatePassthroughVirtualKey(params: {
   const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
     userId: virtualKey.authorId,
     agentId: agent.id,
+    agentAccessContext: agent,
     isAgentAdmin: ownerIsAgentAdmin,
     action: "use",
   });
@@ -421,6 +435,7 @@ export async function validateLlmOAuthAccessToken(params: {
    * that hosts this model rather than an arbitrary sibling.
    */
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
@@ -456,6 +471,7 @@ export async function validateLlmOAuthAccessToken(params: {
       expectedProvider: params.expectedProvider,
       agent: params.agent,
       requestedModel: params.requestedModel,
+      providerKeySelection: params.providerKeySelection,
     });
   }
 
@@ -464,6 +480,7 @@ export async function validateLlmOAuthAccessToken(params: {
     expectedProvider: params.expectedProvider,
     agent: params.agent,
     requestedModel: params.requestedModel,
+    providerKeySelection: params.providerKeySelection,
   });
 }
 
@@ -490,6 +507,7 @@ export async function attemptJwksAuth(
   request: FastifyRequest,
   resolvedAgent: GatewayAgent,
   providerName: string,
+  providerKeySelection?: ProviderKeySelection,
 ): Promise<JwksAuthResult | null> {
   if (!resolvedAgent.identityProviderId) return null;
 
@@ -554,6 +572,7 @@ export async function attemptJwksAuth(
       userId: jwksResult.userId,
       provider: providerName,
       modelName: requestedModelFromBody(request),
+      selection: providerKeySelection,
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
@@ -594,7 +613,7 @@ export async function assertPlatformAuthenticated(params: {
   /** A passthrough virtual key from `X-Archestra-Virtual-Key` was validated. */
   wasPassthroughKeyValidated: boolean;
   wasJwksAuthenticated: boolean;
-  /** The request carried a valid in-process proof (see `takeInternalCall`). */
+  /** The request carried a valid in-process proof (see `internalCallProvenance`). */
   isInternalCall: boolean;
   /**
    * True when the backend authenticates upstream with its OWN credentials and
@@ -898,6 +917,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   expectedProvider: string;
   agent: GatewayAgent;
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -921,6 +941,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     !(await AgentTeamModel.userHasAgentAccess({
       userId: serviceAccountUserId(account.id),
       agentId: params.agent.id,
+      agentAccessContext: params.agent,
       action: "use",
       isAgentAdmin: await ResourcePermissions.allows({
         userId: serviceAccountUserId(account.id),
@@ -937,6 +958,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
         mappings: await resolveOauthClientProviderMappings(oauthClient),
         provider: params.expectedProvider,
         modelId: params.requestedModel,
+        selection: params.providerKeySelection,
       })
     : undefined;
   if (!mappedProviderKey) {
@@ -955,6 +977,14 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       "LLM OAuth client references a missing provider API key.",
     );
   }
+  if (
+    providerApiKey.organizationId !== oauthClient.organizationId ||
+    providerApiKey.provider !== params.expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "LLM OAuth client references an unavailable provider account.",
+    );
   const oauthMappedSecret = providerApiKey.secretId
     ? ((await getSecretValueForLlmProviderApiKey(providerApiKey.secretId)) as
         | string
@@ -1005,6 +1035,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   expectedProvider: string;
   agent: GatewayAgent;
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const member = await MemberModel.getByUserId(
     params.userId,
@@ -1017,6 +1048,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
     userId: params.userId,
     agentId: params.agent.id,
+    agentAccessContext: params.agent,
     isAgentAdmin: false,
     action: "use",
   });
@@ -1035,6 +1067,7 @@ async function validateUserLlmOAuthAccessToken(params: {
     userId: params.userId,
     provider: params.expectedProvider,
     modelName: params.requestedModel,
+    selection: params.providerKeySelection,
   });
   const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
 
@@ -1176,7 +1209,7 @@ async function authenticatePassthroughProxyRequest(params: {
   // keyless-provider allowance in the instrumented handler. The proof is a
   // per-process secret, so a request arriving through the frontend rewrite
   // cannot satisfy it. Taking it also keeps it off the forwarded request.
-  const proof = takeInternalCall(request.headers);
+  const proof = internalCallProvenance(request);
   if (proof.inProcess || proof.guardrail) return;
 
   const unauthenticated = new ApiError(
@@ -1199,6 +1232,7 @@ async function authenticatePassthroughProxyRequest(params: {
   }
 
   const presentedCredential = passthroughToken ?? bearerToken ?? undefined;
+  let authenticatedBearer = false;
   await virtualKeyRateLimiter.check({
     ip: request.ip,
     credential: presentedCredential,
@@ -1229,6 +1263,7 @@ async function authenticatePassthroughProxyRequest(params: {
             agent.organizationId,
           ));
         if (!member) throw unauthenticated;
+        authenticatedBearer = true;
         return;
       }
       // Token validity and expiry are the whole bar here. The provider-mapping
@@ -1236,11 +1271,15 @@ async function authenticatePassthroughProxyRequest(params: {
       // to use, and a pass-through forwards none — so requiring it would reject
       // otherwise-valid platform credentials for no security gain.
       await validateVirtualApiKeyToken(bearerToken);
+      authenticatedBearer = true;
       return;
     }
 
     const agent = await resolveAgent(agentId);
-    if (await attemptJwksAuth(request, agent, provider)) return;
+    if (await attemptJwksAuth(request, agent, provider)) {
+      authenticatedBearer = true;
+      return;
+    }
     if (
       await validateLlmOAuthAccessToken({
         tokenValue: bearerToken,
@@ -1249,6 +1288,7 @@ async function authenticatePassthroughProxyRequest(params: {
         requestedModel: requestedModelFromBody(request),
       })
     ) {
+      authenticatedBearer = true;
       return;
     }
     throw unauthenticated;
@@ -1256,6 +1296,9 @@ async function authenticatePassthroughProxyRequest(params: {
 
   try {
     await authenticate();
+    if (authenticatedBearer && bearerToken) {
+      stripAuthenticatedBearer(request, bearerToken);
+    }
     await virtualKeyRateLimiter.recordSuccess({
       credential: presentedCredential,
     });
@@ -1267,5 +1310,71 @@ async function authenticatePassthroughProxyRequest(params: {
       });
     }
     throw error;
+  }
+}
+
+/**
+ * A bearer accepted by the platform is not an upstream credential. Match the
+ * validated value rather than a token prefix: IdP/OAuth tokens have other
+ * formats, and a downstream Archestra may legitimately use an arch_ key.
+ * Keep distinct caller-supplied provider credentials intact.
+ */
+function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
+  const headerNames = new Set([
+    "authorization",
+    "x-api-key",
+    "api-key",
+    "x-goog-api-key",
+  ]);
+  const stripValue = (value: string): string | undefined => {
+    // Node joins repeated credential headers with commas. Remove matching
+    // credentials from that list without discarding a separate provider key.
+    const values = value.split(",");
+    const retained = values.filter((entry) => {
+      const credential = entry.trim();
+      return (
+        credential !== token &&
+        credential.match(/^Bearer\s+(.+)$/i)?.[1] !== token
+      );
+    });
+    if (retained.length === values.length) return value;
+    return retained.length
+      ? retained.map((entry) => entry.trim()).join(", ")
+      : undefined;
+  };
+  for (const headers of new Set([request.headers, request.raw.headers])) {
+    for (const name of headerNames) {
+      const value = headers[name];
+      if (value === undefined) continue;
+      const retained = (Array.isArray(value) ? value : [value])
+        .map(stripValue)
+        .filter((entry) => entry !== undefined);
+      if (retained.length === 0) delete headers[name];
+      else headers[name] = Array.isArray(value) ? retained : retained[0];
+    }
+  }
+  const rawHeaders = request.raw.rawHeaders;
+  if (rawHeaders) {
+    for (let i = rawHeaders.length - 2; i >= 0; i -= 2) {
+      if (!headerNames.has(rawHeaders[i].toLowerCase())) continue;
+      const retained = stripValue(rawHeaders[i + 1]);
+      if (retained === undefined) rawHeaders.splice(i, 2);
+      else rawHeaders[i + 1] = retained;
+    }
+  }
+  const url = request.raw.url;
+  if (url?.includes("?")) {
+    const queryStart = url.indexOf("?");
+    const segments = url.slice(queryStart + 1).split("&");
+    const retained = segments.filter(
+      (segment) => !new URLSearchParams(segment).getAll("key").includes(token),
+    );
+    if (retained.length !== segments.length) {
+      // Preserve the other parameters byte for byte, including literal question
+      // marks, escaping and order. Re-serializing can change signed provider URLs.
+      request.raw.url =
+        url.slice(0, queryStart) +
+        (retained.length ? `?${retained.join("&")}` : "");
+    }
   }
 }

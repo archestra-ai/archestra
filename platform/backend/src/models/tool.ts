@@ -2326,6 +2326,32 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /** A catalog's live tool rows, with the upstream name each was synced from. */
+  static async findSyncedByCatalogId(catalogId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      rawName: string | null;
+      description: string | null;
+    }>
+  > {
+    return db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+        description: schema.toolsTable.description,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          isNull(schema.toolsTable.agentId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
+  }
+
   /**
    * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
    * Powers the server-scoped Apps run path: building `tools/list` and gating
@@ -2350,6 +2376,35 @@ class ToolModel {
       })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
+  }
+
+  /**
+   * Whether a tool assigned to the agent under `name` declares an upstream
+   * object `outputSchema`, i.e. whether the MCP gateway advertises one for it.
+   */
+  static async assignedToolDeclaresOutputSchema(params: {
+    agentId: string;
+    name: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        and(
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          eq(schema.agentToolsTable.agentId, params.agentId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.name, params.name),
+          sql`${schema.toolsTable.meta}->'outputSchema'->>'type' = 'object'`,
+          notDeleted(schema.toolsTable),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /**
@@ -3462,6 +3517,7 @@ class ToolModel {
         systemPrompt: string | null;
         environmentId: string | null;
         builtInAgentConfig: Agent["builtInAgentConfig"];
+        hasRuntime: boolean;
       };
     }>
   > {
@@ -3475,6 +3531,7 @@ class ToolModel {
           systemPrompt: schema.agentsTable.systemPrompt,
           environmentId: schema.agentsTable.environmentId,
           builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+          hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
         },
       })
       .from(schema.agentToolsTable)

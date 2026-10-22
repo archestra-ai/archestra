@@ -1,6 +1,8 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy } from "@kubernetes/client-node";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
+import db, { schema } from "@/database";
+import { beforeEach, test as it } from "@/test";
 
 vi.mock("@/k8s/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/k8s/shared")>()),
@@ -44,6 +46,10 @@ import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
+  resetPlatformNodeSelectorCache,
+  resetPlatformTolerationsCache,
+} from "@/k8s/mcp-server-runtime/k8s-deployment";
+import {
   createK8sClients,
   getK8sNamespace,
   isK8sConfigured,
@@ -60,6 +66,32 @@ const mockLoadKubeConfig = vi.mocked(loadKubeConfig);
 const mockCreateK8sClients = vi.mocked(createK8sClients);
 const mockGetK8sCapabilities = vi.mocked(getK8sCapabilities);
 const mockGetClusterDnsIps = vi.mocked(clusterDnsResolver.getClusterDnsIps);
+
+let testOrganizationId: string;
+beforeEach(async ({ makeOrganization }) => {
+  testOrganizationId = (await makeOrganization()).id;
+});
+
+// Policy/scheduling tests use real Environment rows; lifecycle races are tested
+// separately against the real Kubernetes client at its HTTP boundary.
+async function reconcilePersistedEnvironment(environment: Environment) {
+  const [row] = await db
+    .insert(schema.environmentsTable)
+    .values({
+      ...environment,
+      organizationId: testOrganizationId,
+      name: "Engine policy test",
+    })
+    .onConflictDoUpdate({
+      target: schema.environmentsTable.id,
+      set: {
+        namespace: environment.namespace,
+        networkPolicy: environment.networkPolicy,
+      },
+    })
+    .returning();
+  return daggerEnvironmentRuntimeManager.reconcileEnvironment(row);
+}
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -218,9 +250,16 @@ describe("buildEngineStatefulSet", () => {
   function build(): k8s.V1StatefulSet {
     return (
       daggerEnvironmentRuntimeManager as unknown as {
-        buildEngineStatefulSet(engineId: string, ns: string): k8s.V1StatefulSet;
+        buildEngineStatefulSet(
+          engineId: string,
+          ns: string,
+          scheduling: { nodeSelector: null; tolerations: null },
+        ): k8s.V1StatefulSet;
       }
-    ).buildEngineStatefulSet(ENGINE_ID, "ns-x");
+    ).buildEngineStatefulSet(ENGINE_ID, "ns-x", {
+      nodeSelector: null,
+      tolerations: null,
+    });
   }
 
   it("sources engine resources from config so small clusters can override them", () => {
@@ -480,7 +519,7 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
   });
 
   function reconcile() {
-    return daggerEnvironmentRuntimeManager.reconcileEnvironment(
+    return reconcilePersistedEnvironment(
       makeEnv({
         namespace: "test-ns",
         networkPolicy: restrictedPolicy as never,
@@ -584,6 +623,7 @@ describe("reconcileOrganizationDefault", () => {
       appsApi: {
         createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
         deleteNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+        readNamespacedStatefulSet: vi.fn().mockRejectedValue({ code: 404 }),
       },
       networkingApi: {
         createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
@@ -627,9 +667,7 @@ describe("reconcileOrganizationDefault", () => {
       await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(
         makeOrg({ id: "org-off" }),
       );
-      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-        makeEnv({ namespace: "release-ns" }),
-      );
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "release-ns" }));
       expect(
         clients.appsApi.createNamespacedStatefulSet,
       ).not.toHaveBeenCalled();
@@ -662,9 +700,7 @@ describe("reconcileOrganizationDefault", () => {
       ).not.toHaveBeenCalled();
       expect(clients.coreApi.createNamespacedConfigMap).not.toHaveBeenCalled();
 
-      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-        makeEnv({ namespace: "release-ns" }),
-      );
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "release-ns" }));
       expect(clients.appsApi.createNamespacedStatefulSet).toHaveBeenCalledTimes(
         1,
       );
@@ -902,5 +938,124 @@ describe("reconcileOrganizationDefault", () => {
     expect(
       clients.customObjectsApi.deleteNamespacedCustomObject,
     ).not.toHaveBeenCalled();
+  });
+});
+
+describe("engine scheduling", () => {
+  const platformPod = {
+    spec: {
+      nodeSelector: { "node-pool": "archestra" },
+      tolerations: [
+        {
+          key: "dedicated",
+          operator: "Equal",
+          value: "archestra",
+          effect: "NoSchedule",
+        },
+      ],
+    },
+  };
+
+  function makeFakeClients() {
+    return {
+      coreApi: {
+        readNamespacedPod: vi.fn().mockResolvedValue(platformPod),
+        createNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+      },
+      appsApi: {
+        createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+      },
+      networkingApi: {
+        createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+        deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+      },
+      customObjectsApi: {
+        deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      },
+    };
+  }
+
+  let clients: ReturnType<typeof makeFakeClients>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetPlatformNodeSelectorCache();
+    resetPlatformTolerationsCache();
+    vi.stubEnv("POD_NAME", "archestra-platform-0");
+    vi.stubEnv("POD_NAMESPACE", "platform-ns");
+    clients = makeFakeClients();
+    mockIsK8sConfigured.mockReturnValue(true);
+    mockGetK8sNamespace.mockReturnValue("release-ns");
+    mockGetK8sCapabilities.mockResolvedValue({
+      networkPolicy: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "kubernetes-network-policy",
+        supportsFqdn: false,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    } as never);
+    mockGetClusterDnsIps.mockResolvedValue(["10.0.0.10"]);
+    mockLoadKubeConfig.mockReturnValue({ kubeConfig: {} } as never);
+    mockCreateK8sClients.mockReturnValue(clients as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null as never,
+    );
+  });
+
+  function engineTemplateSpec(): k8s.V1PodSpec | undefined {
+    return clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].body
+      .spec.template.spec;
+  }
+
+  // A platform pinned to a tainted node pool would otherwise leave its engines
+  // Pending (no toleration) or scheduled onto nodes outside that pool.
+  it("inherits the platform pod's nodeSelector and tolerations", async () => {
+    await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
+
+    expect(clients.coreApi.readNamespacedPod).toHaveBeenCalledWith({
+      name: "archestra-platform-0",
+      namespace: "platform-ns",
+    });
+    const spec = engineTemplateSpec();
+    expect(spec?.nodeSelector).toEqual({ "node-pool": "archestra" });
+    expect(spec?.tolerations).toEqual(platformPod.spec.tolerations);
+  });
+
+  it("uses the configured engine node selector instead of the platform's", async () => {
+    const engine = config.daggerRuntime.engine;
+    const original = engine.nodeSelector;
+    engine.nodeSelector = { "archestra-sandbox": "true" };
+    try {
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
+    } finally {
+      engine.nodeSelector = original;
+    }
+
+    const spec = engineTemplateSpec();
+    expect(spec?.nodeSelector).toEqual({ "archestra-sandbox": "true" });
+    expect(spec?.tolerations).toEqual([
+      {
+        key: "archestra-sandbox",
+        operator: "Equal",
+        value: "true",
+        effect: "NoSchedule",
+      },
+    ]);
+  });
+
+  it("still provisions the engine with default scheduling when the platform pod can't be read", async () => {
+    clients.coreApi.readNamespacedPod.mockRejectedValueOnce(
+      new Error("forbidden"),
+    );
+
+    await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
+
+    const spec = engineTemplateSpec();
+    expect(spec?.nodeSelector).toBeUndefined();
+    expect(spec?.tolerations).toBeUndefined();
   });
 });

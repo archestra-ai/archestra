@@ -8,7 +8,9 @@ import {
   KNOWLEDGE_CONNECTORS,
   KNOWLEDGE_DIRECTORIES,
   KNOWLEDGE_FILES,
+  LOG_SESSION,
   USAGE,
+  YELLS,
 } from "./dataset";
 import { FIXTURE_TIME } from "./determinism";
 import type { SeedState } from "./seed";
@@ -52,6 +54,85 @@ ON CONFLICT DO NOTHING;`);
   seedUsage(state);
   seedLimitUsage();
   seedKnowledge(state);
+  seedYells(state);
+  seedLogSession(state);
+}
+
+/** Rebuild only reserved fixture records so session-head triggers and ownership stay current. */
+export function seedLogSession(state: SeedState): void {
+  const agent = sql(state.agents[LOG_SESSION.agent]);
+  const user = sql(state.users.persona);
+  const session = sql(LOG_SESSION.id);
+  const at = (start: number, duration: number) =>
+    `${FIXTURE_TIME_SQL} - interval '10 minutes' + interval '${start + duration} milliseconds'`;
+  const json = (value: unknown) => `${sql(JSON.stringify(value))}::jsonb`;
+  const history: unknown[] = [{ role: "user", content: LOG_SESSION.prompt }];
+  const id = (kind: "20" | "21", index: number) =>
+    `6f1c2a${kind}-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+  const statements = [
+    `DELETE FROM mcp_tool_calls WHERE session_id = ${session} AND id IN (${LOG_SESSION.tools.map((_, i) => sql(id("21", i))).join(", ")});`,
+    `DELETE FROM interactions WHERE session_id = ${session} AND id IN (${LOG_SESSION.turns.map((_, i) => sql(id("20", i))).join(", ")});`,
+  ];
+  for (const [index, turn] of LOG_SESSION.turns.entries()) {
+    const content = [
+      { type: "text", text: turn.text },
+      ...turn.tools.map((toolIndex) => {
+        const tool = LOG_SESSION.tools[toolIndex];
+        return {
+          type: "tool_use",
+          id: `toolu_docs_${toolIndex}`,
+          name: `${tool.server}__${tool.name}`,
+          input: tool.args,
+        };
+      }),
+    ];
+    const cost =
+      (turn.inputTokens * 3 +
+        turn.outputTokens * 15 +
+        turn.cacheReadTokens * 0.3) /
+      1e6;
+    const preview = {
+      hasContent: true,
+      isTitleGeneration: false,
+      isPromptSuggestion: false,
+      isOpenCodeSideTurn: false,
+      contentNotStored: false,
+      lastUserMessagePreview: LOG_SESSION.prompt,
+      claudeCodeTitle: null,
+      responseToolNames: turn.tools.map(
+        (i) =>
+          `mcp__${LOG_SESSION.tools[i].server}__${LOG_SESSION.tools[i].name}`,
+      ),
+      responseTextPreview: turn.text,
+    };
+    statements.push(`INSERT INTO interactions
+      (id, profile_id, user_id, session_id, session_source, source, auth_method, type, model,
+       request, response, session_preview, duration_ms, input_tokens, output_tokens, cache_read_tokens, cost, baseline_cost, created_at)
+      VALUES (${sql(id("20", index))}, ${agent}, ${user}, ${session}, 'header', 'chat', 'internal', 'anthropic:messages', ${sql(LOG_SESSION.model)},
+       ${json({ model: LOG_SESSION.model, max_tokens: 2048, messages: history })},
+       ${json({ id: `msg_docs_${index}`, type: "message", role: "assistant", model: LOG_SESSION.model, content, stop_reason: turn.tools.length ? "tool_use" : "end_turn", stop_sequence: null, usage: { input_tokens: turn.inputTokens, output_tokens: turn.outputTokens, cache_read_input_tokens: turn.cacheReadTokens } })},
+       ${json(preview)}, ${turn.durationMs}, ${turn.inputTokens}, ${turn.outputTokens}, ${turn.cacheReadTokens}, ${cost}, ${cost}, ${at(turn.startMs, turn.durationMs)});`);
+    history.push({ role: "assistant", content });
+    if (turn.tools.length)
+      history.push({
+        role: "user",
+        content: turn.tools.map((i) => ({
+          type: "tool_result",
+          tool_use_id: `toolu_docs_${i}`,
+          content: LOG_SESSION.tools[i].result,
+        })),
+      });
+  }
+  for (const [index, tool] of LOG_SESSION.tools.entries()) {
+    statements.push(`INSERT INTO mcp_tool_calls
+      (id, agent_id, user_id, session_id, llm_tool_call_id, mcp_server_name, method,
+       tool_name, is_error, tool_call, tool_result, auth_method, source, duration_ms, created_at)
+      VALUES (${sql(id("21", index))}, ${agent}, ${user}, ${session}, ${sql(`toolu_docs_${index}`)}, ${sql(tool.server)}, 'tools/call',
+       ${sql(tool.name)}, false, ${json({ id: `toolu_docs_${index}`, name: `${tool.server}__${tool.name}`, arguments: tool.args })},
+       ${json({ content: [{ type: "text", text: tool.result }], isError: false, _meta: { archestraExecutedAs: { kind: "personal", ownerUserId: state.users.persona, ownerName: "Jordan Ellis" } } })},
+       'session', 'chat', ${tool.durationMs}, ${at(tool.startMs, tool.durationMs)});`);
+  }
+  runSql(`BEGIN;\n${statements.join("\n")}\nCOMMIT;`);
 }
 
 /**
@@ -83,6 +164,18 @@ function seedColleagues(state: SeedState): void {
       return `INSERT INTO "user" (id, name, email, email_verified) VALUES (${sql(userId)}, ${sql(colleague.name)}, ${sql(colleague.email)}, true) ON CONFLICT DO NOTHING;
 INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sql(`docs-member-${colleague.key}`)}, ${sql(organizationId)}, ${sql(userId)}, 'member', now()) ON CONFLICT DO NOTHING;`;
     }).join("\n"),
+  );
+}
+
+/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+function seedYells(state: SeedState): void {
+  const organizationId = state.organization.id;
+  runSql(
+    YELLS.map(
+      (yell) => `INSERT INTO openappa_yells (id, organization_id, caller_id, session_id, tool_call_id, message, with_trajectory, superyell, created_at)
+VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, ${FIXTURE_TIME_SQL} - make_interval(mins => ${yell.minutesAgo}))
+ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message;`,
+    ).join("\n"),
   );
 }
 

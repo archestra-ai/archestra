@@ -52,10 +52,9 @@ export function useChatPlaceholder({
   );
 
   if (shouldAnimate) {
-    return {
-      placeholder: isAnimating ? animatedPlaceholder : null,
-      isAnimating,
-    };
+    // Empty, not null, until the first text types in: the caller's default
+    // placeholder would otherwise show for a moment and then be replaced.
+    return { placeholder: animatedPlaceholder, isAnimating };
   }
 
   return {

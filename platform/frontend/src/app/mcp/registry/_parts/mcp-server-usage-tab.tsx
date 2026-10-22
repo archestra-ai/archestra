@@ -175,15 +175,15 @@ export function McpServerPagedUsageTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-6">
-        <p className="min-w-0 truncate text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <p className="text-sm text-muted-foreground sm:min-w-0 sm:truncate">
           <span className="text-base font-semibold tabular-nums text-foreground">
             {formatCount(total)}
           </span>{" "}
           {total === 1 ? "agent or MCP gateway" : "agents and MCP gateways"} can
           reach this server
         </p>
-        <div className="relative w-64 shrink-0">
+        <div className="relative w-full sm:w-64 sm:shrink-0">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -222,18 +222,20 @@ export function McpServerPagedUsageTab({
                 All
               </Button>
               <span className="text-muted-foreground/50">/</span>
-              <span className="font-medium text-foreground">
+              <span className="min-w-0 truncate font-medium text-foreground">
                 Picked tools from this server
               </span>
             </>
           ) : (
-            <span className="font-medium text-foreground">All tools</span>
+            <span className="shrink-0 font-medium text-foreground">
+              All tools
+            </span>
           )}
           <span className="text-muted-foreground">·</span>
           <span className="tabular-nums text-muted-foreground">
             {formatCount(listTotal)}
           </span>
-          <span className="ml-auto truncate text-muted-foreground/70">
+          <span className="ml-auto hidden truncate text-muted-foreground/70 sm:inline">
             {view === "picked"
               ? "Manual tool access"
               : "Auto mode reaches every server"}
@@ -316,6 +318,8 @@ type UsageRow = Pick<
 const PAGE_SIZE = 20;
 /** Width of the edge fade that tells the strip scrolls. */
 const FADE_PX = 56;
+/** Narrowest a picked card gets before the strip scrolls instead. */
+const MIN_CARD_REM = 12;
 
 const countFormat = new Intl.NumberFormat("en-US");
 function formatCount(value: number) {
@@ -355,17 +359,22 @@ function PickedStrip({
   return (
     <section className="space-y-2.5">
       <div className="flex h-7 items-center gap-2 text-sm">
-        <h3 className="font-medium">Picked tools from this server</h3>
-        <span className="tabular-nums text-muted-foreground">
+        <h3 className="min-w-0 truncate font-medium">
+          Picked tools from this server
+        </h3>
+        <span className="shrink-0 tabular-nums text-muted-foreground">
           {searching
             ? `${formatCount(agents.length)} of ${formatCount(total)}`
             : formatCount(total)}
         </span>
         {overflowing && (
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {/* Touch screens swipe the strip; the arrows only earn their
+                room beside a pointer. */}
             <Button
               variant="ghost"
               size="icon-xs"
+              className="hidden sm:inline-flex"
               aria-label="Scroll left"
               disabled={atStart}
               onClick={() => nudge(-1)}
@@ -375,13 +384,14 @@ function PickedStrip({
             <Button
               variant="ghost"
               size="icon-xs"
+              className="hidden sm:inline-flex"
               aria-label="Scroll right"
               disabled={atEnd}
               onClick={() => nudge(1)}
             >
               <ChevronRight className="size-4" />
             </Button>
-            <span className="mx-1.5 h-4 w-px bg-border" />
+            <span className="mx-1.5 hidden h-4 w-px bg-border sm:block" />
             <Button
               variant="link"
               size="xs"
@@ -399,14 +409,16 @@ function PickedStrip({
         className="grid gap-2 overflow-x-auto"
         style={{
           // Four cards fill the row; past four, a slim peek of the fifth says
-          // there is more to scroll.
+          // there is more to scroll. A narrow screen keeps cards legible
+          // instead, and the strip scrolls sooner.
           gridAutoFlow: "column",
           scrollSnapType: "x mandatory",
           scrollbarWidth: "none",
-          gridAutoColumns:
+          gridAutoColumns: `max(${MIN_CARD_REM}rem, ${
             agents.length > 4
               ? "calc((100% - 2rem) / 4.35)"
-              : "calc((100% - 1.5rem) / 4)",
+              : "calc((100% - 1.5rem) / 4)"
+          })`,
           maskImage: mask,
           WebkitMaskImage: mask,
         }}

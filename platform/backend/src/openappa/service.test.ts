@@ -17,6 +17,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { OpenappaRootOnlyError } from "./failure";
 import { toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
@@ -109,10 +110,14 @@ const native = vi.hoisted(() => ({
     errors: [],
   })),
   validateHostedOpenappaPolicy: vi.fn(async () => []),
-  composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
-    content: input.root,
-    errors: [],
-  })),
+  composeOpenappaPolicy: vi.fn(
+    async (input: {
+      root: string;
+    }): Promise<{ content: string | null; errors: string[] }> => ({
+      content: input.root,
+      errors: [],
+    }),
+  ),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
@@ -137,7 +142,6 @@ beforeEach(async ({ makeOrganization }) => {
     yellEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
     postgresMaxConnections: 10,
-    keptAnnotatorHorizonDays: 30,
   };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
@@ -546,7 +550,7 @@ describe("APPA feature boundary", () => {
       new Error("Reporting unavailable"),
     );
     await expect(executeYell(params)).rejects.toThrow(
-      "policy runtime is unavailable",
+      "Guardrails failed unexpectedly",
     );
     let saved = await OpenAppaYellModel.list({
       organizationId,
@@ -1279,7 +1283,7 @@ describe("APPA feature boundary", () => {
       options,
     );
     if (throws) {
-      await expect(check).rejects.toThrow("OpenAPPA could not safely complete");
+      await expect(check).rejects.toThrow("Guardrails failed unexpectedly");
       expect([...open]).toEqual(["unrelated"]);
       expect(
         native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
@@ -1372,7 +1376,7 @@ describe("APPA feature boundary", () => {
         ],
         { canonicalize: (name) => name },
       ),
-    ).rejects.toThrow("OpenAPPA could not safely complete");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
 
   test("cancels admitted calls via Promise.allSettled and logs failure when cancellation rejects", async () => {
@@ -1393,7 +1397,7 @@ describe("APPA feature boundary", () => {
         toolCallId: "bad",
         sessionId: "conversation",
       }),
-      "Failed to cancel OpenAPPA admitted call",
+      "OpenAPPA could not cancel an admitted call",
     );
   });
 
@@ -2463,7 +2467,7 @@ describe("APPA feature boundary", () => {
         operationId: "child_end:refused",
         output: "secret",
       }),
-    ).rejects.toMatchObject({ statusCode: 503 });
+    ).rejects.toMatchObject({ statusCode: 500, shouldRetry: false });
     await expect(
       endChild({
         session,
@@ -2544,7 +2548,64 @@ describe("APPA feature boundary", () => {
         childId: "conversation:child",
         value: "SUMMARY(24 characters): safe",
       }),
-    ).rejects.toMatchObject({ statusCode: 503 });
+    ).rejects.toMatchObject({ statusCode: 500, shouldRetry: false });
+  });
+
+  test("rules an agent__ spawn as the host Agent tool and keeps the model's spelling", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call", spawn_binding: "fork-1" }),
+    );
+    for (const wrapped of [false, true]) {
+      const call = {
+        id: `spawn-${wrapped}`,
+        name: wrapped ? "archestra__run_tool" : "agent__research",
+        arguments: wrapped
+          ? { tool_name: "agent__research", tool_args: { message: "Research" } }
+          : { message: "Research" },
+      };
+      await evaluateToolCalls(session, [call], {
+        canonicalize: (name) => name,
+        spawnCallIds: new Set([call.id]),
+      });
+      expect(
+        JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+      ).toMatchObject({
+        event: "tool_call",
+        tool: "Agent",
+        spelling: "agent__research",
+        spawn: true,
+        arguments: { message: "Research" },
+      });
+    }
+    // A policy that rules the agent__ tool by name keeps ruling it.
+    for (const name of ["agent__research", 'agent__research(message="x")']) {
+      await evaluateToolCalls(
+        session,
+        [{ id: `named-${name}`, name: "agent__research", arguments: {} }],
+        {
+          canonicalize: (toolName) => toolName,
+          spawnCallIds: new Set([`named-${name}`]),
+        },
+        async () => ({
+          content: `[policy]\nversion = 2\n\n[[policy.tool]]\nname = '${name}'\ndelta = {}\n`,
+          credentials: {},
+        }),
+      );
+      const event = JSON.parse(
+        native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}",
+      );
+      expect(event).toMatchObject({ tool: "agent__research", spawn: true });
+      expect(event).not.toHaveProperty("spelling");
+    }
+    // An outbound A2A call is no spawn and keeps its own name.
+    await evaluateToolCalls(
+      session,
+      [{ id: "outbound", name: "agent__remote", arguments: { message: "Hi" } }],
+      { canonicalize: (name) => name },
+    );
+    expect(
+      JSON.parse(native.dispatchHook.mock.calls.at(-1)?.[0] ?? "{}"),
+    ).toMatchObject({ tool: "agent__remote", spawn: false });
   });
 
   test.each([
@@ -2659,7 +2720,7 @@ describe("APPA feature boundary", () => {
         results: [],
         canonicalize: (name) => name,
       }),
-    ).rejects.toThrow("OpenAPPA could not safely complete");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
     expect(native.initializeOpenappa).not.toHaveBeenCalled();
     expect(native.dispatchHook).not.toHaveBeenCalled();
     expect(database.getDatabaseConnectionString).not.toHaveBeenCalled();
@@ -3235,7 +3296,7 @@ describe("APPA feature boundary", () => {
       outputSource: "tool",
     });
   });
-  test("fails closed with 503 when encountering an unknown decision type", async () => {
+  test("fails closed with 500 when encountering an unknown decision type", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       if (event.event === "tool_result") {
@@ -3258,7 +3319,7 @@ describe("APPA feature boundary", () => {
           },
         ],
       }),
-    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
   test("keeps a structured cancellation indeterminate when processing proxy results", async () => {
     await processProxyResults({
@@ -3367,7 +3428,6 @@ describe("a policy saved mid-conversation", () => {
     vi.mocked(native.dispatchHook).mock.calls[call]?.[1] as {
       content: string;
       compositionHash?: string;
-      snapshot?: boolean;
     };
   const save = async (params: {
     userId: string;
@@ -3413,7 +3473,7 @@ describe("a policy saved mid-conversation", () => {
       .mockImplementationOnce(async () => {
         // Saved, and published by another replica, while this call was decided.
         await save({ userId: user.id, tool: "after", revision: 1 });
-        throw new Error(POLICY_MOVED);
+        throw policyMoved();
       })
       .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }));
 
@@ -3427,45 +3487,8 @@ describe("a policy saved mid-conversation", () => {
     expect(servedPolicy(1).content).toContain('"after"');
   });
 
-  test("dispatches read snapshot and live changes without restarting the conversation", async () => {
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "allow_call" }),
-    );
-    for (const [index, newSessionPolicy] of (
-      ["live", "snapshot", "live"] as const
-    ).entries()) {
-      await GuardrailsDeploymentModel.set({ newSessionPolicy });
-      await evaluateToolCalls(session, [{ ...read, id: `read-${index}` }], {
-        canonicalize: (name) => name,
-      });
-      expect(servedPolicy(index).snapshot).toBe(
-        newSessionPolicy === "snapshot",
-      );
-    }
-  });
-
-  test("a dispatch that cannot read the policy for new sessions fails, never decided", async () => {
-    // The setting decides whether the call may move its session's policy, so
-    // an unread setting must not be taken as live.
-    const get = vi
-      .spyOn(GuardrailsDeploymentModel, "getNewSessionPolicy")
-      .mockRejectedValue(new Error("Connection terminated unexpectedly"));
-    try {
-      const failure = await evaluateToolCalls(session, [read], {
-        canonicalize: (n) => n,
-      }).catch((error: unknown) => error);
-
-      expect(failure).toBeInstanceOf(ApiError);
-      expect(failure).toMatchObject({ statusCode: 503 });
-      expect(get).toHaveBeenCalled();
-      expect(native.dispatchHook).not.toHaveBeenCalled();
-    } finally {
-      get.mockRestore();
-    }
-  });
-
   test("a policy that keeps moving is a retryable 503, never feedback for the model", async () => {
-    native.dispatchHook.mockRejectedValue(new Error(POLICY_MOVED));
+    native.dispatchHook.mockRejectedValue(policyMoved());
 
     const failure = await evaluateToolCalls(session, [read], {
       canonicalize: (n) => n,
@@ -3475,14 +3498,84 @@ describe("a policy saved mid-conversation", () => {
     expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
     expect((failure as ApiError).retryAfterSeconds).toBeGreaterThan(0);
     expect((failure as ApiError).message).toContain(
-      "guardrails policy changed while this request was checked",
+      "Guardrails policy changed while this request was checked",
     );
     expect(native.dispatchHook).toHaveBeenCalledTimes(3);
   });
 });
 
+describe("a dispatch failure on a policy that never composed", () => {
+  const read = { id: "read", name: "read_file", arguments: {} };
+  const refuse = (code: string) => {
+    const error = Object.assign(new Error("native detail"), { code });
+    native.dispatchHook.mockRejectedValue(error);
+    return error;
+  };
+
+  beforeEach(async ({ makeUser }) => {
+    const user = await makeUser();
+    native.composeOpenappaPolicy.mockImplementation(async () => ({
+      content: null,
+      errors: ["battery acme: refused"],
+    }));
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      updatedBy: user.id,
+      content:
+        '[policy]\nversion = 2\ninclude = ["batteries/acme/appa.toml"]\n',
+      contentHash: "root-only",
+      expectedRevision: 0,
+    });
+  });
+  afterEach(() => {
+    native.composeOpenappaPolicy.mockImplementation(
+      async (input: { root: string }) => ({ content: input.root, errors: [] }),
+    );
+  });
+
+  test("a refused policy is explained by the composition that never opened", async () => {
+    refuse("policy_refused");
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 500, shouldRetry: false });
+    expect((failure as ApiError).cause).toBeInstanceOf(OpenappaRootOnlyError);
+  });
+
+  test("a storage failure is reported as itself, not as the refused policy", async () => {
+    const storage = refuse("storage");
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
+    expect((failure as ApiError).cause).toBe(storage);
+  });
+
+  test("an uncoded failure is reported as itself, not as the refused policy", async () => {
+    const uncoded = new Error("Database not initialized");
+    native.dispatchHook.mockRejectedValue(uncoded);
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 500, shouldRetry: false });
+    expect((failure as ApiError).message).toContain("(code: unknown)");
+    expect((failure as ApiError).cause).toBe(uncoded);
+  });
+});
+
 const POLICY_MOVED =
   "OpenAPPA published a newer policy revision for this organization; retry the request";
+
+/** The binding's report that the policy moved, as its loader hands it over. */
+function policyMoved(): Error {
+  return Object.assign(new Error(POLICY_MOVED), { code: "policy_moved" });
+}
 
 describe("remedy by offer", () => {
   // An external client on the gateway names no session: Claude Code sends
@@ -3596,7 +3689,7 @@ describe("remedy by offer", () => {
         originalArguments: '{"offer_id":"offer"}',
         args: { offer_id: "offer" },
       }),
-    ).rejects.toThrow("OpenAPPA could not safely complete");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
 
   test("scopes a client-named session to its principal and keeps the room the header was promised", () => {
@@ -3999,7 +4092,7 @@ describe("remedy by offer", () => {
     );
   });
 
-  test("fails closed with 503 when the child returns cannot be loaded", async () => {
+  test("fails closed with 500 when the child returns cannot be loaded", async () => {
     native.loadChildReturns.mockRejectedValueOnce(
       new Error("host SQL requires a leased connection"),
     );
@@ -4008,10 +4101,10 @@ describe("remedy by offer", () => {
         organizationId,
         parentSessionId: "user:alice|conversation",
       }),
-    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
 
-  test("fails closed with 503 when the offer review cannot be loaded", async () => {
+  test("fails closed with 500 when the offer review cannot be loaded", async () => {
     native.loadOfferReview.mockRejectedValueOnce(
       new Error("host SQL requires a leased connection"),
     );
@@ -4021,7 +4114,7 @@ describe("remedy by offer", () => {
         sessionId: "conversation",
         offerId: "offer-1",
       }),
-    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
 
   test("keeps the informational plan out of what the runtime executes", async () => {
@@ -4206,7 +4299,7 @@ describe("remedy by offer", () => {
         recipientSessionId: "conversation:worker",
         value: "hello",
       }),
-    ).rejects.toThrow("OpenAPPA");
+    ).rejects.toThrow("Guardrails failed unexpectedly");
   });
 
   test("a denied peer read keeps its offers for the remedy path", async () => {
@@ -4340,10 +4433,10 @@ describe("remedy by offer", () => {
     });
   });
 
-  test("a malformed peer response is an unavailable runtime, not a raw parse error", async () => {
+  test("a malformed peer response is a defect, not a raw parse error", async () => {
     const unavailable = {
-      statusCode: 503,
-      message: expect.stringContaining("OpenAPPA could not safely complete"),
+      statusCode: 500,
+      message: expect.stringContaining("Guardrails failed unexpectedly"),
     };
     native.sendPeerMessage.mockResolvedValueOnce("{not json");
     await expect(

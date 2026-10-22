@@ -94,6 +94,19 @@ export const ChatCompletionRequestSchema = z
       .enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
       .nullable()
       .optional(),
+    // Audio generation is opt-in. Preserve these fields through validation so
+    // audio-capable Chat Completions deployments receive the requested modality.
+    modalities: z
+      .array(z.enum(["text", "audio"]))
+      .nullable()
+      .optional(),
+    audio: z
+      .object({
+        voice: z.string(),
+        format: z.enum(["wav", "aac", "mp3", "flac", "opus", "pcm16"]),
+      })
+      .nullable()
+      .optional(),
     stream: z.boolean().nullable().optional(),
     stream_options: z
       .object({ include_usage: z.boolean().optional() })

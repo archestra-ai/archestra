@@ -8,9 +8,15 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
+import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import {
+  clearPersistedQueryCache,
+  restorePersistedQueryCache,
+  startPersistingQueryCache,
+  syncPersistedQueryCacheScope,
+} from "@/lib/query-persistence";
 import { handleApiError } from "@/lib/utils/api";
 import {
-  conversationsQueryKey,
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useClearChatErrors,
@@ -23,7 +29,6 @@ import {
   useDeleteConversation,
   useKeepViewedConversationRead,
   useMarkConversationRead,
-  useMemberDefaultModel,
   useRefreshConversationFilesAfterTurn,
   useResolveChatMcpElicitation,
   useStopChatStream,
@@ -35,7 +40,6 @@ vi.mock("@archestra/shared", () => ({
     getChatConversations: vi.fn(),
     getChatConversation: vi.fn(),
     getChatConversationFiles: vi.fn(),
-    getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
     markChatConversationRead: vi.fn(),
     deleteChatConversation: vi.fn(),
@@ -93,6 +97,43 @@ const createWrapper = () => {
 };
 
 describe("useConversations", () => {
+  it("brings the sidebar's list back from the refresh snapshot, but not a search", async () => {
+    clearPersistedQueryCache();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const stop = startPersistingQueryCache(queryClient);
+    const conversations = [makeConversation()];
+    vi.mocked(archestraApiSdk.getChatConversations).mockResolvedValue({
+      data: conversations,
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getChatConversations>>);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const list = renderHook(() => useConversations({}), { wrapper });
+    const search = renderHook(() => useConversations({ search: "x" }), {
+      wrapper,
+    });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(search.result.current.isSuccess).toBe(true));
+    syncPersistedQueryCacheScope(queryClient, "user-1:org-1");
+    // The snapshot writer debounces.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    stop();
+
+    const refreshed = new QueryClient();
+    restorePersistedQueryCache(refreshed);
+
+    expect(refreshed.getQueryData(conversationsQueryKey())).toEqual(
+      JSON.parse(JSON.stringify(conversations)),
+    );
+    expect(
+      refreshed.getQueryData(conversationsQueryKey({ search: "x" })),
+    ).toBeUndefined();
+    clearPersistedQueryCache();
+  });
+
   it("keeps recent chats during a failed refresh and accepts a later empty list", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -372,74 +413,6 @@ describe("useConversation caching", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-});
-
-describe("useMemberDefaultModel error handling", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("returns the null model/key fallback on an HTTP error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(500) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns the fallback without throwing on a network error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(undefined) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(result.current.isError).toBe(false);
-  });
-});
-
-describe("useMemberDefaultModel caching", () => {
-  it("serves a remount within 30 s from the cache", async () => {
-    vi.clearAllMocks();
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue({
-      data: { modelId: "model-1", chatApiKeyId: "key-1" },
-      error: undefined,
-    } as Awaited<ReturnType<typeof archestraApiSdk.getMemberDefaultModel>>);
-    const wrapper = createWrapper();
-
-    const first = renderHook(() => useMemberDefaultModel(), { wrapper });
-    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
-    first.unmount();
-    const second = renderHook(() => useMemberDefaultModel(), { wrapper });
-
-    expect(second.result.current.data).toEqual({
-      modelId: "model-1",
-      chatApiKeyId: "key-1",
-    });
-    expect(archestraApiSdk.getMemberDefaultModel).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,19 +1,23 @@
 import fs from "node:fs";
+import path from "node:path";
 import { type ArchestraApi, items } from "./api";
 import {
   AGENT_HOOKS,
   AGENTS,
   ENVIRONMENTS,
+  GUARDRAILS_POLICY_RULES,
   KNOWLEDGE_BASES,
   KNOWLEDGE_DIRECTORIES,
   KNOWLEDGE_FILES,
   LIMITS,
+  MCP_CATALOG_ICONS,
   MCP_GATEWAYS,
   PLUGINS,
   PROJECTS,
   REMOTE_MCP_SERVERS,
   SKILLS,
   TEAMS,
+  VALIDATIONS,
   PROVIDER_KEYS,
 } from "./dataset";
 import { SEED_STATE_FILE, STATE_DIR } from "./env";
@@ -130,11 +134,15 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
         api.post<Named>("/api/internal_mcp_catalog", {
           ...server,
           serverType: "remote",
+          icon: catalogIcon(server.name),
         }),
     });
     record("catalog", server.name, created.id);
     await own(`/api/internal_mcp_catalog/${created.id}`);
   }
+
+  await addGuardrailsRules(api);
+  await saveValidations(api);
 
   const existingProviderKeys = items(await api.get<Listed>("/api/llm-provider-api-keys"));
   for (const providerKey of PROVIDER_KEYS) {
@@ -294,4 +302,40 @@ export async function seedKnowledgeFiles(api: ArchestraApi, state: SeedState): P
 
 export function readSeedState(): SeedState {
   return JSON.parse(fs.readFileSync(SEED_STATE_FILE, "utf8")) as SeedState;
+}
+
+/** The icon of a server's public MCP catalog entry, as a data URI, or null without one. */
+function catalogIcon(name: string): string | null {
+  const entry = MCP_CATALOG_ICONS[name];
+  if (!entry) return null;
+  const file = path.resolve(__dirname, "../../../../mcp-catalog/data/mcp-evaluations", entry);
+  return (JSON.parse(fs.readFileSync(file, "utf8")) as { icon?: string }).icon ?? null;
+}
+
+/** Adds the docs' rules to the Guardrails policy, once. Saving the first policy also turns enforcement on. */
+async function addGuardrailsRules(api: ArchestraApi): Promise<void> {
+  const policy = await api.get<{ content: string; revision: number }>("/api/guardrails-policy");
+  const rules = GUARDRAILS_POLICY_RULES.trim();
+  if (policy.content.includes(rules)) return;
+  await api.put("/api/guardrails-policy", {
+    content: `${policy.content.trimEnd()}\n\n${rules}\n`,
+    expectedRevision: policy.revision,
+  });
+}
+
+/** Saves the docs' validation files and runs them, so each row shows a result. Reruns only after the files change. */
+async function saveValidations(api: ArchestraApi): Promise<void> {
+  const suite = await api.get<{ version: string; files: { path: string; content: string }[] }>(
+    "/api/openappa/policy-tests",
+  );
+  const files = VALIDATIONS.map(({ path, content }) => ({ path, content }));
+  const same =
+    suite.files.length === files.length &&
+    files.every((file) => suite.files.some((saved) => saved.path === file.path && saved.content === file.content));
+  if (same) return;
+  const saved = await api.put<{ version: string }>("/api/openappa/policy-tests", {
+    files,
+    expectedVersion: suite.version,
+  });
+  await api.post("/api/openappa/policy-tests/run", { files, sourceVersion: saved.version });
 }

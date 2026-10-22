@@ -16,11 +16,16 @@ crate-type = ["cdylib"]
 # replay steps without `expect` (#688) and the deployment targets each
 # battery lists (#691), loopback requests staying local (#692),
 # parallel subagent spawns waiting for the earlier bind (#694), and plain
-# errors for tool names that identify no tool (#698).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "714a14272d8361c600ea74c75ca8a65b2698a417", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "714a14272d8361c600ea74c75ca8a65b2698a417" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "714a14272d8361c600ea74c75ca8a65b2698a417", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "714a14272d8361c600ea74c75ca8a65b2698a417" }
+# errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
+# and the generic coding battery (#697); then v0.37.0 and libpq TLS
+# parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
+# the attestation offered only where the parent covers its rank (#713),
+# and the archestra battery's agent-run rules (#716).
+# Pin #725's atomic remedy claim fix directly until it lands upstream.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

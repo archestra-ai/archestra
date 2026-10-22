@@ -6,16 +6,12 @@ import {
   setGuardrailsDeployment,
 } from "@/services/guardrails-deployment";
 import { constructResponseSchema } from "@/types";
-import {
-  NewSessionPolicySchema,
-  UnsupportedAppaClientActionSchema,
-} from "@/types/guardrails-policy";
+import { UnsupportedAppaClientActionSchema } from "@/types/guardrails-policy";
 
 const status = z.object({
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
   breakTheGlassEnabled: z.boolean(),
-  newSessionPolicy: NewSessionPolicySchema,
   annotatorModelId: z.string().uuid().nullable(),
   annotatorLlmApiKeyId: z.string().uuid().nullable(),
   featureEnabled: z.boolean(),
@@ -40,12 +36,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.UpdateGuardrailsDeployment,
         tags: ["Guardrails"],
         body: z
-          .object({
+          .strictObject({
             enabled: z.boolean().optional(),
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
             breakTheGlassEnabled: z.boolean().optional(),
-            newSessionPolicy: NewSessionPolicySchema.optional(),
             annotatorModelId: z.string().uuid().nullable().optional(),
             annotatorLlmApiKeyId: z.string().uuid().nullable().optional(),
           })
@@ -54,7 +49,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
               body.enabled !== undefined ||
               body.unsupportedClientAction !== undefined ||
               body.breakTheGlassEnabled !== undefined ||
-              body.newSessionPolicy !== undefined ||
               body.annotatorModelId !== undefined ||
               body.annotatorLlmApiKeyId !== undefined,
             "Set at least one guardrails deployment setting",

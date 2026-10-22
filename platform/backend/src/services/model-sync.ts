@@ -19,6 +19,7 @@ import {
   modelsDevCostToPerToken,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
+import config from "@/config";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
 import { findVertexMultimodalEmbeddingModel } from "@/knowledge-base/embedding-clients/vertex-models";
@@ -56,6 +57,7 @@ import type {
   ModelOutputModality,
 } from "@/types";
 import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 
 /**
  * Service for syncing models from provider APIs to the database.
@@ -102,6 +104,17 @@ class ModelSyncService {
     }
 
     const credentialRow = await LlmProviderApiKeyModel.findById(apiKeyId);
+    const configurationHash = credentialRow
+      ? azureCapabilityConfigurationHash({
+          ...credentialRow,
+          baseUrl: baseUrl || config.llm.azure.baseUrl,
+          extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
+        })
+      : null;
+    const azureConfiguration =
+      provider === "azure" && configurationHash
+        ? { hash: configurationHash, defaultBaseUrl: config.llm.azure.baseUrl }
+        : undefined;
     const isSubscription = credentialRequiresPerUserScope({
       provider,
       apiKey: apiKeyValue,
@@ -131,6 +144,7 @@ class ModelSyncService {
           apiKeyId,
           [],
           provider,
+          { azureConfiguration },
         );
         return 0;
       }
@@ -176,11 +190,36 @@ class ModelSyncService {
           deriveRecommendedForAgents(model.capabilities),
         ]),
       );
-      const modelsWithIds = upsertedModels.map((m) => ({
-        id: m.id,
-        modelId: m.modelId,
-        recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
-      }));
+      const pricingByModelId = new Map(
+        providerModels.map((m) => [m.id, m.providerPricing]),
+      );
+      const azureByModelId = new Map(
+        providerModels.map((m) => [m.id, m.azureCapabilities]),
+      );
+      const capabilitiesByModelId = new Map(
+        modelsToUpsert.map((m) => [m.modelId, m]),
+      );
+      const modelsWithIds = upsertedModels.map((m) => {
+        const azureEvidence = azureByModelId.get(m.modelId);
+        const capabilities = capabilitiesByModelId.get(m.modelId);
+        return {
+          azureCapabilities:
+            provider === "azure" && configurationHash && azureEvidence
+              ? {
+                  ...azureEvidence,
+                  configurationHash,
+                  inputModalities: capabilities?.inputModalities ?? null,
+                  outputModalities: capabilities?.outputModalities ?? null,
+                  supportsToolCalling:
+                    capabilities?.supportsToolCalling ?? null,
+                }
+              : null,
+          providerPricing: pricingByModelId.get(m.modelId) ?? null,
+          id: m.id,
+          modelId: m.modelId,
+          recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
+        };
+      });
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
@@ -188,7 +227,10 @@ class ModelSyncService {
         // A tag is mutable (`ollama create` can repoint it), so the full
         // refresh overwrites the verdict verbatim to self-correct; a normal
         // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
-        { overwriteRecommendedForAgents: forceRefresh === true },
+        {
+          overwriteRecommendedForAgents: forceRefresh === true,
+          azureConfiguration,
+        },
       );
 
       logger.info(
@@ -361,7 +403,8 @@ export function buildModelsToUpsert(params: {
     const isReseller = provider === "bedrock" || provider === "azure";
     const crossProviderArgs = {
       provider,
-      modelId: model.id,
+      modelId:
+        provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
       underlyingModelName: model.underlyingModelName,
       modelsDevData,
     };
@@ -416,7 +459,14 @@ export function buildModelsToUpsert(params: {
       // Foundry) has no registry entry of its own; its backing model does.
       // Resellers already resolve that through the cross-provider tier.
       capabilities:
-        lookupModelsDevCapabilities(capabilitiesMap, model.id) ??
+        (provider === "azure"
+          ? model.underlyingModelName
+            ? lookupModelsDevCapabilities(
+                capabilitiesMap,
+                model.underlyingModelName,
+              )
+            : undefined
+          : lookupModelsDevCapabilities(capabilitiesMap, model.id)) ??
         (!isReseller && model.underlyingModelName
           ? lookupModelsDevCapabilities(
               capabilitiesMap,
@@ -449,7 +499,8 @@ export function buildModelsToUpsert(params: {
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
       cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
       embeddingDimensions: resolveEmbeddingDimensions({
-        modelId: model.id,
+        modelId:
+          provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
         provider,
         fetched: model.capabilities,
       }),
@@ -1035,7 +1086,7 @@ function inferModelCapabilities(params: {
   const { provider, modelId, fetched, underlyingModelName } = params;
 
   if (provider === "azure") {
-    return inferAzureCapabilities(modelId, underlyingModelName);
+    return inferAzureCapabilities(underlyingModelName);
   }
 
   if (provider === "gemini") {
@@ -1149,12 +1200,9 @@ function inferOllamaCapabilities(
  * generative.
  */
 function inferAzureCapabilities(
-  modelId: string,
   underlyingModelName?: string | null,
 ): ProviderModelCapabilities {
-  const isEmbedding = [modelId, underlyingModelName].some((name) =>
-    name?.toLowerCase().includes("embedding"),
-  );
+  const isEmbedding = underlyingModelName?.toLowerCase().includes("embedding");
   if (!isEmbedding) {
     return emptyCapabilities();
   }
@@ -1261,9 +1309,9 @@ function normalizeKnownModelCapabilities(params: {
   // "text" output — the registry records embeddings that way. Mirrors
   // inferAzureCapabilities, which the registry tier would otherwise outrank.
   if (provider === "azure") {
-    const isEmbedding = [modelId, underlyingModelName].some((name) =>
-      name?.toLowerCase().includes("embedding"),
-    );
+    const isEmbedding = underlyingModelName
+      ?.toLowerCase()
+      .includes("embedding");
     if (isEmbedding) {
       return {
         ...capabilities,

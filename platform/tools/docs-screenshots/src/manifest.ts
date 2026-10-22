@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { LOG_SESSION } from "./dataset";
 import { USAGE_TIMEFRAME } from "./determinism";
 import type { Shot } from "./shot";
 
@@ -10,6 +11,30 @@ import type { Shot } from "./shot";
  * light shot there and its dark twin beside it as `.dark.webp`.
  */
 export const SHOTS: Shot[] = [
+  {
+    asset: "automated_screenshots/admin-logs_session-waterfall",
+    route: () => `/llm/logs/${LOG_SESSION.id}`,
+    fixedTime: true,
+    viewport: { width: 1600, height: 1120 },
+    prepare: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: LOG_SESSION.prompt, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: /^Tool call get_incident on PagerDuty,/,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /^Tool call post_message on Slack,/ }),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByRole("list", { name: "Requests", exact: true })
+          .getByRole("listitem"),
+      ).toHaveCount(9);
+    },
+  },
   {
     asset: "automated_screenshots/platform-environments_overview",
     route: () => "/settings/environments",
@@ -605,7 +630,27 @@ export const SHOTS: Shot[] = [
     asset: "automated_screenshots/platform-openappa_policy",
     route: () => "/openappa/policy",
     prepare: async (page) => {
-      await page.locator(".monaco-editor").first().waitFor();
+      // The docs' rules are at the end of the file: jump there, then drop focus
+      // so no cursor shows.
+      await page.locator(".monaco-editor .view-line").first().click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      // Monaco renders spaces as non-breaking spaces, so match a token without one.
+      await page.locator(".view-line").filter({ hasText: "acme/sdk" }).first().waitFor();
+    },
+  },
+  {
+    asset: "automated_screenshots/platform-openappa_validations",
+    route: () => "/openappa/validation",
+    prepare: async (page) => {
+      await page.getByText("Slack data can't go into a public GitHub issue").first().waitFor();
+    },
+  },
+  {
+    asset: "automated_screenshots/platform-openappa_yells",
+    route: () => "/openappa/yells",
+    prepare: async (page) => {
+      await page.getByText("Blocked from opening an issue in acme/sdk").waitFor();
     },
   },
 ];

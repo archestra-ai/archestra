@@ -365,6 +365,14 @@ function reasoningSummaryVerificationError(): Error {
   );
 }
 
+// Bedrock's rejection of a replayed Anthropic thinking block whose signature
+// was produced under a different system prompt.
+function thinkingSignatureRejection(): Error {
+  return new Error(
+    "Bedrock API error (400): The model returned the following errors: messages.1.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation. The `system` prompt differs from the one this block was created with.",
+  );
+}
+
 // drains the returned stream's fullStream so simulated streams don't leak.
 async function drain(result: { fullStream: AsyncIterable<unknown> }) {
   for await (const _ of result.fullStream) {
@@ -613,6 +621,56 @@ describe("runAgentStream", () => {
 
     expect(model.doStreamCalls).toHaveLength(1);
     expect(onReasoningSummaryUnsupported).not.toHaveBeenCalled();
+  });
+
+  test("drops replayed reasoning and retries when the provider rejects a thinking signature", async () => {
+    const model = modelFor(
+      errorChunks(thinkingSignatureRejection()),
+      renderableChunks(),
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: "first" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: { bedrock: { signature: "sig" } },
+          },
+          { type: "text", text: "answer" },
+        ],
+      },
+      { role: "user", content: "second" },
+    ];
+
+    const { result } = await runAgentStream({ config: { model, messages } });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    const partTypes = (call: (typeof model.doStreamCalls)[number]) =>
+      call.prompt.flatMap((message) =>
+        typeof message.content === "string"
+          ? []
+          : message.content.map((part) => part.type),
+      );
+    expect(partTypes(model.doStreamCalls[0])).toContain("reasoning");
+    expect(partTypes(model.doStreamCalls[1])).toEqual(["text", "text", "text"]);
+    expect(await result.text).toBe("hi");
+  });
+
+  test("does not retry a thinking-signature rejection when there is no reasoning to drop", async () => {
+    const model = modelFor(
+      errorChunks(thinkingSignatureRejection()),
+      renderableChunks(),
+    );
+
+    const { result } = await runAgentStream({
+      config: { model, messages: [{ role: "user", content: "hello" }] },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
   });
 
   test("does not strip-retry an unrelated provider error even with reasoningSummary set", async () => {

@@ -19,15 +19,29 @@ export const AdvancedLabelsSection = forwardRef<
     className?: string;
     collapsible?: boolean;
     disabled?: boolean;
+    attributionSource?: "credential" | "billingTeam";
   }
 >(function AdvancedLabelsSection(
-  { labels, onLabelsChange, className, collapsible = false, disabled = false },
+  {
+    labels,
+    onLabelsChange,
+    className,
+    collapsible = false,
+    disabled = false,
+    attributionSource,
+  },
   ref,
 ) {
+  const description = attributionSource
+    ? attributionSource === "credential"
+      ? "Group LLM spend by these labels. They override billing-team labels and are captured at request start."
+      : "Group LLM spend for requests billed to this team. Labels on the authenticated virtual key or OAuth client take priority. Captured at request start."
+    : undefined;
   const content = (
     <fieldset disabled={disabled} className="min-w-0">
       <ProfileLabels
         ref={ref}
+        description={description}
         labels={labels}
         onLabelsChange={onLabelsChange}
       />

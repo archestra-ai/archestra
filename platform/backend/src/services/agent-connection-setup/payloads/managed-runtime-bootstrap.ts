@@ -18,7 +18,7 @@ function owned(file, directory = false, privateFile = true) {
   }
   if (process.platform === "win32") {
     require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-      '$ErrorActionPreference="Stop"; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $writes=[Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership"; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or ($rule.FileSystemRights -band $writes))){exit 1}}'
+      '$ErrorActionPreference="Stop"; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){exit 1}}'
     ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: file, ARCHESTRA_RUNTIME_ACL_PRIVATE: privateFile ? "1" : "0" }, timeout: 1500, stdio: "ignore" });
   }
 }
@@ -161,6 +161,37 @@ if (require.main === module) {
     await require(path.join(runtime.directory, "launcher.cjs")).prepare(runtime);
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
+`;
+
+/** TUI half of the same connection plugin; the server entry stays unchanged. */
+export const MANAGED_TUI_BOOTSTRAP = `import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
+const require = createRequire(import.meta.url);
+// The TUI host transpiles CommonJS dependencies as ESM without their exports.
+// Embed the same verifier as the server loader, excluding its CJS entrypoint.
+${MANAGED_RUNTIME_BOOTSTRAP.slice(0, MANAGED_RUNTIME_BOOTSTRAP.indexOf("module.exports ="))}
+export default {
+  id: "archestra.connection.questions",
+  async tui(api) {
+    const root = dirname(fileURLToPath(import.meta.url));
+    try {
+      const runtime = await refresh(root);
+      // V2 uses a different host API. Leave its native question UI intact.
+      if (runtime.params.apiMajor !== 1 || !runtime.params.questionCards) return;
+      try {
+        const skip = readFileSync(join(homedir(), runtime.params.skipRelpath), "utf8");
+        if (skip.split(/\\r?\\n/).includes("mcp")) return;
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
+      const impl = await import(pathToFileURL(join(runtime.directory, "routing-v1.mjs")).href);
+      await impl.QuestionCardsTui?.(api);
+    } catch {
+      api.ui?.toast?.({ title: "Connection question cards unavailable", message: "Using the client's native questions.", variant: "warning" });
+    }
+  },
+};
 `;
 
 /** The installed plugin exports exactly the native API for its selected major. */

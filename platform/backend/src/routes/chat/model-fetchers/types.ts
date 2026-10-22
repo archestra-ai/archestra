@@ -4,8 +4,10 @@ import type {
   SupportedProvider,
   SupportedProviderEndpoint,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import { ApiError } from "@/types/api";
 import type { ModelDefaultParameters } from "@/types/model";
+import type { ProviderModelPricing } from "@/types/provider-model-pricing";
 
 export const PLACEHOLDER_API_KEY = "EMPTY";
 export const PLACEHOLDER_BEARER_TOKEN = `Bearer ${PLACEHOLDER_API_KEY}`;
@@ -86,6 +88,9 @@ export interface FetchedModelCapabilities {
 }
 
 export interface ModelInfo {
+  azureCapabilities?: AzureModelEvidence | null;
+  /** Instance-local prices; never written to the shared model catalog. */
+  providerPricing?: ProviderModelPricing;
   id: string;
   displayName: string;
   provider: SupportedProvider;

@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
+  PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
@@ -17,6 +17,7 @@ import {
   isOpenCodeFamilyClient,
   PLUGIN_DELIVERY_MAX_COUNT,
 } from "@archestra/shared/connection-setup";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -63,6 +64,11 @@ import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
 import {
+  clientConnectionQueryKey,
+  connectionSetupSeedQueryKey,
+} from "@/lib/connection-approval-query-keys";
+import type { ConnectionSetupSeed } from "@/lib/connection-approval-seed";
+import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
@@ -81,6 +87,10 @@ import {
   type PluginListItem,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
+import {
+  isDocumentSeedFresh,
+  useDocumentSeedFresh,
+} from "@/lib/shell-deferral";
 import { type SkillName, useSkillNames } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
@@ -94,6 +104,12 @@ import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
 } from "./connection-consent-options";
+import {
+  connectionSetupBody,
+  connectionSetupInputsKey,
+  connectionSetupKeyDigest,
+} from "./connection-setup-payload";
+import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -161,6 +177,8 @@ interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
   mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
+  /** True while the gateway list is still loading (an empty list is not final). */
+  mcpGatewaysLoading?: boolean;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -196,6 +214,7 @@ interface ConnectCommandPanelProps {
 export function ConnectCommandPanel({
   client,
   mcpGateways,
+  mcpGatewaysLoading = false,
   mcpGatewayId,
   onMcpGatewaySelect,
   llmProxyId,
@@ -212,6 +231,9 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
+  // Once the terminal's request is approved or denied, its setup is fixed, so
+  // the options to change it go away.
+  const [connectRequestDecided, setConnectRequestDecided] = useState(false);
   const [downloadRequested, setDownloadRequested] = useState(false);
   const preparationEnabled = variant !== "download" || downloadRequested;
   // Optional portions start from the Connect page choices and remain editable.
@@ -305,7 +327,15 @@ export function ConnectCommandPanel({
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
-  const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
+  // A platform the URL names (the installer's request) is known on the
+  // server too, so it starts selected and the first render already matches.
+  const [platform, setPlatform] = useState<ConnectPlatformOption>(() =>
+    requestedPlatform === "windows" ||
+    requestedPlatform === "linux" ||
+    requestedPlatform === "macos"
+      ? toPlatformOption(requestedPlatform)
+      : "macos",
+  );
   useEffect(() => {
     setPlatform(
       requestedPlatform === "windows" ||
@@ -382,7 +412,8 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const { data: availableKeys, isPending: availableKeysPending } =
+    useAvailableLlmProviderApiKeys();
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -492,7 +523,7 @@ export function ConnectCommandPanel({
       ? (modelChoice ??
         (client.id === "claude-desktop"
           ? "claude-haiku-4-5-20251001"
-          : DEFAULT_MODELS[provider]))
+          : PROVIDER_MODEL_TIERS[provider].normal))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
@@ -676,8 +707,8 @@ export function ConnectCommandPanel({
   // One key per distinct setup payload. The effect below regenerates when it
   // changes; the ref guards against an older in-flight response overwriting a
   // newer one.
-  const inputsKey = JSON.stringify({
-    clientId: client.id,
+  const inputsKey = connectionSetupInputsKey({
+    clientId: client.id as InstallerClientId,
     platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
@@ -697,58 +728,67 @@ export function ConnectCommandPanel({
       ? selectedPlugins.map((plugin) => plugin.id).sort()
       : null,
   });
+  // A setup the server prepared for this document's first payload (see
+  // `firstConnectionSetupInputs`): Approve is ready at first paint, and the
+  // browser prepares nothing while the payload stays the same.
+  const queryClient = useQueryClient();
+  // Adopted once, on the first render of the document it was prepared for.
+  // A later mount of this URL prepares a fresh setup: the seeded one may have
+  // expired or been used.
+  const [seededSetup] = useState(() => {
+    if (!connectRequest) return null;
+    const query = queryClient.getQueryCache().find<ConnectionSetupSeed>({
+      queryKey: connectionSetupSeedQueryKey(connectRequest),
+      exact: true,
+    });
+    return isDocumentSeedFresh(queryClient, query)
+      ? (query?.state.data ?? null)
+      : null;
+  });
+  useEffect(() => {
+    if (!connectRequest || !seededSetup) return;
+    queryClient.removeQueries({
+      queryKey: connectionSetupSeedQueryKey(connectRequest),
+      exact: true,
+    });
+  }, [connectRequest, seededSetup, queryClient]);
+  // The approval reads came with the document, so every input of the first
+  // payload is here on the first render and the first preparation can start
+  // at once. Without the seed the lists land one by one; the first
+  // preparation then waits for them to settle, like any later change.
+  const seededApproval = useDocumentSeedFresh(
+    clientConnectionQueryKey(connectRequest ?? ""),
+  );
+  const seededSetupId =
+    seededSetup && seededSetup.keyDigest === connectionSetupKeyDigest(inputsKey)
+      ? seededSetup.id
+      : null;
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
+  // The payload of the setup in `result`, so an effect run with the same
+  // payload keeps it instead of preparing it again.
+  const preparedKeyRef = useRef<string | null>(null);
+  // Whether a preparation has started. The first starts at once; later ones
+  // wait for the user to stop changing the selection.
+  const preparationStartedRef = useRef(false);
+  // The seeded setup stands in for `result` while the page's payload is the
+  // one it was prepared for.
+  const adoptedSetupId =
+    seededSetupId &&
+    (!preparationStartedRef.current || preparedKeyRef.current === inputsKey)
+      ? seededSetupId
+      : null;
 
   const runGeneration = useCallback(
     async (key: string) => {
-      const inputs = JSON.parse(key) as {
-        clientId: InstallerClientId;
-        platform: NonNullable<CreateConnectionSetupBody["platform"]>;
-        baseUrl: string;
-        gatewayId: string | null;
-        proxyId: string | null;
-        provider: SupportedProvider | null;
-        proxyAuth: ConnectProxyAuth | null;
-        model: string | null;
-        skillIds: string[] | null;
-        pluginIds: string[] | null;
-      };
-
-      let skills: CreateConnectionSetupBody["skills"];
-      if (inputs.skillIds && inputs.skillIds.length > 0) {
-        // ttlDays is null because the marketplace the client clones from must
-        // outlive the one-time setup token. It only applies on the snapshot
-        // path (a setup that also delivers plugins); the shared marketplace URL
-        // this normally renders has no expiry to set.
-        skills = { skillIds: inputs.skillIds, ttlDays: null };
-      }
-      if (
-        !inputs.gatewayId &&
-        !inputs.proxyId &&
-        !skills &&
-        (!inputs.pluginIds || inputs.pluginIds.length === 0)
-      ) {
-        return;
-      }
-
+      const body = connectionSetupBody(key);
+      if (!body) return;
+      setResult(null);
+      setFailure(null);
       refusalRef.current = null;
-      const created = await createSetup({
-        clientId: inputs.clientId,
-        platform: inputs.platform,
-        baseUrl: inputs.baseUrl,
-        mcpGatewayId: inputs.gatewayId ?? undefined,
-        llmProxyId: inputs.proxyId ?? undefined,
-        provider:
-          inputs.proxyAuth === "primary-providers"
-            ? undefined
-            : (inputs.provider ?? undefined),
-        proxyAuth: inputs.proxyAuth ?? undefined,
-        model: inputs.model ?? undefined,
-        skills,
-        ...(inputs.pluginIds ? { pluginIds: inputs.pluginIds } : {}),
-      });
+      const created = await createSetup(body);
       if (latestKeyRef.current !== key) return; // stale response
+      preparedKeyRef.current = created ? key : null;
       setResult(created);
       setFailure(
         created ? null : (refusalRef.current ?? "the server gave no reason"),
@@ -758,8 +798,6 @@ export function ConnectCommandPanel({
   );
 
   useEffect(() => {
-    setResult(null);
-    setFailure(null);
     // Don't try to generate a command until the setup can actually be produced:
     // not before a per-user account is connected, not for a virtual key that
     // has no provider key to mint from, and not for a selection over a delivery
@@ -774,13 +812,32 @@ export function ConnectCommandPanel({
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
     ) {
+      preparedKeyRef.current = null;
+      setResult(null);
+      setFailure(null);
       return;
     }
-    const timer = setTimeout(() => {
-      void runGeneration(inputsKey);
-    }, 350);
+    // The same payload as the prepared setup: keep it, and Approve stays on.
+    if (preparedKeyRef.current === inputsKey) return;
+    // The server prepared the first payload with the document.
+    if (!preparationStartedRef.current && seededSetupId) {
+      preparationStartedRef.current = true;
+      preparedKeyRef.current = inputsKey;
+      return;
+    }
+    preparedKeyRef.current = null;
+    setResult(null);
+    setFailure(null);
+    const timer = setTimeout(
+      () => {
+        preparationStartedRef.current = true;
+        void runGeneration(inputsKey);
+      },
+      preparationStartedRef.current || !seededApproval ? 350 : 0,
+    );
     return () => clearTimeout(timer);
   }, [
+    seededApproval,
     inputsKey,
     preparationEnabled,
     hasRunnableAnything,
@@ -791,6 +848,7 @@ export function ConnectCommandPanel({
     primaryRoutingBlocked,
     canAttribute,
     runGeneration,
+    seededSetupId,
   ]);
 
   // Each summary line owns its inline editor. A line is editable only when it
@@ -1097,7 +1155,7 @@ export function ConnectCommandPanel({
         ? selectionProblem
         : failed
           ? "Setup command generation failed"
-          : result
+          : result || adoptedSetupId
             ? "Setup command ready"
             : hasRunnableAnything
               ? "Generating setup command"
@@ -1159,7 +1217,15 @@ export function ConnectCommandPanel({
     );
   }
 
-  if (!hasAnything) {
+  // Until the lists that decide it have loaded, "nothing to connect" is not
+  // known yet: the normal layout shows, preparing, instead of a panel that a
+  // moment later turns into it.
+  const choicesLoading =
+    mcpGatewaysLoading ||
+    skillsLoading ||
+    pluginsLoading ||
+    availableKeysPending;
+  if (!hasAnything && !choicesLoading) {
     // Nothing to put in a setup command — but skills install from their own
     // marketplace URL, so a caller who can read them still has something to do.
     return (
@@ -1195,7 +1261,10 @@ export function ConnectCommandPanel({
                 detail={<GatewayServersSummary gatewayId={gateway.id} />}
               >
                 Connect{" "}
-                <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
+                <GatewayLink
+                  gateway={gateway}
+                  className="font-medium text-foreground"
+                />{" "}
                 for tools
               </SetupSummaryRow>
             )}
@@ -1375,7 +1444,7 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {!showSetupSummary && connectRequest && (
+        {!showSetupSummary && connectRequest && !connectRequestDecided && (
           <ConnectionConsentOptions
             open={customizing}
             onOpenChange={setCustomizing}
@@ -1527,8 +1596,15 @@ export function ConnectCommandPanel({
           >
             {commandStatus}
           </output>
-          <CreditWarningNotice warning={result?.creditWarning} />
+          <CreditWarningNotice
+            warning={
+              result?.creditWarning ??
+              (adoptedSetupId ? seededSetup?.creditWarning : undefined)
+            }
+          />
+          {/* Notices about model routing wait for the lists they describe. */}
           {hasRunnableAnything &&
+            !choicesLoading &&
             (primaryRoutingBlocked && canAttribute === false ? (
               <InlineNotice variant="info">
                 <InlineNoticeText>
@@ -1577,7 +1653,7 @@ export function ConnectCommandPanel({
                 : "border-terminal-edge bg-terminal shadow-sm dark:shadow-lg",
             )}
           >
-            {!hasRunnableAnything ? (
+            {!hasRunnableAnything && !choicesLoading ? (
               <div className="px-5 py-4 text-sm text-muted-foreground">
                 No selected resource can be configured for this client and
                 operating system. Choose another platform or add a connection
@@ -1604,7 +1680,7 @@ export function ConnectCommandPanel({
               <ClientConnectionApproval
                 key={connectRequest}
                 requestId={connectRequest}
-                setupId={result?.id}
+                setupId={result?.id ?? adoptedSetupId ?? undefined}
                 setupProblem={
                   selectionProblem ??
                   (failureMessage
@@ -1613,8 +1689,11 @@ export function ConnectCommandPanel({
                 }
                 clientId={client.id}
                 platform={setupPlatform}
-                gatewaySelected={!!gateway}
-                gatewayName={oauthServerName}
+                gateway={
+                  gateway ? { id: gateway.id, name: gateway.name } : null
+                }
+                mcpServerName={oauthServerName}
+                onDecided={() => setConnectRequestDecided(true)}
                 proxySelected={proxyActive}
                 skillsSelected={skillsEligible && includeSkills}
               />
@@ -1778,6 +1857,17 @@ function DesktopDownload({
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
 }) {
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+  const downloadOnReadyRef = useRef(false);
+  useEffect(() => {
+    if (failed) downloadOnReadyRef.current = false;
+    if (!installerUrl || !downloadOnReadyRef.current) return;
+    // Only the explicit download (or retry) click starts a download. Later
+    // setup changes may prepare a new ticket without downloading it again.
+    downloadOnReadyRef.current = false;
+    downloadLinkRef.current?.click();
+  }, [installerUrl, failed]);
+
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
   // Same shape as the Connect page's prompt row, so picking Claude Desktop
@@ -1808,16 +1898,23 @@ function DesktopDownload({
               ? "Preparing your installer"
               : requested
                 ? "Your installer, ready for 15 minutes"
-                : "Prepare an installer for this setup"}
+                : "Download an installer for this setup"}
           </span>
         )}
         {failed ? (
-          <Button variant="outline" size="lg" onClick={onRetry}>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onRetry();
+            }}
+          >
             <span>Try again</span>
           </Button>
         ) : installerUrl ? (
           <Button asChild size="lg" className="h-12 rounded-xl px-6">
-            <a href={installerUrl} download>
+            <a ref={downloadLinkRef} href={installerUrl} download>
               <Download />
               <span>Download installer</span>
             </a>
@@ -1826,11 +1923,16 @@ function DesktopDownload({
           <Button
             size="lg"
             disabled={requested}
-            onClick={onPrepare}
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onPrepare();
+            }}
             className="h-12 rounded-xl px-6"
           >
             <Download />
-            <span>{pending ? "Preparing installer" : "Prepare installer"}</span>
+            <span>
+              {pending ? "Preparing installer" : "Download installer"}
+            </span>
           </Button>
         )}
       </div>

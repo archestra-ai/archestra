@@ -107,6 +107,8 @@ export type AppaPreparedRequest = {
   };
   /** Child-return completions collected before provider dispatch. */
   childReturns?: CollectedChildReturns;
+  /** The spawn calls APPA released, as the markers in the history name them. */
+  releasedSpawnCalls?: string[];
   /** Unverified self-contained trajectory proofs; child binding verifies them. */
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
 };
@@ -138,6 +140,7 @@ export function prepareAppaRequest(params: {
    */
   delegationMarkers?: AppaDelegationMarker[];
   childReturns?: CollectedChildReturns;
+  releasedSpawnCalls?: string[];
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
    * The client's own wire, when a Model Router route translated it to this
@@ -196,7 +199,7 @@ export function prepareAppaRequest(params: {
   if ([...hostedNames].some((name) => clientNames.has(name))) {
     throw new ApiError(
       400,
-      "A provider-hosted tool conflicts with a client tool; rename or remove that declaration.",
+      "OpenAPPA found a provider-hosted tool that conflicts with a client tool; rename or remove that declaration.",
     );
   }
   if (
@@ -286,6 +289,9 @@ export function prepareAppaRequest(params: {
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(params.releasedSpawnCalls
+      ? { releasedSpawnCalls: params.releasedSpawnCalls }
+      : {}),
     ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
       ? { childTrajectoryReceipts }
       : {}),
@@ -402,7 +408,7 @@ export function prepareAppaRequest(params: {
       ) {
         throw new ApiError(
           400,
-          "A provider-hosted tool conflicts with the OpenAPPA remedy tools; rename or remove that declaration.",
+          "OpenAPPA found a provider-hosted tool that conflicts with its remedy tools; rename or remove that declaration.",
         );
       }
       if (!notice) {
@@ -505,6 +511,9 @@ export function prepareAppaRequest(params: {
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(params.releasedSpawnCalls
+      ? { releasedSpawnCalls: params.releasedSpawnCalls }
+      : {}),
     ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
       ? { childTrajectoryReceipts }
       : {}),

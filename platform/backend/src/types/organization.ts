@@ -460,6 +460,7 @@ export const UpdateSecuritySettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  defaultPersonalAgentAccessAllTools: z.boolean().optional(),
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -477,6 +478,8 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
+  defaultFastModelId: z.string().uuid().nullable().optional(),
+  defaultSmartModelId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

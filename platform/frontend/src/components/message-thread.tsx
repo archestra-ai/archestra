@@ -70,6 +70,7 @@ const MessageThread = ({
   hideDivider,
   agentName,
   selectedModel,
+  openPendingTools = false,
 }: {
   messages: PartialUIMessage[];
   chatErrors?: PersistedChatError[];
@@ -81,6 +82,11 @@ const MessageThread = ({
   hideDivider?: boolean;
   agentName?: string;
   selectedModel?: string;
+  /**
+   * Open a tool call that has no result yet. A logged request that ends on
+   * one is waiting on it, so it is what a reader opened the request to see.
+   */
+  openPendingTools?: boolean;
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
   const { data: organization } = useOrganization();
@@ -358,6 +364,11 @@ const MessageThread = ({
                               <Tool
                                 key={part.toolCallId ?? partKey}
                                 className={getColorClass()}
+                                defaultOpen={
+                                  openPendingTools &&
+                                  !toolResultPart &&
+                                  isPendingToolState(part.state)
+                                }
                               >
                                 <ToolHeader
                                   type={`tool-${toolName}`}
@@ -496,7 +507,14 @@ const MessageThread = ({
                               }
 
                               return (
-                                <Tool key={`${message.id}-${part.toolCallId}`}>
+                                <Tool
+                                  key={`${message.id}-${part.toolCallId}`}
+                                  defaultOpen={
+                                    openPendingTools &&
+                                    !toolResultPart &&
+                                    isPendingToolState(part.state)
+                                  }
+                                >
                                   <ToolHeader
                                     type={part.type}
                                     state={
@@ -705,4 +723,8 @@ function getPartSignature(part: PartialUIMessage["parts"][number]): string {
  */
 function isCancelledToolOutput(output: unknown): boolean {
   return extractMcpToolError(output)?.type === "cancelled";
+}
+
+function isPendingToolState(state: string | undefined): boolean {
+  return state === "input-available" || state === "input-streaming";
 }

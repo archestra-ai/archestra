@@ -493,6 +493,24 @@ jobs:
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
 
+  update-terraform-provider:
+    name: Start Terraform provider update
+    # Propose each release from main to the Terraform provider as soon as it is
+    # published, instead of at the updater's next daily run. A workflow_dispatch
+    # sent with GITHUB_TOKEN starts a run; the release event it caused does not.
+    if: ${{ github.ref == 'refs/heads/main' && needs.publish-github-release.result == 'success' }}
+    needs:
+      - publish-github-release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # Start the Update Terraform Provider workflow.
+    steps:
+      - name: Start Update Terraform Provider
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run update-terraform-provider.yml --ref main
+
   notify-release-failure:
     name: Notify release failure
     # Pages #alerting when a release that was ACTUALLY being published fails, so a broken

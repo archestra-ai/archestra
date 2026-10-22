@@ -10,6 +10,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
   createK8sClients,
@@ -194,6 +195,11 @@ class AgentRuntimeManager {
         spec: withOwner,
         capabilities,
         clusterDnsIps,
+        clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
+          coreApi: clients.coreApi,
+          namespace: withOwner.namespace,
+          clusterDnsIps,
+        }),
       }),
     );
     await this.applyNetworkPolicy(
@@ -1536,10 +1542,18 @@ class AgentRuntimeManager {
       namespace: params.spec.runtimeScope,
       ownerReferences: params.sandbox.metadata.ownerReferences,
     };
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      clients.coreApi,
+    );
     const policies = buildAgentRuntimeEnvironmentEgressPolicies({
       spec,
       capabilities: (await getK8sCapabilities()).networkPolicy,
-      clusterDnsIps: await clusterDnsResolver.getClusterDnsIps(clients.coreApi),
+      clusterDnsIps,
+      clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
+        coreApi: clients.coreApi,
+        namespace: spec.namespace,
+        clusterDnsIps,
+      }),
     });
     await this.applyEgressPolicies(policies);
     await this.applyNetworkPolicy(

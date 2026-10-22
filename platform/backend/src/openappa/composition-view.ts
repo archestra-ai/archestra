@@ -63,7 +63,7 @@ export function helperOwner(
 }
 
 /** The record an accepted composition stores beside its bytes. */
-export function servedSnapshot(params: {
+export function servedRecord(params: {
   batteries: readonly PolicyBatteryView[];
   installs: readonly BatteryInstall[];
   contentHash: string;

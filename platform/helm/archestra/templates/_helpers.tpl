@@ -597,6 +597,10 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# MCP deployment diagnostics read namespace events to explain failing pods.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
 # Agent image prefetch reads the default ServiceAccount's image pull secrets.
 - apiGroups: [""]
   resources: ["serviceaccounts"]
@@ -610,11 +614,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Agent Sandbox owns the runtime Pod and persistent workspace lifecycle.
-# Transcript recovery verifies the retained claim belongs to its Sandbox.
+# Agent Sandbox owns persistent workspaces; transcript recovery reads them.
+# Dagger owns rebuildable engine caches and lists/deletes orphaned cache claims.
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["get"]
+  verbs: ["get", "list", "delete"]
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes"]
   verbs: ["get", "list", "create", "patch", "delete"]
@@ -660,6 +664,26 @@ Worker selector labels
 app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-worker
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: worker
+{{- end }}
+
+{{/*
+Topology spread constraints for one Deployment. archestra.topologySpreadConstraints
+is shared by the web and worker Deployments, so a constraint without a
+labelSelector gets the rendering Deployment's own selector labels: each
+Deployment then spreads its own pods.
+Usage: include "archestra-platform.topologySpreadConstraints" (dict "constraints" .Values.archestra.topologySpreadConstraints "selectorLabels" (include "archestra-platform.selectorLabels" .))
+*/}}
+{{- define "archestra-platform.topologySpreadConstraints" -}}
+{{- $selector := fromYaml .selectorLabels -}}
+{{- $out := list -}}
+{{- range .constraints -}}
+{{- $constraint := deepCopy . -}}
+{{- if not (hasKey $constraint "labelSelector") -}}
+{{- $_ := set $constraint "labelSelector" (dict "matchLabels" $selector) -}}
+{{- end -}}
+{{- $out = append $out $constraint -}}
+{{- end -}}
+{{- toYaml $out -}}
 {{- end }}
 
 {{/*
@@ -901,6 +925,16 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
   {{- end }}
   env:
     {{- include "archestra-platform.env" . | nindent 4 }}
+  {{- /* ARCHESTRA_DATABASE_URL may come from envFrom, so mirror the main container's sources. */}}
+  {{- if or .Values.archestra.envFrom .initContainerExtraEnvFrom }}
+  envFrom:
+    {{- with .Values.archestra.envFrom }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .initContainerExtraEnvFrom }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
   {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
   volumeMounts:
     - name: vault-secrets

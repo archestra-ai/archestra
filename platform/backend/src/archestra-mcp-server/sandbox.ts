@@ -111,7 +111,7 @@ const SandboxTargetSchema = z
       .boolean()
       .optional()
       .describe(
-        "Set true for a brand-new isolated sandbox; its id is returned.",
+        "Set true for a brand-new empty sandbox, without the conversation's attachments or earlier work; its id is returned.",
       ),
     id: z
       .string()
@@ -121,7 +121,8 @@ const SandboxTargetSchema = z
   .optional()
   .describe(
     "Which sandbox to use. Omit (or leave empty) for the conversation's default " +
-      'sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated ' +
+      "sandbox (created on first use), which holds the conversation's attachments. " +
+      'Pass `{ "fresh": true }` for a new empty ' +
       'sandbox, or `{ "id": "<uuid>" }` to target a specific one.',
   );
 
@@ -2046,8 +2047,8 @@ function ensureUsable(
 
 /**
  * Map a loosely-typed {@link SandboxTarget} to a canonical intent. Models often
- * express "the default sandbox" as `{ fresh: false }`, `{ id: "" }`, or `{}`, so
- * those collapse to the default (undefined). `fresh: true` wins over an id; a
+ * express "the default sandbox" as `{ fresh: false }`, `{ id: "" }`, the nil
+ * UUID, or `{}`, so those collapse to the default (undefined). `fresh: true` wins over an id; a
  * non-empty id is validated as a UUID and otherwise reported clearly.
  */
 function normalizeTarget(
@@ -2060,17 +2061,22 @@ function normalizeTarget(
     return { intent: { fresh: true } };
   }
   const id = target.id?.trim();
-  if (id) {
+  if (id && id !== NIL_UUID) {
     if (!isUuid(id)) {
       return {
-        error: `target.id must be a sandbox id (UUID). Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+        error: `target.id must be a sandbox id (UUID). ${TARGET_HINT}`,
       };
     }
     return { intent: { id } };
   }
-  // `{ fresh: false }`, `{ id: "" }`, or `{}` — the model meant the default.
+  // `{ fresh: false }`, `{ id: "" }`, the nil UUID, or `{}` — the model meant the default.
   return { intent: undefined };
 }
+
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+const TARGET_HINT =
+  "Omit `target` to use the conversation's default sandbox, which holds the conversation's attachments and earlier work, or pass `target: { fresh: true }` to start an empty one.";
 
 /**
  * Resolve a {@link SandboxTarget} to a concrete sandbox id, creating the
@@ -2147,7 +2153,7 @@ async function resolveTarget(params: {
         "[Sandbox] rejected out-of-scope sandbox id",
       );
       return {
-        error: `No accessible sandbox with id ${intent.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+        error: `No accessible sandbox with id ${intent.id} exists. ${TARGET_HINT}`,
       };
     }
     return { sandboxId: asSandboxId(sandbox.id) };

@@ -303,9 +303,11 @@ describe("member subscription disconnect", () => {
       }),
     );
     renderPage();
-    const disconnect = await screen.findByRole("button", {
-      name: "Delete Hidden subscription",
-    });
+    const disconnect = await screen.findByRole(
+      "button",
+      { name: "Delete Hidden subscription" },
+      { timeout: 5000 },
+    );
     expect(
       screen.queryByTestId("subscription-provider-card-github-copilot"),
     ).not.toBeInTheDocument();

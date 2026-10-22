@@ -17,7 +17,6 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import type { Rebinding } from "@/openappa/retired-annotators";
 import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -75,12 +74,7 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
  * it; one the document introduces is an error. Either way the held-back
  * batteries are named with it, since they are what the refusal is fixed by.
  * A held-back battery the document composes without is no refusal; its status
- * is the effective policy's to report. A document that composes is warned
- * about each annotator the effective policy declares and it would drop. A
- * name it binds differently from a policy sessions opened under is an error,
- * since those sessions would be redirected; one the revision being replaced
- * already binds that way is a warning, since the document changes nothing
- * for them.
+ * is the effective policy's to report.
  */
 async function deploymentRefusal(params: {
   organizationId: string;
@@ -91,74 +85,33 @@ async function deploymentRefusal(params: {
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
-    previous,
   });
-  const inDeployment = (line: string) => `in this deployment: ${line}`;
-  // What the revision being replaced already meets is not this document's
-  // doing: it is warned about, while what this document introduces is an error.
-  const before =
+  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  const kept = new Set(
     previous === content
-      ? submitted
-      : submitted.refusal.length === 0 && submitted.rebound.length === 0
-        ? null
-        : await openappaBatteriesService.composeInDeployment({
+      ? submitted.refusal
+      : (
+          await openappaBatteriesService.composeInDeployment({
             organizationId,
             content: previous,
-          });
-  // A rebinding is carried only while the name stays bound as the revision
-  // being replaced binds it; binding it a third way redirects sessions again.
-  const carried = new Map(
-    (before?.rebound ?? []).map((rebinding) => [
-      rebinding.name,
-      rebinding.current,
-    ]),
+          })
+        ).refusal,
   );
-  const isCarried = (rebinding: Rebinding) =>
-    carried.get(rebinding.name) === rebinding.current;
-  const rebindingErrors = submitted.rebound
-    .filter((rebinding) => !isCarried(rebinding))
-    .map((rebinding) => inDeployment(rebindingError(rebinding)));
-  const rebindingWarnings = submitted.rebound
-    .filter(isCarried)
-    .map((rebinding) => inDeployment(rebindingWarning(rebinding)));
-  if (submitted.refusal.length === 0)
-    return {
-      errors: rebindingErrors,
-      warnings: [...submitted.retiring, ...rebindingWarnings],
-    };
-  const kept = new Set(before?.refusal ?? []);
   const introduced = submitted.refusal.filter((error) => !kept.has(error));
+  const inDeployment = (line: string) => `in this deployment: ${line}`;
   const keptNote =
     " (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)";
   if (introduced.length > 0)
     return {
-      errors: [
-        ...[...introduced, ...submitted.heldBack].map(inDeployment),
-        ...rebindingErrors,
-      ],
+      errors: [...introduced, ...submitted.heldBack].map(inDeployment),
       warnings: [],
     };
   return {
-    errors: rebindingErrors,
-    warnings: [
-      ...[...submitted.refusal, ...submitted.heldBack].map(
-        (line) => inDeployment(line) + keptNote,
-      ),
-      ...rebindingWarnings,
-    ],
+    errors: [],
+    warnings: [...submitted.refusal, ...submitted.heldBack].map(
+      (line) => inDeployment(line) + keptNote,
+    ),
   };
-}
-
-/** A rebinding this document introduces: sessions opened earlier would be redirected. */
-function rebindingError(rebinding: Rebinding): string {
-  const { name, current, earlier } = rebinding;
-  return `annotator "${name}" is bound to ${current} in this revision, but sessions opened under earlier policies were answered by ${earlier.join(" or ")} and would be redirected. Declare the new binding under a new annotator name so those sessions keep theirs.`;
-}
-
-/** A rebinding the revision being replaced already carries: this document changes nothing for those sessions. */
-function rebindingWarning(rebinding: Rebinding): string {
-  const { name, current, earlier } = rebinding;
-  return `annotator "${name}" stays bound to ${current}; sessions opened under earlier policies were answered by ${earlier.join(" or ")} and have been answered by ${current} since the revision that rebound it. This revision changes nothing for them.`;
 }
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
@@ -331,7 +284,7 @@ export const guardrailsPolicyService = {
       } catch {
         logger.warn(
           { organizationId },
-          "Could not queue informational validation after a policy change",
+          "OpenAPPA could not queue informational validation after a policy change",
         );
       }
     }
@@ -367,6 +320,7 @@ function requireEnabled() {
   if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
+const CODING_BATTERY = "coding";
 const CLAUDE_CODE_BATTERY = "claude-code";
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
@@ -375,15 +329,17 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, and the bundled `claude-code` battery over the
- * client built-ins this host derives as `host/archestra/<name>`. It reads the
- * organization's members as `internal`, and has the organization's default
- * model label each sandbox command, each shell command the client battery
- * routes to a model, and each tool no rule names.
+ * carry in this deployment, and the bundled `coding` battery over the client
+ * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
+ * onto Claude Code's tools, and the root maps it onto the other clients'. It
+ * reads the organization's members as `internal`, and has the organization's
+ * default model label each sandbox command, each shell command the client
+ * batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
   return `include = [
   "${bundledEntry(ARCHESTRA_BATTERY)}",
+  "${bundledEntry(CODING_BATTERY)}",
   "${bundledEntry(CLAUDE_CODE_BATTERY)}",
 ]
 
@@ -395,6 +351,19 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
+# The coding battery's tools under Codex's and OpenCode's spellings.
+[aliases.tool.${CODING_BATTERY}]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]
+
 [policy]
 version = 2
 
@@ -404,8 +373,10 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
-# A subagent's return that matches the bounded JSON schema its parent declared
-# at the spawn crosses at the parent's trust. Built into the runtime.
+# Lets an agent hand a risky read to a subagent. The subagent must reply in
+# the strict JSON shape the agent asked for, so injected instructions and
+# extra data can't slip back. A reply that fits gets the agent's trust.
+# Built into the runtime.
 [[policy.sanitizer]]
 name = "attest-schema"
 on = ["tool_output"]
@@ -427,8 +398,8 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
-# The client battery's shell annotators, with the battery's own mandate, asked
-# of the annotator model instead of a local claude process.
+# The client batteries' shell and Monitor annotators, with the batteries' own
+# mandate, asked of the annotator model instead of a local claude process.
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
@@ -436,6 +407,10 @@ hint = "\`context.github\` is the deployment's finding about the repository and 
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.monitor-requirements"
 builtin = "archestra"
 
 # Labels each call no rule names with the OpenAPPA annotator model (the
@@ -472,7 +447,7 @@ annotator = "${UNDECLARED_TOOL_ANNOTATOR}"
 
 # Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
-name = "hitl"
+name = "human-approval"
 hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
@@ -483,7 +458,7 @@ attention = ["*"]
 [externals]
 timeout_ms = 20000
 
-[externals.authorities.hitl]
+[externals.authorities.human-approval]
 builtin = "hitl"
 `;
 }

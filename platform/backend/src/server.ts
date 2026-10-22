@@ -168,6 +168,7 @@ import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
+  MS_TEAMS_SIGN_IN_PATH,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
@@ -807,6 +808,8 @@ const startWebServer = async () => {
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     // one-time setup token is embedded in the URL path; never log it
     if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
+    // Teams sign-in key and OAuth code are in the query string; never log them
+    if (url.startsWith(MS_TEAMS_SIGN_IN_PATH)) return true;
     return false;
   };
 
@@ -1036,9 +1039,9 @@ const startWebServer = async () => {
       // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
       // drop the legacy interactions payload indexes on deployments upgrading
       // from before migration 0116 stopped creating them, and build the
-      // agent_tools and mcp_server lookup indexes and the interactions
-      // session-preview backfill index. Idempotent; errors are logged inside
-      // and retried next boot.
+      // agent_tools, mcp_server and interactions lookup indexes (the
+      // session-preview backfill and passthrough-key indexes). Idempotent;
+      // errors are logged inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
       void createAgentToolsIndexes();
       void createMcpServerIndexes();

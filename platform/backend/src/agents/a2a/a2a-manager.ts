@@ -10,6 +10,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
+import { ensureToolCallsHaveResults } from "@/agents/tool-call-results";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
@@ -178,12 +179,19 @@ interface A2AManagerConfig {
 export interface A2ASystemParams {
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
+  /** Caller-owned runtime title; bypasses automatic title generation. */
+  runtimeTitle?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
   source?: InteractionSource;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
+  /** Awaited after persistence, before launch: register delivery without awaiting network I/O. */
+  onRuntimeSessionCreated?: (session: {
+    taskId: string;
+    workspaceId: string;
+  }) => Promise<void>;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -531,8 +539,9 @@ export class A2AManager {
       const contextUiMessages = coerceMalformedToolInputs(
         contextDbMessages.map((m) => m.content as UIMessage),
       );
-      const requestMessages: ModelMessage[] =
-        await convertToModelMessages(contextUiMessages);
+      const requestMessages: ModelMessage[] = ensureToolCallsHaveResults(
+        await convertToModelMessages(contextUiMessages),
+      );
 
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the
@@ -681,7 +690,9 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                onRuntimeSessionCreated: systemParams?.onRuntimeSessionCreated,
                 task: executedTurnText,
+                title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",
@@ -1746,7 +1757,7 @@ export class A2AManager {
     const { tasks, totalSize } = await A2ATaskModel.listForActor({
       actorKind: params.actor.kind,
       actorId: params.actor.id,
-      agentId: params.agentId,
+      agentIds: [params.agentId],
       contextId: request.contextId,
       state: request.status,
       statusChangedAfter: request.statusTimestampAfter

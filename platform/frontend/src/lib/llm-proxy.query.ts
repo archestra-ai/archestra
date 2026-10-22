@@ -1,11 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { llmProxyQueryKey } from "@/lib/connection-approval-query-keys";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const { getLlmProxy, updateLlmProxy } = archestraApiSdk;
-
-const llmProxyQueryKey = ["llm-proxy"] as const;
 
 /** The organization's LLM Proxy (a singleton, created on first use). */
 export function useLlmProxy(params?: { enabled?: boolean }) {

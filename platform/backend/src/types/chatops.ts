@@ -52,6 +52,36 @@ export const ChatOpsProviderInfoSchema = z.object({
   dmInfo: ChatOpsDmInfoSchema,
 });
 
+/**
+ * Stored chatops config as the config routes read it back: only what is not a
+ * secret.
+ */
+const ChatOpsStoredConfigBaseSchema = z.object({
+  /** Whether the provider would start from this config: enabled, with the credentials its mode needs. */
+  configured: z.boolean(),
+  /** When the stored config last changed; null when none is stored. */
+  updatedAt: z.date().nullable(),
+  enabled: z.boolean(),
+});
+
+export const SlackChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    connectionMode: ChatOpsConnectionModeSchema,
+  });
+
+export const MsTeamsChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    tenantId: z.string().nullable(),
+    /** Whether people may sign in so the bot reads their group-chat files. */
+    groupChatFileSignIn: z.boolean(),
+    /** The Web redirect URI that sign-in needs on the bot's Entra app. */
+    signInRedirectUri: z.string(),
+  });
+
+export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
   providers: z.array(ChatOpsProviderInfoSchema),
@@ -65,12 +95,15 @@ export const ChatOpsStatusResponseSchema = z.object({
  *   non-file response such as an HTML login page).
  * - `total_limit_reached`: the combined attachment budget was already spent.
  * - `too_many`: more files than the per-message cap were attached.
+ * - `sign_in_required`: only the sender's own access can read the file (a
+ *   Teams group-chat file in their OneDrive) and they have not signed in.
  */
 export type SkippedAttachmentReason =
   | "too_large"
   | "download_failed"
   | "total_limit_reached"
-  | "too_many";
+  | "too_many"
+  | "sign_in_required";
 
 /**
  * A file that was attached to a message but not delivered to the model. Carried
@@ -133,6 +166,8 @@ export interface IncomingChatMessage {
  * Options for sending a chat reply
  */
 export interface ChatReplyOptions {
+  /** Use bounded delivery without retries for optional Slack acknowledgments. */
+  bestEffort?: boolean;
   /** The original message to reply to */
   originalMessage: IncomingChatMessage;
   /** The reply text */
@@ -151,6 +186,8 @@ export interface ChatReplyOptions {
    * so the footer stays the reply's last line.
    */
   hint?: string;
+  /** Stable runtime conversation link, rendered separately from the answer. */
+  conversationUrl?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -510,11 +547,14 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
-   * Clear a transient "thinking" indicator without posting a message.
-   * Needed when the agent deliberately stays silent: providers like Slack
-   * only auto-clear the status once a message is posted to the thread.
+   * Explicitly clear processing status or remove an unanswered placeholder.
+   * Metadata carries provider-specific placeholder cleanup state.
    */
-  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+  clearTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
 
   /**
    * Open a reply stream for this message (optional). The stream posts nothing
@@ -659,6 +699,26 @@ export interface ChatOpsProvider {
   downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
 
   /**
+   * Download files of the incoming message that the platform does not put on
+   * the message itself (MS Teams channels and group chats keep them in
+   * SharePoint). Called only for a message the bot is answering.
+   * @returns One outcome per file found on the message
+   */
+  downloadMessageFiles?(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]>;
+
+  /**
+   * Ask the sender to sign in so their `sign_in_required` files become
+   * readable, holding the message to answer once they have (MS Teams group
+   * chats). Returns false when no sign-in could be offered.
+   */
+  requestFileSignIn?(params: {
+    message: IncomingChatMessage;
+    fileNames: string[];
+  }): Promise<boolean>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)
@@ -720,6 +780,11 @@ export interface MsTeamsDbConfig {
   graphTenantId: string;
   graphClientId: string;
   graphClientSecret: string;
+  /**
+   * Whether people may sign in to the bot so it can read the files they send
+   * in group chats. Needs the sign-in redirect URI on the bot's Entra app.
+   */
+  groupChatFileSignIn?: boolean;
 }
 
 /** Slack config stored as a DB secret */

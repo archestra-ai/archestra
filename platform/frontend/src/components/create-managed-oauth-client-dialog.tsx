@@ -1,8 +1,9 @@
 "use client";
 import type { archestraApiTypes } from "@archestra/shared";
 import { Server, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import {
@@ -79,6 +80,7 @@ export function CreateManagedOAuthClientDialog({
       initialGrants: [],
     },
   });
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const defaultTargetIds = defaultAllowedGatewayIds?.join(",") ?? "";
   const [step, setStep] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -130,13 +132,17 @@ export function CreateManagedOAuthClientDialog({
       <form
         className="flex min-h-0 flex-col"
         onSubmit={form.handleSubmit(async () => {
+          const labels = labelsRef.current?.saveUnsavedLabel() ?? values.labels;
           if (step < 2) {
             setStep(step + 1);
             return;
           }
           if (ready)
             await onSubmit(
-              await resolveOauthClientFormBody(values, providedGateways),
+              await resolveOauthClientFormBody(
+                { ...values, labels },
+                providedGateways,
+              ),
             );
         })}
       >
@@ -217,7 +223,10 @@ export function CreateManagedOAuthClientDialog({
                   <AccordionItem value="advanced">
                     <AccordionTrigger>Advanced</AccordionTrigger>
                     <AccordionContent>
-                      <OAuthClientAdvancedFields form={form} />
+                      <OAuthClientAdvancedFields
+                        form={form}
+                        labelsRef={labelsRef}
+                      />
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>

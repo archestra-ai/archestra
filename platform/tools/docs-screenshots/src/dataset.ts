@@ -73,6 +73,8 @@ export const REMOTE_MCP_SERVERS = [
   { name: "Notion", description: "Pages, databases, and comments", serverUrl: "https://mcp.notion.com/mcp" },
   { name: "PagerDuty", description: "Incidents, services, and on-call schedules", serverUrl: "https://mcp.pagerduty.com/mcp" },
   { name: "Atlassian", description: "Jira issues and Confluence pages", serverUrl: "https://mcp.atlassian.com/v1/mcp" },
+  { name: "GitHub", description: "Repositories, issues, and pull requests", serverUrl: "https://api.githubcopilot.com/mcp/" },
+  { name: "Slack", description: "Channels, messages, and threads", serverUrl: "https://mcp.slack.com/mcp" },
   // Token header sign-in, so its Install dialog asks for a key.
   {
     name: "Stripe",
@@ -87,6 +89,89 @@ export const REMOTE_MCP_SERVERS = [
         sensitive: true,
       },
     },
+  },
+] as const;
+
+/** Catalog entries that reuse the icon of their public MCP catalog entry (`mcp-catalog/data/mcp-evaluations`). */
+export const MCP_CATALOG_ICONS: Record<string, string> = {
+  GitHub: "githubcopilot__remote-mcp.json",
+  Slack: "slack__remote-mcp.json",
+};
+
+/**
+ * Rules the Guardrails docs walk through, added to the starting policy: an agent
+ * that read an internal Slack channel cannot open an issue in the public SDK repository.
+ */
+export const GUARDRAILS_POLICY_RULES = `
+# Reading Slack keeps what the agent learned inside the company.
+[[policy.tool]]
+name = "slack__slack_read_channel"
+delta = { audience = ["internal"] }
+
+# acme/sdk is a public repository: a new issue there may carry only public data.
+[[policy.tool]]
+name = "github__issue_write(owner:acme,repo:sdk)"
+requires = { audience = { contains = ["public"] } }
+`;
+
+/** Validation files on Guardrails → Validations, each checking one case of GUARDRAILS_POLICY_RULES. */
+export const VALIDATIONS = [
+  {
+    path: "slack-to-public-issue.appa",
+    content: `# Slack data can't go into a public GitHub issue
+mcp/slack/slack_read_channel {
+  channel_id: "C0INCIDENT"
+}
+expect allow
+
+mcp/github/issue_write {
+  method: "create"
+  owner: "acme"
+  repo: "sdk"
+  title: "Upload retries ignore URL expiry"
+}
+expect authority human-approval
+`,
+  },
+  {
+    path: "public-issue-fresh-session.appa",
+    content: `# A fresh session can open a public issue
+mcp/github/issue_write {
+  method: "create"
+  owner: "acme"
+  repo: "sdk"
+  title: "Upload retries ignore URL expiry"
+}
+expect allow
+`,
+  },
+] as const;
+
+/** Yells on Guardrails → Yells: agents that could not finish a task because of the policy. */
+export const YELLS = [
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000001",
+    user: "priya",
+    minutesAgo: 35,
+    superyell: false,
+    message:
+      "Blocked from opening an issue in acme/sdk after reading #incident-review. The issue only describes the SDK retry bug, with no customer details, but the session can no longer send anything public.",
+  },
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000002",
+    user: "marcus",
+    minutesAgo: 180,
+    superyell: true,
+    message:
+      "Could not publish the v3.2.0 release notes to the public changelog: the notes were drafted after reading the internal release thread, and every approval covered only one call.",
+  },
+  {
+    id: "5e11a0e1-0000-4000-8000-000000000003",
+    user: "daniel",
+    minutesAgo: 1440,
+    superyell: false,
+    message:
+      "The remedy plan offered approval for a GitHub search that needs no approval: reading public issues should not need a review.",
   },
 ] as const;
 
@@ -459,3 +544,106 @@ export const AGENT_PLACEMENT = [
   { agent: "Release Notes Writer", team: "Platform Engineering", environment: "staging" },
   { agent: "Sales Ops Analyst", team: "Data Science", environment: "production" },
 ] as const;
+
+/** A complete incident investigation, including parallel tools on the timeline. */
+export const LOG_SESSION = {
+  id: "docs-incident-investigation",
+  agent: "Incident Responder",
+  prompt: "Investigate the checkout latency spike after the latest deployment",
+  model: "claude-sonnet-4-6",
+  turns: [
+    {
+      startMs: 0,
+      durationMs: 6200,
+      inputTokens: 1840,
+      outputTokens: 210,
+      cacheReadTokens: 0,
+      text: "I'll compare the incident with recent deployments, then check the service metrics.",
+      tools: [0, 1],
+    },
+    {
+      startMs: 9700,
+      durationMs: 8100,
+      inputTokens: 4860,
+      outputTokens: 285,
+      cacheReadTokens: 1600,
+      text: "The latency increase started two minutes after checkout-api v2.18.3. I'll check connection-pool saturation and application errors.",
+      tools: [2, 3],
+    },
+    {
+      startMs: 23600,
+      durationMs: 9600,
+      inputTokens: 8270,
+      outputTokens: 340,
+      cacheReadTokens: 4200,
+      text: "The deployment reduced the database pool from 40 connections to 10. Queue time rose while database query time stayed flat. I'll share the evidence with the on-call team.",
+      tools: [4],
+    },
+    {
+      startMs: 35900,
+      durationMs: 11200,
+      inputTokens: 9640,
+      outputTokens: 520,
+      cacheReadTokens: 6400,
+      text: "## Checkout latency: deployment regression\n\nThe spike began after **checkout-api v2.18.3** reduced the database connection pool from **40 to 10**.\n\n| Evidence | Finding |\n| --- | --- |\n| PagerDuty | Latency alert started at 11:42 UTC |\n| GitHub | v2.18.3 deployed at 11:40 UTC |\n| Metrics | p95 latency rose from 180 ms to 2.4 s |\n| Logs | Connection-pool timeouts; query time unchanged |\n\n**Recommended next step:** roll back v2.18.3 and verify latency recovers. The summary is in #platform-oncall. No deployment was changed.",
+      tools: [],
+    },
+  ],
+  tools: [
+    {
+      server: "PagerDuty",
+      name: "get_incident",
+      startMs: 6400,
+      durationMs: 2800,
+      args: { incident_id: "INC-2481" },
+      result:
+        "INC-2481: checkout-api p95 latency above 2 seconds. Triggered at 11:42 UTC. Assigned to Platform Engineering.",
+    },
+    {
+      server: "GitHub",
+      name: "list_deployments",
+      startMs: 6400,
+      durationMs: 1500,
+      args: { repository: "acme/checkout-api", environment: "production" },
+      result:
+        "v2.18.3 deployed at 11:40 UTC. Configuration change: DB_POOL_SIZE reduced from 40 to 10. Previous version: v2.18.2.",
+    },
+    {
+      server: "Datadog",
+      name: "query_metrics",
+      startMs: 18000,
+      durationMs: 3200,
+      args: {
+        query: "p95:trace.http.request.duration{service:checkout-api}",
+        from: "11:30",
+        to: "11:50",
+      },
+      result:
+        "p95 latency: 180 ms before deploy, 2.4 s after. Connection-pool utilization: 100%. Database query p95: unchanged at 24 ms.",
+    },
+    {
+      server: "Datadog",
+      name: "search_logs",
+      startMs: 18000,
+      durationMs: 4300,
+      args: {
+        query: "service:checkout-api status:error",
+        from: "11:40",
+        to: "11:50",
+      },
+      result:
+        "126 connection-pool timeout errors since 11:42 UTC. All from v2.18.3. No database availability or authentication failures.",
+    },
+    {
+      server: "Slack",
+      name: "post_message",
+      startMs: 33500,
+      durationMs: 1400,
+      args: {
+        channel: "platform-oncall",
+        text: "Checkout latency correlates with v2.18.3 reducing DB_POOL_SIZE from 40 to 10. Recommend rollback; verify latency and pool wait time. No deployment changed.",
+      },
+      result: "Incident summary posted to #platform-oncall.",
+    },
+  ],
+} as const;

@@ -53,7 +53,11 @@ export function useImpersonationCandidatesPage({
 export function useImpersonateUser() {
   return useMutation({
     mutationFn: async (userId: string) => {
-      const result = await authClient.admin.impersonateUser({ userId });
+      // By path: the admin plugin's client is not in the bundle.
+      const result = await authClient.$fetch("/admin/impersonate-user", {
+        method: "POST",
+        body: { userId },
+      });
       if (result.error) {
         throw result.error;
       }
@@ -81,7 +85,9 @@ export function useImpersonateUser() {
 export function useStopImpersonating() {
   return useMutation({
     mutationFn: async () => {
-      const result = await authClient.admin.stopImpersonating();
+      const result = await authClient.$fetch("/admin/stop-impersonating", {
+        method: "POST",
+      });
       if (result.error) {
         throw result.error;
       }

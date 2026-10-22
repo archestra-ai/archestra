@@ -1,3 +1,12 @@
+import { priceBillingUsage } from "@/services/billable-usage";
+import { asRecord } from "@/utils/as-record";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
+import { componentCacheCosts } from "@/utils/billable-usage";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * LLM Proxy Helpers
  *
@@ -347,8 +356,23 @@ export async function calculateUsageCost(params: {
   model: string;
   usage: UsageView;
   provider: SupportedProvider;
+  usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return undefined;
+  if (params.usageAccountingMode === "enforce")
+    return Number(
+      (
+        await priceBillingUsage({
+          model,
+          usage,
+          provider,
+          mode: "enforce",
+          providerApiKeyId: params.providerApiKeyId,
+        })
+      ).cost,
+    );
   if (usage.providerReportedCost !== undefined) {
     return usage.providerReportedCost;
   }
@@ -358,6 +382,7 @@ export async function calculateUsageCost(params: {
     usage.outputTokens,
     provider,
     {
+      providerApiKeyId: params.providerApiKeyId,
       readTokens: usage.cacheReadTokens ?? 0,
       writeTokens: usage.cacheWriteTokens ?? 0,
       write1hTokens: usage.cacheWrite1hTokens ?? 0,
@@ -372,29 +397,80 @@ export async function calculateInteractionCosts(params: {
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
+  usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<{
+  billingUsage?: PricedBillingUsage;
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
-  const actualCost = await calculateUsageCost({
-    model: params.actualModel,
-    usage: params.usage,
-    provider: params.providerName,
-  });
-  const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
-    params.actualModel,
-    params.providerName,
-    params.usage.cacheReadTokens ?? 0,
-    params.usage.cacheWriteTokens ?? 0,
-    params.usage.cacheWrite1hTokens ?? 0,
-  );
+  if (params.usage.usageUnavailable || params.usage.costUnavailable) {
+    return {
+      actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
+    };
+  }
+  const billingUsage =
+    params.usageAccountingMode && params.usageAccountingMode !== "off"
+      ? await priceBillingUsage({
+          model: params.actualModel,
+          usage: params.usage,
+          provider: params.providerName,
+          mode: params.usageAccountingMode,
+          providerApiKeyId: params.providerApiKeyId,
+        })
+      : undefined;
+  const actualCost =
+    billingUsage?.mode === "enforce"
+      ? Number(billingUsage.cost)
+      : await calculateUsageCost({
+          model: params.actualModel,
+          usage: params.usage,
+          provider: params.providerName,
+          providerApiKeyId: params.providerApiKeyId,
+        });
+  const cacheBreakdown =
+    billingUsage?.mode === "enforce"
+      ? undefined
+      : await utils.costOptimization.calculateCacheCost(
+          params.actualModel,
+          params.providerName,
+          params.usage.cacheReadTokens ?? 0,
+          params.usage.cacheWriteTokens ?? 0,
+          params.usage.cacheWrite1hTokens ?? 0,
+          params.providerApiKeyId,
+        );
+  const componentsCache =
+    billingUsage?.mode === "enforce"
+      ? billingUsage.components.map(componentCacheCosts)
+      : undefined;
   return {
+    billingUsage,
     actualCost,
-    cacheCost: cacheBreakdown?.cacheCost,
-    cacheSavings: cacheBreakdown?.cacheSavings,
-    cacheReadSavings: cacheBreakdown?.cacheReadSavings,
+    ...(componentsCache
+      ? {
+          cacheCost: componentsCache.reduce(
+            (sum, item) => sum + item.cacheCost,
+            0,
+          ),
+          cacheSavings: componentsCache.reduce(
+            (sum, item) => sum + item.cacheSavings,
+            0,
+          ),
+          cacheReadSavings: componentsCache.reduce(
+            (sum, item) => sum + item.cacheReadSavings,
+            0,
+          ),
+        }
+      : {
+          cacheCost: cacheBreakdown?.cacheCost,
+          cacheSavings: cacheBreakdown?.cacheSavings,
+          cacheReadSavings: cacheBreakdown?.cacheReadSavings,
+        }),
   };
 }
 
@@ -420,6 +496,7 @@ export function applyInputTokenFallback(params: {
   model: string;
 }): UsageView {
   const { usage } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return usage;
   const hasCacheTokens =
     (usage.cacheReadTokens ?? 0) !== 0 ||
     (usage.cacheWriteTokens ?? 0) !== 0 ||
@@ -461,6 +538,16 @@ export function applyInputTokenFallback(params: {
     ...usage,
     inputTokens: estimatedInputTokens,
     inputTokensEstimated: true,
+    billingQuote: undefined,
+    ...(usage.billingUsage
+      ? {
+          billingUsage: {
+            ...usage.billingUsage,
+            status: "incomplete" as const,
+            issues: [...usage.billingUsage.issues, "estimated_input_tokens"],
+          },
+        }
+      : {}),
   };
 }
 
@@ -470,6 +557,7 @@ export function applyInputTokenFallback(params: {
  */
 export function buildInteractionRecord(params: {
   agent: GatewayAgent;
+  billingAttribution?: BillingAttribution;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   billingMode: BillingMode;
@@ -496,6 +584,7 @@ export function buildInteractionRecord(params: {
   actualModel: string;
   usage: UsageView;
   costs: {
+    billingUsage?: PricedBillingUsage;
     actualCost: number | undefined;
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
@@ -504,6 +593,9 @@ export function buildInteractionRecord(params: {
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
+    environmentId: params.billingAttribution?.environmentId,
+    billingAttribution: params.billingAttribution,
+    billingUsage: params.costs.billingUsage,
     externalAgentId: params.externalAgentId,
     authMethod: params.authMethod,
     billingMode: params.billingMode,
@@ -522,7 +614,10 @@ export function buildInteractionRecord(params: {
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
-    response: params.response as InteractionResponse,
+    response: withMediaUsageAvailability(
+      params.response,
+      params.usage,
+    ) as InteractionResponse,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
@@ -533,14 +628,24 @@ export function buildInteractionRecord(params: {
     // optimization saving instead of a negative one, and so historical rows
     // written while rules existed keep their meaning.
     baselineModel: params.actualModel,
-    inputTokens: params.usage.inputTokens,
+    inputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
-    outputTokens: params.usage.outputTokens,
+    outputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
-    cost: params.costs.actualCost?.toFixed(10) ?? null,
-    baselineCost: params.costs.actualCost?.toFixed(10) ?? null,
+    cost:
+      params.costs.billingUsage?.mode === "enforce"
+        ? params.costs.billingUsage.cost
+        : (params.costs.actualCost?.toFixed(10) ?? null),
+    baselineCost:
+      params.costs.billingUsage?.mode === "enforce"
+        ? params.costs.billingUsage.cost
+        : (params.costs.actualCost?.toFixed(10) ?? null),
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
     cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
   };
@@ -683,6 +788,7 @@ export function upstreamErrorMessage(
  * The caller limits retries to failures before the first response chunk.
  */
 export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
+  if (error instanceof ObservedProviderUsageError) return false;
   if (
     error instanceof ApiError ||
     explicitHttpStatus(error) !== undefined ||
@@ -830,11 +936,15 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type (and details) so native
-        // streaming clients classify the failure correctly. This uses
-        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // Keep the provider's own error object (its code, details, policy
+        // review data) so native streaming clients classify and recover from
+        // the failure as they would talking to the provider directly. This
+        // uses upstreamBody, not upstreamPassthroughBody: the status (200) is
         // already sent, so the status checks of the passthrough do not apply,
-        // and the type and details are all the client has to go on.
+        // and the error object is all the client has to go on.
+        ...(upstreamBody !== undefined
+          ? providerErrorFields(upstreamBody)
+          : {}),
         // A transport failure has no provider body: frame it as a server
         // error with its own code, so a client that classifies by type
         // (the AI SDK's Responses parser, OpenCode, Kilo Code) treats it as
@@ -847,9 +957,6 @@ export function handleError(
           "api_error",
         ...(transportFailure ? { code: transportFailure.code } : {}),
         message: errorMessage,
-        ...(upstreamBody !== undefined
-          ? providerErrorDetails(upstreamBody)
-          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -1162,10 +1269,9 @@ function extractTrustedProviderErrorBody(error: unknown): object | undefined {
     : undefined;
 }
 
-/** The provider's `details` member of its error object, for mid-stream frames. */
-function providerErrorDetails(body: object): { details?: unknown } {
-  const details = (body as { error?: { details?: unknown } }).error?.details;
-  return details && typeof details === "object" ? { details } : {};
+/** The provider's own error object, for mid-stream frames. */
+function providerErrorFields(body: object): Record<string, unknown> {
+  return asRecord((body as { error?: unknown }).error) ?? {};
 }
 
 /**
@@ -1324,4 +1430,46 @@ function undecorated(
     return undefined;
   }
   return toolCall.name.slice(decoration.prefix.length);
+}
+
+/** Handler-owned component metrics; HTTP wrappers own other providers' tokens. */
+export function reportBillableUsageMetrics(params: {
+  usage: PricedBillingUsage;
+  agent: GatewayAgent;
+  source: InteractionSource;
+  billingMode: BillingMode;
+  authMethod?: InteractionAuthMethod;
+  tokens: boolean;
+}) {
+  for (const component of params.usage.components) {
+    if (params.tokens)
+      metrics.llm.reportLLMTokens(
+        component.provider,
+        params.agent,
+        {
+          input: component.inputTokens,
+          output: component.outputTokens,
+          cacheRead: component.cacheReadTokens,
+          cacheWrite: component.cacheWriteTokens,
+        },
+        component.model,
+        params.source,
+      );
+    metrics.llm.reportLLMCost({
+      provider: component.provider,
+      profile: params.agent,
+      model: component.model,
+      cost: component.cost ? Number(component.cost) : 0,
+      source: params.source,
+      billingMode: params.billingMode,
+      authMethod: params.authMethod,
+    });
+    metrics.llm.reportLLMCacheCost(
+      component.provider,
+      params.agent,
+      component.model,
+      componentCacheCosts(component),
+      params.source,
+    );
+  }
 }

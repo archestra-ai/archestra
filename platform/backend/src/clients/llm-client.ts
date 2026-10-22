@@ -33,6 +33,7 @@ import {
   subscriptionKindFromCredential,
   USER_ID_HEADER,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 
 import { context, propagation } from "@opentelemetry/api";
 import {
@@ -45,6 +46,7 @@ import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
+import { createAzureMediaLanguageModel } from "@/clients/azure-media-language-model";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
@@ -81,6 +83,10 @@ import {
   openappaEnabled,
 } from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
+import {
+  type AzureModelCapabilities,
+  resolveAzureModelCapabilities,
+} from "@/services/azure-model-capabilities";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -226,6 +232,7 @@ export function createLLMModel(params: {
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
   /** A platform guardrail call, exempt from blocking unrecognized clients. */
   internalCall?: boolean;
+  azureCapabilities?: AzureModelEvidence;
 }): LLMModel {
   const {
     provider,
@@ -313,6 +320,7 @@ export function createLLMModel(params: {
       headers,
       fetch: createTracedFetch(),
       supportedEndpoints,
+      azureCapabilities: params.azureCapabilities,
     }),
     { provider, modelName },
   );
@@ -461,6 +469,25 @@ export async function createLLMModelForAgent(params: {
       ? await personalTokenValue({ organizationId, userId })
       : apiKey;
 
+  const azureCapabilities: AzureModelCapabilities | undefined =
+    provider === "azure"
+      ? await resolveAzureModelCapabilities({
+          providerApiKeyId: chatApiKeyId,
+          modelId: modelName,
+        })
+      : undefined;
+  if (azureCapabilities?.status === "stale") {
+    throw new ApiError(400, azureCapabilities.reason);
+  }
+  // Unknown metadata retains the explicitly selected standard Chat surface.
+  // It cannot select a native media transport or borrow another key's facts.
+  if (azureCapabilities?.status === "unknown") {
+    logger.debug(
+      { reason: azureCapabilities.reason },
+      "Azure Chat capabilities unknown; using the explicit Chat surface",
+    );
+  }
+
   const model = createLLMModel({
     provider,
     apiKey: proxyCredential,
@@ -475,6 +502,8 @@ export async function createLLMModelForAgent(params: {
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
+    azureCapabilities:
+      azureCapabilities?.status === "known" ? azureCapabilities : undefined,
   });
 
   const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
@@ -525,6 +554,7 @@ type ProviderModelConfig = {
      * mean "use the provider's default surface", never a guess.
      */
     supportedEndpoints?: SupportedProviderEndpoint[] | null;
+    azureCapabilities?: AzureModelEvidence;
   }) => LLMModel;
   /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
   defaultBaseUrl: string | undefined;
@@ -932,13 +962,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       headers,
       fetch: providedFetch,
       direct,
+      azureCapabilities,
     }) => {
       // Azure has no usable default endpoint; without this guard createOpenAI
       // would fall back to api.openai.com and send the Azure api-key there.
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
-      const useResponses = isAzureOpenAiFirstPartyModelName(modelName);
+      const useResponses = isAzureOpenAiFirstPartyModelName(
+        azureCapabilities?.underlyingModelName ?? modelName,
+      );
 
       // The AI SDK client can't set Azure's api-version as a default query
       // param, so we wrap fetch and inject it on every request — except for
@@ -964,6 +997,49 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       const requestHeaders = normalizedApiKey
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
+
+      const kind = azureCapabilities?.kind;
+      if (
+        azureCapabilities &&
+        !azureCapabilities.operations.some((operation) =>
+          ["chat", "responses", "image-generation", "realtime-turn"].includes(
+            operation,
+          ),
+        )
+      ) {
+        throw new ApiError(
+          400,
+          "This Azure deployment does not support Chat media turns. Use its explicit media endpoint.",
+        );
+      }
+      if (direct && (kind === "realtime" || kind === "translation")) {
+        throw new ApiError(
+          400,
+          "Azure realtime media models require the LLM proxy or Chat. Select a text model for direct model tasks.",
+        );
+      }
+      if (
+        kind === "image" ||
+        kind === "audio" ||
+        kind === "realtime" ||
+        kind === "translation"
+      ) {
+        return createAzureMediaLanguageModel({
+          modelId: modelName,
+          baseURL: direct
+            ? (buildAzureDeploymentBaseUrl({
+                baseUrl: baseURL,
+                deploymentName: modelName,
+              }) ?? baseURL)
+            : baseURL,
+          headers: {
+            ...requestHeaders,
+            ...(sdkApiKey ? { authorization: `Bearer ${sdkApiKey}` } : {}),
+          },
+          fetch: fetchWithVersion,
+          kind,
+        });
+      }
 
       // Classic Responses endpoints are resource-scoped; Chat Completions
       // endpoints are deployment-scoped. V1 URLs pass through unchanged.

@@ -44,6 +44,6 @@ export async function recordOpenAppaClientFailure(params: {
     });
   } catch (err) {
     // Reporting failure must never turn the original refusal into an allow.
-    logger.warn({ err }, "Could not save OpenAPPA client failure report");
+    logger.warn({ err }, "OpenAPPA could not save the client failure report");
   }
 }

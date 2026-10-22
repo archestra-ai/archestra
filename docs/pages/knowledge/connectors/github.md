@@ -2,14 +2,14 @@
 title: GitHub
 description: Connect GitHub documents to Knowledge and configure source access
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-19
 ---
 
 Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds the pull request where you decided it. The connector syncs issues, pull request discussions, and repository files.
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** an organization [credential](/docs/admin/security/credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
+**Authentication:** an organization [credential](/docs/admin/credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
 
 ## Connecting GitHub
 
@@ -27,7 +27,7 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
 | Include Repository Files | Toggle to sync repository files (default: off)                                               |
-| File Types            | Comma-separated file extensions to index when repository files are enabled (defaults to `.md`, `.mdx`, `.yaml`, `.yml`) |
+| File Types            | Comma-separated extensions (`.md`, `.tm.hcl`) or file names (`Dockerfile`, `Makefile`) to index when repository files are enabled, in any folder. `*` indexes every text file and skips binaries. Defaults to `.md`, `.mdx`, `.yaml`, `.yml` |
 | Folders               | Comma-separated folders to index, relative to the repository root (optional -- leave blank to index the whole repository) |
 
 ## GitHub Auto-Sync Permissions

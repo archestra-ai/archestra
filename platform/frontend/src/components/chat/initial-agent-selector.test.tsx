@@ -95,6 +95,7 @@ const {
   mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
+    closeInstallForms: vi.fn(),
     closeLocalInstall: vi.fn(),
     closeNoAuthInstall: vi.fn(),
     closeOAuth: vi.fn(),
@@ -384,6 +385,40 @@ describe("InitialAgentSelector before the agent resolves", () => {
     expect(
       screen.getByRole("combobox", { name: "Beta Agent" }),
     ).toBeInTheDocument();
+    mockUseProfile.mockClear();
+  });
+});
+
+describe("InitialAgentSelector agent chip", () => {
+  it("never shows another agent's name while the chat's agent resolves", () => {
+    queryClient.clear();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <InitialAgentSelector currentAgentId={null} onAgentChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    // The roster is loaded and holds other agents, but none is the chosen one.
+    expect(
+      screen.getByRole("combobox", { name: "Loading agent" }),
+    ).toHaveAttribute("aria-busy", "true");
+    for (const name of ["Alpha Agent", "Beta Agent", "Gamma Agent"]) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    }
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <InitialAgentSelector
+          currentAgentId="agent-2"
+          onAgentChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Beta Agent" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Alpha Agent")).not.toBeInTheDocument();
+    // Later tests read this mock's first call.
     mockUseProfile.mockClear();
   });
 });

@@ -1,0 +1,5 @@
+# Shared browser/recording tools. Regenerate the hashed lock from platform/:
+# uv pip compile --python-version 3.11 --universal --generate-hashes \
+#   docker_images/agent/requirements.in -o docker_images/agent/requirements.lock
+shot-scraper==1.12
+playwright==1.64.0

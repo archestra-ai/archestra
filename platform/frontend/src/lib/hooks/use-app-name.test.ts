@@ -62,6 +62,14 @@ describe("useAppIconLogo", () => {
     expect(result.current).toBe("/logo-icon.svg");
   });
 
+  it("falls back to the light-on-dark default logo in dark mode when no branding is available", () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "dark" });
+
+    const { result } = renderHook(() => useAppIconLogo());
+
+    expect(result.current).toBe("/logo-icon-dark.svg");
+  });
+
   it("uses the dark icon logo in dark mode when available", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "dark" });
     mockAppearance({

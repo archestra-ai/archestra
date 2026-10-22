@@ -29,6 +29,8 @@ jobs:
       BRANCH: automation/client-versions
       CODEX_FILE: platform/backend/src/routes/chat/model-fetchers/openai.ts
       GROK_FILE: platform/backend/src/services/xai-subscription-token.ts
+      COPILOT_FILE: platform/backend/src/services/github-copilot-token.ts
+      COPILOT_CLI_FILE: platform/backend/src/services/agent-connection-setup/agents/copilot-cli.ts
     steps:
       - name: Checkout trusted main branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -86,6 +88,52 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve latest stable VS Code release
+        id: vscode
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            version="$(gh api "repos/microsoft/vscode/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$version" == "END" ]]; then
+              echo "::error::No stable VS Code release found"
+              exit 1
+            fi
+            [[ -n "$version" ]] && break
+            ((page += 1))
+          done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve latest stable Copilot Chat release
+        id: copilot-chat
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            tag="$(gh api "repos/microsoft/vscode-copilot-chat/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]{1,4}$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$tag" == "END" ]]; then
+              echo "::error::No stable Copilot Chat release found"
+              exit 1
+            fi
+            [[ -n "$tag" ]] && break
+            ((page += 1))
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       # The App token makes pushes and the new PR trigger ordinary CI.
       - name: Generate releaser token
         id: token
@@ -125,36 +173,41 @@ jobs:
         env:
           CODEX_TAG: ${{ steps.codex.outputs.tag }}
           GROK_VERSION: ${{ steps.grok.outputs.version }}
+          VSCODE_VERSION: ${{ steps.vscode.outputs.version }}
+          COPILOT_CHAT_TAG: ${{ steps.copilot-chat.outputs.tag }}
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          if [[ -n "$CODEX_TAG" ]]; then
-            pnpm --dir backend update:codex-models-client-version "$CODEX_TAG" "$TARGET/$CODEX_FILE"
-          fi
-          if [[ -n "$GROK_VERSION" ]]; then
-            pnpm --dir backend update:grok-client-version "$GROK_VERSION" "$TARGET/$GROK_FILE"
-          fi
-
-          # git diff --quiet exits 1 for a change and above 1 for an error.
-          # file_changed returns 0 (true) when the file differs from HEAD.
-          file_changed() {
-            if git -C "$TARGET" diff --quiet -- "$1"; then
-              return 1
-            else
-              local status=$?
-              if [[ "$status" -ne 1 ]]; then
-                exit "$status"
-              fi
-              return 0
+          summary=()
+          run_updater() {
+            local label="$1"
+            shift
+            local before
+            before="$(git -C "$TARGET" diff)"
+            "$@"
+            local after
+            after="$(git -C "$TARGET" diff)"
+            if [[ "$before" != "$after" ]]; then
+              summary+=("$label")
             fi
           }
-          summary=()
-          if file_changed "$CODEX_FILE"; then
-            summary+=("Codex ${CODEX_TAG#rust-v}")
+          if [[ -n "$CODEX_TAG" ]]; then
+            run_updater "Codex ${CODEX_TAG#rust-v}" \
+              pnpm --dir backend update:codex-models-client-version "$CODEX_TAG" "$TARGET/$CODEX_FILE"
           fi
-          if file_changed "$GROK_FILE"; then
-            summary+=("Grok CLI $GROK_VERSION")
+          if [[ -n "$GROK_VERSION" ]]; then
+            run_updater "Grok CLI $GROK_VERSION" \
+              pnpm --dir backend update:grok-client-version "$GROK_VERSION" "$TARGET/$GROK_FILE"
           fi
+          if [[ -n "$VSCODE_VERSION" ]]; then
+            run_updater "VS Code $VSCODE_VERSION" \
+              pnpm --dir backend update:vscode-client-version "$VSCODE_VERSION" "$TARGET/$COPILOT_FILE" "$TARGET/$COPILOT_CLI_FILE"
+          fi
+          if [[ -n "$COPILOT_CHAT_TAG" ]]; then
+            run_updater "Copilot Chat ${COPILOT_CHAT_TAG#v}" \
+              pnpm --dir backend update:copilot-chat-client-version "$COPILOT_CHAT_TAG" "$TARGET/$COPILOT_FILE"
+          fi
+
           if [[ "${#summary[@]}" -eq 0 ]]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -172,7 +225,7 @@ jobs:
           SUMMARY: ${{ steps.update.outputs.summary }}
         run: |
           set -euo pipefail
-          git -C "$TARGET" add -- "$CODEX_FILE" "$GROK_FILE"
+          git -C "$TARGET" add -- "$CODEX_FILE" "$GROK_FILE" "$COPILOT_FILE" "$COPILOT_CLI_FILE"
           git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update client versions ($SUMMARY)"
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
@@ -186,7 +239,7 @@ jobs:
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$CODEX_FILE" "$GROK_FILE"; then
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$CODEX_FILE" "$GROK_FILE" "$COPILOT_FILE" "$COPILOT_CLI_FILE"; then
             echo "Client versions already match main."
             exit 0
           else
@@ -197,7 +250,7 @@ jobs:
           fi
 
           pr_title="chore: update client versions"
-          pr_body="Track stable Codex CLI and Grok CLI releases. Codex filters the ChatGPT subscription model catalog by client version, and xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum."
+          pr_body="Track stable Codex CLI, Grok CLI, VS Code, and GitHub Copilot Chat releases. Codex filters the ChatGPT subscription model catalog by client version, xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum, and GitHub Copilot endpoints require a current VS Code and Copilot Chat editor identity."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -218,12 +271,18 @@ jobs:
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 
       - name: Fail for an unresolved client
-        if: steps.codex.outcome == 'failure' || steps.grok.outcome == 'failure'
+        if: >-
+          steps.codex.outcome == 'failure' ||
+          steps.grok.outcome == 'failure' ||
+          steps.vscode.outcome == 'failure' ||
+          steps.copilot-chat.outcome == 'failure'
         env:
           CODEX_OUTCOME: ${{ steps.codex.outcome }}
           GROK_OUTCOME: ${{ steps.grok.outcome }}
+          VSCODE_OUTCOME: ${{ steps.vscode.outcome }}
+          COPILOT_CHAT_OUTCOME: ${{ steps.copilot-chat.outcome }}
         run: |
-          echo "::error::Could not resolve every client version (Codex: $CODEX_OUTCOME, Grok CLI: $GROK_OUTCOME)"
+          echo "::error::Could not resolve every client version (Codex: $CODEX_OUTCOME, Grok CLI: $GROK_OUTCOME, VS Code: $VSCODE_OUTCOME, Copilot Chat: $COPILOT_CHAT_OUTCOME)"
           exit 1
 
   # Hourly runs stay quiet unless a run fails or pushes a new version.

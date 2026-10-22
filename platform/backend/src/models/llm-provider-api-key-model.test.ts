@@ -54,10 +54,10 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         lastSyncedAt: new Date(),
       });
       const bestCandidateModel = await ModelModel.create({
-        externalId: "openai/gpt-5.5",
+        externalId: "openai/gpt-6.1-sol",
         provider: "openai",
-        modelId: "gpt-5.5",
-        description: "GPT-5.5",
+        modelId: "gpt-6.1-sol",
+        description: "GPT-6.1 Sol",
         contextLength: 128000,
         inputModalities: ["text"],
         outputModalities: ["text"],
@@ -88,6 +88,75 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
 
       expect(bestModels.get(bestMarkedKey.id)?.id).toBe(bestCandidateModel.id);
       expect(bestModels.get(fallbackKey.id)?.id).toBe(fallbackSecondModel.id);
+    });
+  });
+
+  describe("getFastModel", () => {
+    test("picks the key's most-preferred fast-tier chat model, else none", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const linkedKey = async (
+        provider: SupportedProvider,
+        modelIds: string[],
+      ) => {
+        const key = await makeLlmProviderApiKey(org.id, secret.id, {
+          provider,
+        });
+        const models = await Promise.all(
+          modelIds.map((modelId) =>
+            ModelModel.create({
+              externalId: `${provider}/${modelId}`,
+              provider,
+              modelId,
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              lastSyncedAt: new Date(),
+            }),
+          ),
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          key.id,
+          models.map((model) => model.id),
+        );
+        return key;
+      };
+      const fastModelOf = async (key: {
+        id: string;
+        provider: SupportedProvider;
+      }) =>
+        (
+          await LlmProviderApiKeyModelLinkModel.getFastModel({
+            apiKeyId: key.id,
+            provider: key.provider,
+          })
+        )?.modelId ?? null;
+
+      const openai = await linkedKey("openai", [
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-6-luna-pro",
+        "gpt-6-luna",
+      ]);
+      const anthropic = await linkedKey("anthropic", [
+        "claude-sonnet-5",
+        "claude-haiku-5-5-20261001",
+      ]);
+      const proOverFast = await linkedKey("openrouter", [
+        "openai/gpt-6-luna-pro",
+        "anthropic/claude-sonnet-5",
+      ]);
+      const flagshipOnly = await linkedKey("anthropic", ["claude-opus-5"]);
+      const noFastTier = await linkedKey("groq", ["openai/gpt-oss-120b"]);
+
+      expect(await fastModelOf(openai)).toBe("gpt-6-luna");
+      expect(await fastModelOf(anthropic)).toBe("claude-haiku-5-5-20261001");
+      expect(await fastModelOf(proOverFast)).toBeNull();
+      expect(await fastModelOf(flagshipOnly)).toBeNull();
+      expect(await fastModelOf(noFastTier)).toBeNull();
     });
   });
 
@@ -263,7 +332,7 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         provider: "openai",
       });
       // A best-tier model id, so the hidden key's sync marks its link best.
-      const shared = await makeModel("gpt-6-astra");
+      const shared = await makeModel("gpt-6.1-sol");
       const hiddenOnly = await makeModel("gpt-hidden-only");
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(visible.id, [
         shared.id,
@@ -286,7 +355,7 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         })),
       ).toEqual([
         // The marker counts on any linked key, including a hidden one.
-        { modelId: "gpt-6-astra", isBest: true, keys: [visible.id] },
+        { modelId: "gpt-6.1-sol", isBest: true, keys: [visible.id] },
         { modelId: "gpt-hidden-only", isBest: false, keys: [] },
       ]);
     });
@@ -655,107 +724,32 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
     });
   });
 
-  describe("best-model marker priority", () => {
-    test.for([
-      { catalog: ["gpt-4o", "gpt-3.5-turbo"], expected: "gpt-4o" },
-      { catalog: ["gpt-4.1", "gpt-4o"], expected: "gpt-4.1" },
-      { catalog: ["gpt-5", "gpt-4o"], expected: "gpt-5" },
-      { catalog: ["gpt-5.4", "gpt-5"], expected: "gpt-5.4" },
-      { catalog: ["gpt-5.5", "gpt-5.4"], expected: "gpt-5.5" },
-      { catalog: ["gpt-5.5-pro", "gpt-5.5"], expected: "gpt-5.5-pro" },
-      { catalog: ["gpt-6-sol", "gpt-5.6-sol"], expected: "gpt-6-sol" },
-      { catalog: ["gpt-6-astra", "gpt-6-sol"], expected: "gpt-6-astra" },
-      { catalog: ["gpt-6-luna", "gpt-5.6-sol"], expected: "gpt-5.6-sol" },
-    ])("marks $expected as best for $catalog", async ({ catalog, expected }, {
-      makeOrganization,
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
-      const org = await makeOrganization();
-      const secret = await makeSecret();
-      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
-        provider: "openai",
-      });
-
-      const models = [];
-      for (const modelId of catalog) {
-        models.push(
-          await ModelModel.create({
-            externalId: `openai/${modelId}`,
-            provider: "openai",
-            modelId,
-            description: modelId,
-            inputModalities: ["text"],
-            outputModalities: ["text"],
-            supportsToolCalling: true,
-            lastSyncedAt: new Date(),
-          }),
-        );
-      }
-
-      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-        apiKey.id,
-        models.map((model) => ({ id: model.id, modelId: model.modelId })),
-        "openai",
-      );
-
-      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
-        apiKey.id,
-      );
-      expect(best?.modelId).toBe(expected);
-    });
-  });
-
-  describe("best-model marker priority across providers", () => {
+  describe("best model is the default trio's normal", () => {
     const cases: Array<{
       provider: SupportedProvider;
       catalog: string[];
       expected: string;
     }> = [
       {
+        provider: "openai",
+        catalog: ["gpt-6-astra", "gpt-6-luna", "gpt-6.1-sol"],
+        expected: "gpt-6.1-sol",
+      },
+      {
         provider: "anthropic",
-        catalog: ["claude-sonnet-4-8", "claude-haiku-4-5"],
-        expected: "claude-sonnet-4-8",
-      },
-      {
-        provider: "azure",
-        catalog: ["gpt-4o", "gpt-3.5-turbo"],
-        expected: "gpt-4o",
+        catalog: ["claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"],
+        expected: "claude-sonnet-5-5",
       },
       {
         provider: "gemini",
-        catalog: ["gemini-2.5-flash"],
-        expected: "gemini-2.5-flash",
-      },
-      {
-        // Current generation must outrank a legacy model so "best" is never a
-        // model the selector also badges "old".
-        provider: "gemini",
-        catalog: ["gemini-2.5-pro", "gemini-3.6-flash"],
-        expected: "gemini-3.6-flash",
-      },
-      {
-        // Gemini 3.8 Flash is the current best Gemini model.
-        provider: "gemini",
-        catalog: ["gemini-3.5-pro", "gemini-3.8-flash"],
+        catalog: ["gemini-3.5-flash-lite", "gemini-3.8-flash"],
         expected: "gemini-3.8-flash",
       },
       {
-        // Gemini 4 Argon outranks it once it ships.
-        provider: "gemini",
-        catalog: ["gemini-3.8-flash", "gemini-4-argon"],
-        expected: "gemini-4-argon",
-      },
-      {
-        provider: "bedrock",
-        catalog: ["anthropic.claude-sonnet-4-8"],
-        expected: "anthropic.claude-sonnet-4-8",
-      },
-      { provider: "xai", catalog: ["grok-3"], expected: "grok-3" },
-      {
-        provider: "cohere",
-        catalog: ["command-r-plus"],
-        expected: "command-r-plus",
+        // No default-trio match: the first linked model.
+        provider: "xai",
+        catalog: ["grok-3"],
+        expected: "grok-3",
       },
     ];
 

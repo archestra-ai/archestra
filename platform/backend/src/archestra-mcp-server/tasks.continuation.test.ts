@@ -1,8 +1,8 @@
 import {
-  TOOL_GET_RUN_FULL_NAME,
-  TOOL_LIST_RUNS_FULL_NAME,
-  TOOL_START_RUN_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
+  TOOL_STEER_AGENT_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { onTestFinished, vi } from "vitest";
@@ -95,9 +95,11 @@ test.for([
   await claudeCodeAccountManager.disconnect({ runtime, userId });
   const previous = mode === "continuation" ? await retainedRun() : null;
   const result = await executeArchestraTool(
-    mode === "initial" ? TOOL_START_RUN_FULL_NAME : TOOL_STEER_RUN_FULL_NAME,
+    mode === "initial"
+      ? TOOL_START_AGENT_RUN_FULL_NAME
+      : TOOL_STEER_AGENT_RUN_FULL_NAME,
     previous
-      ? { task_id: previous.taskId, message: "Revise the UI and demo it" }
+      ? { run_id: previous.taskId, message: "Revise the UI and demo it" }
       : { agent_id: agent.id, message: "Implement the UI" },
     context,
   );
@@ -112,7 +114,7 @@ test.for([
   const tasks = await A2ATaskModel.listForActor({
     actorKind: "user",
     actorId: userId,
-    agentId: agent.id,
+    agentIds: [agent.id],
     pageSize: 100,
   });
   expect(tasks.tasks).toHaveLength(previous ? 1 : 0);
@@ -153,24 +155,30 @@ test("a continuation reuses the account after an image change and reports a late
   const previous = await retainedRun();
   const notify = vi
     .spyOn(chatOpsManager, "notifyBindingThread")
-    .mockResolvedValue();
+    .mockResolvedValue(true);
   vi.spyOn(backend, "continueRun").mockRejectedValue(
     new Error("Runtime transport unavailable"),
   );
   vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
   vi.spyOn(backend, "releaseRun").mockResolvedValue();
   const result = await executeArchestraTool(
-    TOOL_STEER_RUN_FULL_NAME,
-    { task_id: previous.taskId, message: "Revise the UI and demo it" },
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId, message: "Revise the UI and demo it" },
     context,
   );
   expect(result.isError).toBe(false);
   const reply = JSON.parse((result.content[0] as { text: string }).text);
-  expect(reply.task_id).not.toBe(previous.taskId);
-  expect(reply.status).toBe("accepted");
-  await expect
-    .poll(async () => (await A2ATaskModel.findById(reply.task_id))?.state)
-    .toBe("TASK_STATE_FAILED");
+  expect(reply).toMatchObject({ status: "continued", run_id: previous.taskId });
+  const continuationState = async () =>
+    (
+      await A2ATaskModel.listForActor({
+        actorKind: "user",
+        actorId: userId,
+        agentIds: [agent.id],
+        pageSize: 10,
+      })
+    ).tasks.find((task) => task.id !== previous.taskId)?.state;
+  await expect.poll(continuationState).toBe("TASK_STATE_FAILED");
   await expect.poll(() => notify.mock.calls.length).toBe(1);
   expect(notify).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -242,10 +250,19 @@ test("an external gateway steers the current turn using the original session han
   const steer = vi.spyOn(backend, "steer").mockResolvedValue();
   const launch = vi.spyOn(backend, "launch");
   const continuation = vi.spyOn(backend, "continueRun");
-  for (const taskId of [previous.taskId, currentTask.id, previous.taskId]) {
+  const byTurn = await executeArchestraTool(
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: currentTask.id, message: "Keep working on the existing draft" },
+    externalContext,
+  );
+  expect(byTurn.isError).toBe(true);
+  for (let attempt = 0; attempt < 2; attempt++) {
     const result = await executeArchestraTool(
-      TOOL_STEER_RUN_FULL_NAME,
-      { task_id: taskId, message: "Keep working on the existing draft" },
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      {
+        run_id: previous.taskId,
+        message: "Keep working on the existing draft",
+      },
       externalContext,
     );
     expect(result.isError).not.toBe(true);
@@ -253,8 +270,8 @@ test("an external gateway steers the current turn using the original session han
       result.structuredContent,
     );
     expect(result.structuredContent).toMatchObject({
-      task_id: currentTask.id,
-      session_id: previous.taskId,
+      status: "steered",
+      run_id: previous.taskId,
     });
     expect(steer).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -266,23 +283,20 @@ test("an external gateway steers the current turn using the original session han
     );
   }
   const status = await executeArchestraTool(
-    TOOL_GET_RUN_FULL_NAME,
-    { task_id: previous.taskId },
+    TOOL_GET_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId },
     externalContext,
   );
   expect(status.structuredContent).toMatchObject({
-    session_id: previous.taskId,
-    run: { task_id: currentTask.id },
+    run: { run_id: previous.taskId, state: "working" },
     run_url: expect.stringContaining(`/chat/runs/${previous.taskId}`),
     workspace: { can_continue: true, continuation_error: null },
     requests: [
       {
-        task_id: previous.taskId,
         text: "Decode numeric HTML entities in the existing repository",
         truncated: false,
       },
       {
-        task_id: currentTask.id,
         text: "Cover invalid Unicode code points too",
         truncated: false,
       },
@@ -292,17 +306,26 @@ test("an external gateway steers the current turn using the original session han
     status.structuredContent,
   );
   const listed = await executeArchestraTool(
-    TOOL_LIST_RUNS_FULL_NAME,
-    { agent_id: agent.id },
+    TOOL_LIST_AGENT_RUNS_FULL_NAME,
+    { agent_ids: [agent.id], mine_only: true },
     externalContext,
   );
   const listedText = JSON.parse((listed.content[0] as { text: string }).text);
   expect(listedText).toEqual(listed.structuredContent);
-  expect(listedText.runs).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ task_id: currentTask.id }),
-    ]),
+  // The completed first turn is history: the run is listed once, as it is now.
+  expect(listedText).toMatchObject({
+    runs: [{ run_id: previous.taskId, state: "working" }],
+    summary: { total: 1, by_state: { working: 1 } },
+  });
+  const completed = await executeArchestraTool(
+    TOOL_LIST_AGENT_RUNS_FULL_NAME,
+    { agent_ids: [agent.id], mine_only: true, state: "completed" },
+    externalContext,
   );
+  expect(completed.structuredContent).toMatchObject({
+    runs: [],
+    summary: { total: 0 },
+  });
   expect(launch).not.toHaveBeenCalled();
   expect(continuation).not.toHaveBeenCalled();
   expect(
@@ -310,7 +333,7 @@ test("an external gateway steers the current turn using the original session han
       await A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: userId,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 100,
       })
     ).tasks,
@@ -323,8 +346,8 @@ test.for([
 ] as const)("a %s session rejects steering without creating a replacement task", async (unavailable) => {
   const previous = await retainedRun();
   const retained = await executeArchestraTool(
-    TOOL_GET_RUN_FULL_NAME,
-    { task_id: previous.taskId },
+    TOOL_GET_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId },
     context,
   );
   expect(retained.structuredContent).toMatchObject({
@@ -344,33 +367,31 @@ test.for([
     });
   }
   const expired = await executeArchestraTool(
-    TOOL_GET_RUN_FULL_NAME,
-    { task_id: previous.taskId },
+    TOOL_GET_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId },
     context,
   );
   expect(expired.structuredContent).toMatchObject({
     workspace: {
       can_continue: false,
       continuation_error: expect.stringContaining(
-        unavailable === "expired" ? "session expired" : "workspace was removed",
+        unavailable === "expired" ? "run expired" : "workspace was removed",
       ),
     },
   });
   const result = await executeArchestraTool(
-    TOOL_STEER_RUN_FULL_NAME,
-    { task_id: previous.taskId, message: "Continue the draft" },
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId, message: "Continue the draft" },
     context,
   );
   expect(result.isError).toBe(true);
-  expect(JSON.stringify(result.content)).toContain(
-    "No new session was started",
-  );
+  expect(JSON.stringify(result.content)).toContain("No new run was started");
   expect(
     (
       await A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: userId,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 100,
       })
     ).tasks,
@@ -382,8 +403,8 @@ test("steering rejects literal NUL characters with an actionable error before de
   const steer = vi.spyOn(backend, "steer");
   const continuation = vi.spyOn(backend, "continueRun");
   const result = await executeArchestraTool(
-    TOOL_STEER_RUN_FULL_NAME,
-    { task_id: previous.taskId, message: "Test the character \0 too" },
+    TOOL_STEER_AGENT_RUN_FULL_NAME,
+    { run_id: previous.taskId, message: "Test the character \0 too" },
     context,
   );
   expect(result.isError).toBe(true);
@@ -395,14 +416,14 @@ test("steering rejects literal NUL characters with an actionable error before de
       await A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: userId,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 100,
       })
     ).tasks,
   ).toHaveLength(1);
 });
 
-test("start_run persists handoff files before launching the runtime", async () => {
+test("start_agent_run persists handoff files before launching the runtime", async () => {
   await connect(runtime);
   const contents = "Draft for the next turn\n";
   let stagedBeforeLaunch = false;
@@ -416,7 +437,7 @@ test("start_run persists handoff files before launching the runtime", async () =
   vi.spyOn(backend, "releaseRun").mockResolvedValue();
   vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
   const result = await executeArchestraTool(
-    TOOL_START_RUN_FULL_NAME,
+    TOOL_START_AGENT_RUN_FULL_NAME,
     {
       agent_id: agent.id,
       message: "Continue the attached document",
@@ -432,22 +453,23 @@ test("start_run persists handoff files before launching the runtime", async () =
   );
   expect(result.isError).not.toBe(true);
   const reply = result.structuredContent as {
-    session_id: string;
-    run: { task_id: string };
+    run: { run_id: string };
+    run_url: string;
+    next_step: string;
   };
-  expect(reply.session_id).toBe(reply.run.task_id);
+  expect(reply.run_url).toMatch(new RegExp(`/chat/runs/${reply.run.run_id}$`));
   expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(
     reply,
   );
   await expect
-    .poll(async () => (await A2ATaskModel.findById(reply.run.task_id))?.state)
+    .poll(async () => (await A2ATaskModel.findById(reply.run.run_id))?.state)
     .toBe("TASK_STATE_FAILED");
   expect(stagedBeforeLaunch).toBe(true);
 });
 
 test("invalid handoff attachment data is rejected before creating a run", async () => {
   const result = await executeArchestraTool(
-    TOOL_START_RUN_FULL_NAME,
+    TOOL_START_AGENT_RUN_FULL_NAME,
     {
       agent_id: agent.id,
       message: "Read the attachment",
@@ -467,7 +489,7 @@ test("invalid handoff attachment data is rejected before creating a run", async 
       await A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: userId,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 100,
       })
     ).tasks,

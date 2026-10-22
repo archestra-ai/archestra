@@ -23,7 +23,7 @@ For a server someone else runs, such as GitHub's or Linear's.
 4. Pick how it signs in. See the table below.
 5. Open **Advanced**. Under permissions, choose who can find it. To keep it in one [environment](/docs/admin/environments), pick that too.
 6. Click **Add Server**. On **Test Connection**, install it to see the tools it offers.
-7. Cover the new tools in your [Guardrails policy](/docs/agents/guardrails/policies#policy-coverage).
+7. Cover the new tools in your [Guardrails policy](/docs/agents/guardrails/policies).
 
 ![Adding a remote server with OAuth 2.1 sign-in](/docs/automated_screenshots/mcp-servers-adding_remote.webp)
 
@@ -48,7 +48,7 @@ For a server that ships as a package or an image, such as one you start with `np
 1. Follow the remote steps, but pick **Self-hosted** instead of **Remote**.
 2. Enter the command and its arguments, or a Docker image. For `npx -y @acme/mcp-server`, the command is `npx` and the arguments are `-y @acme/mcp-server`.
 3. Pick the transport: **stdio** for most packages, or **streamable-http** for a server that listens on a port. For HTTP, enter the port and MCP path.
-4. Add its environment variables. To make each person enter their own value, such as an API key, mark it for installation. To fill it from a saved [credential](/docs/admin/security/credentials), pick that credential.
+4. Add its environment variables. To make each person enter their own value, such as an API key, mark it for installation. To fill it from a saved [credential](/docs/admin/credentials), pick that credential.
 5. Click **Add Server**, then install and test it. Archestra starts the pod when you install.
 
 ## Headers and OAuth Settings

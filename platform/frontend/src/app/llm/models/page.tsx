@@ -104,6 +104,7 @@ import {
 
 export default function ModelsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const apiKeyFilter = searchParams.get("apiKey") ?? "all";
   const { hasActiveScopeFilters, access, sharedWith } = useScopeFilterParams();
   const {
     data: models = [],
@@ -111,7 +112,12 @@ export default function ModelsPage() {
     isLoadingError: isModelsLoadError,
     error: modelsError,
     refetch,
-  } = useModelsWithApiKeys({ toastOnError: false, access, sharedWith });
+  } = useModelsWithApiKeys({
+    toastOnError: false,
+    access,
+    sharedWith,
+    apiKeyIds: apiKeyFilter === "all" ? undefined : [apiKeyFilter],
+  });
   const { data: apiKeys = [], isLoading: isApiKeysLoading } =
     useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
@@ -138,7 +144,6 @@ export default function ModelsPage() {
   // Filters live in the URL so they survive reloads and are shareable, like the
   // other list pages' table filters.
   const search = searchParams.get("search") ?? "";
-  const apiKeyFilter = searchParams.get("apiKey") ?? "all";
   const modelTypeParam = searchParams.get("modelType");
   const modelTypeFilter: ModelsPageModelTypeFilter =
     modelTypeParam === "chat" || modelTypeParam === "embedding"
@@ -183,8 +188,7 @@ export default function ModelsPage() {
       freeOnly,
       canFilterFreeModels,
     });
-    // Applied here rather than on the query: this page reads the whole catalog
-    // once and narrows it in the browser, as its other filters do.
+    // Labels narrow the selected instance's catalog in the browser.
     if (!selectedLabels) return byPageFilters;
     return byPageFilters.filter((model) =>
       Object.entries(selectedLabels).every(([key, values]) =>
@@ -472,14 +476,14 @@ export default function ModelsPage() {
             row.original;
           if (hasUnknownCapabilities(row.original)) return null;
           if (
-            pricePerMillionCacheRead === null ||
+            pricePerMillionCacheRead === null &&
             pricePerMillionCacheWrite === null
           ) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }
           return (
             <span className="text-sm font-mono">
-              {`$${formatPricePerMillion(pricePerMillionCacheRead)} / $${formatPricePerMillion(pricePerMillionCacheWrite)}`}
+              {`${pricePerMillionCacheRead === null ? "-" : `$${formatPricePerMillion(pricePerMillionCacheRead)}`} / ${pricePerMillionCacheWrite === null ? "-" : `$${formatPricePerMillion(pricePerMillionCacheWrite)}`}`}
             </span>
           );
         },

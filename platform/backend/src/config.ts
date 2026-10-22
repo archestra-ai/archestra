@@ -21,7 +21,6 @@ import {
   DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
   DEFAULT_CHUNK_SIZE_TOKENS,
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
-  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
@@ -47,6 +46,7 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -2025,7 +2025,6 @@ export function parseOpenAppaConfig({
   postgresMaxConnections,
   reviewSummaryProvider,
   reviewSummaryModel,
-  keptAnnotatorHorizonDays,
   authSecret,
 }: {
   yellEnabled?: string;
@@ -2033,7 +2032,6 @@ export function parseOpenAppaConfig({
   postgresMaxConnections?: string;
   reviewSummaryProvider?: string;
   reviewSummaryModel?: string;
-  keptAnnotatorHorizonDays?: string;
   authSecret?: string;
 } = {}) {
   const dedicated = offerSigningSecret ?? "";
@@ -2067,30 +2065,8 @@ export function parseOpenAppaConfig({
     // Omitted (not `undefined`) when disabled so exact-shape consumers and
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
-    keptAnnotatorHorizonDays: parseKeptAnnotatorHorizonDays(
-      keptAnnotatorHorizonDays,
-    ),
   };
 }
-
-/**
- * Days without activity after which an annotator kept for conversations that
- * started under an earlier policy is no longer kept. 0 keeps it for as long
- * as a stored opening policy names it.
- */
-function parseKeptAnnotatorHorizonDays(envValue?: string): number {
-  const value = envValue?.trim();
-  if (value === undefined || value === "")
-    return DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS;
-  if (!/^\d+$/.test(value) || Number(value) > MAX_KEPT_ANNOTATOR_HORIZON_DAYS)
-    throw new Error(
-      `ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS must be a whole number of days from 0 to ${MAX_KEPT_ANNOTATOR_HORIZON_DAYS}`,
-    );
-  return Number(value);
-}
-
-const DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS = 30;
-const MAX_KEPT_ANNOTATOR_HORIZON_DAYS = 3650;
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
   if (!authSecret) return "";
@@ -2213,8 +2189,6 @@ const openappa = parseOpenAppaConfig({
     process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   reviewSummaryProvider: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER,
   reviewSummaryModel: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL,
-  keptAnnotatorHorizonDays:
-    process.env.ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS,
   authSecret: authSessionSecret,
 });
 const llmProxyPlugins = parseLlmProxyPlugins(
@@ -2268,6 +2242,11 @@ const config = {
   },
   websocket: {
     path: "/ws",
+  },
+  mcpOAuth: {
+    // Deployment-operator opt-in; compatibility must remain the default.
+    enforceOutboundValidation:
+      process.env.ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION === "true",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
@@ -2994,18 +2973,6 @@ const config = {
     azure: {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
-    defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
-    defaultProvider: ((): SupportedProvider => {
-      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
-      if (
-        provider &&
-        SupportedProviders.includes(provider as SupportedProvider)
-      ) {
-        return provider as SupportedProvider;
-      }
-      return "anthropic";
-    })(),
     activeRun: {
       replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
@@ -3068,8 +3035,6 @@ const config = {
     knowledgeBase:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED ===
       "true",
-    aiSecurity:
-      process.env.ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED === "true",
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
@@ -3280,6 +3245,15 @@ const config = {
       additionalDeniedCidrs: parseEngineDeniedCidrs(
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
       ),
+      // Steers engines onto a dedicated node pool: a key=value list that
+      // becomes each engine's nodeSelector, plus one matching NoSchedule
+      // toleration per entry. Empty (the default) inherits the platform pod's
+      // nodeSelector and tolerations, like MCP server pods.
+      nodeSelector: parseLabelSelector(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR,
+        {},
+        "ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR",
+      ),
     },
   },
   /**
@@ -3425,6 +3399,9 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    usageAccountingMode: parseUsageAccountingMode(
+      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
+    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3857,6 +3834,15 @@ const config = {
    * the new connection page the default Connect destination — can key off it.
    */
   beta: process.env.ARCHESTRA_BETA === "true",
+  /**
+   * Internal UI feedback overlay for the team's own deployments: pin a comment
+   * on an element and post it, with a screenshot and an optional screen clip,
+   * to a Slack channel. Slack is the only storage. It posts as a chatops
+   * Slack bot; which one, and the channel, are picked in the UI on first use.
+   */
+  devFeedback: {
+    enabled: process.env.ARCHESTRA_DEV_FEEDBACK_ENABLED === "true",
+  },
   ngrok: {
     // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
     // agent SDK) so the instance is reachable from the Internet for inbound

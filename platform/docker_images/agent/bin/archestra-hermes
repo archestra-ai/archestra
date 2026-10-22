@@ -288,7 +288,7 @@ jq -n \
   --arg binding "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
-  --arg system_prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" \
+  --arg system_prompt "$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")" \
   --arg completion_hook "${completion_hook}" \
   '({
     providers:{archestra:{

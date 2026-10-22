@@ -1,4 +1,11 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
+import { primaryBillingUsage } from "@/utils/billable-usage";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * Generic LLM Proxy Handler
  *
@@ -24,7 +31,10 @@ import {
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
-import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import {
+  ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
@@ -37,7 +47,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -104,6 +114,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -116,11 +127,14 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
+  type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -150,6 +164,7 @@ import {
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
+  reportBillableUsageMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
@@ -163,6 +178,8 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { getAzureProxyIngress } from "./utils/azure-ingress";
+import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
@@ -184,6 +201,10 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  attributionLabels?: AttributionLabels;
+  usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
+  billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
   governedThread?: GovernedThread;
@@ -421,7 +442,7 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
-  const proof = takeInternalCall(request.headers);
+  const proof = internalCallProvenance(request);
   // Credential paths accept either proof; only the guardrail proof reaches
   // OpenAPPA as its bypass.
   const internalCall = proof.inProcess || proof.guardrail;
@@ -485,6 +506,7 @@ export async function handleLLMProxy<
   // The first credential that names a billing team pays; the passthrough key
   // resolves first, matching its precedence for per-key limits.
   let billingTeamId = authOverride?.billingTeamId;
+  let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -802,6 +824,8 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
+        providerKey.organizationId !== resolvedAgent.organizationId ||
+        personalToken.organizationId !== resolvedAgent.organizationId ||
         (!internalCall &&
           !(await LlmProviderApiKeyModel.canUseKey(
             providerKey,
@@ -1104,6 +1128,15 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    if (
+      provider.unavailableUsageAccounting &&
+      config.llmProxy.usageAccountingMode === "enforce"
+    ) {
+      throw new ApiError(
+        422,
+        "Authoritative usage and cost accounting are unavailable for this media operation",
+      );
+    }
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1111,6 +1144,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
+        unpricedMediaModel: provider.unavailableUsageAccounting
+          ? requestAdapter.getModel()
+          : undefined,
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
@@ -1528,14 +1564,54 @@ export async function handleLLMProxy<
     });
     let billingMode = credentialBillingMode;
 
+    if (providerName === "azure") {
+      const original = requestAdapter.getOriginalRequest() as Record<
+        string,
+        unknown
+      >;
+      const metadata = original.metadata as Record<string, unknown> | undefined;
+      const type = String(provider.interactionType);
+      const operation =
+        type === "azure:images"
+          ? metadata?.operation === "image-edit"
+            ? "image-edit"
+            : "image-generation"
+          : type === "azure:audio"
+            ? original.operation === "speech"
+              ? "audio-speech"
+              : original.operation === "transcriptions"
+                ? "audio-transcription"
+                : "audio-translation"
+            : type === "azure:realtime"
+              ? "realtime-turn"
+              : provider.spanName === "embedding"
+                ? "embedding"
+                : type === "azure:responses"
+                  ? "responses"
+                  : "chat";
+      await validateAzureModelOperation({
+        providerApiKeyId: perKeyChatApiKeyId,
+        modelId: requestAdapter.getModel(),
+        operation,
+        parameters: original,
+      });
+    }
+
     // Create client with observability (each provider handles metrics internally)
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
-      providerName === "microsoft-365-copilot" || proof.guardrail
+      provider.cancelOnDisconnect ||
+      providerName === "microsoft-365-copilot" ||
+      providerName === "azure" ||
+      provider.interactionType === "azure:realtime" ||
+      proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
+      ...(providerName === "azure"
+        ? { azureRequest: getAzureProxyIngress(request) }
+        : {}),
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
       abortSignal,
@@ -1596,12 +1672,19 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
+    const providerRequest =
+      providerName === "anthropic" &&
+      externalAgentId === CLAUDE_DESKTOP_CLIENT_ID &&
+      provider.isSubscriptionCredential?.(apiKey) === true
+        ? withClaudeDesktopSubscriptionPreamble(repairedRequest)
+        : repairedRequest;
+
     // A connection probe is not an agent task. This is request-local and does
     // not alter the client's model, sandbox, approval policy or configuration.
     const finalRequest = (
       connectionVerification
-        ? { ...asRecord(repairedRequest), tool_choice: "none" }
-        : repairedRequest
+        ? { ...asRecord(providerRequest), tool_choice: "none" }
+        : providerRequest
     ) as TRequest;
 
     // The tool names the request declares, in the canonical form tool-call
@@ -1621,7 +1704,44 @@ export async function handleLLMProxy<
         ),
     );
 
+    const billingEntities: BillingAttribution["entities"] = [
+      { entityType: "organization", entityId: resolvedAgent.organizationId },
+      { entityType: "agent", entityId: resolvedAgent.id },
+      ...(billingTeamId ? [billingTeamId] : teams.map((team) => team.id)).map(
+        (entityId) => ({ entityType: "team" as const, entityId }),
+      ),
+    ];
+    for (const [entityType, entityId] of [
+      ["user", billingTeamId ? undefined : userId],
+      ["virtual_key", virtualKeyId],
+      ["virtual_key", passthroughVirtualKeyId],
+      ["llm_oauth_client", authenticatedApp?.id],
+      ["environment", resolvedAgent.environmentId],
+    ] as const)
+      if (entityId) billingEntities.push({ entityType, entityId });
+    const uniqueBillingEntities = new Map(
+      billingEntities.map((entity) => [
+        `${entity.entityType}:${entity.entityId}`,
+        entity,
+      ]),
+    );
+    attributionLabels = await resolveRequestAttributionLabels({
+      organizationId: resolvedAgent.organizationId,
+      authMethod,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      oauthClientId: authenticatedApp?.id,
+      billingTeamId,
+    });
     const ctx: LLMProxyContext<TRequest> = {
+      attributionLabels,
+      usageAccountingMode: config.llmProxy.usageAccountingMode,
+      providerApiKeyId: perKeyChatApiKeyId,
+      billingAttribution: {
+        organizationId: resolvedAgent.organizationId,
+        environmentId: resolvedAgent.environmentId,
+        entities: [...uniqueBillingEntities.values()],
+      },
       connectionVerification,
       ...(appaReceipts ? { appaReceipts } : {}),
       ...(governedThread ? { governedThread } : {}),
@@ -1701,6 +1821,19 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (
+      lifecycleError instanceof ObservedProviderUsageError &&
+      lifecycleError.billingRecorded
+    )
+      return handleError(
+        lifecycleError,
+        reply,
+        provider.extractErrorMessage,
+        false,
+        provider.extractInternalCode.bind(provider),
+        provider.formatStreamErrorFrame,
+        provider.translatesWireFormat,
+      );
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = upstreamErrorMessage(
@@ -1734,17 +1867,32 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage },
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(
+              { error: errorMessage },
+              {
+                inputTokens: 0,
+                outputTokens: 0,
+                usageUnavailable: true,
+                costUnavailable: true,
+              },
+            )
+          : { error: errorMessage }) as InteractionResponse,
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
         // Mirrors `model`, as every write path does now that nothing rewrites
         // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1839,6 +1987,7 @@ async function handleStreaming<
   ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -1887,6 +2036,11 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
+  // Set once a terminal reaches the client, whichever path released it: the
+  // stream loop, the policy release, or a failed generation. An error frame
+  // after it must not end the response a second time.
+  const carriesStreamTerminal = provider.carriesStreamTerminal;
+  let terminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1936,6 +2090,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+    if (carriesStreamTerminal && !terminalSent)
+      terminalSent = carriesStreamTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -1977,13 +2133,25 @@ async function handleStreaming<
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
-        response: response as InteractionResponse,
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(response, {
+              inputTokens: 0,
+              outputTokens: 0,
+              usageUnavailable: true,
+              costUnavailable: true,
+            })
+          : response) as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
         toolCallBlock,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2001,6 +2169,176 @@ async function handleStreaming<
   // interaction is written in the finally, and a row that does not say it was
   // refused is indistinguishable from a healthy one.
   let toolCallBlock: ToolCallBlock | undefined;
+
+  let accountingFinalized = false;
+  let upstreamFinished = false;
+  let providerTerminalSeen = false;
+  const finalizeInteraction = async () => {
+    if (accountingFinalized) return;
+    accountingFinalized = true;
+
+    // Always record interaction (whether stream completed or was aborted)
+    if (!upstreamFinished && !streamCompleted) {
+      logger.info(
+        { clientGone },
+        "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
+    // Client-visible first byte, preflight included. Observed here rather
+    // than at commit time because the commit can happen during preflight,
+    // before the handler has the labels in hand.
+    if (streamTiming.firstByteAt !== undefined) {
+      metrics.llm.reportTimeToFirstByte(
+        providerName,
+        agent,
+        actualModel,
+        (streamTiming.firstByteAt - streamTiming.requestReceivedAt) / 1000,
+        source,
+      );
+    }
+
+    let usage = streamAdapter.state.usage;
+    if (usage && !upstreamFinished && ctx.usageAccountingMode !== "off") {
+      const breakdown =
+        usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
+      usage = {
+        ...usage,
+        billingQuote: undefined,
+        billingUsage: {
+          ...breakdown,
+          status: "incomplete",
+          issues: [...breakdown.issues, "partial_stream"],
+        },
+      };
+    }
+    if (usage) {
+      withSessionContext(sessionId, () => {
+        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
+
+        if (usage.outputTokens && firstChunkTime) {
+          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+          metrics.llm.reportTokensPerSecond(
+            providerName,
+            agent,
+            actualModel,
+            usage.outputTokens,
+            totalDurationSeconds,
+            source,
+          );
+        }
+      });
+
+      const costs = await calculateInteractionCosts({
+        usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
+        actualModel,
+        usage,
+        providerName,
+      });
+
+      withSessionContext(sessionId, () => {
+        if (costs.billingUsage?.mode === "enforce") {
+          reportBillableUsageMetrics({
+            usage: costs.billingUsage,
+            agent,
+            source,
+            billingMode,
+            authMethod,
+            tokens: true,
+          });
+          return;
+        }
+        metrics.llm.reportLLMCost({
+          provider: providerName,
+          profile: agent,
+          model: actualModel,
+          cost: costs.actualCost,
+          source,
+          billingMode,
+          authMethod,
+        });
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+        );
+      });
+
+      try {
+        const record = buildInteractionRecord({
+          billingAttribution: ctx.billingAttribution,
+          agent,
+          externalAgentId,
+          authMethod,
+          billingMode,
+          authenticatedApp,
+          billingTeamId,
+          runId,
+          userId,
+          serviceAccountId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          appId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: withProviderToolCallIds(
+            failedStreamResponse ?? streamAdapter.toProviderResponse(),
+            streamAdapter.state.toolCalls,
+          ),
+          actualModel,
+          usage,
+          costs,
+          toolCallBlock,
+        });
+        await persistProxyInteraction({
+          record,
+          encryptedChat,
+          streamTiming,
+          attributionLabels,
+        });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create interaction record (agent may have been deleted)",
+        );
+        if (ctx.usageAccountingMode === "enforce")
+          throw new ApiError(503, "Unable to settle LLM usage");
+      }
+    } else {
+      // No usage ever arrived. On the error path the catch has already recorded
+      // the failure; otherwise the provider ended the stream early (a truncated
+      // response), and the partial content is all we have to log. Either way the
+      // call must not disappear from interaction history.
+      await recordUsagelessInteraction(
+        withProviderToolCallIds(
+          failedStreamResponse ?? streamAdapter.toProviderResponse(),
+          streamAdapter.state.toolCalls,
+        ),
+      );
+    }
+  };
 
   try {
     // Execute streaming request with tracing — the span covers the full streaming
@@ -2105,6 +2443,7 @@ async function handleStreaming<
           }
 
           if (result.isFinal) {
+            providerTerminalSeen = true;
             break;
           }
         }
@@ -2174,6 +2513,8 @@ async function handleStreaming<
             );
           }
           const cost = await calculateUsageCost({
+            usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
             model: actualModel,
             usage: state.usage,
             provider: providerName,
@@ -2198,6 +2539,13 @@ async function handleStreaming<
       },
     });
 
+    // Anthropic requires message_stop; its beta usage arrives before that frame.
+    upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
+    if (!upstreamFinished && ctx.usageAccountingMode === "enforce")
+      throw new ApiError(
+        502,
+        "Provider stream ended before final usage was confirmed",
+      );
     logger.info("Stream loop completed, processing final events");
 
     if (
@@ -2220,6 +2568,7 @@ async function handleStreaming<
         ? withoutResponsesModelOutputSSE(failureEvents)
         : failureEvents)
         writeToClient(event);
+      await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2445,6 +2794,7 @@ async function handleStreaming<
     }
 
     // Stream end events
+    await finalizeInteraction();
     writeToClient(streamAdapter.formatEndSSE());
     reply.raw.end();
 
@@ -2550,6 +2900,7 @@ async function handleStreaming<
         usage: codexError.completion.usage,
       } as TChunk);
       if (terminal.sseData) writeToClient(terminal.sseData);
+      await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2589,153 +2940,61 @@ async function handleStreaming<
       );
     }
 
+    let streamError = lifecycleError;
+    try {
+      await finalizeInteraction();
+    } catch (settlementError) {
+      // Serialize settlement failure here too, while the SSE stream is open.
+      logger.error(
+        {
+          upstreamStatus: extractDurationStatusCode(lifecycleError),
+          ...(suppressContent ? {} : { err: lifecycleError }),
+        },
+        "Stream failure preceded usage settlement failure",
+      );
+      streamError = settlementError;
+    }
+    if (provider.binaryStream && reply.raw.headersSent) {
+      reply.raw.destroy();
+      return reply;
+    }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    // Read once, here: nothing else writes to the client before the error
+    // frame, so `terminalSent` cannot change after this point.
+    const frameContext: StreamErrorFrameContext = {
+      responseId:
+        streamAdapter.clientResponse?.id ??
+        (streamAdapter.state.responseId || undefined),
+      model:
+        streamAdapter.clientResponse?.model ??
+        (streamAdapter.state.model || actualModel),
+      terminalSent,
+    };
     return handleError(
-      lifecycleError,
+      streamError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      eofError && formatStreamErrorFrame
+      formatStreamErrorFrame
         ? (event: unknown) => {
             const source = asRecord(event);
-            return formatStreamErrorFrame({
-              ...source,
-              error: { ...asRecord(source?.error), code: eofError.code },
-            });
+            return formatStreamErrorFrame(
+              eofError
+                ? {
+                    ...source,
+                    error: { ...asRecord(source?.error), code: eofError.code },
+                  }
+                : event,
+              frameContext,
+            );
           }
-        : formatStreamErrorFrame,
+        : undefined,
       provider.translatesWireFormat,
     );
   } finally {
     keepAlive.stop();
-
-    // Always record interaction (whether stream completed or was aborted)
-    if (!streamCompleted) {
-      logger.info(
-        { clientGone },
-        "Stream was aborted before completion, recording partial interaction",
-      );
-    }
-
-    // Client-visible first byte, preflight included. Observed here rather
-    // than at commit time because the commit can happen during preflight,
-    // before the handler has the labels in hand.
-    if (streamTiming.firstByteAt !== undefined) {
-      metrics.llm.reportTimeToFirstByte(
-        providerName,
-        agent,
-        actualModel,
-        (streamTiming.firstByteAt - streamTiming.requestReceivedAt) / 1000,
-        source,
-      );
-    }
-
-    const usage = streamAdapter.state.usage;
-    if (usage) {
-      withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMTokens(
-          providerName,
-          agent,
-          {
-            input: usage.inputTokens,
-            output: usage.outputTokens,
-            cacheRead: usage.cacheReadTokens,
-            cacheWrite: usage.cacheWriteTokens,
-          },
-          actualModel,
-          source,
-        );
-
-        if (usage.outputTokens && firstChunkTime) {
-          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-          metrics.llm.reportTokensPerSecond(
-            providerName,
-            agent,
-            actualModel,
-            usage.outputTokens,
-            totalDurationSeconds,
-            source,
-          );
-        }
-      });
-
-      const costs = await calculateInteractionCosts({
-        actualModel,
-        usage,
-        providerName,
-      });
-
-      withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMCost({
-          provider: providerName,
-          profile: agent,
-          model: actualModel,
-          cost: costs.actualCost,
-          source,
-          billingMode,
-          authMethod,
-        });
-        metrics.llm.reportLLMCacheCost(
-          providerName,
-          agent,
-          actualModel,
-          {
-            cacheCost: costs.cacheCost,
-            cacheReadSavings: costs.cacheReadSavings,
-          },
-          source,
-        );
-      });
-
-      try {
-        const record = buildInteractionRecord({
-          agent,
-          externalAgentId,
-          authMethod,
-          billingMode,
-          authenticatedApp,
-          billingTeamId,
-          runId,
-          userId,
-          serviceAccountId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          appId,
-          sessionId,
-          sessionSource,
-          source,
-          providerType: provider.interactionType,
-          request: originalRequest,
-          processedRequest: request,
-          response: withProviderToolCallIds(
-            failedStreamResponse ?? streamAdapter.toProviderResponse(),
-            streamAdapter.state.toolCalls,
-          ),
-          actualModel,
-          usage,
-          costs,
-          toolCallBlock,
-        });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
-      } catch (interactionError) {
-        logger.error(
-          { err: interactionError, profileId: agent.id },
-          "Failed to create interaction record (agent may have been deleted)",
-        );
-      }
-    } else {
-      // No usage ever arrived. On the error path the catch has already recorded
-      // the failure; otherwise the provider ended the stream early (a truncated
-      // response), and the partial content is all we have to log. Either way the
-      // call must not disappear from interaction history.
-      await recordUsagelessInteraction(
-        withProviderToolCallIds(
-          failedStreamResponse ?? streamAdapter.toProviderResponse(),
-          streamAdapter.state.toolCalls,
-        ),
-      );
-    }
+    await finalizeInteraction();
   }
 }
 
@@ -2757,6 +3016,7 @@ async function handleNonStreaming<
   ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -2853,6 +3113,63 @@ async function handleNonStreaming<
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
+        if (error instanceof ObservedProviderUsageError) {
+          const costs = await calculateInteractionCosts({
+            actualModel,
+            usage: error.usage,
+            providerName,
+            usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
+          });
+          const record = buildInteractionRecord({
+            agent,
+            billingAttribution: ctx.billingAttribution,
+            externalAgentId,
+            authMethod,
+            billingMode: getBillingMode(),
+            authenticatedApp,
+            billingTeamId,
+            runId,
+            userId,
+            serviceAccountId,
+            virtualKeyId,
+            passthroughVirtualKeyId,
+            appId,
+            sessionId,
+            sessionSource,
+            source,
+            providerType: provider.interactionType,
+            request: originalRequest,
+            processedRequest: request,
+            response: error.response,
+            actualModel,
+            usage: error.usage,
+            costs,
+          });
+          await persistProxyInteraction({
+            record,
+            encryptedChat,
+            streamTiming,
+            attributionLabels,
+          });
+          if (costs.billingUsage?.mode === "enforce")
+            withSessionContext(sessionId, () =>
+              reportBillableUsageMetrics({
+                usage: costs.billingUsage as PricedBillingUsage,
+                agent,
+                source,
+                billingMode: getBillingMode(),
+                authMethod,
+                tokens: providerName === "anthropic",
+              }),
+            );
+          throw new ObservedProviderUsageError({
+            original: error.original,
+            usage: error.usage,
+            response: error.response,
+            billingRecorded: true,
+          });
+        }
         if (error instanceof CodexResponsesGenerationError) {
           // Reuse accounting/persistence below without running success hooks.
           codexGenerationError = error;
@@ -2939,6 +3256,8 @@ async function handleNonStreaming<
         );
       }
       const cost = await calculateUsageCost({
+        usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         model: actualModel,
         usage,
         provider: providerName,
@@ -3124,12 +3443,38 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
+        usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
       });
 
       withSessionContext(sessionId, () => {
+        if (costs.billingUsage?.mode === "enforce") {
+          reportBillableUsageMetrics({
+            usage: costs.billingUsage,
+            agent,
+            source,
+            billingMode,
+            authMethod,
+            tokens: providerName === "anthropic",
+          });
+          return;
+        }
+        if (providerName === "anthropic")
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
         metrics.llm.reportLLMCost({
           provider: providerName,
           profile: agent,
@@ -3152,6 +3497,7 @@ async function handleNonStreaming<
       });
 
       const refusalRecord = buildInteractionRecord({
+        billingAttribution: ctx.billingAttribution,
         agent,
         externalAgentId,
         authMethod,
@@ -3180,6 +3526,7 @@ async function handleNonStreaming<
         record: refusalRecord,
         encryptedChat,
         streamTiming,
+        attributionLabels,
       });
 
       if (pluginRegistry && pluginContext) {
@@ -3261,25 +3608,41 @@ async function handleNonStreaming<
     }
     clientResponse = pluginResponse as TResponse;
   }
-  // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
-  // for non-streaming requests. We only report cost here to avoid double counting.
-  // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
-  // mocked API clients can't use an observable fetch.
-  // metrics.llm.reportLLMTokens(
-  //   providerName,
-  //   agent,
-  //   { input: usage.inputTokens, output: usage.outputTokens },
-  //   actualModel,
-  //   source,
-  // );
-
+  // Anthropic tokens are emitted here for JSON and internally streamed calls;
+  // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
+    usageAccountingMode: ctx.usageAccountingMode,
+    providerApiKeyId: ctx.providerApiKeyId,
     actualModel,
     usage,
     providerName,
   });
 
   withSessionContext(sessionId, () => {
+    if (costs.billingUsage?.mode === "enforce") {
+      reportBillableUsageMetrics({
+        usage: costs.billingUsage,
+        agent,
+        source,
+        billingMode,
+        authMethod,
+        tokens: providerName === "anthropic",
+      });
+      return;
+    }
+    if (providerName === "anthropic")
+      metrics.llm.reportLLMTokens(
+        providerName,
+        agent,
+        {
+          input: usage.inputTokens,
+          output: usage.outputTokens,
+          cacheRead: usage.cacheReadTokens,
+          cacheWrite: usage.cacheWriteTokens,
+        },
+        actualModel,
+        source,
+      );
     metrics.llm.reportLLMCost({
       provider: providerName,
       profile: agent,
@@ -3301,6 +3664,7 @@ async function handleNonStreaming<
   let responsePersisted = false;
   try {
     const record = buildInteractionRecord({
+      billingAttribution: ctx.billingAttribution,
       agent,
       externalAgentId,
       authMethod,
@@ -3337,13 +3701,20 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction({ record, encryptedChat, streamTiming });
+    await persistProxyInteraction({
+      record,
+      encryptedChat,
+      streamTiming,
+      attributionLabels,
+    });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
       "Failed to create interaction record (agent may have been deleted)",
     );
+    if (ctx.usageAccountingMode === "enforce")
+      throw new ApiError(503, "Unable to settle LLM usage");
   }
 
   if (generationFailed) {
@@ -3716,15 +4087,18 @@ async function persistProxyInteraction({
   record,
   encryptedChat,
   streamTiming,
+  attributionLabels,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
+  attributionLabels?: AttributionLabels;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
   await InteractionModel.create(

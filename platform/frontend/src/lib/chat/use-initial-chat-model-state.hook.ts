@@ -9,7 +9,6 @@ import {
 } from "@/app/chat/chat-initial-state";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
-import { useUpdateMemberDefaultModel } from "./chat.query";
 import {
   deriveModelSource,
   getSavedAgent,
@@ -30,11 +29,6 @@ type InitialChatOrganization = {
   defaultLlmApiKeyId?: string | null;
 } | null;
 
-type InitialChatMemberDefault = {
-  modelId?: string | null;
-  chatApiKeyId?: string | null;
-} | null;
-
 type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   // ---- already-fetched data, passed in by the caller (NO queries inside) ----
   agents: TAgent[];
@@ -45,7 +39,6 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   modelsByProvider: Record<string, LlmModel[]>;
   /** Keys the viewer may use (the available-keys list), not merely see. */
   chatApiKeys: { id: string; provider: string }[];
-  memberDefault: InitialChatMemberDefault;
   // ---- caller-owned policy, kept explicit at the boundary ----
   /** Resolve to this agent if it is present (page passes the URL param). */
   urlAgentId?: string | null;
@@ -97,15 +90,14 @@ export type InitialChatModelState = {
   setThinkingEffort: (effort: ThinkingEffortSetting) => void;
   onAgentChange: (agentId: string) => void;
   onModelChange: (modelId: string) => void;
-  onProviderChange: (provider: SupportedProvider, apiKeyId: string) => void;
+  onProviderChange: (provider: SupportedProvider) => void;
   onResetModelOverride: () => void;
 };
 
 /**
  * The shared new-chat initialization orchestration: the agent/model/key
  * resolution chain (project default > org default > saved pick > member default
- * > first), the resolution effects, member-default persistence, and the change
- * handlers.
+ * > first), the resolution effects, and the change handlers.
  *
  * It does NO data fetching — every query result is passed in so query policy
  * (which queries run and when they are enabled) stays at the caller boundary.
@@ -122,7 +114,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     defaultAgentId,
     modelsByProvider,
     chatApiKeys,
-    memberDefault,
     urlAgentId,
     urlModelId,
     projectDefaultAgentId,
@@ -134,14 +125,26 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     routeConversationId,
   } = params;
 
-  const [agentId, setAgentId] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(null);
+  // With the data already in the cache on the first render (a page the
+  // server rendered with the composer's data), the starting agent and model
+  // resolve in that render, so the server and the browser draw the final
+  // composer at once. Only a choice that this browser's saved pick cannot
+  // change resolves here; the effect below resolves the rest as before.
+  const [initial] = useState(() => resolveOnFirstRender(params));
+  const [agentId, setAgentId] = useState<string | null>(
+    initial?.agent.id ?? null,
+  );
+  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(
+    initial?.agent ?? null,
+  );
   // Whether the load-time resolution below has run to a decision. Until it
   // has, the agent picker must not guess: a guess paints one agent and then
-  // swaps to the resolved one.
-  const [hasResolvedAgent, setHasResolvedAgent] = useState(false);
-  const [modelId, setModelId] = useState<string>("");
-  const [apiKeyId, setApiKeyId] = useState<string | null>(null);
+  // swaps to the resolved one. A first-render choice is that decision.
+  const [hasResolvedAgent, setHasResolvedAgent] = useState(!!initial);
+  const [modelId, setModelId] = useState<string>(initial?.model?.modelId ?? "");
+  const [apiKeyId, setApiKeyId] = useState<string | null>(
+    initial?.model?.apiKeyId ?? null,
+  );
   // Carried into the create request on first submit, so a choice made before
   // the conversation exists survives into the row.
   const [thinkingEffort, setThinkingEffort] =
@@ -149,12 +152,21 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   // Stores the resolved agent in a ref so the model init effect can read it
   // synchronously.
-  const resolvedAgentRef = useRef<TAgent | null>(null);
+  const resolvedAgentRef = useRef<TAgent | null>(initial?.agent ?? null);
 
   // Track which agentId URL param has been consumed (so we don't re-apply the
   // same one after the user clears the selection, but do apply a new one when
   // navigating from a different agent page).
-  const urlParamsConsumedRef = useRef<string | null>(null);
+  const urlParamsConsumedRef = useRef<string | null>(
+    initial?.fromUrl ? (urlAgentId ?? null) : null,
+  );
+
+  // A first-render choice is saved as the effect's choice would be.
+  useEffect(() => {
+    if (initial && !initial.fromUrl && !initial.fromProjectDefault) {
+      saveAgent(initial.agent.id);
+    }
+  }, [initial]);
 
   const organizationDefaults = useMemo(
     () =>
@@ -178,7 +190,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         modelsByProvider,
         chatApiKeys,
         organization: organizationDefaults,
-        memberDefault: memberDefault ?? null,
       });
 
       const chosen =
@@ -195,13 +206,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         setApiKeyId(null);
       }
     },
-    [
-      modelsByProvider,
-      chatApiKeys,
-      organizationDefaults,
-      memberDefault,
-      urlModelId,
-    ],
+    [modelsByProvider, chatApiKeys, organizationDefaults, urlModelId],
   );
 
   // Resolve which agent to use on load.
@@ -278,7 +283,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // later). Uses modelInitializedRef instead of checking modelId to avoid a
   // race: ModelSelector's auto-select fires before this effect and sets modelId,
   // which would cause an early return and skip the proper priority chain.
-  const modelInitializedRef = useRef(false);
+  const modelInitializedRef = useRef(!!initial?.model);
   useEffect(() => {
     if (!agentId) return;
     if (modelInitializedRef.current) return;
@@ -289,7 +294,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       modelsByProvider,
       chatApiKeys,
       organization: organizationDefaults,
-      memberDefault: memberDefault ?? null,
     });
 
     if (!resolved) return; // No models available yet
@@ -307,7 +311,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     modelsByProvider,
     chatApiKeys,
     organizationDefaults,
-    memberDefault,
     urlModelId,
     isApiKeysLoading,
   ]);
@@ -338,55 +341,22 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     }
   }, [routeConversationId]);
 
-  // Persist the user's (model, key) pick as their member default so the next
-  // new chat reuses it. No-ops on an incomplete pair.
-  const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
-  const updateMemberDefaultModelMutateRef = useRef(
-    updateMemberDefaultModelMutation.mutate,
-  );
-  updateMemberDefaultModelMutateRef.current =
-    updateMemberDefaultModelMutation.mutate;
-  const chatApiKeysRef = useRef(chatApiKeys);
-  chatApiKeysRef.current = chatApiKeys;
-  const persistMemberDefaultModel = useCallback(
-    (nextModelId: string | null, nextApiKeyId: string | null) => {
-      if (!nextModelId || !nextApiKeyId) return;
-      // A default carries into chats on any agent, so it must be a key the
-      // viewer may use; an agent's own key works only through that agent.
-      if (!chatApiKeysRef.current.some((k) => k.id === nextApiKeyId)) return;
-      updateMemberDefaultModelMutateRef.current({
-        modelId: nextModelId,
-        chatApiKeyId: nextApiKeyId,
-      });
-    },
-    [],
-  );
-
-  // Model change. The picked model is scoped to the selected key, so the pair
-  // is persisted as the member default.
-  const apiKeyIdRef = useRef(apiKeyId);
-  apiKeyIdRef.current = apiKeyId;
-  const onModelChange = useCallback(
-    (nextModelId: string) => {
-      setModelId(nextModelId);
-      persistMemberDefaultModel(nextModelId, apiKeyIdRef.current);
-    },
-    [persistMemberDefaultModel],
-  );
+  const onModelChange = useCallback((nextModelId: string) => {
+    setModelId(nextModelId);
+  }, []);
 
   // API key change — preselect the best model for the new key's provider.
   const onProviderChange = useCallback(
-    (provider: SupportedProvider, nextApiKeyId: string) => {
+    (provider: SupportedProvider) => {
       const preferred = resolvePreferredModelForProvider({
         provider,
         modelsByProvider,
       });
       if (preferred) {
         setModelId(preferred.modelId);
-        persistMemberDefaultModel(preferred.modelId, nextApiKeyId);
       }
     },
-    [modelsByProvider, persistMemberDefaultModel],
+    [modelsByProvider],
   );
 
   const onAgentChange = useCallback(
@@ -401,8 +371,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   );
 
   // Reset to the agent/org default model (shown when on a custom model).
-  // Resolves without the member default — reset deliberately drops the user's
-  // personal override to fall back to the agent/org default.
   const onResetModelOverride = useCallback(() => {
     modelInitializedRef.current = false;
 
@@ -411,7 +379,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       modelsByProvider,
       chatApiKeys,
       organization: organizationDefaults,
-      memberDefault: null,
     });
 
     if (resolved) {
@@ -419,12 +386,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       setApiKeyId(resolved.apiKeyId);
     }
     modelInitializedRef.current = true;
-
-    // Clear the saved member default so the reset sticks for future new chats.
-    updateMemberDefaultModelMutateRef.current({
-      modelId: null,
-      chatApiKeyId: null,
-    });
   }, [modelsByProvider, chatApiKeys, organizationDefaults]);
 
   const provider = useMemo((): SupportedProvider | undefined => {
@@ -482,4 +443,80 @@ function resolveUrlModelSelection(params: {
   );
   if (!key) return null;
   return { modelId: model.dbId, apiKeyId: key.id };
+}
+
+/**
+ * The starting agent and model, when the first render already has what the
+ * load effect waits for and the outcome cannot depend on this browser's saved
+ * pick. Null otherwise: the effect then resolves as it always has. The saved
+ * pick lives in localStorage, which the server cannot read, so resolving it
+ * here would render a different composer on the server and in the browser.
+ */
+function resolveOnFirstRender<TAgent extends InitialChatAgent>(
+  params: InitialChatModelStateParams<TAgent>,
+): {
+  agent: TAgent;
+  model: { modelId: string; apiKeyId: string | null } | null;
+  fromUrl: boolean;
+  fromProjectDefault: boolean;
+} | null {
+  if (
+    params.isAgentsLoading ||
+    params.agents.length === 0 ||
+    params.isOrgLoading ||
+    params.isProjectLoading ||
+    params.isApiKeysLoading ||
+    params.isPermissionResolving
+  ) {
+    return null;
+  }
+  let agent: TAgent | undefined;
+  let fromProjectDefault = false;
+  const fromUrl = !!params.urlAgentId;
+  if (params.urlAgentId) {
+    agent = params.agents.find((a) => a.id === params.urlAgentId);
+  } else {
+    const selection = resolveInitialAgentSelection({
+      agents: params.agents,
+      projectDefaultAgentId: params.projectDefaultAgentId,
+      organizationDefaultAgentId: params.organization?.defaultAgentId,
+      savedAgentId: null,
+      memberDefaultAgentId: params.defaultAgentId,
+      canUseSavedAgent: false,
+    });
+    // A default (project, member or organization) outranks a saved pick, so
+    // its choice holds whatever this browser saved; the fallback can be drawn
+    // only where no saved pick could outrank it.
+    if (
+      selection &&
+      (selection.source !== "fallback" || !params.canUseSavedAgent)
+    ) {
+      agent = selection.agent;
+      fromProjectDefault = selection.fromProjectDefault;
+    }
+  }
+  if (!agent) return null;
+  const resolved = resolveInitialAgentState({
+    agent,
+    modelsByProvider: params.modelsByProvider,
+    chatApiKeys: params.chatApiKeys,
+    organization: params.organization
+      ? {
+          defaultModelId: params.organization.defaultModelId,
+          defaultLlmApiKeyId: params.organization.defaultLlmApiKeyId,
+        }
+      : null,
+  });
+  const model =
+    resolveUrlModelSelection({
+      urlModelId: params.urlModelId,
+      modelsByProvider: params.modelsByProvider,
+      chatApiKeys: params.chatApiKeys,
+    }) ?? resolved;
+  return {
+    agent,
+    model: model ? { modelId: model.modelId, apiKeyId: model.apiKeyId } : null,
+    fromUrl,
+    fromProjectDefault,
+  };
 }

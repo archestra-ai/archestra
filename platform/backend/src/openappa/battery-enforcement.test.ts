@@ -37,7 +37,6 @@ import {
 } from "@/test/openappa-github-roster";
 import { GitHubUserIdSchema, type User } from "@/types";
 import { openappaBatteriesService } from "./batteries";
-import { expandCommandExecutionPolicyRules } from "./command-normalization";
 import { bundledEntry, openappaDeclarations } from "./declarations";
 import { parsePolicyToml, toolEntries } from "./policy-text";
 import { recompileAllOnStart } from "./service";
@@ -377,7 +376,7 @@ ${catchAllRules()}`,
     expect(await decide(organizationId, [READ])).toEqual([UNANSWERED_HELPER]);
   });
 
-  test("the default policy applies the claude-code battery to client built-ins and asks the default model about the rest", async ({
+  test("the default policy applies the coding battery to every client's built-ins and asks the default model about the rest", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -417,6 +416,9 @@ requires = { audience = { contains = ["self"] } }
       "read-readme": `host/archestra/Read {\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
       // Codex's shell spells the command `cmd`.
       "codex-credentials": `host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "codex-git-push": `host/archestra/exec_command {\n  cmd: "git push origin main"\n}\nexpect allow\n`,
+      // OpenCode's read spells the path `filePath`.
+      "opencode-read-env": `host/archestra/read {\n  filePath: "/repo/.env"\n}\nexpect allow\n${probe}`,
       "git-push": `host/archestra/Bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
       "unruled-client-tool": "host/archestra/FutureBuiltIn {}\nexpect allow\n",
       // A subagent's return is checked when it hands back, so starting one
@@ -429,11 +431,7 @@ requires = { audience = { contains = ["self"] } }
       // named like the battery's host keeps its own identity.
       "mcp-named-like-the-host": `mcp/claude-code/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n`,
     };
-    const dispatched = await replay({
-      organizationId,
-      scenarios,
-      content: expandCommandExecutionPolicyRules,
-    });
+    const dispatched = await replay({ organizationId, scenarios });
 
     // A session narrowed to its requester sends the probe to review.
     expect(
@@ -446,10 +444,12 @@ requires = { audience = { contains = ["self"] } }
       JSON.stringify(dispatched, null, 1),
     ).toEqual({
       "probe-alone": ["allow"],
-      "read-env": ["allow", "authority hitl"],
+      "read-env": ["allow", "authority human-approval"],
       "note-after-read-env": ["allow", "allow"],
       "read-readme": ["allow", "allow"],
-      "codex-credentials": ["allow", "authority hitl"],
+      "codex-credentials": ["allow", "authority human-approval"],
+      "codex-git-push": ["claude-code.bash-repository-requirements"],
+      "opencode-read-env": ["allow", "authority human-approval"],
       "git-push": ["claude-code.bash-repository-requirements"],
       "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "spawn-after-read-env": ["allow", "allow", "allow"],
@@ -457,20 +457,6 @@ requires = { audience = { contains = ["self"] } }
       "unruled-mcp-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "mcp-named-like-the-host": [UNDECLARED_TOOL_ANNOTATOR],
     });
-
-    // The runtime rebinds the battery's `host/claude-code/Bash(...)` rules onto
-    // `host/archestra/Bash(...)` when it loads the policy, after a dispatch
-    // added the other command tools' spellings to the stored composition.
-    // Without those spellings the host alias alone leaves Codex's shell to the
-    // catch-all.
-    const stored = await replay({
-      organizationId,
-      scenarios: { "codex-credentials": scenarios["codex-credentials"] },
-      content: (composed) => composed,
-    });
-    expect(stored["codex-credentials"]?.steps.map(stepOutcome)).toEqual([
-      UNDECLARED_TOOL_ANNOTATOR,
-    ]);
   });
 });
 
@@ -482,13 +468,12 @@ type ReplayFile = {
 };
 
 /**
- * Scenario files replayed over the stored composition as `content` hands it
- * to the runtime. Keyed by path without its extension.
+ * Scenario files replayed over the stored composition. Keyed by path without
+ * its extension.
  */
 async function replay(params: {
   organizationId: string;
   scenarios: Record<string, string>;
-  content: (composed: string) => string;
 }): Promise<Record<string, ReplayFile>> {
   const { content } = await openappaBatteriesService.getEffectivePolicy(
     params.organizationId,
@@ -498,7 +483,7 @@ async function replay(params: {
     await withoutModelCli(() =>
       native.replayOpenappaPolicy(
         JSON.stringify({
-          content: params.content(content),
+          content,
           files: Object.entries(params.scenarios).map(([path, scenario]) => ({
             path: `${path}.appa`,
             content: scenario,
@@ -807,7 +792,7 @@ async function decide(
       await withoutModelCli(() =>
         native.replayOpenappaPolicy(
           JSON.stringify({
-            content: expandCommandExecutionPolicyRules(content),
+            content,
             files: chunk.map((call, index) => ({
               path: `${String(index).padStart(2, "0")}.appa`,
               content: `${call.tool} {\n${Object.entries(call.arguments)

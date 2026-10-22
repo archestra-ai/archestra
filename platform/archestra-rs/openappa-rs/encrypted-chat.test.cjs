@@ -69,9 +69,7 @@ test('encrypted trajectories enforce, replay, survive a new process, and contain
   assert.ok(outputs.rows[0].decision.__appa_encrypted);
   const starts = await pg.query('SELECT root,start_decision FROM openappa_sessions WHERE organization_id=$1 AND session_id=$2', [session.organization_id, session.session_id]);
   assert.ok(starts.rows[0].start_decision.__appa_encrypted);
-  const opening = await pg.query('SELECT policy_file_key FROM openappa_root_openings WHERE root=$1 AND organization_id=$2', [starts.rows[0].root, session.organization_id]);
-  assert.equal(opening.rows.length, 1, 'encrypted roots retain their policy identity for annotator liveness without decrypting their opening event');
-  assert.match(opening.rows[0].policy_file_key, /^[0-9a-f]{64}$/);
+  assert.deepEqual(await native.openappaRootKinds([starts.rows[0].root, 'archestra:no-such-root']), ['encrypted', null], 'a keyless read tells an encrypted opening apart without decrypting it');
   const events = await pg.query('SELECT payload FROM openappa_events WHERE root=$1 ORDER BY seq', [starts.rows[0].root]);
   assert.ok(events.rows.length > 1);
   for (const row of events.rows) assert.ok(row.payload.subarray(0,17).includes(Buffer.from('appa-storage-v1')) && !row.payload.includes(Buffer.from(marker)));

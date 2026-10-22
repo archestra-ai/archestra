@@ -38,6 +38,10 @@ export function setOAuthState(state: string) {
   sessionStorage.setItem(OAUTH_STATE, state);
 }
 
+export function getOAuthState() {
+  return sessionStorage.getItem(OAUTH_STATE);
+}
+
 /** Store the catalog ID that initiated the OAuth flow. */
 export function setOAuthCatalogId(catalogId: string) {
   sessionStorage.setItem(OAUTH_CATALOG_ID, catalogId);

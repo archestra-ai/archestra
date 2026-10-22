@@ -10,6 +10,7 @@ import { secretManager } from "@/secrets-manager";
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import type {
   InternalMcpCatalog,
@@ -383,6 +384,7 @@ export async function autoReinstallServer(
         inputSchema: Record<string, unknown>;
         _meta?: Record<string, unknown>;
         annotations?: Record<string, unknown>;
+        outputSchema?: Record<string, unknown>;
       }>
     >;
   },
@@ -499,6 +501,7 @@ async function syncToolsForServer(
         inputSchema: Record<string, unknown>;
         _meta?: Record<string, unknown>;
         annotations?: Record<string, unknown>;
+        outputSchema?: Record<string, unknown>;
       }>
     >;
   },
@@ -512,12 +515,25 @@ async function syncToolsForServer(
     name: ToolModel.slugifyName(toolNamePrefix, tool.name),
     description: tool.description,
     parameters: tool.inputSchema,
-    meta: { _meta: tool._meta, annotations: tool.annotations },
+    meta: {
+      _meta: tool._meta,
+      annotations: tool.annotations,
+      outputSchema: tool.outputSchema,
+    },
     catalogId: catalogItem.id,
     rawToolName: tool.name,
   }));
 
   const syncResult = await ToolModel.syncToolsForCatalog(toolsToSync);
+  await recordInstallToolDescriptions({
+    mcpServerId: server.id,
+    syncedTools: [
+      ...syncResult.created,
+      ...syncResult.updated,
+      ...syncResult.unchanged,
+    ],
+    reported: toolsToSync,
+  });
   await refreshMcpSkillMetadata({
     catalogId: catalogItem.id,
     mcpServerId: server.id,

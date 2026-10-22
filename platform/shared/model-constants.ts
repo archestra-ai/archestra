@@ -68,6 +68,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "kimi:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "azure:images",
+  "azure:audio",
+  "openai:audio",
+  "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
@@ -856,159 +860,108 @@ export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
 export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 
 /**
- * Pattern-based model markers per provider.
- * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "best" (highest quality) models.
- *
- * Patterns are checked in array order (first match wins), so list each
- * provider's ids most- to least-preferred (more specific before general). The
- * first listed id present in the account is the one marked best.
+ * Model tier a forked subagent runs on. `normal` is the parent's own model;
+ * `smart` and `fast` stay on the parent's key and resolve to the agent's trio,
+ * then the organization's, then PROVIDER_MODEL_TIERS.
  */
-export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
-  openai: [
-    // Luna is deliberately absent so a smaller tier is never marked best.
-    "gpt-6-astra",
-    "gpt-6-sol",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  gemini: [
-    // Gemini 4 Argon, the next flagship tier. It has no public API id yet, so
-    // match the tier name rather than a guessed full id.
-    "argon",
-    "gemini-3.8-flash",
-    "gemini-3.5-pro",
-    "gemini-3.6-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-pro",
-    "gemini-3.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-  ],
-  cerebras: ["zai-glm-4.7"],
-  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
-  mistral: [
-    "mistral-medium-2604",
-    "mistral-large",
-    "mistral-medium",
-    "mistral-small",
-  ],
-  // The bare `sonar*` chat-completions family leads so the provider's default
-  // stays a Sonar model; the vendor-prefixed Agent API entries trail it,
-  // mirroring the cross-vendor shape of `archestra` below.
-  perplexity: [
-    "sonar-deep-research",
-    "sonar-reasoning-pro",
-    "sonar-pro",
-    "sonar",
-    "anthropic/claude-opus-5",
-    "anthropic/claude-sonnet-5",
-    "perplexity/glm-5.2",
-  ],
-  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
-  xai: ["grok-4.3", "grok-4", "grok-3"],
-  openrouter: [
-    "anthropic/claude-opus-4.8",
-    "anthropic/claude-opus-4.7",
-    "openai/gpt-5.5-pro",
-    "openai/gpt-5.5",
-    "google/gemini-3.1-pro-preview",
-    "x-ai/grok-4.3",
-    "deepseek/deepseek-v4-pro",
-  ],
-  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
-  "ollama-native": [
-    "gpt-oss:120b",
-    "llama4:maverick",
-    "llama4:scout",
-    "qwen3:235b",
-  ],
-  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
-  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
-  minimax: ["minimax-m3", "minimax-m2.7"],
-  kimi: [
-    "kimi-k2-thinking",
-    "kimi-k2-turbo",
-    "kimi-k2",
-    "kimi-latest",
-    "moonshot-v1-128k",
-    "kimi",
-  ],
-  azure: [
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  bedrock: [
-    "anthropic.claude-opus-4-8",
-    "anthropic.claude-opus-4-7",
-    "claude-opus",
-    "claude-sonnet",
-    "amazon.nova-pro",
-  ],
-  "github-copilot": [
-    "claude-opus",
-    "claude-sonnet",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
-  // The upstream Archestra can front any provider, so match common flagship
-  // families across vendors (most- to least-preferred).
-  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
-  // Embeddings-only, so these mark the best *embedding* model rather than a
-  // chat one — the retrieval-quality flagship first.
-  voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
-  jev: ["jev"],
+export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
+export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
+
+interface ProviderModelTiers {
+  normal: string;
+  smart?: string;
+  fast?: string;
+}
+
+/**
+ * Fast-tier models per provider, most- to least-preferred, matched as
+ * substrings of a key's synced model ids; a `pro` variant never matches. For
+ * short, latency-bound internal calls such as guardrail annotation. A provider
+ * without an entry has no fast default and keeps its usual model.
+ */
+export const PROVIDER_FAST_MODEL_PATTERNS: Partial<
+  Record<SupportedProvider, string[]>
+> = {
+  anthropic: ["claude-haiku-5-5"],
+  bedrock: ["claude-haiku-5-5"],
+  openai: ["gpt-6-luna", "gpt-5.6-luna"],
+  openrouter: ["anthropic/claude-haiku-5.5", "openai/gpt-6-luna"],
+  gemini: ["gemini-3.5-flash-lite"],
 };
 
 /**
- * Default model for each provider when no synced "best" model is available.
- * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ * The default trio per provider: what runs when no agent, organization or
+ * conversation picked a model. Matched as a substring of a key's model ids
+ * (see findTierDefault); a key that serves none of them falls back to its first
+ * model, and an unset or unmatched `smart` / `fast` runs the parent's model.
  */
-export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+export const PROVIDER_MODEL_TIERS: Record<
+  SupportedProvider,
+  ProviderModelTiers
+> = {
   // Embeddings-only: never used to start a conversation, only as the fallback
   // embedding model when no synced "best" row exists.
-  voyage: "voyage-4",
-  jev: "jev-1.13.0",
-  anthropic: "claude-opus-4-8",
-  openai: "gpt-5.5",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-3.6-flash",
-  cohere: "command-a-plus-05-2026",
-  groq: "openai/gpt-oss-120b",
-  xai: "grok-4.3",
-  ollama: "llama3.2",
-  "ollama-native": "llama3.2",
-  vllm: "default",
-  cerebras: "zai-glm-4.7",
-  mistral: "mistral-medium-2604",
-  perplexity: "sonar-pro",
-  zhipuai: "glm-5.1",
-  deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-8",
-  minimax: "MiniMax-M3",
-  kimi: "kimi-k2-0711-preview",
-  azure: "gpt-5.5",
-  "github-copilot": "gpt-4o",
-  "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  voyage: { normal: "voyage-4" },
+  jev: { normal: "jev-1.13.0" },
+  anthropic: {
+    fast: "claude-haiku-5-5",
+    normal: "claude-sonnet-5-5",
+    smart: "claude-opus-5-5",
+  },
+  openai: { fast: "gpt-6-luna", normal: "gpt-6.1-sol", smart: "gpt-6-astra" },
+  openrouter: {
+    fast: "anthropic/claude-haiku-5.5",
+    normal: "anthropic/claude-sonnet-5.5",
+    smart: "anthropic/claude-opus-5.5",
+  },
+  gemini: {
+    fast: "gemini-3.5-flash-lite",
+    normal: "gemini-3.8-flash",
+    // Gemini 4 Argon has no public API yet; switch `smart` to it once it ships.
+    smart: "gemini-3.8-flash",
+  },
+  cohere: { normal: "command-a-plus-05-2026" },
+  groq: { normal: "openai/gpt-oss-120b" },
+  xai: { normal: "grok-4.3" },
+  ollama: { normal: "llama3.2" },
+  "ollama-native": { normal: "llama3.2" },
+  vllm: { normal: "default" },
+  cerebras: { normal: "zai-glm-4.7" },
+  mistral: { normal: "mistral-medium-2604" },
+  perplexity: { normal: "sonar-pro" },
+  zhipuai: { normal: "glm-5.1" },
+  deepseek: { normal: "deepseek-v4-pro" },
+  bedrock: {
+    fast: "claude-haiku-5-5",
+    normal: "anthropic.claude-sonnet-5-5",
+    smart: "claude-opus-5-5",
+  },
+  minimax: { normal: "MiniMax-M3" },
+  kimi: { normal: "kimi-k2-0711-preview" },
+  azure: { normal: "gpt-5.5" },
+  "github-copilot": {
+    // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.
+    fast: "gpt-6-luna",
+    normal: "claude-sonnet-5.5",
+    smart: "claude-opus-5.5",
+  },
+  "microsoft-365-copilot": { normal: MICROSOFT_365_COPILOT_MODELS[0].id },
   // Fallback only; users pick from the upstream's fetched model list.
-  archestra: "gpt-4o",
+  archestra: { normal: "gpt-4o" },
 };
+
+/** The provider's default-trio model for `tier` among `models`, if any. */
+export function findTierDefault<T extends { modelId: string }>(
+  models: T[],
+  provider: SupportedProvider,
+  tier: SubagentModelTier,
+): T | undefined {
+  const pattern = PROVIDER_MODEL_TIERS[provider][tier]?.toLowerCase();
+  if (!pattern) return undefined;
+  return [...models]
+    .sort((a, b) => a.modelId.localeCompare(b.modelId))
+    .find((m) => m.modelId.toLowerCase().includes(pattern));
+}
 
 /**
  * Cache token price as a multiple of the model's per-token INPUT price.

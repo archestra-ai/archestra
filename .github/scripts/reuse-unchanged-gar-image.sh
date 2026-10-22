@@ -44,17 +44,27 @@ if ! source_digest=$(get_digest "$source_image"); then
   exit 0
 fi
 
-# Retagging keeps the original digest's upload time. A weekly rebuild picks up
-# floating base-image and OS package updates even when repository files are idle.
-if ! uploaded=$(gcloud artifacts docker images describe \
-  "${IMAGE}@${source_digest}" --format='value(uploadTime)' 2>/dev/null) ||
+# Docker-image describe returns a Container Analysis summary, not the uploadTime
+# field. Read the immutable package version instead. Its createTime survives
+# retagging, so a weekly rebuild still picks up base-image and OS package updates.
+if [[ ! "$IMAGE" =~ ^([a-z0-9-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+)$ ]]; then
+  echo "Not a supported GAR image reference; building $IMAGE normally."
+  exit 0
+fi
+location="${BASH_REMATCH[1]}"
+project="${BASH_REMATCH[2]}"
+repository="${BASH_REMATCH[3]}"
+package="${BASH_REMATCH[4]}"
+if ! uploaded=$(gcloud artifacts versions describe "$source_digest" \
+  --project="$project" --location="$location" --repository="$repository" \
+  --package="$package" --format='value(createTime)' 2>/dev/null) ||
   ! uploaded_epoch=$(python3 -c '
 import datetime, sys
 timestamp = datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
 assert timestamp.tzinfo is not None
 print(int(timestamp.timestamp()))
 ' "$uploaded" 2>/dev/null); then
-  echo "Image upload time unavailable; building $IMAGE normally."
+  echo "Image creation time unavailable; building $IMAGE normally."
   exit 0
 fi
 age_seconds=$(($(date -u +%s) - uploaded_epoch))

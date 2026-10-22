@@ -20,7 +20,10 @@ crate-type = ["cdylib"]
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
 # the attestation offered only where the parent covers its rank (#713),
-# and the archestra battery's agent-run rules (#716).
+# and the archestra battery's agent-run rules (#716); then explicit
+# no-remedy refusal feedback (#720), a failed subagent reported as stopped
+# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
+# escape (#724).
 # Pin #725's atomic remedy claim fix directly until it lands upstream.
 appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
 appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }

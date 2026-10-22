@@ -3,7 +3,10 @@ import type { z } from "zod";
 import type { LLMProvider, OpenAi } from "@/types";
 import { ApiError, Azure } from "@/types";
 import { azureAdapterFactory, getAzureClientForRequest } from "./azure";
-import { createImageGenerationAdapters } from "./image-generation";
+import {
+  createImageGenerationAdapters,
+  safeImageUpstreamError,
+} from "./image-generation";
 
 type ImageRequest = z.infer<typeof Azure.API.ImageGenerationRequestSchema>;
 type ImageResponse = z.infer<typeof Azure.API.ImageGenerationResponseSchema>;
@@ -21,24 +24,30 @@ export const azureImagesAdapterFactory: LLMProvider<
   interactionType: "azure:images",
   spanName: "generate_content",
   unavailableUsageAccounting: true,
+  recordRequestDurationInHandler: true,
   getBaseUrl: azureAdapterFactory.getBaseUrl,
   extractApiKey: azureAdapterFactory.extractApiKey,
-  createClient: azureAdapterFactory.createClient,
+  createClient: (apiKey, options) =>
+    azureAdapterFactory.createClient(apiKey, { ...options, agent: undefined }),
   extractErrorMessage: azureAdapterFactory.extractErrorMessage,
   extractInternalCode: azureAdapterFactory.extractInternalCode,
   ...createImageGenerationAdapters("azure"),
   async execute(client, request) {
-    const response = await getAzureClientForRequest(
-      client,
-      request.model,
-    ).images.generate({
-      ...request,
-      stream: false,
-    } as OpenAI.Images.ImageGenerateParamsNonStreaming);
-    return Azure.API.ImageGenerationResponseSchema.parse({
-      ...response,
-      model: request.model,
-    });
+    try {
+      const response = await getAzureClientForRequest(
+        client,
+        request.model,
+      ).images.generate({
+        ...request,
+        stream: false,
+      } as OpenAI.Images.ImageGenerateParamsNonStreaming);
+      return Azure.API.ImageGenerationResponseSchema.parse({
+        ...response,
+        model: request.model,
+      });
+    } catch (error) {
+      throw safeImageUpstreamError(error);
+    }
   },
   async executeStream() {
     throw new ApiError(

@@ -420,13 +420,21 @@ describe.each([
       ).toBe(IMAGE);
 
       const beforeError = upstream.calls.length;
-      await expect(
-        client.images.generate({
-          model: imageModels[1],
-          prompt: "upstream-error",
-        }),
-      ).rejects.toMatchObject({ status: 429 });
-      expect(upstream.calls).toHaveLength(beforeError + 1);
+      for (const model of imageModels) {
+        const error = await client.images
+          .generate({ model, prompt: "upstream-error" })
+          .catch((failure: unknown) => failure);
+        expect(error).toMatchObject({ status: 429 });
+        if (!model.startsWith("gemini:")) {
+          expect(
+            (error as { headers?: Headers }).headers?.get("retry-after"),
+          ).toBe("2");
+        }
+        expect((error as Error).message).not.toContain(
+          "synthetic-openai-secret",
+        );
+      }
+      expect(upstream.calls).toHaveLength(beforeError + imageModels.length);
       for (const model of imageModels) {
         await expect(
           client.images.generate({ model, prompt: "slow" }, { timeout: 50 }),
@@ -449,6 +457,31 @@ describe.each([
           row.type.endsWith(":images") || row.type === "gemini:generateContent",
       );
       expect(images.length).toBeGreaterThanOrEqual(5);
+      const failedImages = images.filter(
+        (row) =>
+          (
+            row.request as {
+              prompt?: string;
+              contents?: Array<{ parts?: Array<{ text?: string }> }>;
+            }
+          ).prompt === "upstream-error" ||
+          (
+            row.request as {
+              contents?: Array<{ parts?: Array<{ text?: string }> }>;
+            }
+          ).contents?.[0]?.parts?.[0]?.text === "upstream-error",
+      );
+      expect(failedImages).toHaveLength(imageModels.length);
+      for (const row of failedImages) {
+        expect(row).toMatchObject({
+          inputTokens: null,
+          outputTokens: null,
+          cost: null,
+          response: {
+            __mediaUsage: { tokensAvailable: false, costAvailable: false },
+          },
+        });
+      }
       expect(
         images.every(
           (row) =>
@@ -498,6 +531,7 @@ describe.each([
       ).rejects.toMatchObject({ status: 422 });
       expect(upstream.calls).toHaveLength(beforeEnforced);
     } finally {
+      app.server.closeAllConnections();
       await app.close();
       await upstream.close();
     }
@@ -556,10 +590,16 @@ async function startUpstream() {
       return;
     }
     if (prompt === "upstream-error") {
-      response.writeHead(429, { "content-type": "application/json" });
+      response.writeHead(429, {
+        "content-type": "application/json",
+        "retry-after": "2",
+      });
       return response.end(
         JSON.stringify({
-          error: { message: "Synthetic rate limit", type: "rate_limit_error" },
+          error: {
+            message: "Synthetic rate limit: synthetic-openai-secret",
+            type: "rate_limit_error",
+          },
         }),
       );
     }
@@ -672,9 +712,11 @@ async function startUpstream() {
   return {
     origin: `http://127.0.0.1:${address.port}`,
     calls,
-    close: () =>
-      new Promise<void>((resolve, reject) =>
+    close: () => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
-      ),
+      );
+    },
   };
 }

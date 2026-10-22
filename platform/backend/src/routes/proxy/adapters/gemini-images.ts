@@ -9,6 +9,7 @@ import {
 } from "@/types";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
+import { safeImageUpstreamError } from "./image-generation";
 
 /** Translate only Images parameters with an exact native Gemini meaning. */
 export function toGeminiImageRequest(
@@ -37,12 +38,13 @@ export function toGeminiImageRequest(
 export const geminiImagesAdapterFactory = {
   ...geminiAdapterFactory,
   unavailableUsageAccounting: true,
+  recordRequestDurationInHandler: true,
   cancelOnDisconnect: true,
   createClient(apiKey: string | undefined, options: CreateClientOptions) {
-    const native = geminiAdapterFactory.createClient(
-      apiKey,
-      options,
-    ) as GoogleGenAI;
+    const native = geminiAdapterFactory.createClient(apiKey, {
+      ...options,
+      agent: undefined,
+    }) as GoogleGenAI;
     // Keep the native adapter's request preparation and observability, adding
     // only the request-scoped cancellation signal supported by the Google SDK.
     return {
@@ -62,7 +64,12 @@ export const geminiImagesAdapterFactory = {
     );
   },
   async execute(client: unknown, request: GeminiRequestWithModel) {
-    const result = await geminiAdapterFactory.execute(client, request);
+    let result: Gemini.Types.GenerateContentResponse;
+    try {
+      result = await geminiAdapterFactory.execute(client, request);
+    } catch (error) {
+      throw safeImageUpstreamError(error);
+    }
     const adapter = new GeminiImagesResponseAdapter(result);
     if (!adapter.getOriginalResponse().data?.length) {
       throw new ObservedProviderUsageError({

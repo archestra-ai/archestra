@@ -270,6 +270,18 @@ describe.each([
       });
       expect(invalidMultipart.status).toBe(401);
       expect(calls).toHaveLength(before);
+      const malformedAgent = new OpenAI({
+        baseURL: `${origin}/v1/model-router/not-a-uuid`,
+        apiKey: key.value,
+        maxRetries: 0,
+      });
+      await expect(
+        malformedAgent.audio.transcriptions.create({
+          model: modelIds[0],
+          file: file(),
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(calls).toHaveLength(before);
       const foreign = await makeAgent({ agentType: "llm_proxy" });
       const foreignClient = new OpenAI({
         baseURL: `${origin}/v1/model-router/${foreign.id}`,

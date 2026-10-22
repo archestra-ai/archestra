@@ -667,6 +667,9 @@ async function authenticateMediaRequest(
 ): Promise<ModelRouterAuth> {
   const auth = await getModelRouterAuth(request);
   const { agentId } = request.params as { agentId?: string };
+  if (agentId && !UuidIdSchema.safeParse(agentId).success) {
+    throw new ApiError(400, "Invalid LLM proxy id.");
+  }
   const agent = agentId
     ? await getModelRouterAgent(agentId)
     : await getDefaultModelRouterAgent();

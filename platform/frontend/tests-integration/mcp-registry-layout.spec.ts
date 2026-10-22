@@ -269,14 +269,17 @@ test.describe("MCP Registry layout", () => {
   }) => {
     await seed(mswControl);
     await mcpRegistryPage.goto();
+    // Page time stands still, so only a filter that needs no pause can apply.
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1_000));
 
     await page
       .getByRole("textbox", { name: "Search MCP servers by name" })
       .fill("not-installed");
+    await page.clock.runFor(1);
 
     await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
       0,
-      { timeout: 200 },
     );
     await expect(
       mcpRegistryPage.cardForCatalogItem("not-installed"),

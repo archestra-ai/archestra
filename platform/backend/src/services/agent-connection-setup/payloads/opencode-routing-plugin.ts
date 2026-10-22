@@ -115,6 +115,9 @@ const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
 const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/v1beta\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)|\\/backend-api\\/codex\\/responses)$/;
 const fetchGuardSymbol = Symbol.for("archestra.opencode.llmProxyFetchGuard");
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
+// Names the managed alias that sent a request. The fetch guard removes it
+// before the request leaves the client.
+const managedAliasHeader = "x-archestra-managed-alias";
 const openAiApiBaseUrl = "https://api.openai.com/v1";
 const clientLabel = ${JSON.stringify(label)};
 const clientDir = ${JSON.stringify(dir)};
@@ -176,11 +179,27 @@ const managedAuth = (id) => ({ apiKey: aliasKeys.get(id), baseURL: activeRoutes[
     headers.delete("ChatGPT-Account-Id");
     headers.delete("x-goog-api-key");
     headers.delete(openAiOAuthBridgeHeader);
+    headers.delete(managedAliasHeader);
     headers.set("Authorization", "Bearer " + aliasKeys.get(id));
     for (const [name, value] of Object.entries(headersFor(id))) headers.set(name, value);
     return directFetch(new Request(activeRoutes[id] + suffix, { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
   },
 });
+// The client's own sign-in for an aliased provider can replace the managed
+// key with its own token: Kilo Code does this after an xAI sign-in. The
+// managed route accepts only the managed key, so that token never goes there.
+const withManagedAliasKey = (request, url, alias) => {
+  const headers = new Headers(request.headers);
+  headers.delete(managedAliasHeader);
+  const route = aliasKeys.has(alias) ? activeRoutes[alias] : undefined;
+  const base = route ? new URL(route) : undefined;
+  if (base && base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/")) {
+    for (const name of ["Authorization", "ChatGPT-Account-Id", "x-goog-api-key", openAiOAuthBridgeHeader]) headers.delete(name);
+    const key = aliasKeys.get(alias);
+    if (key) headers.set("Authorization", "Bearer " + key);
+  }
+  return new Request(request, { headers });
+};
 const directFetch = ${
     params.runtime
       ? `(input, init) => {
@@ -206,8 +225,10 @@ let proxyOrigins = computeProxyOrigins(activeRoutes);
 
 if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
   globalThis.fetch = (input, init) => {
-    const request = new Request(input, init);
+    let request = new Request(input, init);
     const url = new URL(request.url);
+    const alias = request.headers.get(managedAliasHeader);
+    if (alias !== null) request = withManagedAliasKey(request, url, alias);
     // A ChatGPT sign-in made after startup still has its requests bridged.
     const chatGptAuth = url.href === chatGptResponsesUrl ? openAiOAuth ?? currentOpenAiOAuth() : null;
     if (chatGptAuth) {
@@ -359,6 +380,7 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
     Object.assign(output.headers, headersFor(providerId));
     output.headers["x-opencode-session"] = input.sessionID;
     output.headers[openCodeAgentHeader] = input.agent;
+    if (aliasKeys.has(providerId)) output.headers[managedAliasHeader] = providerId;
   },
   ...(googleOAuth ? {
     auth: {

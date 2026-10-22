@@ -4,6 +4,7 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
 import {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -389,6 +390,11 @@ class DaggerEnvironmentRuntimeManager {
       capabilities,
       clusterDnsIps,
       additionalDeniedCidrs: config.daggerRuntime.engine.additionalDeniedCidrs,
+      clusterIpFamilies: await clusterIpFamilyResolver.getIpFamilies({
+        coreApi: clients.coreApi,
+        namespace,
+        clusterDnsIps,
+      }),
     });
     const policyName = constructManagedNetworkPolicyName(
       daggerEngineDeploymentName(engineId),

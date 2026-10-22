@@ -1,4 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
+import type { ClusterIpFamily } from "@/k8s/cluster-ip-families";
 import {
   buildManagedAwsApplicationNetworkPolicy,
   buildManagedCiliumNetworkPolicy,
@@ -67,6 +68,8 @@ export function buildAgentRuntimeEnvironmentEgressPolicies(params: {
   >;
   capabilities?: K8sNetworkPolicyCapabilities | null;
   clusterDnsIps?: string[];
+  /** Families the cluster serves; only consumed by the floor. */
+  clusterIpFamilies?: ClusterIpFamily[];
 }): AgentRuntimeEgressPolicyObject[] {
   const { spec, capabilities } = params;
   const clusterDnsIps = params.clusterDnsIps ?? [];
@@ -93,6 +96,7 @@ export function buildAgentRuntimeEnvironmentEgressPolicies(params: {
           labels: metadata.labels,
           clusterDnsIps,
           allowedCidrs,
+          clusterIpFamilies: params.clusterIpFamilies,
         })
       : buildUnrestrictedFloorPolicy({
           name: names.environmentNetworkPolicy,
@@ -100,6 +104,7 @@ export function buildAgentRuntimeEnvironmentEgressPolicies(params: {
           labels: metadata.labels,
           clusterDnsIps,
           allowedCidrs,
+          clusterIpFamilies: params.clusterIpFamilies,
         });
     return [
       withAgentRuntimeMetadata({

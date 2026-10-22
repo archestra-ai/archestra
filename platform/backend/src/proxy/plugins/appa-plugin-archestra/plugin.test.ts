@@ -3299,10 +3299,24 @@ describe("asking through the client's own question tool", () => {
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
+    client?: "opencode" | "kilo";
   }) {
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const adapter =
+      params.client === "kilo"
+        ? new AppaKiloAdapter()
+        : params.client === "opencode"
+          ? new AppaOpenCodeAdapter()
+          : new AppaClaudeCodeAdapter();
+    const nativeName = params.client ? "question" : "AskUserQuestion";
+    const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = { "user-agent": "claude-code/1" };
+    context.headers = params.client
+      ? {
+          "user-agent": `${params.client}/1`,
+          "x-opencode-session": params.sessionId,
+          "x-archestra-question-cards": "1",
+        }
+      : { "user-agent": "claude-code/1" };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3315,7 +3329,7 @@ describe("asking through the client's own question tool", () => {
         namespaces: new Map(),
       },
       customTools: new Set(),
-      declaredTools: [{ name: "AskUserQuestion" }],
+      declaredTools: [{ name: nativeName }],
       session: {},
     };
     let askCount = 0;
@@ -3333,14 +3347,14 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: true,
+        canShowToolCallReview: !params.client,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: true,
+        canShowToolCallReview: !params.client,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
@@ -3376,11 +3390,13 @@ describe("asking through the client's own question tool", () => {
         toolResults: [
           {
             id: answerId,
-            name: "AskUserQuestion",
+            name: nativeName,
             content: JSON.stringify(
               label === ""
-                ? "The user did not answer the questions."
-                : `Your questions have been answered: "${question}"="${label}". You can now continue with these answers in mind.`,
+                ? params.client
+                  ? "User dismissed the question."
+                  : "The user did not answer the questions."
+                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3395,6 +3411,159 @@ describe("asking through the client's own question tool", () => {
     };
     return { plugin, context, trusted, askCard, answer };
   }
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
+    const offerId = `offer-${client}-cards`;
+    const f = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-cards`,
+      offerId,
+    });
+    const command = `echo ${"full-command ".repeat(500)}`;
+    await stageInspectableReview(f.trusted.session, offerId, command);
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await f.plugin.onSessionInit(f.context);
+      const first = await f.askCard();
+      expect(first.card.question).toContain("Call preview (");
+      expect(first.card.question).not.toContain(command);
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      await f.answer(first.answerId, first.card.question, "Inspect");
+      expect(
+        await peekHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBeUndefined();
+      const inspected = await f.askCard();
+      expect(inspected.card.question).toContain(command);
+      expect(inspected.card.question).toContain("Full review:");
+      expect(inspected.reviewDetails).toBeUndefined();
+      await f.answer(inspected.answerId, inspected.card.question, "Allow");
+      expect(
+        await consumeHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBe("approve");
+      await f.answer(inspected.answerId, inspected.card.question, "Deny");
+      expect(
+        await peekHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBeUndefined();
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+      await f.plugin.onCleanup(f.context);
+    }
+  });
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
+    const offerId = `offer-${client}-scope`;
+    const owner = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-owner`,
+      offerId,
+    });
+    const other = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-other`,
+      offerId,
+    });
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await stageInspectableReview(owner.trusted.session, offerId, "pwd");
+      await stageInspectableReview(other.trusted.session, offerId, "pwd");
+      await owner.plugin.onSessionInit(owner.context);
+      await other.plugin.onSessionInit(other.context);
+      const card = await owner.askCard();
+      await other.answer(card.answerId, card.card.question, "Allow");
+      expect(
+        await peekHitlRuling({ session: owner.trusted.session, offerId }),
+      ).toBeUndefined();
+      expect(
+        await peekHitlRuling({ session: other.trusted.session, offerId }),
+      ).not.toBe("approve");
+      await owner.answer(card.answerId, card.card.question, "Allow");
+      expect(
+        await consumeHitlRuling({ session: owner.trusted.session, offerId }),
+      ).toBe("approve");
+
+      const altered = await other.askCard();
+      await other.answer(altered.answerId, "Run bash?", "Allow");
+      expect(
+        await peekHitlRuling({ session: other.trusted.session, offerId }),
+      ).not.toBe("approve");
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+      await owner.plugin.onCleanup(owner.context);
+      await other.plugin.onCleanup(other.context);
+    }
+  });
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      for (const action of ["dismiss", "stale", "deny"] as const) {
+        const offerId = `offer-${client}-${action}`;
+        const f = inspectableClaudeReview({
+          client,
+          sessionId: `user:user|${client}-${action}`,
+          offerId,
+        });
+        await stageInspectableReview(f.trusted.session, offerId, "pwd");
+        await f.plugin.onSessionInit(f.context);
+        try {
+          const card = await f.askCard();
+          if (action === "stale")
+            await stageInspectableReview(
+              f.trusted.session,
+              offerId,
+              "echo changed",
+            );
+          await f.answer(
+            card.answerId,
+            card.card.question,
+            action === "dismiss" ? "" : action === "deny" ? "Deny" : "Allow",
+          );
+          const ruling = await peekHitlRuling({
+            session: f.trusted.session,
+            offerId,
+          });
+          if (action === "deny") expect(ruling).toBe("deny");
+          else expect(ruling).not.toBe("approve");
+          if (action === "dismiss") expect(ruling).not.toBe("deny");
+        } finally {
+          await f.plugin.onCleanup(f.context);
+        }
+      }
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+    }
+  });
 
   const INSPECTABLE_REVIEW_TEXT = [
     "[OpenAPPA] Approve this call?",

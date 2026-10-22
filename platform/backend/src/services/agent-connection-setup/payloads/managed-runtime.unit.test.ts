@@ -28,7 +28,15 @@ const digest = (source: string) =>
   createHash("sha256").update(source).digest("hex");
 const require = createRequire(import.meta.url);
 
-async function fixture(client = KILO_CLIENT, apiMajor = 1) {
+async function fixture({
+  client = KILO_CLIENT,
+  apiMajor = 1,
+  version,
+}: {
+  client?: typeof KILO_CLIENT;
+  apiMajor?: number;
+  version?: string;
+} = {}) {
   const home = await mkdtemp(path.join(tmpdir(), "managed-runtime-"));
   roots.push(home);
   const context = {
@@ -51,12 +59,20 @@ async function fixture(client = KILO_CLIENT, apiMajor = 1) {
     headers: {},
   });
   if (!install) throw new Error("Missing installer");
+  const bin = path.join(home, "bin");
+  await mkdir(bin);
+  await writeFile(
+    path.join(bin, client.binary),
+    `#!${process.execPath}\nconsole.log(${JSON.stringify(version ?? (client.clientId === "kilo" ? "7.8.15" : "1.19.3"))});\n`,
+    { mode: 0o700 },
+  );
   const env = {
     ...process.env,
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, "config"),
     XDG_DATA_HOME: path.join(home, "data"),
     ARCHESTRA_OC_RUNTIME_API_MAJOR: String(apiMajor),
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
   };
   await exec(process.execPath, ["-e", install.script], { env });
   const root = path.join(home, ".archestra", `${client.stateName}-runtime`);
@@ -113,6 +129,65 @@ afterEach(async () => {
 });
 
 describe("managed runtime trust boundary", () => {
+  test.each([
+    OPENCODE_CLIENT,
+    KILO_CLIENT,
+  ])("$clientId installs the TUI half without replacing other plugins or preferences", async (client) => {
+    const files = await fixture({ client });
+    const tui = path.join(path.dirname(files.configPath), "tui.json");
+    const original = JSON.parse(await readFile(tui, "utf8"));
+    expect(original.plugin).toHaveLength(1);
+    expect(original.plugin[0]).toContain("/tui.mjs");
+    await writeFile(
+      tui,
+      JSON.stringify({
+        ...original,
+        theme: "custom",
+        plugin: ["other-plugin", ...original.plugin],
+      }),
+    );
+    await exec(process.execPath, [files.installPath], { env: files.env });
+    expect(JSON.parse(await readFile(tui, "utf8"))).toEqual({
+      theme: "custom",
+      plugin: ["other-plugin", ...original.plugin],
+    });
+    const parameters = JSON.parse(
+      await readFile(path.join(files.root, "params.json"), "utf8"),
+    );
+    expect(parameters.questionCards).toBe(true);
+  });
+
+  test.each([
+    [OPENCODE_CLIENT, 1, "1.17.0"],
+    [OPENCODE_CLIENT, 2, "2.0.25"],
+    [KILO_CLIENT, 1, "7.7.0"],
+    [KILO_CLIENT, 1, "unknown"],
+  ] as const)("unsupported $0.clientId $2 keeps native questions", async (client, major, version) => {
+    const files = await fixture({ client, apiMajor: major, version });
+    const parameters = JSON.parse(
+      await readFile(path.join(files.root, "params.json"), "utf8"),
+    );
+    expect(parameters.questionCards).toBe(false);
+    await expect(
+      readFile(path.join(path.dirname(files.configPath), "tui.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("JSONC preferences are preserved and the manual TUI entry remains available", async () => {
+    const files = await fixture();
+    const commented = path.join(path.dirname(files.configPath), "tui.jsonc");
+    const source = '{ // keep this comment\n "theme": "custom" }\n';
+    await writeFile(commented, source);
+    const result = await exec(process.execPath, [files.installPath], {
+      env: files.env,
+    });
+    expect(result.stderr).toContain("native question fallback");
+    expect(await readFile(commented, "utf8")).toBe(source);
+    expect(await readFile(path.join(files.root, "tui.mjs"), "utf8")).toContain(
+      "ArchestraQuestionsTui",
+    );
+  });
+
   test("the installed launcher CLI executes the refreshed launcher, not only its next-process replacement", async () => {
     const files = await fixture();
     const manifest = managedRuntimeManifest({ installation, clientId: "kilo" });
@@ -421,7 +496,7 @@ describe("pre-bind local repair", () => {
     KILO_CLIENT,
     OPENCODE_CLIENT,
   ])("$label repairs offline and preserves JSONC authentication/comments and snapshots", async (client) => {
-    const files = await fixture(client);
+    const files = await fixture({ client });
     const canonical = { type: "remote", url };
     await writeFile(
       files.configPath,
@@ -521,7 +596,7 @@ describe("pre-bind local repair", () => {
   });
 
   test("V2 uses awaited native MCP transform before provider hooks and honors disabled bindings", async () => {
-    const files = await fixture(OPENCODE_CLIENT, 2);
+    const files = await fixture({ client: OPENCODE_CLIENT, apiMajor: 2 });
     await writeFile(files.pluginPath, files.install.v2);
     const result = await files.run(
       `globalThis.fetch=async()=>{throw Error("offline")};const plugin=await import(${JSON.stringify(files.pluginPath)});const servers={deployment:{type:"remote",url:${JSON.stringify(url)}},duplicate:{type:"remote",url:${JSON.stringify(url)}},disabled_alias:{type:"remote",url:${JSON.stringify(url)},disabled:true}};const events=[];await plugin.default.setup({mcp:{transform:async fn=>{fn({list:()=>Object.entries(servers),update:(name,fn)=>fn(servers[name])});events.push("mcp");}},provider:{transform:async()=>{events.push("provider");}},session:{hook:async()=>{events.push("request");}}}); console.log(JSON.stringify({servers,events}));`,
@@ -534,7 +609,7 @@ describe("pre-bind local repair", () => {
   });
 
   test("V2 disk repair uses disabled flags and keeps deliberately disabled native bindings disabled", async () => {
-    const files = await fixture(OPENCODE_CLIENT, 2);
+    const files = await fixture({ client: OPENCODE_CLIENT, apiMajor: 2 });
     await writeFile(
       files.configPath,
       JSON.stringify({ mcp: { [name]: { type: "remote", url } } }),
@@ -719,12 +794,16 @@ console.log(JSON.stringify(requests));
 `);
     const requests = JSON.parse(result.stdout);
     expect(requests[0]["x-archestra-client-runtime-token"]).toBeUndefined();
+    expect(requests[0]["x-archestra-question-cards"]).toBeUndefined();
     expect(requests[1]["x-archestra-client-runtime-token"]).toBe(
       `cru1_${installation}.example`,
     );
+    expect(requests[1]["x-archestra-question-cards"]).toBe("1");
     expect(requests[2]["x-archestra-client-runtime-token"]).toBeUndefined();
+    expect(requests[2]["x-archestra-question-cards"]).toBeUndefined();
     expect(requests[3]["x-archestra-client-runtime-token"]).toBeUndefined();
     expect(requests[4]["x-archestra-client-runtime-token"]).toBeUndefined();
+    expect(requests[4]["x-archestra-question-cards"]).toBeUndefined();
   });
 
   test("Unicode alias evidence is ASCII-escaped for HTTP without changing its identity", async () => {
@@ -758,7 +837,7 @@ console.log(JSON.stringify(captured));
   });
 
   test("V2 scopes proof by setup, clears failed transforms, and stamps only final managed inference HTTP", async () => {
-    const files = await fixture(OPENCODE_CLIENT, 2);
+    const files = await fixture({ client: OPENCODE_CLIENT, apiMajor: 2 });
     await writeFile(files.pluginPath, files.install.v2);
     const result = await files.run(`
 import fs from "node:fs";

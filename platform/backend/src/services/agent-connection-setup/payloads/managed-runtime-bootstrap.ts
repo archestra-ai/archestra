@@ -163,6 +163,37 @@ if (require.main === module) {
 }
 `;
 
+/** TUI half of the same connection plugin; the server entry stays unchanged. */
+export const MANAGED_TUI_BOOTSTRAP = `import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
+const require = createRequire(import.meta.url);
+// The TUI host transpiles CommonJS dependencies as ESM without their exports.
+// Embed the same verifier as the server loader, excluding its CJS entrypoint.
+${MANAGED_RUNTIME_BOOTSTRAP.slice(0, MANAGED_RUNTIME_BOOTSTRAP.indexOf("module.exports ="))}
+export default {
+  id: "archestra.connection.questions",
+  async tui(api) {
+    const root = dirname(fileURLToPath(import.meta.url));
+    try {
+      const runtime = await refresh(root);
+      // V2 uses a different host API. Leave its native question UI intact.
+      if (runtime.params.apiMajor !== 1 || !runtime.params.questionCards) return;
+      try {
+        const skip = readFileSync(join(homedir(), runtime.params.skipRelpath), "utf8");
+        if (skip.split(/\\r?\\n/).includes("mcp")) return;
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
+      const impl = await import(pathToFileURL(join(runtime.directory, "routing-v1.mjs")).href);
+      await impl.ArchestraQuestionsTui?.(api);
+    } catch {
+      api.ui?.toast?.({ title: "Connection question cards unavailable", message: "Using the client's native questions.", variant: "warning" });
+    }
+  },
+};
+`;
+
 /** The installed plugin exports exactly the native API for its selected major. */
 export function managedPluginBootstrap(major: 1 | 2): string {
   const prelude = `import { homedir } from "node:os";

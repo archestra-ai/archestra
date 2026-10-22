@@ -161,6 +161,7 @@ import {
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
 import { labeledQuestionRuling } from "./adapters/native-question-ruling";
+import { openCodeReviewQuestion } from "./adapters/opencode-review";
 import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
@@ -239,16 +240,19 @@ type AppaPluginObserver = {
 };
 
 type NativeQuestionClaim = {
+  /** Exact server-issued native question, never recovered from client history. */
+  askedQuestion?: string;
   offerIds?: string[];
   /** The card offered Inspect; its answers resolve inspection state. */
   inspectable?: boolean;
-  /** The card was issued with the complete review text above it. */
+  /** The issued card carried the complete review in its input or preceding text. */
   reviewText?: boolean;
   /** The exact staged payload the card was issued from. */
   digest?: string;
 };
 
 type IssuedNativeQuestion = {
+  askedQuestion?: string;
   id: string;
   name: string;
   offerIds: string[];
@@ -1054,6 +1058,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let reviewText: string | undefined;
       let inspectableReview = false;
       let reviewDigest: string | undefined;
+      let askedQuestion: string | undefined;
       if (
         isSpecialToolMember(binding, call, "askUser") &&
         archestraMcpBranding.getToolShortName(
@@ -1104,6 +1109,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         reviewText = canonical.reviewText;
         inspectableReview = canonical.inspectable === true;
         reviewDigest = canonical.digest;
+        askedQuestion = canonical.askedQuestion;
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
@@ -1119,14 +1125,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : undefined;
       if (issued) {
         prepared = issued.call;
-        // The complete review rides beside the card as server-generated
-        // assistant text; it is never part of the native question's input.
-        if (reviewText) prepared = { ...prepared, reviewDetails: reviewText };
+        // Claude's complete review precedes the card as assistant text.
+        // OpenCode-family clients carry it in the bound question input instead.
+        if (reviewText && !askedQuestion)
+          prepared = { ...prepared, reviewDetails: reviewText };
         issuedNativeQuestions.push({
           ...issued.question,
           offerIds,
           ...(inspectableReview ? { inspectable: true } : {}),
           ...(reviewDigest ? { digest: reviewDigest } : {}),
+          ...(askedQuestion ? { askedQuestion } : {}),
           ...(reviewText ? { reviewText: true } : {}),
         });
         changed = true;
@@ -4753,6 +4761,9 @@ function stampAskUserTrajectory(
   };
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function canonicalizeHitlAskUserCall(params: {
   binding: AppaPluginBinding;
   call: LlmProxyToolCallsContext["toolCalls"][number];
@@ -4768,8 +4779,9 @@ async function canonicalizeHitlAskUserCall(params: {
   inspectable?: boolean;
   /** The exact staged payload the issued card is bound to. */
   digest?: string;
-  /** The complete review to emit as assistant text immediately before the card. */
+  /** The complete review carried in the native input or preceding assistant text. */
   reviewText?: string;
+  askedQuestion?: string;
 }> {
   if (params.offerIds.length !== 1) {
     const pending = await Promise.all(
@@ -4789,11 +4801,18 @@ async function canonicalizeHitlAskUserCall(params: {
       offerIds: params.offerIds,
     });
     if (inspectable) {
+      const family =
+        params.binding.adapter?.id === "opencode" ||
+        params.binding.adapter?.id === "kilo";
+      const askedQuestion = family
+        ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
+        : undefined;
       return {
         call: {
           ...params.call,
           arguments: JSON.stringify({
             ...inspectable.card,
+            ...(askedQuestion ? { question: askedQuestion } : {}),
             trajectory: currentTrajectory(params.binding.session),
           }),
         },
@@ -4801,6 +4820,7 @@ async function canonicalizeHitlAskUserCall(params: {
         offerIds: [...params.offerIds],
         inspectable: true,
         digest: inspectable.digest,
+        ...(askedQuestion ? { askedQuestion } : {}),
         ...(inspectable.reviewText
           ? { reviewText: inspectable.reviewText }
           : {}),
@@ -4846,6 +4866,8 @@ async function canonicalizeHitlAskUserCall(params: {
     offerIds: [...params.offerIds],
   };
 }
+
+// SPDX-SnippetEnd
 
 /** A call's arguments without the ones only the proxy may write for `tool`. */
 function withoutStampedArguments(params: {
@@ -5041,6 +5063,9 @@ async function rememberNativeQuestions(
           ...(question.inspectable ? { inspectable: true } : {}),
           ...(question.reviewText ? { reviewText: true } : {}),
           ...(question.digest ? { digest: question.digest } : {}),
+          ...(question.askedQuestion
+            ? { askedQuestion: question.askedQuestion }
+            : {}),
         },
         HITL_QUESTION_TTL_MS,
       ),
@@ -5110,6 +5135,7 @@ async function claimNativeQuestionResults(params: {
         inspectable?: unknown;
         reviewText?: unknown;
         digest?: unknown;
+        askedQuestion?: unknown;
         /** A pre-upgrade page card's binding; those cards are gone. */
         page?: unknown;
       }>(candidates.flatMap((candidate) => candidate.keys))
@@ -5133,6 +5159,9 @@ async function claimNativeQuestionResults(params: {
         ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
         ...(entry.inspectable === true ? { inspectable: true } : {}),
         ...(entry.reviewText === true ? { reviewText: true } : {}),
+        ...(typeof entry.askedQuestion === "string"
+          ? { askedQuestion: entry.askedQuestion }
+          : {}),
         ...(typeof entry.digest === "string" && entry.digest.length > 0
           ? { digest: entry.digest }
           : {}),
@@ -5178,6 +5207,7 @@ async function recordNativeHitlRulings(params: {
         carriedReviewText: claim.reviewText === true,
         // An inspectable claim without its payload digest matches nothing.
         claimDigest: claim.digest ?? "",
+        askedQuestion: claim.askedQuestion,
       });
       if (outcome.kind === "ruling") recorded.push(outcome.ruling);
       // A dropped answer records nothing and advances nothing.
@@ -5345,6 +5375,7 @@ type InspectableHitlAnswerOutcome =
  * placeholder id may stand in for it.
  */
 async function recordInspectableHitlAnswer(params: {
+  askedQuestion?: string;
   binding: AppaPluginBinding;
   answer: Record<string, unknown>;
   offerId: string;
@@ -5397,14 +5428,14 @@ async function recordInspectableHitlAnswer(params: {
   };
   let reading = labeledQuestionRuling(
     result,
-    asked.card.shortQuestion ?? asked.card.question,
+    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question,
     asked.card.options.map((option) => option.label),
   );
   let answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
       : undefined;
-  if (reading === "unrecognized") {
+  if (reading === "unrecognized" && !params.askedQuestion) {
     // A card of the previous layout, issued before a deploy, can still be open.
     for (const question of asked.previousQuestions) {
       const previous = labeledQuestionRuling(
@@ -5513,23 +5544,29 @@ async function sealInspectableClosure(params: {
 
 /**
  * Whether an offer-backed ask_user call becomes an inspectable native card:
- * only Claude Code's question tool on a transport that can place the complete
- * review text before the card. Other clients keep the plain card and never
- * offer an Inspect that could not deliver.
+ * Claude needs transport support for review text. OpenCode-family questions
+ * carry it in the native input, including on transports with no text injection.
+ * Their connection plugin enhances presentation; native surfaces remain usable.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function inspectsNatively(
   binding: AppaPluginBinding,
   canShowToolCallReview: boolean,
 ): boolean {
   const native = binding.adapter?.nativeQuestion;
   return (
-    binding.adapter?.id === "claude-code" &&
     !!native?.fromAskUser &&
     native.isAvailable?.(binding.requestHeaders) !== false &&
     declaresNativeQuestion(binding, native.toolName) &&
-    canShowToolCallReview
+    ((binding.adapter?.id === "claude-code" && canShowToolCallReview) ||
+      ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
+        binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );
 }
+
+// SPDX-SnippetEnd
 
 function assertUniqueNativeQuestionResultIds(params: {
   binding: AppaPluginBinding;

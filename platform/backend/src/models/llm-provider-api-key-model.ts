@@ -1,6 +1,7 @@
 import {
   type CompleteModelSelection,
   findTierDefault,
+  PROVIDER_FAST_MODEL_PATTERNS,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -576,6 +577,28 @@ class LlmProviderApiKeyModelLinkModel {
       }));
   }
 
+  /**
+   * The key's preferred fast-tier chat model (`PROVIDER_FAST_MODEL_PATTERNS`),
+   * or null when its provider has no fast tier or the key serves none of it.
+   */
+  static async getFastModel(params: {
+    apiKeyId: string;
+    provider: SupportedProvider;
+  }): Promise<Model | null> {
+    const patterns = PROVIDER_FAST_MODEL_PATTERNS[params.provider];
+    if (!patterns) return null;
+    const models = (
+      await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(params.apiKeyId)
+    )
+      .filter(
+        (model) =>
+          ModelModel.supportsTextChat(model) &&
+          !PRO_TIER_MODEL_ID.test(model.modelId),
+      )
+      .sort((a, b) => a.modelId.localeCompare(b.modelId));
+    return findFirstMatchByPatternPriority(models, patterns) ?? null;
+  }
+
   static async getBestModel(apiKeyId: string): Promise<Model | null> {
     const [result] = await db
       .select({ model: schema.modelsTable })
@@ -708,4 +731,27 @@ export default LlmProviderApiKeyModelLinkModel;
 
 export function selectionKey(selection: CompleteModelSelection): string {
   return `${selection.apiKeyId}:${selection.modelId}`;
+}
+
+/** A `pro` token: the reasoning tier above a fast model of the same name. */
+const PRO_TIER_MODEL_ID = /(?:^|[-/])pro(?:[-/:]|$)/i;
+
+/**
+ * Find the first model matching patterns, respecting pattern priority order.
+ * Patterns are checked in order (first pattern = highest priority).
+ * For each pattern, returns the first alphabetically sorted match.
+ */
+function findFirstMatchByPatternPriority<T extends { modelId: string }>(
+  sortedModels: T[],
+  patterns: string[],
+): T | undefined {
+  for (const pattern of patterns) {
+    const match = sortedModels.find((m) =>
+      m.modelId.toLowerCase().includes(pattern.toLowerCase()),
+    );
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
 }

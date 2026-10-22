@@ -91,6 +91,75 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
     });
   });
 
+  describe("getFastModel", () => {
+    test("picks the key's most-preferred fast-tier chat model, else none", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const linkedKey = async (
+        provider: SupportedProvider,
+        modelIds: string[],
+      ) => {
+        const key = await makeLlmProviderApiKey(org.id, secret.id, {
+          provider,
+        });
+        const models = await Promise.all(
+          modelIds.map((modelId) =>
+            ModelModel.create({
+              externalId: `${provider}/${modelId}`,
+              provider,
+              modelId,
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              lastSyncedAt: new Date(),
+            }),
+          ),
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          key.id,
+          models.map((model) => model.id),
+        );
+        return key;
+      };
+      const fastModelOf = async (key: {
+        id: string;
+        provider: SupportedProvider;
+      }) =>
+        (
+          await LlmProviderApiKeyModelLinkModel.getFastModel({
+            apiKeyId: key.id,
+            provider: key.provider,
+          })
+        )?.modelId ?? null;
+
+      const openai = await linkedKey("openai", [
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-6-luna-pro",
+        "gpt-6-luna",
+      ]);
+      const anthropic = await linkedKey("anthropic", [
+        "claude-sonnet-5",
+        "claude-haiku-5-5-20261001",
+      ]);
+      const proOverFast = await linkedKey("openrouter", [
+        "openai/gpt-6-luna-pro",
+        "anthropic/claude-sonnet-5",
+      ]);
+      const flagshipOnly = await linkedKey("anthropic", ["claude-opus-5"]);
+      const noFastTier = await linkedKey("groq", ["openai/gpt-oss-120b"]);
+
+      expect(await fastModelOf(openai)).toBe("gpt-6-luna");
+      expect(await fastModelOf(anthropic)).toBe("claude-haiku-5-5-20261001");
+      expect(await fastModelOf(proOverFast)).toBeNull();
+      expect(await fastModelOf(flagshipOnly)).toBeNull();
+      expect(await fastModelOf(noFastTier)).toBeNull();
+    });
+  });
+
   describe("findLinkedModels", () => {
     test("returns empty array when no models exist", async ({
       makeOrganization,

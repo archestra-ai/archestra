@@ -1122,6 +1122,15 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    if (
+      provider.unavailableUsageAccounting &&
+      config.llmProxy.usageAccountingMode === "enforce"
+    ) {
+      throw new ApiError(
+        422,
+        "Authoritative usage and cost accounting are unavailable for this media operation",
+      );
+    }
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1550,6 +1559,7 @@ export async function handleLLMProxy<
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
+      provider.cancelOnDisconnect ||
       providerName === "microsoft-365-copilot" ||
       providerName === "azure" ||
       provider.interactionType === "azure:realtime" ||
@@ -2125,7 +2135,7 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce")
+        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -2859,6 +2869,10 @@ async function handleStreaming<
         "Stream failure preceded usage settlement failure",
       );
       streamError = settlementError;
+    }
+    if (provider.binaryStream && reply.raw.headersSent) {
+      reply.raw.destroy();
+      return reply;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     // Read once, here: nothing else writes to the client before the error

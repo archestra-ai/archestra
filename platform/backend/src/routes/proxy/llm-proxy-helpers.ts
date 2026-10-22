@@ -359,6 +359,7 @@ export async function calculateUsageCost(params: {
   providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return undefined;
   if (params.usageAccountingMode === "enforce")
     return Number(
       (
@@ -404,6 +405,14 @@ export async function calculateInteractionCosts(params: {
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
+  if (params.usage.usageUnavailable || params.usage.costUnavailable) {
+    return {
+      actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
+    };
+  }
   const billingUsage =
     params.usageAccountingMode && params.usageAccountingMode !== "off"
       ? await priceBillingUsage({
@@ -486,6 +495,7 @@ export function applyInputTokenFallback(params: {
   model: string;
 }): UsageView {
   const { usage } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return usage;
   const hasCacheTokens =
     (usage.cacheReadTokens ?? 0) !== 0 ||
     (usage.cacheWriteTokens ?? 0) !== 0 ||
@@ -614,9 +624,13 @@ export function buildInteractionRecord(params: {
     // optimization saving instead of a negative one, and so historical rows
     // written while rules existed keep their meaning.
     baselineModel: params.actualModel,
-    inputTokens: params.usage.inputTokens,
+    inputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
-    outputTokens: params.usage.outputTokens,
+    outputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,

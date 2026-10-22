@@ -8,9 +8,11 @@
  * as is with the member's model id, and a different wire goes through a
  * translator. Members a client's wire cannot reach are left out of its plan.
  */
-import type {
-  SupportedProvider,
-  SupportedProviderDiscriminator,
+import {
+  isModelPoolProvider,
+  type ModelPoolProvider,
+  type SupportedProvider,
+  type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Anthropic, Bedrock, LLMProvider, OpenAi } from "@/types";
@@ -57,7 +59,7 @@ export interface MemberTransport {
 
 /** Whether a pool can send requests to a key on this provider. */
 export function isPoolableProvider(provider: SupportedProvider): boolean {
-  return memberAdapter(provider) !== null;
+  return isModelPoolProvider(provider);
 }
 
 /** The wire a request arrived in, or null when pools don't serve it. */
@@ -223,24 +225,20 @@ export function memberTransport(params: {
 export function memberAdapter(
   provider: SupportedProvider,
 ): LLMProvider<unknown, unknown, unknown, unknown, unknown> | null {
-  return (
-    (MEMBER_ADAPTERS[provider] as LLMProvider<
-      unknown,
-      unknown,
-      unknown,
-      unknown,
-      unknown
-    >) ?? null
-  );
+  if (!isModelPoolProvider(provider)) return null;
+  return MEMBER_ADAPTERS[provider] as LLMProvider<
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown
+  >;
 }
 
 // === Internal helpers ===
 
-/**
- * Providers a pool member can sit on. Per-user providers (Copilot) and
- * subscription-only ones are left out: their credential belongs to one user.
- */
-const MEMBER_ADAPTERS: Partial<Record<SupportedProvider, unknown>> = {
+/** The adapter each provider a pool member can sit on sends requests with. */
+const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
   anthropic: anthropicAdapterFactory,
   bedrock: bedrockAdapterFactory,
   openai: openaiAdapterFactory,
@@ -266,7 +264,7 @@ const TRANSLATED = new Set([
 ]);
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
-  if (!MEMBER_ADAPTERS[provider]) return null;
+  if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";
   return "openai-chat";

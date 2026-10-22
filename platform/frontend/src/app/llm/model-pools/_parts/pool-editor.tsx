@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
 import { Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
@@ -74,11 +74,14 @@ export function PoolEditor({
   const members = form.watch("members");
 
   const { data: allKeys = [] } = useLlmProviderApiKeys();
-  // Personal keys belong to one user, so only shared keys can be members.
+  // Personal keys belong to one user, so only shared keys on providers a pool
+  // can send to can be members.
   const sharedKeys = useMemo(
     () =>
       allKeys
-        .filter((key) => key.userId === null)
+        .filter(
+          (key) => key.userId === null && isModelPoolProvider(key.provider),
+        )
         .sort(
           (a, b) =>
             a.provider.localeCompare(b.provider) ||

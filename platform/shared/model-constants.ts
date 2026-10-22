@@ -102,6 +102,37 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
+ * Providers whose shared keys can be model pool members. Per-user providers
+ * (Copilot) and subscription-only ones are left out: their credential belongs
+ * to one user. Gemini and Cohere have no translator to or from the wires
+ * pooled clients speak.
+ */
+export const MODEL_POOL_PROVIDERS = [
+  "anthropic",
+  "bedrock",
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+] as const satisfies readonly SupportedProvider[];
+export type ModelPoolProvider = (typeof MODEL_POOL_PROVIDERS)[number];
+
+export function isModelPoolProvider(
+  provider: SupportedProvider,
+): provider is ModelPoolProvider {
+  return (MODEL_POOL_PROVIDERS as readonly string[]).includes(provider);
+}
+
+/**
  * The wire formats a single provider can serve one model catalog over, spelled
  * as the provider spells them. Only GitHub Copilot publishes this per model
  * today (`supported_endpoints` on its `/models` entries), and it is the only

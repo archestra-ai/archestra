@@ -14,12 +14,12 @@ Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sa
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Coding agents](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Coding agents**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
+2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -29,9 +29,9 @@ Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Run
 
 From a connected client, ask your agent to create one. [`create_agent`](/docs/reference/archestra-mcp-server#create_agent) takes the same choice as `runtime: { "template": "claude-code" }`, or a custom `image`. [`list_llm_models`](/docs/reference/archestra-mcp-server#list_llm_models) finds a model to pin.
 
-### Choose and Order Coding Agents
+### Choose and Order Agent Runtimes
 
-With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Coding agents** to choose the agents offered during creation.
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Agent Runtimes** to choose the agents offered during creation.
 
 1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
@@ -130,7 +130,7 @@ What to know:
 
 ## Start Runs From Elsewhere
 
-- **Your coding agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
+- **Remote Agents:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.

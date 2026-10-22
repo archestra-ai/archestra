@@ -1,7 +1,13 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronRight,
+  Download,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { CreatedByCell } from "@/components/created-by-cell";
@@ -14,6 +20,7 @@ import {
 import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -320,6 +327,17 @@ function UserTable({
               ? () => changeFilter({ state: ALL, q: "" })
               : undefined
           }
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={rows.length === 0}
+              onClick={() => downloadUsersCsv(rows)}
+            >
+              <Download className="size-4" />
+              <span>Export CSV</span>
+            </Button>
+          }
           search={
             <SearchInput
               placeholder="Search users or agents..."
@@ -526,4 +544,46 @@ function StateDot({ state }: { state: AgentAdoptionStatus }) {
       style={{ backgroundColor: STATES[state].color }}
     />
   );
+}
+
+/**
+ * The table as filtered and sorted, every page of it: who has and hasn't
+ * connected an agent, for following up outside the app.
+ */
+function downloadUsersCsv(rows: AgentAdoptionMember[]) {
+  const header = [
+    "Name",
+    "Email",
+    "State",
+    "Agents",
+    "Last MCP tool call",
+    "Last LLM proxy call",
+  ];
+  const lines = rows.map((member) =>
+    [
+      member.name,
+      member.email,
+      AGENT_STATES[member.status].label,
+      member.agents.map(agentLabel).join("; "),
+      member.gatewayLastSeenAt ?? "",
+      member.llmLastSeenAt ?? "",
+    ]
+      .map(csvCell)
+      .join(","),
+  );
+  const blob = new Blob([[header.join(","), ...lines].join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `agent-connections-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: string): string {
+  // A leading formula character would run as a formula in a spreadsheet.
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }

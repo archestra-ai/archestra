@@ -32,6 +32,21 @@ describe("collectArchestraToolInvalidations", () => {
     ).toEqual([["agent-runs"]]);
   });
 
+  it("refreshes the guardrails deployment after a policy update in chat", () => {
+    expect(
+      collectArchestraToolInvalidations({
+        parts: [
+          {
+            type: "tool-archestra__update_guardrails_policy",
+            state: "output-available",
+            output: { revision: 1, enforcement: "on" },
+          },
+        ],
+        getToolShortName,
+      }),
+    ).toEqual([["guardrails-deployment"]]);
+  });
+
   it("refreshes run sessions when start_run is dispatched through run_tool", () => {
     expect(
       collectArchestraToolInvalidations({

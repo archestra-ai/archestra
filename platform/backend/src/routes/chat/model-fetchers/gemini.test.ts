@@ -45,6 +45,11 @@ describe("gemini model fetchers", () => {
                 supportedGenerationMethods: ["generateContent"],
               },
               {
+                name: "models/gemini-2.5-flash-image",
+                displayName: "Gemini 2.5 Flash Image",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
                 name: "models/gemini-1.5-pro",
                 displayName: "Gemini 1.5 Pro",
                 supportedGenerationMethods: ["generateContent"],
@@ -92,6 +97,11 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-2.5-pro",
           displayName: "Gemini 2.5 Pro",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash-image",
+          displayName: "Gemini 2.5 Flash Image",
           provider: "gemini",
         },
         {
@@ -233,6 +243,10 @@ describe("gemini model fetchers", () => {
           tunedModelInfo: {},
         },
         {
+          name: "publishers/google/models/gemini-2.5-flash-image",
+          displayName: "Gemini 2.5 Flash Image",
+        },
+        {
           name: "publishers/google/models/gemini-embedding-001",
           version: "default",
           tunedModelInfo: {},
@@ -293,6 +307,11 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-2.5-flash",
           displayName: "Gemini 2.5 Flash",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-2.5-flash-image",
+          displayName: "Gemini 2.5 Flash Image",
           provider: "gemini",
         },
         {

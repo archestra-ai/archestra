@@ -15,6 +15,7 @@ import {
 } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
+import { DevFeedbackLauncher } from "@/components/dev-feedback/dev-feedback-launcher";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
 import {
@@ -197,6 +198,7 @@ export function AppShell({ children }: AppShellProps) {
             onResizingChange={sidebarWidth.setResizing}
           />
           <MaintenanceModeOverlay />
+          <DevFeedbackLauncher />
           {/* MAIN_CONTENT_ID + tabIndex={-1} make this the "skip to main
               content" target (WCAG 2.4.1 Bypass Blocks), so activating that
               link moves keyboard focus past the sidebar navigation and into
@@ -259,7 +261,6 @@ export function AppShell({ children }: AppShellProps) {
           <ConversationSearchProvider />
           <AfterIdle>
             <OnboardingSurveyDialog />
-            <FeedbackPopupDialog />
           </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
@@ -307,12 +308,6 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
 const OnboardingSurveyDialog = lazyComponent(() =>
   import("@/components/onboarding-survey-dialog").then(
     (m) => m.OnboardingSurveyDialog,
-  ),
-);
-
-const FeedbackPopupDialog = lazyComponent(() =>
-  import("@/components/feedback-popup-dialog").then(
-    (m) => m.FeedbackPopupDialog,
   ),
 );
 

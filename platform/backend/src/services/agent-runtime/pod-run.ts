@@ -74,6 +74,7 @@ async function startAgentRunSession(params: {
   organizationId: string;
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
+  onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
   title?: string;
   runMode: "interactive" | "one_shot";
@@ -253,6 +254,7 @@ async function startAgentRunSession(params: {
           "This Agent is already in use or its saved files have reached their retention deadline",
         );
       claimedWorkspace = true;
+      await notifyRuntimeSessionCreated(params, workspace.id);
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
       if (previous?.virtualApiKeyId)
         await cleanupAgentRun(previous, { requireTranscript: true });
@@ -290,6 +292,7 @@ async function startAgentRunSession(params: {
               1000,
         ),
       });
+      await notifyRuntimeSessionCreated(params, createdWorkspace.id);
       await stampRuntimeBinding({
         spec,
         organizationId: params.organizationId,
@@ -393,6 +396,7 @@ export async function runTaskInAgentRuntime(params: {
   organizationId: string;
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
+  onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
   title?: string;
   runMode: "interactive" | "one_shot";
@@ -750,3 +754,28 @@ export function extractFinalAnswer(transcript: string): string {
 const LOG_DRAIN_GRACE_MS = 2_000;
 // A retained PVC may need attachment to a temporary recovery Pod first.
 const OUTPUT_SNAPSHOT_TIMEOUT_MS = 120_000;
+
+type RuntimeSessionCreatedCallback = (session: {
+  taskId: string;
+  workspaceId: string;
+}) => Promise<void>;
+
+async function notifyRuntimeSessionCreated(
+  params: {
+    taskId: string;
+    onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
+  },
+  workspaceId: string,
+): Promise<void> {
+  try {
+    await params.onRuntimeSessionCreated?.({
+      taskId: params.taskId,
+      workspaceId,
+    });
+  } catch (error) {
+    logger.warn(
+      { error, taskId: params.taskId },
+      "Could not announce the Agent Runtime session",
+    );
+  }
+}

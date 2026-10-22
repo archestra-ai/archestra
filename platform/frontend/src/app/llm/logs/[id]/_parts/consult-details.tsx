@@ -35,7 +35,7 @@ export function ConsultDetails({
   verdict,
   onBack,
 }: {
-  /** The resizable pane height, applied from `lg`. */
+  /** The pane height, applied from `lg`. */
   height: number;
   view: ConsultView;
   /** The tool call the consult was raised for, when there was one. */

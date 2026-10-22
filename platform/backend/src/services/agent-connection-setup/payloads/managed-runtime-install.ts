@@ -60,17 +60,31 @@ if (params.managedKeyFile) {
 }
 const bootstrap = ${JSON.stringify(MANAGED_RUNTIME_BOOTSTRAP)};
 fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-if (process.platform === "win32") {
-  require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH -AclObject $acl'
-  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 3000, stdio: "ignore" });
-}
 const check = file => {
   const stat = fs.lstatSync(file);
   if (stat.isSymbolicLink() || (process.getuid && stat.uid !== process.getuid()) || (process.platform !== "win32" && (stat.mode & 0o022))) throw new Error("Unsafe managed runtime ownership");
 };
 check(root);
 check(path.dirname(root));
+if (process.platform === "win32") {
+  // The launcher refuses to start unless the user owns ~/.archestra and no one
+  // but the user, SYSTEM and Administrators can write to it. Other tools leave
+  // it otherwise (Codex's Windows sandbox grants CodexSandboxUsers Modify, and
+  // an elevated process makes Administrators the owner), so take ownership and
+  // drop those write grants, generic write rights included. An inherited grant
+  // can only go with inheritance: Windows first turns the inherited rules into
+  // explicit ones (rebuilding them by hand fails on generic rights), then the
+  // foreign ones are removed. The runtime directory is then owned by the user
+  // and locked to the user alone.
+  // Not Set-Acl: once an earlier install has locked an item, Set-Acl needs
+  // SeSecurityPrivilege, which a non-admin user does not have. SetAccessControl
+  // on the item works because powershell.exe is Windows PowerShell 5.1.
+  // One process for both, with room for a slow start and for Windows to apply
+  // the new rules to everything under ~/.archestra.
+  require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; $foreign={param($rule) $rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and (([int64]$rule.FileSystemRights -band $writes) -ne 0)}; $parent=$env:ARCHESTRA_RUNTIME_ACL_PARENT; $acl=Get-Acl -LiteralPath $parent; if(@($acl.GetAccessRules($false,$true,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_}).Count -gt 0){$acl.SetAccessRuleProtection($true,$true); (Get-Item -LiteralPath $parent).SetAccessControl($acl); $acl=Get-Acl -LiteralPath $parent}; $changed=$false; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid); $changed=$true}; foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_})){[void]$acl.RemoveAccessRuleSpecific($rule); $changed=$true}; if($changed){(Get-Item -LiteralPath $parent).SetAccessControl($acl)}; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid)}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"))); (Get-Item -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH).SetAccessControl($acl)'
+  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PARENT: path.dirname(root), ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 15000, stdio: "ignore" });
+}
 if (process.platform !== "win32") fs.chmodSync(root, 0o700);
 const fingerprint = crypto.createHash("sha256").update(bootstrap).digest("hex");
 const ownerFile = path.join(root, "owner.json");

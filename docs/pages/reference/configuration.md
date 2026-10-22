@@ -558,6 +558,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ## LLM Proxy
 
+- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
+  - Default: `off`
+  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
+  - Set it on both web and worker pods. Requests retain their starting mode. See [Roll Out Usage Accounting](/docs/admin/usage-accounting).
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
   - See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
@@ -734,6 +739,14 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
 
 ## MCP Servers
 
+- **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.
+  - Default: `false`. Set exactly `true` to enforce validation. With the default, existing HTTP and private endpoints, redirects, discovery fallbacks and token refresh behavior remain unchanged. This protection is not active by default.
+  - Enforcement covers metadata and scope discovery, dynamic client registration, authorization-code exchange (including proxy servers), refresh and client-credentials grants. Each destination must pass URL and DNS validation and the catalog's environment egress policy; the remote MCP server's base host must also be permitted. Missing organization context or a missing or foreign environment fails closed.
+  - Production requires HTTPS and public unicast addresses; private, loopback, link-local and reserved addresses are rejected, including mixed DNS answers. Connections use the validated address while retaining the original hostname for TLS. Development and test deployments retain the shared validator's HTTP and loopback exceptions.
+  - Metadata GETs may follow up to three redirects, validating every destination. Requests carrying credentials cannot follow redirects. Each fetch, including redirects and response reading, has a 30-second deadline and a 1 MiB response limit.
+  - Before enabling, check that your providers use supported endpoints and that the environment permits their metadata, registration and token hosts. HTTP/private production providers and providers redirecting token POSTs require compatibility mode. Disabling restores compatibility without rotating tokens, clearing credentials or forcing reconnection.
+  - This setting does not change incoming OAuth authentication to Archestra, the Connection page, LLM provider networking or other outbound URL consumers.
+
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Re-syncs every installed MCP server's tools and Skills from the live server at this interval, in minutes.
   - Default: unset (no periodic refresh)
   - Values: a positive whole number, for example `30`. `0` disables it.
@@ -887,7 +900,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.
@@ -1279,13 +1292,13 @@ See [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams) for setup.
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Microsoft Entra tenant ID of a single-tenant bot.
   - Default: unset (multi-tenant bot)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET)
 
 ### Slack
@@ -1461,11 +1474,6 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS) is enabled.
   - Default: `true`
   - Values: `true`, `false`
-
-- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - Days an annotator removed from the policy keeps working for conversations that started before the change.
-  - Default: `30`
-  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored. Any other value stops startup.
-  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExpirySelect } from "./expiry-select";
 
 function Harness() {
@@ -19,6 +19,16 @@ function Harness() {
 }
 
 describe("ExpirySelect", () => {
+  beforeEach(() => {
+    // Freeze calendar time while leaving user-event and popover timers real.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("switches between a custom date and presets without adding another field", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -48,7 +58,6 @@ describe("ExpirySelect", () => {
     const saved = new Date(
       screen.getByLabelText("Saved expiration").textContent ?? "",
     ).getTime();
-    expect(saved - before).toBeGreaterThanOrEqual(7 * 86400000);
-    expect(saved - before).toBeLessThan(7 * 86400000 + 1000);
+    expect(saved - before).toBe(7 * 86400000);
   });
 });

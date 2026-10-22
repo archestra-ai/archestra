@@ -7,6 +7,7 @@ import AppModel from "@/models/app";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import DevFeedbackConfigModel from "@/models/dev-feedback-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -1120,6 +1121,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  // Which chatops Slack bot and channel the UI feedback overlay posts to.
+  "/api/dev-feedback/setup": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: async (_id, _orgId) =>
+      (await DevFeedbackConfigModel.get()) ?? {},
   },
   "/api/chatops/config/slack": {
     resourceType: "chatOpsConfig",

@@ -700,6 +700,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
+  agentRunAttentionNoticesTable: {
+    audited: false,
+    reason:
+      "internal Slack delivery state; contains only routing, message identity, and attention resolution",
+  },
   agentRunsTable: {
     audited: false,
     reason:
@@ -1081,11 +1086,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "label history dataset the native runtime appends",
   },
-  openappaRootOpeningsTable: {
-    audited: false,
-    reason:
-      "derived from the runtime's event log once per root; read to keep or retire annotators, never edited",
-  },
   startupMigrationsTable: {
     audited: false,
     reason:
@@ -1118,6 +1118,14 @@ export const AUDIT_DECISIONS = {
   interactionSessionHeadsBackfillTable: {
     audited: false,
     reason: "internal backfill progress marker",
+  },
+  interactionBillingTable: {
+    audited: false,
+    reason: "content-free idempotent billing receipts",
+  },
+  limitBillingUsageTable: {
+    audited: false,
+    reason: "transactional settled usage projection",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

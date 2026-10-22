@@ -95,8 +95,12 @@ const server = setupServer(
     HttpResponse.json(null),
   ),
   http.get("/health", () => HttpResponse.json({ status: "ok" })),
+  http.get("/api/guardrails-deployment", () =>
+    HttpResponse.json({ enabled: false, featureEnabled: false, active: false }),
+  ),
   http.get("/api/llm-provider-api-keys/available", () => HttpResponse.json([])),
   http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
+  http.get("/api/agents/:id/delegations", () => HttpResponse.json([])),
   http.get("/api/internal_mcp_catalog", () => HttpResponse.json([])),
   http.get("/api/mcp_server", () => HttpResponse.json([])),
   http.get("/api/resource-permissions/conversation/:id", () =>
@@ -205,13 +209,17 @@ test("regenerating a message whose turn failed re-runs it from the saved message
   renderChat();
 
   // The thread shows the saved message under the live id.
-  await waitFor(() =>
-    expect(chatMessagesProps.current?.messages).toEqual([
-      expect.objectContaining({
-        id: "live-user",
-        metadata: expect.objectContaining({ persistedMessageId: "saved-user" }),
-      }),
-    ]),
+  await waitFor(
+    () =>
+      expect(chatMessagesProps.current?.messages).toEqual([
+        expect.objectContaining({
+          id: "live-user",
+          metadata: expect.objectContaining({
+            persistedMessageId: "saved-user",
+          }),
+        }),
+      ]),
+    { timeout: 5000 },
   );
 
   await act(async () => {

@@ -21,7 +21,11 @@ import { CODEX_GUARD_CLIENT } from "./guard/clients";
 import { inSingleQuotedHereString } from "./guard/startup-guard.windows";
 import { renderSetupScript } from "./index";
 import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
-import type { SetupScriptContext, SetupScriptProxySection } from "./types";
+import {
+  SETUP_STOPPED_EXIT_CODE,
+  type SetupScriptContext,
+  type SetupScriptProxySection,
+} from "./types";
 
 const execFileAsync = promisify(execFile);
 
@@ -503,6 +507,101 @@ exit 0
         ).toBe(true);
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
+describe.skipIf(!powershellAvailable)(
+  "PowerShell managed instructions source file",
+  () => {
+    test("a reconnect locks the source file again without admin rights, and writes the token only after the lock", async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "archestra-acl-"));
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const setupPath = path.join(root, "setup.ps1");
+      const driverPath = path.join(root, "driver.ps1");
+      const source = `${STARTUP_GUARD_INSTALL["claude-code"].psScriptRelpath}.instructions-source.json`;
+      try {
+        await Promise.all([home, bin].map((directory) => mkdir(directory)));
+        await writeFile(
+          path.join(bin, "claude"),
+          '#!/bin/sh\n[ "$1 $2" = "mcp remove" ] && exit 1\nexit 0\n',
+        );
+        await chmod(path.join(bin, "claude"), 0o755);
+        const script = renderSetupScript({
+          clientId: "claude-code",
+          platform: "windows",
+          appName: "Archestra",
+          mcp: {
+            serverName: "test_gateway",
+            toolPrefix: "archestra__",
+            url: "https://proxy.example.com/v1/mcp/test-gateway",
+          },
+          proxy: null,
+          skills: null,
+          managedInstructionsSource: {
+            url: "https://proxy.example.com/api/connection-instructions",
+            token: "instructions-token",
+          },
+        });
+        const identity =
+          "[System.Security.Principal.WindowsIdentity]::GetCurrent().Name";
+        expect(script).toContain(identity);
+        await writeFile(setupPath, script.replaceAll(identity, "'test-user'"));
+        // Linux has no Windows ACL APIs, so the driver fakes them. Owner-only
+        // file mode stands in for the owner-only ACL. The fake Set-Acl follows
+        // the Windows rule behind the bug: a non-admin user cannot set an ACL
+        // again on a file that already has it.
+        await writeFile(
+          driverPath,
+          `$ErrorActionPreference = 'Stop'
+$locked = [IO.UnixFileMode]'UserRead, UserWrite'
+function global:New-Object {
+  param([Parameter(Position = 0)][string]$TypeName, [Parameter(Position = 1)][object[]]$ArgumentList)
+  if ($TypeName -like 'System.Security.AccessControl.*') {
+    $acl = [pscustomobject]@{}
+    $acl | Add-Member -MemberType ScriptMethod -Name SetAccessRuleProtection -Value { }
+    $acl | Add-Member -MemberType ScriptMethod -Name AddAccessRule -Value { }
+    return $acl
+  }
+  if ($PSBoundParameters.ContainsKey('ArgumentList')) { return Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList }
+  Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName
+}
+function global:Set-Acl {
+  param([string]$LiteralPath, $AclObject)
+  if ([IO.File]::GetUnixFileMode($LiteralPath) -eq $locked) { throw "The process does not possess the 'SeSecurityPrivilege' privilege" }
+  if ((Get-Item -LiteralPath $LiteralPath).Length -ne 0) { throw 'The file had content before it was locked' }
+  [IO.File]::SetUnixFileMode($LiteralPath, $locked)
+}
+$setup = Get-Content -Raw $env:ARCHESTRA_TEST_SETUP_PATH
+$source = Join-Path $env:USERPROFILE '${source}'
+foreach ($attempt in 1..2) {
+  Invoke-Expression $setup
+  if ([IO.File]::GetUnixFileMode($source) -ne $locked) { throw "Connect $attempt left the source file unlocked" }
+  if ((Get-Content -Raw $source | ConvertFrom-Json).token -ne 'instructions-token') { throw "Connect $attempt did not write the token" }
+}
+exit 0
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              CLAUDE_CONFIG_DIR: "",
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_SETUP_PATH: setupPath,
+            },
+            timeout: 30_000,
+          },
+        );
+      } finally {
         await rm(root, { recursive: true, force: true });
       }
     });
@@ -1331,3 +1430,133 @@ foreach ($index in 0..${params.proxies.length - 1}) {
     await rm(root, { recursive: true, force: true });
   }
 }
+
+describe.skipIf(!powershellAvailable)("PowerShell Codex preflight", () => {
+  // Runs a rendered Codex setup script against a Codex that answers model
+  // discovery from the bundled catalog, writes no cache and has no app-server,
+  // like an offline or older Codex.
+  async function runSetup(
+    args: (script: string) => string[],
+    { failPreflightNode = false } = {},
+  ) {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-preflight-powershell-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const configPath = path.join(home, ".codex", "config.toml");
+    try {
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await mkdir(bin);
+      await writeFile(configPath, CODEX_CONFIG_WITH_TRAILING_TABLE);
+      await writeFile(path.join(bin, "codex"), codexMcpStub("USERPROFILE"));
+      await chmod(path.join(bin, "codex"), 0o755);
+      if (failPreflightNode) {
+        // Fails only the preflight's node process, like a crash in its backup step.
+        await writeFile(
+          path.join(bin, "node"),
+          `#!/bin/bash\nif [ "$1" = - ] && [ "$3" = proxy ]; then cat > /dev/null; echo 'Error: backup failed' >&2; exit 1; fi\nexec '${process.execPath}' "$@"\n`,
+        );
+        await chmod(path.join(bin, "node"), 0o755);
+      }
+      await writeFile(
+        path.join(root, "setup.ps1"),
+        renderSetupScript({
+          clientId: "codex",
+          platform: "windows",
+          appName: "Test Platform",
+          mcp: {
+            serverName: "test_gateway",
+            toolPrefix: "test__",
+            url: "https://example.com/v1/mcp/test",
+          },
+          proxy: {
+            authMode: "provider-key",
+            provider: "openai",
+            providerLabel: "OpenAI",
+            baseUrl: "https://example.com/v1",
+            url: "https://example.com/v1/openai",
+            proxyName: "test_proxy",
+            virtualKey: null,
+            virtualKeyName: null,
+            passthroughVirtualKey: null,
+            model: null,
+          },
+          skills: null,
+        }),
+      );
+      const result = spawnSync(
+        "pwsh",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          ...args(path.join(root, "setup.ps1")),
+        ],
+        {
+          cwd: home,
+          encoding: "utf8",
+          env: {
+            HOME: home,
+            USERPROFILE: home,
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          timeout: 60_000,
+        },
+      );
+      return {
+        status: result.status,
+        output: `${result.stdout}${result.stderr}`,
+        config: await readFile(configPath, "utf8"),
+      };
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  test.each([
+    {
+      // How the installer runs the downloaded script.
+      invocation: "-File",
+      args: (script: string) => ["-File", script],
+      expectedStatus: SETUP_STOPPED_EXIT_CODE,
+    },
+    {
+      // A pasted one-liner runs in the user's session, which stays open.
+      invocation: "irm | iex",
+      args: (script: string) => [
+        "-Command",
+        `Get-Content -Raw '${script}' | Invoke-Expression; Write-Host 'session still open'`,
+      ],
+      expectedStatus: 0,
+    },
+  ])("a stale model list stops setup with the cause once and no error record ($invocation)", async ({
+    args,
+    expectedStatus,
+  }) => {
+    const { status, output, config } = await runSetup(args);
+    expect(status).toBe(expectedStatus);
+    if (expectedStatus === 0) expect(output).toContain("session still open");
+    expect(output).toContain(
+      "Codex setup preflight failed: Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.\nNo client configuration was changed.",
+    );
+    expect(output.match(/start a new installer run/g)).toHaveLength(1);
+    expect(output).not.toMatch(
+      /FullyQualifiedErrorId|CategoryInfo|Setup is incomplete/,
+    );
+    expect(config).toBe(CODEX_CONFIG_WITH_TRAILING_TABLE);
+  });
+
+  test("a preflight failure without a named cause still ends with the generic next step", async () => {
+    const { status, output, config } = await runSetup(
+      (script) => ["-File", script],
+      { failPreflightNode: true },
+    );
+    expect(output).toContain("Error: backup failed");
+    // PowerShell's error view wraps the rest of the message at the console width.
+    expect(output).toContain("Codex preflight failed.");
+    expect(status).toBe(1);
+    expect(config).toBe(CODEX_CONFIG_WITH_TRAILING_TABLE);
+  });
+});

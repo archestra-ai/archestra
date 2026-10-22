@@ -182,6 +182,7 @@ export const TOOL_LIST_AGENT_RUNS_SHORT_NAME = "list_agent_runs";
 export const TOOL_STEER_RUN_SHORT_NAME = "steer_run";
 export const TOOL_CANCEL_RUN_SHORT_NAME = "cancel_run";
 export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
+export const TOOL_POST_RUN_MESSAGE_SHORT_NAME = "post_run_message";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
@@ -222,6 +223,14 @@ export const TOOL_SET_APP_LABELS_SHORT_NAME = "set_app_labels";
 export const TOOL_SET_APP_LOCK_SHORT_NAME = "set_app_lock";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
+export const TOOL_YELL_SHORT_NAME = "yell";
+/**
+ * What a yell tells the agent when break the glass turned OpenAPPA off. The
+ * chat composer reads it in the yell's result to show that guardrails no
+ * longer apply to the chat, so the wording is shared, not copied.
+ */
+export const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_PREVIEW_APP_TOOL_SHORT_NAME = "preview_app_tool";
 export const TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME = "get_app_diagnostics";
@@ -362,6 +371,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_STEER_RUN_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -597,6 +607,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   steer_run: "tasks",
   cancel_run: "tasks",
   post_run_file: "tasks",
+  post_run_message: "tasks",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
   transfer_workspace_file: "tasks",
@@ -793,6 +804,8 @@ export const TOOL_CANCEL_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_RUN_SHORT_NAME}` as const;
 export const TOOL_POST_RUN_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_POST_RUN_MESSAGE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_MESSAGE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
@@ -1209,6 +1222,7 @@ export const RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export function isRunControlArchestraToolShortName(
@@ -1251,6 +1265,7 @@ export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
@@ -1266,6 +1281,7 @@ export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_RUN_MESSAGE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
     "trajectory",

@@ -444,19 +444,6 @@ class McpServerModel {
   }
 
   /**
-   * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
-   */
-  static async getFirstCreatedAt(): Promise<Date | null> {
-    const [row] = await db
-      .select({ createdAt: schema.mcpServersTable.createdAt })
-      .from(schema.mcpServersTable)
-      .orderBy(asc(schema.mcpServersTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
-  }
-
-  /**
    * Installations that have recorded no per-installation tool descriptions
    * yet, in catalogs with more than one installation (only there can
    * installations disagree). A random sample, so installations that keep

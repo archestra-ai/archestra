@@ -18,9 +18,10 @@ import { isPolicyMoved } from "./policy-moved";
  * A refused policy fails the same way on every request, so clients are told
  * not to retry it (`x-should-retry: false` on a 500). So do a missing
  * deployment setting and a request the binding cannot read, and a
- * conversation whose opening policy the runtime cannot reopen (a 409). An
- * unavailable runtime may recover, so it stays a retryable 503, as does a
- * failure that carries no code (the addon did not load, or the host failed).
+ * conversation the runtime cannot continue, such as one opened under an
+ * earlier policy model (a 409). An unavailable runtime may recover, so it
+ * stays a retryable 503, as does a failure that carries no code (the addon
+ * did not load, or the host failed).
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof OpenappaFailure) return error;
@@ -99,16 +100,6 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
     : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
 }
 
-/** A conversation whose opening policy names an annotator the served policy does not answer. */
-export class OpenappaRetiredAnnotatorError extends Error {
-  constructor(readonly annotator: string) {
-    super(
-      "the served policy does not answer an annotator from the opening policy",
-    );
-    this.name = "OpenappaRetiredAnnotatorError";
-  }
-}
-
 /**
  * The organization's text was refused and no composition ever opened, so the
  * runtime has nothing to enforce: every governed call is refused.
@@ -172,6 +163,7 @@ const RuntimeFailureCode = z.enum([
   "held_elsewhere",
   "unstarted_parent",
   "policy_moved",
+  "legacy_family",
   "policy_refused",
   "runtime_misconfigured",
   "pool_exhausted",
@@ -188,11 +180,6 @@ function classify(error: unknown): Failure {
   const code = runtimeFailureCode(error);
   if (code !== null)
     return classifyCode(code, error instanceof Error ? error.message : "");
-  if (error instanceof OpenappaRetiredAnnotatorError)
-    return {
-      statusCode: 409,
-      detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
-    };
   if (error instanceof OpenappaRootOnlyError)
     return {
       statusCode: 500,
@@ -248,6 +235,14 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
         statusCode: 409,
         detail:
           "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+      };
+    // The conversation opened pinned to the policy it started under, which no
+    // longer exists in the policy model. Every later request fails the same way.
+    case "legacy_family":
+      return {
+        statusCode: 409,
+        detail:
+          "This conversation was opened under an earlier policy model. Start a new conversation.",
       };
     // No fork exists for the subagent to open, whatever the retry.
     case "spawn_not_taken":

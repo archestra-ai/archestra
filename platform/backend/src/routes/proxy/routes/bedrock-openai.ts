@@ -3,7 +3,7 @@ import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import logger from "@/logging";
 import {
   fetchBedrockModels,
@@ -230,7 +230,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // IAM uses the server's own AWS credentials, so it is never open to an
       // anonymous caller, whatever the organization setting: only JWKS (above)
       // or an in-process call may use it.
-      const proof = takeInternalCall(request.headers);
+      const proof = internalCallProvenance(request);
       if (!proof.inProcess && !proof.guardrail) {
         throw new ApiError(
           401,

@@ -390,6 +390,7 @@ describe("McpGatewayLogsPage filters", () => {
         "Call",
         "Gateway",
         "Credential",
+        "Status",
         "Duration",
         "Time",
       ]) {
@@ -468,7 +469,8 @@ describe("McpGatewayLogsPage filters", () => {
 
       render(<McpGatewayLogsPage />);
 
-      expect(screen.getByText("Failed")).toBeVisible();
+      // The Status column names the outcome; the reason stays on the row.
+      expect(screen.getByText("Error")).toBeVisible();
       expect(screen.getByText("Forbidden: missing scope")).toBeVisible();
       expect(screen.getByText("Support")).toBeVisible();
     });

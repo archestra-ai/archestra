@@ -30,6 +30,37 @@ interface EnvironmentWithAssignedCount {
 }
 
 class EnvironmentModel {
+  /** Bounded ownership evidence for engines created before runtime owner labels. */
+  static async findHistoricalNamespaces(engineIds: string[]) {
+    if (engineIds.length === 0) return [];
+    return db
+      .selectDistinct({
+        id: schema.auditLogsTable.resourceId,
+        beforeNamespace: sql<
+          string | null
+        >`${schema.auditLogsTable.before}->>'namespace'`,
+        afterNamespace: sql<
+          string | null
+        >`${schema.auditLogsTable.after}->>'namespace'`,
+        hasBeforeNamespace: sql<boolean>`${schema.auditLogsTable.before} ? 'namespace'`,
+        hasAfterNamespace: sql<boolean>`${schema.auditLogsTable.after} ? 'namespace'`,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceType, "environment"),
+          eq(schema.auditLogsTable.outcome, "success"),
+          inArray(schema.auditLogsTable.action, [
+            "environment.created",
+            "environment.updated",
+            "environment.deleted",
+          ]),
+          inArray(schema.auditLogsTable.resourceId, engineIds),
+        ),
+      )
+      .limit(1000);
+  }
+
   /** Every environment across all organizations (control-plane reconcile sweep). */
   static async listAll(): Promise<Environment[]> {
     return db.select().from(schema.environmentsTable);

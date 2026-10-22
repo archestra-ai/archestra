@@ -1,14 +1,17 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Search, X } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { QueryChip } from "@/app/llm/(costs)/costs/cost-explorer-parts";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LogTime } from "@/components/log-time";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { AgentAdoption } from "@/lib/connected-client.query";
+import { cn } from "@/lib/utils/tailwind";
 import { AgentIcon } from "./agent-icon";
 import {
   amount,
@@ -37,8 +40,23 @@ const METRICS = [
 type Props = {
   adoption: AgentAdoption;
   window: ConnectionsWindow;
-  initialGroup: Dimension;
+  /** The grouping an older `?view=` link named, until `by` is set. */
+  legacyGroup?: Dimension;
 };
+/**
+ * The explorer's state, kept in the URL so a drilldown can be linked and
+ * Back steps out of it: `by` and `show` pick the grouping and metric, and
+ * each drilled-into value is its own parameter.
+ */
+const SCOPE_PARAMS: Record<Dimension, string> = {
+  user: "user",
+  agent: "agent",
+  service: "gateway",
+  kind: "kind",
+};
+/** Deepest first: what Back steps out of. */
+const DRILL_ORDER: Dimension[] = ["kind", "service", "agent", "user"];
+const DEFAULT_GROUP: Dimension = "user";
 
 export function ConnectionUsageExplorer(props: Props) {
   const explorer = useExplorer(props);
@@ -51,7 +69,7 @@ export function ConnectionUsageExplorer(props: Props) {
       className="min-w-0 overflow-hidden rounded-xl border bg-card"
     >
       <div className="border-b bg-muted/30 px-3 py-2.5">
-        <QueryBar explorer={explorer} split={explorer.metric === "calls"} />
+        <QueryBar explorer={explorer} />
       </div>
       <div className="space-y-3 px-4 pt-3 pb-4">
         <ScopeTrail explorer={explorer} />
@@ -70,8 +88,8 @@ export function ConnectionUsageExplorer(props: Props) {
             <span>{explorer.facts.length.toLocaleString()} observed paths</span>
           ) : (
             <span>
-              {explorer.rows.length.toLocaleString()} groups · select a row to
-              explore
+              {explorer.rows.length.toLocaleString()}{" "}
+              {explorer.rows.length === 1 ? "group" : "groups"}
             </span>
           )}
         </span>
@@ -88,10 +106,50 @@ export function ConnectionUsageExplorer(props: Props) {
 }
 
 function useExplorer(props: Props) {
-  const [group, setGroup] = useState<Dimension>(props.initialGroup);
-  const [metric, setMetric] = useState<Metric>("calls");
-  const [scope, setScope] = useState<Scope>({});
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const group: Dimension =
+    DIMENSIONS.find((item) => item.id === params.get("by"))?.id ??
+    props.legacyGroup ??
+    DEFAULT_GROUP;
+  const metric: Metric =
+    METRICS.find((item) => item.id === params.get("show"))?.id ?? "calls";
+  // The search params object only changes on navigation.
+  const scope = useMemo(() => {
+    const next: Scope = {};
+    for (const dimension of DRILL_ORDER) {
+      const value = params.get(SCOPE_PARAMS[dimension]);
+      if (value) next[dimension] = value;
+    }
+    return next;
+  }, [params]);
   const [search, setSearch] = useState("");
+
+  const navigate = (next: {
+    group?: Dimension;
+    metric?: Metric;
+    scope?: Scope;
+  }) => {
+    const updated = new URLSearchParams(params.toString());
+    // An older `?view=user` named the grouping; `by` says it now.
+    if (props.legacyGroup) updated.delete("view");
+    const nextGroup = next.group ?? group;
+    if (nextGroup === DEFAULT_GROUP) updated.delete("by");
+    else updated.set("by", nextGroup);
+    const nextMetric = next.metric ?? metric;
+    if (nextMetric === "calls") updated.delete("show");
+    else updated.set("show", nextMetric);
+    const nextScope = next.scope ?? scope;
+    for (const dimension of DRILL_ORDER) {
+      const value = nextScope[dimension];
+      if (value) updated.set(SCOPE_PARAMS[dimension], value);
+      else updated.delete(SCOPE_PARAMS[dimension]);
+    }
+    const query = updated.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   const allFacts = useMemo(() => factsOf(props.adoption), [props.adoption]);
   const facts = useMemo(
     () => filterFacts({ facts: allFacts, scope, search, metric }),
@@ -108,23 +166,34 @@ function useExplorer(props: Props) {
       }),
     [facts, group, props.adoption.members, scope, search],
   );
-  const focus = (dimension: Dimension, key: string) => {
-    setScope((previous) => ({ ...previous, [dimension]: key }));
+  const drill = (row: Group) => {
     setSearch("");
-    setGroup(
-      dimension === "user"
-        ? "agent"
-        : dimension === "agent"
-          ? "service"
-          : dimension === "service"
-            ? "kind"
-            : "user",
-    );
+    navigate({
+      scope: { ...scope, [row.dimension]: row.key },
+      group: NEXT_GROUP[row.dimension],
+    });
   };
-  const drill = (row: Group) => focus(row.dimension, row.key);
+  /** Drill into one row's MCP or LLM calls. */
+  const drillKind = (row: Group, kind: "mcp" | "llm") =>
+    navigate({
+      scope: { ...scope, [row.dimension]: row.key, kind },
+      group: row.dimension === "user" ? "agent" : "user",
+    });
+  // Dropping a value goes back to grouping by it, so clearing every value
+  // returns the explorer to where it started rather than leaving it on the
+  // deepest grouping the drilldown reached.
+  const removeScope = (dimension: Dimension) => {
+    const next = { ...scope };
+    delete next[dimension];
+    navigate({ scope: next, group: dimension === "kind" ? group : dimension });
+  };
+  const back = () => {
+    const deepest = DRILL_ORDER.find((dimension) => scope[dimension]);
+    if (deepest) removeScope(deepest);
+  };
   const reset = () => {
-    setScope({});
     setSearch("");
+    navigate({ scope: {}, group: DEFAULT_GROUP });
   };
   return {
     props,
@@ -133,25 +202,29 @@ function useExplorer(props: Props) {
     rows,
     total: amount(facts),
     group,
-    setGroup,
+    setGroup: (next: Dimension) => navigate({ group: next }),
     metric,
-    setMetric,
+    setMetric: (next: Metric) => navigate({ metric: next }),
     scope,
-    setScope,
     search,
     setSearch,
     drill,
+    drillKind,
+    removeScope,
+    back,
     reset,
   };
 }
+
+/** Where a click on a row of each grouping leads. */
+const NEXT_GROUP: Record<Dimension, Dimension> = {
+  user: "agent",
+  agent: "service",
+  service: "kind",
+  kind: "user",
+};
 type Explorer = ReturnType<typeof useExplorer>;
-function QueryBar({
-  explorer,
-  split = true,
-}: {
-  explorer: Explorer;
-  split?: boolean;
-}) {
+function QueryBar({ explorer }: { explorer: Explorer }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <QueryChip
@@ -166,11 +239,6 @@ function QueryBar({
         options={[...DIMENSIONS]}
         onChange={explorer.setGroup}
       />
-      {split && (
-        <span className="text-[11px] text-muted-foreground">
-          MCP / LLM split
-        </span>
-      )}
       <div className="relative ml-auto w-full sm:w-60">
         <Search className="pointer-events-none absolute left-2 top-2.5 size-3.5 text-muted-foreground" />
         <Input
@@ -188,9 +256,24 @@ function ScopeTrail({ explorer }: { explorer: Explorer }) {
   const entries = Object.entries(explorer.scope) as [Dimension, string][];
   return (
     <div className="flex min-h-7 flex-wrap items-center gap-1.5 text-xs">
+      {entries.length > 0 ? (
+        <Button
+          variant="outline"
+          size="xs"
+          className="mr-1"
+          onClick={explorer.back}
+        >
+          <ArrowLeft aria-hidden="true" />
+          <span>Back</span>
+        </Button>
+      ) : null}
       <UnstyledButton
         onClick={explorer.reset}
-        className="text-muted-foreground hover:text-foreground"
+        className={cn(
+          entries.length > 0
+            ? "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            : "font-medium text-foreground",
+        )}
       >
         <span>All connections</span>
       </UnstyledButton>
@@ -211,13 +294,7 @@ function ScopeTrail({ explorer }: { explorer: Explorer }) {
             <ChevronRight className="size-3 text-muted-foreground" />
             <UnstyledButton
               aria-label={`Remove ${label ?? key} filter`}
-              onClick={() =>
-                explorer.setScope((previous) => {
-                  const next = { ...previous };
-                  delete next[dim];
-                  return next;
-                })
-              }
+              onClick={() => explorer.removeScope(dim)}
               className="inline-flex items-center gap-1 rounded border bg-muted/30 px-1.5 py-0.5"
             >
               <span>{label ?? key}</span>
@@ -323,14 +400,7 @@ function SummaryTable({
           disabled={!row.original.mcp}
           onClick={(e) => {
             e.stopPropagation();
-            explorer.setScope((previous) => ({
-              ...previous,
-              [row.original.dimension]: row.original.key,
-              kind: "mcp",
-            }));
-            explorer.setGroup(
-              row.original.dimension === "user" ? "agent" : "user",
-            );
+            explorer.drillKind(row.original, "mcp");
           }}
           className="block w-full text-right text-xs tabular-nums hover:underline disabled:cursor-default disabled:no-underline"
         >
@@ -350,14 +420,7 @@ function SummaryTable({
           disabled={!row.original.llm}
           onClick={(e) => {
             e.stopPropagation();
-            explorer.setScope((previous) => ({
-              ...previous,
-              [row.original.dimension]: row.original.key,
-              kind: "llm",
-            }));
-            explorer.setGroup(
-              row.original.dimension === "user" ? "agent" : "user",
-            );
+            explorer.drillKind(row.original, "llm");
           }}
           className="block w-full text-right text-xs tabular-nums hover:underline disabled:cursor-default disabled:no-underline"
         >
@@ -388,6 +451,19 @@ function SummaryTable({
           <LogTime showTooltip={false} timestamp={row.original.lastSeenAt} />
         ) : null,
     },
+    {
+      // A row opens the next level down; the chevron says so.
+      id: "open",
+      header: () => <span className="sr-only">Open</span>,
+      size: 36,
+      minSize: 36,
+      cell: () => (
+        <ChevronRight
+          aria-hidden="true"
+          className="ml-auto size-4 text-muted-foreground"
+        />
+      ),
+    },
   ];
   return (
     <DataTable
@@ -395,7 +471,7 @@ function SummaryTable({
       columns={columns}
       hideSelectedCount
       hidePaginationWhenSinglePage
-      fixedWidthColumnIds={["users", "mcp", "llm", "calls", "last"]}
+      fixedWidthColumnIds={["users", "mcp", "llm", "calls", "last", "open"]}
       flexibleColumnIds={["name"]}
       onRowClick={explorer.drill}
       emptyMessage="No calls match this view"
@@ -462,7 +538,7 @@ function Bars({
           <span className="size-1.5 rounded-sm bg-chart-2" />
           LLM
         </span>
-        <span className="ml-auto">Select a row to drill down</span>
+        <span className="ml-auto">Select a bar or row to see what's in it</span>
       </div>
     </div>
   );

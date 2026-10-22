@@ -451,7 +451,10 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
 
 # Cloud database CA bundle for SSL certificate validation
-# This allows sslmode=require to work with AWS RDS and Google Cloud SQL
+# This allows sslmode=require to work with AWS RDS and Google Cloud SQL.
+# Node reads it through NODE_EXTRA_CA_CERTS. The OpenAPPA runtime connects
+# through OpenSSL, which reads only the system store, so the RUN below also
+# appends the bundle to /etc/ssl/certs/ca-certificates.crt.
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 # Vendor cloud database CA bundles into the repository so image builds do not
@@ -489,6 +492,7 @@ RUN apk --no-cache upgrade && \
         "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
+    cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625

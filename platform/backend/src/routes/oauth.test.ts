@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {
   buildDiscoveryUrls,
@@ -26,6 +26,8 @@ import { OAUTH_CALLBACK_PATH } from "./route-paths";
 // after their assertions. If an assertion throws, the inline restore is skipped
 // and the mocked fetch leaks into whatever test file runs next in the worker.
 // This top-level hook guarantees the real fetch is back after every test.
+setupTestCacheManager();
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -859,12 +861,22 @@ describe("OAuth helper functions", () => {
 
 describe("OAuth routes", () => {
   let app: FastifyInstanceWithZod;
+  let organizationId: string;
   const originalFetch = globalThis.fetch;
 
-  beforeEach(async () => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId);
     app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, {
+        user,
+        organizationId,
+        authMethod: "session",
+        sessionInfo: { id: "test-oauth-session", createdAt: new Date() },
+      });
+    });
     await app.register(oauthRoutes);
   });
 
@@ -891,6 +903,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Resource Split MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -942,6 +955,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1016,29 +1030,6 @@ describe("OAuth routes", () => {
     const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
-
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
     const callbackResponse = await app.inject({
       method: "POST",
@@ -1069,6 +1060,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1125,6 +1117,8 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
+          authorization_response_iss_parameter_supported: true,
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1144,38 +1138,13 @@ describe("OAuth routes", () => {
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
 
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-            issuer: "https://login.example.com",
-            issParameterSupported: true,
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
-
     const callbackResponse = await app.inject({
       method: "POST",
       url: "/api/oauth/callback",
       payload: {
         code: "authorization-code",
         state,
-        iss: "https://login.example.com",
+        iss: "https://login.example.com/oauth",
       },
     });
 
@@ -1188,6 +1157,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1244,6 +1214,8 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
+          authorization_response_iss_parameter_supported: true,
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1262,31 +1234,6 @@ describe("OAuth routes", () => {
     const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
-
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-            issuer: "https://login.example.com",
-            issParameterSupported: true,
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
     const callbackResponse = await app.inject({
       method: "POST",
@@ -1306,6 +1253,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Refresh Resource Split MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1349,7 +1297,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 
@@ -1393,6 +1343,7 @@ describe("OAuth routes", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "Basic Auth Refresh MCP",
         serverType: "remote",
         serverUrl: "https://mcp.example.com/mcp",
@@ -1495,9 +1446,6 @@ describe("OAuth routes", () => {
       vi.stubGlobal("fetch", fetchMock);
       // Capture the external cache write without requiring PostgreSQL. The
       // callback below reads the same state through the real PGlite database.
-      const cacheWrite = vi
-        .spyOn(cacheManager, "set")
-        .mockResolvedValue(undefined);
 
       const initiateResponse = await app.inject({
         method: "POST",
@@ -1513,27 +1461,6 @@ describe("OAuth routes", () => {
       });
 
       const state = initiateResponse.json().state;
-      const oauthState = cacheWrite.mock.calls.find(
-        ([key]) => key === `${CacheKey.OAuthState}-${state}`,
-      )?.[1];
-      expect(oauthState).toBeDefined();
-      await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-      await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: oauthState,
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
       const callbackResponse = await app.inject({
         method: "POST",
@@ -1553,7 +1480,10 @@ describe("OAuth routes", () => {
       });
 
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
       const refreshedSecret = await secretManager().getSecret(
         callbackResponse.json().secretId,
@@ -1564,7 +1494,10 @@ describe("OAuth routes", () => {
         client_secret: "registered-secret",
       });
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
 
       const refreshRequest = fetchMock.mock.calls.find(([, init]) => {
@@ -1587,6 +1520,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Persist Failure MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1628,7 +1562,9 @@ describe("OAuth routes", () => {
       .spyOn(secretManager(), "updateSecret")
       .mockRejectedValueOnce(new Error("vault unavailable"));
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1642,6 +1578,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Invalid Grant MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1677,7 +1614,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     const updateSpy = vi.spyOn(secretManager(), "updateSecret");
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1694,6 +1633,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "No Refresh Token MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1715,7 +1655,9 @@ describe("OAuth routes", () => {
       true,
     );
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "no_refresh_token",
@@ -1727,6 +1669,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Missing Secret MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1744,7 +1687,10 @@ describe("OAuth routes", () => {
     });
 
     await expect(
-      refreshOAuthToken("00000000-0000-0000-0000-000000000000", catalog.id),
+      refreshOAuthToken({
+        secretId: "00000000-0000-0000-0000-000000000000",
+        catalogId: catalog.id,
+      }),
     ).resolves.toEqual({
       ok: false,
       kind: "terminal",
@@ -1757,6 +1703,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Refresh Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1828,7 +1775,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 
@@ -1850,9 +1799,12 @@ describe("OAuth dynamic client registration client name", () => {
   const originalFetch = globalThis.fetch;
   const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
 
-  beforeEach(() => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = { id: "test-oauth-session", createdAt: new Date() };
+    });
   });
 
   afterEach(() => {
@@ -2032,9 +1984,12 @@ describe("OAuth dynamic client registration scope fallback", () => {
   const originalFetch = globalThis.fetch;
   const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
 
-  beforeEach(() => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = { id: "test-oauth-session", createdAt: new Date() };
+    });
   });
 
   afterEach(() => {
@@ -2307,26 +2262,3 @@ describe("OAuth dynamic client registration scope fallback", () => {
     expect(message).toContain("Registration is disabled for this tenant.");
   });
 });
-
-function usePgliteCacheWrites(): void {
-  vi.spyOn(cacheManager, "set").mockImplementation(async (key, value, ttl) => {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${key}`},
-        ${JSON.stringify({
-          value,
-          expires: Date.now() + (ttl ?? 60 * 60 * 1000),
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
-    return value;
-  });
-}

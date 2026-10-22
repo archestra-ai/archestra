@@ -19,6 +19,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gte,
   inArray,
   isNotNull,
@@ -31,6 +32,7 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import {
   decryptInteractionContent,
@@ -38,7 +40,7 @@ import {
   readInteractionRow,
 } from "@/content-encryption/audit-rows";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   type CursorPaginatedResult,
@@ -76,6 +78,7 @@ import {
   InteractionSessionPreviewSchema,
 } from "@/types/interaction";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
@@ -83,6 +86,7 @@ import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import AgentUsageModel from "./agent-usage";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import InteractionBillingModel from "./interaction-billing";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import InteractionSessionHeadModel from "./interaction-session-head";
 import InteractionUserActivityModel from "./interaction-user-activity";
@@ -559,13 +563,18 @@ class InteractionModel {
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly.
-    const environmentId = data.profileId
-      ? await AgentModel.findEnvironmentId(data.profileId)
-      : (data.environmentId ?? null);
+    const { billingUsage, billingAttribution, ...columns } = data;
+    if (billingUsage && !billingAttribution)
+      throw new Error("Billing attribution is required for settlement");
+    const environmentId = billingAttribution
+      ? billingAttribution.environmentId
+      : data.profileId
+        ? await AgentModel.findEnvironmentId(data.profileId)
+        : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
     // the deployment's Log Content mode withholds.
     const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(data) : data;
+    const record = withheld ? withholdInteractionContent(columns) : columns;
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);
@@ -610,8 +619,9 @@ class InteractionModel {
       ),
       id: interactionId,
     };
-    const insert = async () => {
-      const [created] = await db
+    const insert = async (tx?: Transaction) => {
+      const writer = tx ?? db;
+      const [created] = await writer
         .insert(schema.interactionsTable)
         // Monotonic v7 id: created_at ties happen under load, and the delta
         // manager's "most recent interaction" lookup breaks ties with the id.
@@ -619,7 +629,7 @@ class InteractionModel {
         .onConflictDoNothing({ target: schema.interactionsTable.id })
         .returning();
       if (!created) {
-        const [existing] = await db
+        const [existing] = await writer
           .select()
           .from(schema.interactionsTable)
           .where(eq(schema.interactionsTable.id, interactionId));
@@ -637,10 +647,76 @@ class InteractionModel {
       }
       return created;
     };
+    const write = (tx?: Transaction) =>
+      insertValues.userId == null
+        ? insert(tx)
+        : InteractionUserActivityModel.append(insertValues, tx);
     const interaction =
-      data.userId == null
-        ? await insert()
-        : await InteractionUserActivityModel.append(insertValues);
+      billingUsage && billingAttribution
+        ? await retainDeletedBillingAttribution({
+            values: insertValues,
+            run: () =>
+              retryOnceOnDeadlock(() =>
+                withDbTransaction(async (tx) => {
+                  const claimed = await InteractionBillingModel.claim({
+                    tx,
+                    interactionId,
+                    usage: billingUsage,
+                    attribution: billingAttribution,
+                    userId: data.userId ?? null,
+                    billingTeamId: data.billingTeamId ?? null,
+                    billingMode: data.billingMode ?? "metered",
+                    logIdentity: {
+                      profileId: data.profileId,
+                      appId: data.appId ?? null,
+                      connectorId: data.connectorId ?? null,
+                      serviceAccountId: data.serviceAccountId ?? null,
+                    },
+                  });
+                  if (!claimed) {
+                    const [existing] = await tx
+                      .select()
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (existing) return existing;
+                  }
+                  if (claimed) {
+                    const [legacy] = await tx
+                      .select({ id: schema.interactionsTable.id })
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (legacy)
+                      throw new Error(
+                        "Cannot settle an interaction already written without a billing receipt",
+                      );
+                  }
+                  const created = await write(tx);
+                  if (claimed && data.billingMode !== "subscription") {
+                    if (billingUsage.mode === "enforce") {
+                      await LimitModel.settleBillableUsage({
+                        tx,
+                        usage: billingUsage,
+                        attribution: billingAttribution,
+                      });
+                    } else {
+                      // Shadow records the candidate quote but posts only legacy counts.
+                      await LimitModel.recordInteractionTokenUsage({
+                        agentId: data.profileId ?? "",
+                        teamIds: [],
+                        entities: [],
+                        model: data.model ?? "",
+                        inputTokens: data.inputTokens ?? 0,
+                        outputTokens: data.outputTokens ?? 0,
+                        tx,
+                        attribution: billingAttribution,
+                      });
+                    }
+                  }
+                  return created;
+                }),
+              ),
+          })
+        : await write();
     // The RETURNING row is this method's public return value — decrypt it so
     // callers never see envelopes. Safe for encrypted-chat rows too: this caller
     // supplied the very key that just encrypted them.
@@ -652,16 +728,17 @@ class InteractionModel {
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
-    trackBackgroundWork(
-      InteractionModel.updateUsageAfterInteraction(
-        interaction as InsertInteraction & { id: string },
-      ).catch((error) => {
-        logger.error(
-          { error },
-          `Failed to update usage tracking for interaction ${interaction.id}`,
-        );
-      }),
-    );
+    if (!billingUsage)
+      trackBackgroundWork(
+        InteractionModel.updateUsageAfterInteraction(
+          interaction as InsertInteraction & { id: string },
+        ).catch((error) => {
+          logger.error(
+            { error },
+            `Failed to update usage tracking for interaction ${interaction.id}`,
+          );
+        }),
+      );
 
     AgentUsageModel.recordUseInBackground({
       agentId: interaction.profileId,
@@ -912,6 +989,11 @@ class InteractionModel {
           durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
           source: schema.interactionsTable.source,
+          // The row's small stored preview (not the payload), so the trace can
+          // name a turn by the prompt it served; decrypted below.
+          sessionPreview: schema.interactionsTable.sessionPreview,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
           requestType: sql<"main" | "subagent">`
             CASE
               WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
@@ -967,13 +1049,37 @@ class InteractionModel {
       ),
     );
     return createPaginatedResult(
-      rows.map((row) => ({
-        ...row,
-        externalAgentIdLabel: resolveExternalAgentIdLabel(
-          row.externalAgentId,
-          agentNamesMap,
-        ),
-      })),
+      rows.map(({ sessionPreview, encryptedChatConversationId, ...row }) => {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Locked-safe: a locked chat's preview stays a sentinel, which then
+        // fails the schema check and names nothing.
+        const read = readInteractionRow({
+          sessionPreview,
+          encryptedChatConversationId,
+        });
+        // SPDX-SnippetEnd
+        const preview = InteractionSessionPreviewSchema.safeParse(
+          read.sessionPreview,
+        );
+        return {
+          ...row,
+          externalAgentIdLabel: resolveExternalAgentIdLabel(
+            row.externalAgentId,
+            agentNamesMap,
+          ),
+          userMessagePreview: preview.success
+            ? preview.data.lastUserMessagePreview
+            : null,
+          responseToolNames: preview.success
+            ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseTextPreview: preview.success
+            ? (preview.data.responseTextPreview ?? null)
+            : null,
+        };
+      }),
       Number(total),
       pagination,
     );
@@ -1865,7 +1971,7 @@ class InteractionModel {
         processedRequest: null,
       })),
     );
-    const responses = await InteractionModel.titleResponsesFor(rows);
+    const responses = await InteractionModel.responsesFor(rows);
     return InteractionModel.storeSessionPreviews(
       rows.map((row) =>
         InteractionModel.sessionPreviewValue(
@@ -1996,8 +2102,15 @@ class InteractionModel {
           }
         }
         // SPDX-SnippetEnd
-        responses = await InteractionModel.titleResponsesFor(
-          loaded.filter((row) => !unreadable.has(row.id)),
+        // Ancestors are only folded; only the rows being filled read their
+        // response.
+        const filling = new Set(
+          chunk.filter((member) => member.missing).map((member) => member.id),
+        );
+        responses = await InteractionModel.responsesFor(
+          loaded.filter(
+            (row) => filling.has(row.id) && !unreadable.has(row.id),
+          ),
         );
       } catch (error) {
         // Without this chunk nothing below it can be folded: the rest of the
@@ -2052,43 +2165,35 @@ class InteractionModel {
   }
 
   /**
-   * The responses of the title-generation turns among `rows`, by id. Only
-   * those turns read their response (for the title text); responses can
-   * dwarf requests, so the rest are never loaded.
+   * The responses of `rows`, by id: a preview names a request by what it
+   * produced (its tool calls or reply) and a title turn by its title. Only
+   * rows about to be written are passed, a bounded chunk at a time.
    */
-  private static async titleResponsesFor(
-    rows: Array<{
-      id: string;
-      source: InteractionSource | null;
-      request: unknown;
-    }>,
+  private static async responsesFor(
+    rows: Array<{ id: string }>,
   ): Promise<Map<string, unknown>> {
     const t = schema.interactionsTable;
-    const titleIds = rows
-      .filter(
-        (row) =>
-          !isGuardrailSource(row.source) &&
-          JSON.stringify(row.request ?? null).includes(
-            "Please write a 5-10 word title",
-          ),
-      )
-      .map((row) => row.id);
     const responses = new Map<string, unknown>();
-    if (titleIds.length === 0) return responses;
-    const titles = await db
+    if (rows.length === 0) return responses;
+    const loaded = await db
       .select({
         id: t.id,
         response: t.response,
         encryptedChatConversationId: t.encryptedChatConversationId,
       })
       .from(t)
-      .where(inArray(t.id, titleIds));
+      .where(
+        inArray(
+          t.id,
+          rows.map((row) => row.id),
+        ),
+      );
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    for (const title of titles) {
-      readInteractionRow(title);
-      responses.set(title.id, title.response);
+    for (const row of loaded) {
+      readInteractionRow(row);
+      responses.set(row.id, row.response);
     }
     // SPDX-SnippetEnd
     return responses;
@@ -2531,6 +2636,12 @@ class InteractionModel {
         conversationTitle: sql<
           string | null
         >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
+        // The knowledge connector a knowledge:* row ran for, so the list can
+        // tell "Embedding documents" rows apart. Only when one connector owns
+        // every row; looked up by primary key once per session.
+        connectorName: sql<
+          string | null
+        >`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.connectorId}) = 1 THEN (SELECT ${schema.knowledgeBaseConnectorsTable.name} FROM ${schema.knowledgeBaseConnectorsTable} WHERE ${schema.knowledgeBaseConnectorsTable.id} = MAX(${schema.interactionsTable.connectorId}::text)::uuid) END`,
       })
       .from(schema.interactionsTable)
       .leftJoin(
@@ -2646,6 +2757,7 @@ class InteractionModel {
         contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
+        connectorName: s.connectorName ?? null,
       };
     });
     return sessions;
@@ -3506,16 +3618,22 @@ function buildLastUserMessagePreview(
     if (!message) {
       return null;
     }
-    let preview = message.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
-    // Don't leave half a surrogate pair at the truncation point.
-    const lastCode = preview.charCodeAt(preview.length - 1);
-    if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
-      preview = preview.slice(0, -1);
-    }
-    return preview;
+    return truncatePreview(message);
   } catch {
     return null;
   }
+}
+
+function truncatePreview(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  let preview = trimmed.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
+  // Don't leave half a surrogate pair at the truncation point.
+  const lastCode = preview.charCodeAt(preview.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    preview = preview.slice(0, -1);
+  }
+  return preview;
 }
 
 /**
@@ -3637,5 +3755,90 @@ function buildSessionPreview(
     claudeCodeTitle: isTitleGeneration
       ? (response?.content?.[0]?.text ?? null)
       : null,
+    ...(contentNotStored
+      ? { responseToolNames: [], responseTextPreview: null }
+      : buildResponsePreview(data)),
   };
+}
+
+/** The tools a response asked for, else the start of its reply. */
+function buildResponsePreview(
+  data: InsertInteraction,
+): Pick<
+  InteractionSessionPreview,
+  "responseToolNames" | "responseTextPreview"
+> {
+  try {
+    const interaction = new DynamicInteraction({
+      request: data.request,
+      response: data.response,
+      type: data.type,
+    } as never);
+    const responseToolNames = interaction.getToolNamesRequested();
+    return {
+      responseToolNames,
+      responseTextPreview:
+        responseToolNames.length > 0
+          ? null
+          : truncatePreview(interaction.getLastAssistantResponse()),
+    };
+  } catch {
+    return { responseToolNames: [], responseTextPreview: null };
+  }
+}
+
+/** Retry only failed log foreign keys; admission attribution stays in the receipt. */
+async function retainDeletedBillingAttribution<T>(params: {
+  values: typeof schema.interactionsTable.$inferInsert;
+  run: () => Promise<T>;
+}): Promise<T> {
+  const columns = getTableColumns(schema.interactionsTable);
+  const foreignKeys = getTableConfig(schema.interactionsTable).foreignKeys;
+  const clearedConstraints = new Set<string>();
+  // Each retry clears a nullable log reference. Unknown constraints fail
+  // immediately; each constraint can be cleared only once.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await params.run();
+    } catch (error) {
+      let detail: unknown = error;
+      for (
+        let depth = 0;
+        depth < 5 &&
+        detail &&
+        typeof detail === "object" &&
+        !("constraint" in detail);
+        depth++
+      )
+        detail = "cause" in detail ? detail.cause : null;
+      if (
+        !detail ||
+        typeof detail !== "object" ||
+        !("code" in detail) ||
+        detail.code !== "23503" ||
+        !("constraint" in detail) ||
+        typeof detail.constraint !== "string" ||
+        clearedConstraints.has(detail.constraint) ||
+        attempt >= foreignKeys.length
+      )
+        throw error;
+      const missing = foreignKeys
+        .find((key) => key.getName() === detail.constraint)
+        ?.reference().columns;
+      if (!missing?.length || missing.some((column) => column.notNull))
+        throw error;
+      clearedConstraints.add(detail.constraint);
+      for (const column of missing) {
+        const key = Object.entries(columns).find(
+          ([, value]) => value.name === column.name,
+        )?.[0];
+        if (!key) throw error;
+        Reflect.set(params.values, key, null);
+      }
+      logger.info(
+        { constraint: detail.constraint },
+        "Cleared deleted log reference; retained admitted billing attribution",
+      );
+    }
+  }
 }

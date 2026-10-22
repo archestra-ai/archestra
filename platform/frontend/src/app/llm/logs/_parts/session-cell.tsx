@@ -34,9 +34,12 @@ export function SessionCell({ session }: { session: LogSession }) {
     describeSessionOrigin(session);
   const isAppChat = Boolean(session.conversationTitle && session.sessionId);
 
+  // A session whose latest turns carry no user text (a client mid tool loop,
+  // or one whose preview was never captured) is still a session of something:
+  // name it by the client rather than calling a busy session empty.
   const placeholder = session.contentNotStored
     ? "Content not stored"
-    : "No message";
+    : `${originLabel} session`;
   // Server-computed preview: the sessions API never returns raw request
   // bodies (shipping them OOM-killed the platform container, T-1015).
   const preview = sessionTitleOf({
@@ -54,7 +57,7 @@ export function SessionCell({ session }: { session: LogSession }) {
   const actor = describeActor(session, appName);
 
   return (
-    <div className="flex min-w-0 items-center gap-3.5">
+    <div className="flex min-w-0 items-center gap-3.5 pr-4">
       <SessionAvatar
         client={client}
         source={primarySource}
@@ -71,26 +74,22 @@ export function SessionCell({ session }: { session: LogSession }) {
         >
           {title}
         </div>
-        <div className="flex h-4 min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
-          <span
-            className={cn(
-              "min-w-0 truncate",
-              actor.kind === "people" && "text-foreground/80",
-            )}
-          >
+        {/* One inline run that truncates as a whole: as flex items the
+            parts each kept their width, so a narrow column let "via …" run
+            on into the next one. */}
+        <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
+          <span className={cn(actor.kind === "people" && "text-foreground/80")}>
             {actor.label}
           </span>
           {actor.kind === "people" && actor.names.length > 1 ? (
-            <span className="shrink-0 tabular-nums">
-              +{actor.names.length - 1}
-            </span>
-          ) : null}
-          <span className="shrink-0 text-muted-foreground/70">via</span>
-          <span className="shrink-0 truncate">{originLabel}</span>
+            <span className="tabular-nums"> +{actor.names.length - 1}</span>
+          ) : null}{" "}
+          <span className="text-muted-foreground/70">via</span>{" "}
+          <span>{originLabel}</span>
           {client && primarySource && primarySource !== "api" ? (
             <>
-              <Dot />
-              <span className="truncate">{sourceLabel(primarySource)}</span>
+              {" "}
+              <Dot /> <span>{sourceLabel(primarySource)}</span>
             </>
           ) : null}
           {extraSources.length > 0 ? (
@@ -98,7 +97,7 @@ export function SessionCell({ session }: { session: LogSession }) {
               <TooltipTrigger asChild>
                 <UnstyledButton
                   aria-label={`Also includes ${extraSources.map(sourceLabel).join(", ")}`}
-                  className="ml-0.5 shrink-0 cursor-default rounded-sm px-1 tabular-nums ring-1 ring-border ring-inset hover:text-foreground"
+                  className="ml-1 cursor-default rounded-sm px-1 tabular-nums ring-1 ring-border ring-inset hover:text-foreground"
                 >
                   +{extraSources.length}
                 </UnstyledButton>
@@ -118,11 +117,12 @@ export function SessionCell({ session }: { session: LogSession }) {
           ) : null}
           {isAppChat ? (
             <>
-              <Dot />
+              {" "}
+              <Dot />{" "}
               <Link
                 href={`/chat/${session.sessionId}`}
                 onClick={(event) => event.stopPropagation()}
-                className="shrink-0 font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
+                className="font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
               >
                 Open chat
               </Link>

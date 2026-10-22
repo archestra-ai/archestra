@@ -455,6 +455,38 @@ describe("useHasPermissions", () => {
 });
 
 describe("usePermissionMap", () => {
+  it("stays unresolved while the session loads instead of denying everything", async () => {
+    let resolveSession!: (
+      value: Awaited<ReturnType<typeof authClient.getSession>>,
+    ) => void;
+    vi.mocked(authClient.getSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      }) as ReturnType<typeof authClient.getSession>,
+    );
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: { organization: ["read"] },
+      error: undefined,
+      request: new Request("http://localhost"),
+      response: new Response(),
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+    const { result } = renderHook(
+      () => usePermissionMap({ canReadOrg: { organization: ["read"] } }),
+      { wrapper: createWrapper() },
+    );
+    expect(result.current).toBeNull();
+    await act(async () => {
+      resolveSession({
+        data: {
+          user: { id: "viewer", email: "viewer@example.com" },
+          session: { id: "viewer-session" },
+        },
+        error: null,
+      } as Awaited<ReturnType<typeof authClient.getSession>>);
+    });
+    await waitFor(() => expect(result.current).toEqual({ canReadOrg: true }));
+  });
+
   it("shows known role links while scoped capabilities load", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

@@ -426,8 +426,12 @@ class ConnectedClientModel {
           SELECT ${toolCalls.userId} AS user_id,
             ${toolCalls.oauthClientId} AS oauth_client_id,
             ${toolCalls.agentId} AS via_id,
-            count(*) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)})::int AS calls,
-            max(${toolCalls.createdAt}) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)}) AS window_last_at,
+            -- Counted like the usage series: a handshake (initialize,
+            -- tools/list) is the agent starting, not a call it made.
+            count(*) FILTER (WHERE ${toolCalls.method} = 'tools/call'
+              AND ${inWindow(sql`${toolCalls.createdAt}`)})::int AS calls,
+            max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call'
+              AND ${inWindow(sql`${toolCalls.createdAt}`)}) AS window_last_at,
             max(${toolCalls.createdAt}) AS last_call_at,
             -- Starting an agent isn't doing something; only a tool call is.
             max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call') AS last_tool_call_at,

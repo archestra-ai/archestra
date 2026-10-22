@@ -7,6 +7,7 @@ import {
   isLogContentNotStored,
   type McpExecutedAs,
   parseFullToolName,
+  TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import {
   canShowMcpToolCallStatus,
@@ -45,6 +46,11 @@ export function readMcpToolCall(row: {
   method: string;
   /** The tool's own name, without its server prefix; null for non-tool methods. */
   toolName: string | null;
+  /**
+   * For a `run_tool` dispatch, the tool it ran (without its server prefix):
+   * every such call is named `run_tool`, which says nothing on its own.
+   */
+  dispatchedToolName: string | null;
   /** The recorded arguments, or `undefined` when none were recorded. */
   args: unknown;
   lockedArgs: UnavailableContent | null;
@@ -97,11 +103,16 @@ export function readMcpToolCall(row: {
         : "success";
 
   const fullName = typeof toolCall?.name === "string" ? toolCall.name : null;
+  const toolName = fullName
+    ? parseFullToolName(fullName).toolName || fullName
+    : null;
   return {
     method,
-    toolName: fullName
-      ? parseFullToolName(fullName).toolName || fullName
-      : null,
+    toolName,
+    dispatchedToolName: runToolTargetName(
+      toolName,
+      lockedArgs ? undefined : toolCall?.arguments,
+    ),
     args: lockedArgs ? undefined : toolCall?.arguments,
     lockedArgs,
     result,
@@ -110,6 +121,21 @@ export function readMcpToolCall(row: {
     outcomeMessage: result ? readOutcomeMessage(status, result) : null,
     executedAs: extractMcpExecutedAs(outcome),
   };
+}
+
+/**
+ * The tool a `run_tool` call dispatched to, without its server prefix, or
+ * null for any other call (or one whose arguments were not recorded).
+ */
+export function runToolTargetName(
+  toolName: string | null,
+  args: unknown,
+): string | null {
+  if (toolName !== TOOL_RUN_TOOL_SHORT_NAME) return null;
+  const target = (args as { tool_name?: unknown } | null | undefined)
+    ?.tool_name;
+  if (typeof target !== "string" || !target) return null;
+  return parseFullToolName(target).toolName || target;
 }
 
 /**

@@ -1,5 +1,9 @@
 import { TriangleAlert } from "lucide-react";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import type { CoverageSummary } from "@/lib/openappa-coverage.query";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 
@@ -17,8 +21,10 @@ export function CoverageWarnings({ totals }: { totals: Totals }) {
     <div className="flex flex-col gap-2">
       <InlineNotice variant={warning.variant}>
         <TriangleAlert />
-        <span className="font-medium">{warning.title}</span>
-        <InlineNoticeText>{warning.text}</InlineNoticeText>
+        <InlineNoticeBody>
+          <span className="font-medium">{warning.title}</span>
+          <InlineNoticeText>{warning.text}</InlineNoticeText>
+        </InlineNoticeBody>
       </InlineNotice>
       <OpenAppaChatButton
         size="xs"

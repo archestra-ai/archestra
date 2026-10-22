@@ -71,6 +71,25 @@ export function AttachmentVideo({
   );
 }
 
+/** Audio uses the same authenticated attachment URLs as images and video. */
+export function AttachmentAudio({
+  url,
+  conversationId,
+}: {
+  url: string;
+  conversationId: string | null | undefined;
+}) {
+  const resolved = useAttachmentContentUrl(url, conversationId);
+  if (resolved.failed) return <AttachmentUnavailable />;
+  if (!resolved.url)
+    return <div className="h-12 w-64 animate-pulse rounded-lg bg-muted" />;
+  return (
+    <audio src={resolved.url} controls aria-label="Generated audio">
+      <track kind="captions" />
+    </audio>
+  );
+}
+
 /**
  * A download/open link for an attachment. While a sealed attachment is still
  * being fetched the anchor renders inert rather than disappearing, so the

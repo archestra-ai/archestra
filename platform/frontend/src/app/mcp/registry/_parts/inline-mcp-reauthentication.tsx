@@ -69,6 +69,7 @@ export function InlineMcpReauthentication({
         setOAuthMcpServerId(server.id);
         const { authorizationUrl, state } = await initiateOAuth.mutateAsync({
           catalogId: item.id,
+          serverId: server.id,
         });
         setOAuthState(state);
         setOAuthCatalogId(item.id);

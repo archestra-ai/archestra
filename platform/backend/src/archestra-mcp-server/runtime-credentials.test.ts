@@ -2,7 +2,9 @@ import {
   BatteryCredentialRequestSchema,
   getArchestraToolFullName,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -85,6 +87,9 @@ test("request_battery_credentials resolves each battery's setup for the card", a
   makeOrganization,
   makeUser,
 }) => {
+  // With the sandbox on, a battery's setup is its multi-user target's, so pin
+  // it off to compare against the base declaration.
+  vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(false);
   const organization = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, organization.id, { role: "admin" });

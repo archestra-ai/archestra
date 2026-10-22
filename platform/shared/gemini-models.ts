@@ -5,15 +5,17 @@
  * selector (to badge older generations) so both stay in sync.
  *
  * `GET /v1beta/models` returns many models that advertise `generateContent` but
- * are not usable as chat (text-to-speech, image generation, audio/live), plus
- * deprecated and non-Gemini families. We keep only text-output Gemini-family chat
- * models at or above a minimum generation, plus first-class Gemini embeddings.
+ * need unsupported transports (text-to-speech and audio/live), plus deprecated
+ * and non-Gemini families. Text and image Gemini-family models at or above a
+ * minimum generation are usable in Chat, alongside first-class embeddings.
  */
 
 import type { ThinkingEffort } from "./thinking-effort";
 
-/** Output-modality families that are not usable for text chat. */
-const NON_TEXT_GEMINI_PATTERNS = ["tts", "image", "audio", "live"];
+/** Families whose transport is not supported by Gemini Chat. */
+const NON_CHAT_GEMINI_PATTERNS = ["tts", "audio", "live"];
+/** Image models can chat, but do not accept text-model thinking settings. */
+const NON_TEXT_GEMINI_PATTERNS = [...NON_CHAT_GEMINI_PATTERNS, "image"];
 
 /** Lowest Gemini-family generation kept in the catalog. */
 const GEMINI_FAMILY_MIN_VERSION: GeminiVersion = [2, 5];
@@ -61,8 +63,8 @@ const GEMINI_THINKING_LEVEL_MIN_VERSION: GeminiVersion = [3, 0];
 
 /**
  * True when the model should appear in the selectable catalog: first-class
- * Gemini embeddings, or a text-output `gemini-`/`gemma-` chat model at or above
- * {@link GEMINI_FAMILY_MIN_VERSION}. Drops TTS/image/audio/live variants and
+ * Gemini embeddings, or a text/image `gemini-`/`gemma-` chat model at or above
+ * {@link GEMINI_FAMILY_MIN_VERSION}. Drops TTS/audio/live variants and
  * unbranded families (learnlm, aqa, *-bison, legacy embedding-001/text-embedding-*).
  */
 export function isUsableGeminiCatalogModel(modelId: string): boolean {
@@ -74,7 +76,7 @@ export function isUsableGeminiCatalogModel(modelId: string): boolean {
   if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
     return true;
   }
-  if (NON_TEXT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
+  if (NON_CHAT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
     return false;
   }
 

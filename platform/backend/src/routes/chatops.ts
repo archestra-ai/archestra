@@ -34,8 +34,11 @@ import {
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
+import SlackProvider from "@/agents/chatops/slack-provider";
+import TelegramProvider from "@/agents/chatops/telegram-provider";
 import {
   buildAgentFooter,
   EventDedupMap,
@@ -71,6 +74,9 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   type IncomingChatMessage,
+  MsTeamsChatOpsConfigViewSchema,
+  SlackChatOpsConfigViewSchema,
+  TelegramChatOpsConfigViewSchema,
 } from "@/types";
 import {
   ChatOpsChannelBindingResponseSchema,
@@ -1775,6 +1781,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chatops/config/ms-teams",
+    {
+      schema: {
+        operationId: RouteId.GetMsTeamsChatOpsConfig,
+        description:
+          "Get the stored MS Teams chatops configuration without its secrets",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(MsTeamsChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("ms-teams");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored ? new MSTeamsProvider(stored).isConfigured() : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        appId: stored?.appId || null,
+        tenantId: stored?.tenantId || null,
+      };
+    },
+  );
+
   /**
    * Update MS Teams chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
@@ -1926,6 +1957,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
     },
   );
+  fastify.get(
+    "/api/chatops/config/slack",
+    {
+      schema: {
+        operationId: RouteId.GetSlackChatOpsConfig,
+        description:
+          "Get the stored Slack chatops configuration without its secrets",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(SlackChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("slack");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored ? new SlackProvider(stored).isConfigured() : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        appId: stored?.appId || null,
+        connectionMode: stored?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+      };
+    },
+  );
+
   /**
    * Update Slack chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
@@ -2669,6 +2725,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        operationId: RouteId.GetTelegramChatOpsConfig,
+        description:
+          "Get the stored Telegram chatops configuration without its bot token",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(TelegramChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("telegram");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored
+          ? new TelegramProvider(stored).isConfigured()
+          : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+      };
+    },
+  );
+
   /**
    * Update Telegram chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
@@ -3299,9 +3380,16 @@ async function handleAgentSelection(
         channelId?: string;
         workspaceId?: string;
         originalMessageText?: string;
+        pendingAttachmentsKey?: string;
       }
     | undefined;
-  const { agentId, channelId, workspaceId, originalMessageText } = value || {};
+  const {
+    agentId,
+    channelId,
+    workspaceId,
+    originalMessageText,
+    pendingAttachmentsKey,
+  } = value || {};
 
   if (!agentId) {
     await context.sendActivity("Please select an agent from the dropdown.");
@@ -3368,10 +3456,33 @@ async function handleAgentSelection(
 
   logger.debug("[ChatOps] handleAgentSelection: binding upserted");
 
-  // If there was an original message (not a command), process it now
-  if (originalMessageText && !isCommand(originalMessageText)) {
+  // Files sent with the original message. Sender and conversation come from
+  // the activity itself, never from the client-echoed card data, and match
+  // how the provider parsed the original message.
+  const provider = chatOpsManager.getMSTeamsProvider();
+  const activityChannelId = (
+    context.activity.channelData?.channel?.id ||
+    context.activity.conversation?.id ||
+    ""
+  ).split(";messageid=")[0];
+  const originalAttachments =
+    provider && pendingAttachmentsKey
+      ? await provider.takeAgentSelectionAttachments({
+          key: pendingAttachmentsKey,
+          senderId: message.senderId,
+          channelId: activityChannelId,
+        })
+      : [];
+  const replayText =
+    originalMessageText && !isCommand(originalMessageText)
+      ? originalMessageText
+      : "";
+
+  // If there was an original message (not a command), process it now. A
+  // message of only files has no text but still needs its answer.
+  if (replayText || (!originalMessageText && originalAttachments.length > 0)) {
     logger.debug(
-      { originalMessageText },
+      { originalMessageText, attachmentCount: originalAttachments.length },
       "[ChatOps] handleAgentSelection: about to send 'processing' message",
     );
     await context.sendActivity(
@@ -3381,8 +3492,6 @@ async function handleAgentSelection(
       "[ChatOps] handleAgentSelection: 'processing' message sent, about to call processMessage",
     );
 
-    // Get the provider and process the original message
-    const provider = chatOpsManager.getMSTeamsProvider();
     if (provider) {
       // Construct a message object for processing
       const originalMessage: IncomingChatMessage = {
@@ -3393,8 +3502,11 @@ async function handleAgentSelection(
         senderId: message.senderId,
         senderName: message.senderName,
         senderEmail: message.senderEmail,
-        text: originalMessageText,
-        rawText: originalMessageText,
+        text: replayText,
+        rawText: replayText,
+        ...(originalAttachments.length > 0 && {
+          attachments: originalAttachments,
+        }),
         timestamp: message.timestamp,
         isThreadReply: message.isThreadReply,
         metadata: {

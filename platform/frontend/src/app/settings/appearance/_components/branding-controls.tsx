@@ -164,6 +164,7 @@ function AssetTile({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const isIconField = field.startsWith("icon") || field === "favicon";
   return (
     <div className="min-w-0 space-y-2">
       <Label htmlFor={`appearance-${field}`} className="text-xs">
@@ -184,13 +185,13 @@ function AssetTile({
           )}
         >
           <img
-            src={value || "/logo-icon.svg"}
+            src={value || (isIconField ? "/logo-icon.svg" : "/logo.svg")}
             alt=""
             className={cn(
               "object-contain",
-              field.startsWith("icon") || field === "favicon" || !value
-                ? "size-6"
-                : "max-h-9 max-w-[80%]",
+              isIconField ? "size-6" : "max-h-9 max-w-[80%]",
+              // The default marks are drawn in near-black.
+              !value && dark && "invert",
             )}
           />
           <span

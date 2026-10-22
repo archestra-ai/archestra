@@ -48,7 +48,11 @@ overrides:
   # GHSA-j3f2-48v5-ccww (infinite loop in .proto option parsing) in 8.6.6.
   protobufjs: '>=8.6.6'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.5
+  # CVE-2026-112942 (HIGH, command injection) affects >=7.0.0 <=7.3.6 and is
+  # fixed in 7.3.7. Transitive-only (vitest, @vitest/mocker and
+  # vite-tsconfig-paths resolve it), so the override is the only way to lift
+  # every resolution past the vulnerable range.
+  vite: 7.3.7
   # GHSA-395f-4hp3-45gv (HIGH): quadratic-complexity DoS in shell-quote's
   # parse(), fixed in 1.9.0. GHSA-pqg4-j6r4-53mv (CVE-2026-102422, CRITICAL):
   # command injection in quote() via a line terminator after a { comment }
@@ -83,6 +87,9 @@ overrides:
   esbuild: '>=0.28.1'
   # CVE-2026-77301 (HIGH, excessive memory allocation) fixed in 0.6.1.
   adm-zip: 0.6.1
+  # CVE-2026-111755 and CVE-2026-111756 (both HIGH) fixed in 1.16.1.
+  # Transitive-only (via axios), so an override lifts every resolution.
+  follow-redirects: '>=1.16.1'
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1

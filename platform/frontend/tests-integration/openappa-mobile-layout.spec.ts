@@ -60,6 +60,11 @@ for (const width of [320, 375]) {
           },
         },
         {
+          method: "post",
+          url: "/api/openappa/policy-tests/inspect",
+          body: { files: [] },
+        },
+        {
           method: "get",
           url: "/api/openappa/coverage/entities",
           body: {
@@ -184,7 +189,14 @@ for (const width of [320, 375]) {
     test("a selected overflow tab fits the tab row instead of scrolling it", async ({
       page,
     }) => {
+      // Wait for the debounced inspection so teardown checks its MSW coverage.
+      const inspection = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().endsWith("/api/openappa/policy-tests/inspect"),
+      );
       await page.goto("/openappa/validation");
+      await inspection;
       const trigger = page.getByRole("button", {
         name: "Validations",
         exact: true,

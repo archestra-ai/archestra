@@ -183,6 +183,7 @@ export { default as limitBillingUsageTable } from "./limit-billing-usage";
 export { default as limitLabelsTable } from "./limit-label";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
+export { default as proxyProviderFilesTable } from "./proxy-provider-file";
 export { default as llmProviderApiKeyLabelsTable } from "./llm-provider-api-key-label";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";

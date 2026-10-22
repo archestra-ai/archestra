@@ -20,12 +20,25 @@ import {
   withEmbeddingEncoding,
 } from "../adapters/embeddings-wire";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import {
+  handleAzureImageEdit,
+  ImageEditMultipartBodySchema,
+  parseAzureImageEditRequest,
+} from "../image-edit-handler";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
+import { registerMediaMultipartParser } from "../utils/media-multipart";
+import azureFilesRoutes from "./azure-files";
 import { registerAudioRoutes } from "./audio";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await registerMediaMultipartParser(fastify);
+  await fastify.register(azureFilesRoutes);
+  fastify.addHook("preValidation", async (request) => {
+    rejectUnsupportedProxyFileReferences(request.body);
+  });
   const API_PREFIX = `${PROXY_API_PREFIX}/azure`;
   await registerAudioRoutes(fastify, "azure");
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
@@ -47,6 +60,8 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           RESPONSES_SUFFIX,
           EMBEDDINGS_SUFFIX,
           IMAGES_SUFFIX,
+          "/images/edits",
+          "/files",
           "/realtime/turns",
           "/audio/speech",
           "/audio/transcriptions",
@@ -58,6 +73,36 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         rejectUnhandledPaths: true,
       }),
     });
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.AzureImageEditsWithAgent
+            : RouteId.AzureImageEditsWithDefaultAgent,
+          description:
+            "Edit Azure images using bounded multipart image inputs and an optional PNG mask. Returns a complete image response; streaming is unsupported.",
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: Azure.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleAzureImageEdit(
+          await parseAzureImageEditRequest(request),
+          request,
+          reply,
+        ),
+    );
   }
 
   for (const withAgent of [false, true]) {

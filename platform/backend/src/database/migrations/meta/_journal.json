@@ -4124,6 +4124,13 @@
       "when": 1792635006325,
       "tag": "0588_purple_celestials",
       "breakpoints": true
+    },
+    {
+      "idx": 589,
+      "version": "7",
+      "when": 1792635768211,
+      "tag": "0589_majestic_bill_hollister",
+      "breakpoints": true
     }
   ]
 }

@@ -765,6 +765,51 @@ export function upstreamErrorMessage(
 }
 
 /**
+ * Why a model pool should move this request to its next member, or undefined
+ * when the failure would recur on any member (a bad request, a content
+ * filter) or nobody waits for the answer. Rate limits, overload, server
+ * errors, timeouts and unreachable upstreams are member-local, and so are a
+ * member's rejected credential (401/403) and a model it does not serve (404).
+ */
+export function poolFailoverReason(
+  error: unknown,
+): { reason: string; status: number; retryAfterMs?: number } | undefined {
+  if (error instanceof ObservedProviderUsageError) return undefined;
+  if (error instanceof ApiError || isClientAbortError(error)) return undefined;
+  const status =
+    explicitHttpStatus(error) ?? classifyTransientUpstreamError(error);
+  if (status === undefined) return undefined;
+  const failsOver =
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500;
+  if (!failsOver) return undefined;
+  const retryAfter = extractRetryAfterHeader(error);
+  const retryAfterMs =
+    retryAfter === undefined
+      ? undefined
+      : /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - Date.now());
+  const reason =
+    status === 429
+      ? "rate_limited"
+      : status === 401 || status === 403
+        ? "auth_failed"
+        : status === 404
+          ? "model_not_found"
+          : status === 408 || status === 504
+            ? "timeout"
+            : explicitHttpStatus(error) === undefined
+              ? "unreachable"
+              : "server_error";
+  return { reason: `${reason} (${status})`, status, retryAfterMs };
+}
+
+/**
  * Identifies connection failures eligible for retry. Errors with an HTTP
  * status, provider error payload, client abort, or timeout are excluded.
  * The caller limits retries to failures before the first response chunk.

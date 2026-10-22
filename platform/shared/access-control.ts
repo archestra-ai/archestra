@@ -1008,6 +1008,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["read"],
   },
   [RouteId.GetLlmModels]: {},
+  [RouteId.GetModelPools]: { llmModel: ["read"] },
+  [RouteId.CreateModelPool]: { llmModel: ["update"] },
+  [RouteId.UpdateModelPool]: { llmModel: ["update"] },
+  [RouteId.DeleteModelPool]: { llmModel: ["update"] },
   [RouteId.GetLlmProviderModelLabelKeys]: { llmModel: ["read"] },
   [RouteId.GetLlmProviderModelLabelValues]: { llmModel: ["read"] },
   [RouteId.SyncLlmModels]: {

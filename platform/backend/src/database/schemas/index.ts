@@ -203,6 +203,8 @@ export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
 export { default as modelLabelsTable } from "./model-label";
+export { default as modelPoolsTable } from "./model-pool";
+export { default as modelPoolMembersTable } from "./model-pool-member";
 export { default as modelTeamsTable } from "./model-team";
 export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";

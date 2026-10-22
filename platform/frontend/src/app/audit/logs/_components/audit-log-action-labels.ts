@@ -136,6 +136,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
+  "modelPool.created": "Model pool created",
+  "modelPool.updated": "Model pool updated",
+  "modelPool.deleted": "Model pool deleted",
   "oauthClient.created": "OAuth client created",
   "oauthClient.updated": "OAuth client updated",
   "oauthClient.deleted": "OAuth client deleted",
@@ -380,6 +383,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "knowledgeFile",
   "limit",
   "llmModel",
+  "modelPool",
   "oauthClient",
   "llmOauthClient",
   "llmProviderApiKey",

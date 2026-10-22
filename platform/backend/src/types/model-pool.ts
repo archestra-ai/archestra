@@ -1,0 +1,33 @@
+import { SupportedProvidersSchema } from "@archestra/shared";
+import { createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
+import { schema } from "@/database";
+
+export const SelectModelPoolMemberSchema = createSelectSchema(
+  schema.modelPoolMembersTable,
+);
+
+export const SelectModelPoolSchema = createSelectSchema(
+  schema.modelPoolsTable,
+).extend({
+  provider: SupportedProvidersSchema,
+  members: z.array(SelectModelPoolMemberSchema),
+});
+
+export const ModelPoolMemberInputSchema = z.object({
+  providerApiKeyId: z.string().uuid(),
+  priority: z.number().int().min(1).max(100).default(1),
+  weight: z.number().int().min(1).max(1000).default(1),
+  enabled: z.boolean().default(true),
+});
+
+export const ModelPoolInputSchema = z.object({
+  name: z.string().trim().min(1).max(256),
+  provider: SupportedProvidersSchema,
+  modelId: z.string().trim().min(1).max(512),
+  members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
+});
+
+export type ModelPoolMember = z.infer<typeof SelectModelPoolMemberSchema>;
+export type ModelPool = z.infer<typeof SelectModelPoolSchema>;
+export type ModelPoolInput = z.infer<typeof ModelPoolInputSchema>;

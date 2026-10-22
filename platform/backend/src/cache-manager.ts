@@ -173,6 +173,8 @@ export const CacheKey = {
    * next call reads them.
    */
   AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /** Model pool members sitting out after a failure, shared by every replica. */
+  ModelPoolBench: "model-pool-bench",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

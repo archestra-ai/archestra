@@ -29,6 +29,7 @@ import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import ModelPoolModel from "@/models/model-pool";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -1006,6 +1007,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // LLM virtual keys & OAuth clients
+  "/api/model-pools": {
+    resourceType: "modelPool",
+    fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
+  },
+  "/api/model-pools/:id": {
+    resourceType: "modelPool",
+    fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-virtual-keys": {
     resourceType: "virtualApiKey",
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),

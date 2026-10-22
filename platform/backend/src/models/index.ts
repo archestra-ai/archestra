@@ -118,6 +118,7 @@ export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
+export { default as ModelPoolModel } from "./model-pool";
 export { default as ModelTeamModel } from "./model-team";
 export { default as ModelUserModel } from "./model-user";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";

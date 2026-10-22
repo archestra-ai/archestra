@@ -52,6 +52,7 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
 export { default as mfilesVafAddOnRoutes } from "./mfiles-vaf-add-on/mfiles-vaf-add-on.routes";
 export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilot-auth/microsoft-365-copilot-auth.routes";
+export { default as modelPoolRoutes } from "./model-pool/model-pool.routes";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthClientsRoutes } from "./oauth-client/oauth-client.routes";
 export { default as oauthServerRoutes } from "./oauth-server";

@@ -24,6 +24,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import ModelPoolModel from "@/models/model-pool";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -161,6 +162,7 @@ export const AUDIT_DECISIONS = {
   mcpServersTable: { audited: true, model: McpServerModel },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
+  modelPoolsTable: { audited: true, model: ModelPoolModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
@@ -862,6 +864,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated; the connector audit snapshot carries the mapping list so upsert/delete diffs",
+  },
+  modelPoolMembersTable: {
+    audited: false,
+    reason: "child: pool × provider key; parent (model pool) audited",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,

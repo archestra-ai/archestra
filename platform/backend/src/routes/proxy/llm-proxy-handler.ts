@@ -170,6 +170,12 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import {
+  type ModelPoolPlan,
+  openThroughModelPool,
+  planModelPool,
+  type UpstreamAttempt,
+} from "./model-pool-failover";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
@@ -201,6 +207,14 @@ export interface LLMProxyContext<TRequest> {
   attributionLabels?: AttributionLabels;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  /**
+   * The upstream attempt this request's interaction rows record: which
+   * provider key served it and, through a model pool, which attempt it was.
+   * Mutated as a pool moves between members.
+   */
+  upstreamAttempt: UpstreamAttempt;
+  /** Set when the request's key is a member of the pool for its model. */
+  modelPool?: ModelPoolRouting;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -263,6 +277,14 @@ export interface LLMProxyContext<TRequest> {
    * first byte the client sees, wherever in preflight or streaming it happens.
    */
   streamTiming: StreamTiming;
+}
+
+/** How a request is spread across its model pool's members. */
+export interface ModelPoolRouting {
+  plan: ModelPoolPlan;
+  clientFor: (providerApiKeyId: string) => Promise<unknown>;
+  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
 
 export interface StreamTiming {
@@ -1105,6 +1127,9 @@ export async function handleLLMProxy<
     internalCall,
   );
 
+  const upstreamAttempt: UpstreamAttempt = {
+    providerApiKeyId: perKeyChatApiKeyId,
+  };
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1556,31 +1581,125 @@ export async function handleLLMProxy<
       proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
-    const client = provider.createClient(apiKey, {
+    const createUpstreamClient = (target: {
+      apiKey: string | undefined;
+      baseUrl: string | undefined;
+      headers: Record<string, string>;
+      providerApiKeyId: string | undefined;
+    }) =>
+      provider.createClient(target.apiKey, {
+        baseUrl: target.baseUrl,
+        agent: resolvedAgent,
+        abortSignal,
+        source,
+        model: requestAdapter.getModel(),
+        defaultHeaders:
+          Object.keys(target.headers).length > 0 ? target.headers : undefined,
+        llmProviderApiKeyId: target.providerApiKeyId,
+        sessionId: sessionId ?? undefined,
+        onResponseHeaders: (responseHeaders) => {
+          if (providerName === "anthropic") {
+            billingMode = utils.refineAnthropicBillingModeFromHeaders({
+              // A retry's response must not inherit a failed attempt's overage.
+              billingMode: credentialBillingMode,
+              headers: responseHeaders,
+            });
+          }
+        },
+        openAiCodexPassthrough,
+        ...(providerName === "gemini" &&
+        typeof headersForExtraction["x-goog-user-project"] === "string"
+          ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
+          : {}),
+      });
+    const client = createUpstreamClient({
+      apiKey,
       baseUrl: effectiveBaseUrl,
-      agent: resolvedAgent,
-      abortSignal,
-      source,
-      model: requestAdapter.getModel(),
-      defaultHeaders:
-        Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
-      llmProviderApiKeyId: perKeyChatApiKeyId,
-      sessionId: sessionId ?? undefined,
-      onResponseHeaders: (responseHeaders) => {
-        if (providerName === "anthropic") {
-          billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            // A retry's response must not inherit a failed attempt's overage.
-            billingMode: credentialBillingMode,
-            headers: responseHeaders,
-          });
-        }
-      },
-      openAiCodexPassthrough,
-      ...(providerName === "gemini" &&
-      typeof headersForExtraction["x-goog-user-project"] === "string"
-        ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
-        : {}),
+      headers: mergedHeaders,
+      providerApiKeyId: perKeyChatApiKeyId,
     });
+
+    // A pool takes over when the resolved key is a member of the pool for
+    // this model. Other members get their own client, built the same way.
+    const modelPoolPlan =
+      perKeyChatApiKeyId && !openAiCodexPassthrough
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            provider: providerName,
+            modelId: actualModel,
+            providerApiKeyId: perKeyChatApiKeyId,
+            sessionId,
+          })
+        : null;
+    const modelPool: ModelPoolRouting | undefined = modelPoolPlan
+      ? {
+          plan: modelPoolPlan,
+          clientFor: async (memberKeyId) => {
+            if (memberKeyId === perKeyChatApiKeyId) return client;
+            const row = await LlmProviderApiKeyModel.findById(memberKeyId);
+            if (!row) {
+              throw new ApiError(500, "Model pool member key no longer exists");
+            }
+            return createUpstreamClient({
+              apiKey: row.secretId
+                ? await getSecretValueForLlmProviderApiKey(row.secretId)
+                : undefined,
+              baseUrl:
+                row.inferenceBaseUrl ?? row.baseUrl ?? provider.getBaseUrl(),
+              headers: { ...(row.extraHeaders ?? {}), ...headersToForward },
+              providerApiKeyId: row.id,
+            });
+          },
+          recordFailedAttempt: (attempt) =>
+            persistProxyInteraction({
+              record: {
+                profileId: resolvedAgent.id,
+                externalAgentId,
+                runId,
+                userId,
+                serviceAccountId,
+                virtualKeyId,
+                passthroughVirtualKeyId,
+                appId: attributedAppId,
+                sessionId,
+                sessionSource,
+                source,
+                authMethod,
+                authenticatedAppId: authenticatedApp?.id,
+                authenticatedAppName: authenticatedApp?.name,
+                billingTeamId,
+                type: provider.interactionType,
+                request:
+                  requestAdapter.getOriginalRequest() as InteractionRequest,
+                processedRequest: null,
+                response: { error: attempt.failureReason ?? "failed" },
+                model: actualModel,
+                baselineModel: actualModel,
+                inputTokens: 0,
+                outputTokens: 0,
+                // The provider answered nothing, so this attempt is free.
+                cost: "0",
+              },
+              encryptedChat,
+              streamTiming,
+              upstreamAttempt: attempt,
+            }),
+          setResponseHeaders: (attempt) => {
+            if (reply.raw.headersSent) return;
+            reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
+            reply.raw.setHeader(
+              "x-archestra-attempts",
+              String(attempt.attempt ?? 1),
+            );
+            if (attempt.providerApiKeyId) {
+              reply.raw.setHeader(
+                "x-archestra-provider-key",
+                attempt.providerApiKeyId,
+              );
+            }
+          },
+        }
+      : undefined;
 
     if (pluginContext) {
       await pluginRegistry.onPrompt({
@@ -1682,6 +1801,8 @@ export async function handleLLMProxy<
       attributionLabels,
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
+      upstreamAttempt,
+      ...(modelPool ? { modelPool } : {}),
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -1827,6 +1948,7 @@ export async function handleLLMProxy<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        upstreamAttempt,
       });
     } catch (interactionError) {
       logger.error(
@@ -2079,6 +2201,7 @@ async function handleStreaming<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        upstreamAttempt: ctx.upstreamAttempt,
       });
     } catch (interactionError) {
       logger.error(
@@ -2245,6 +2368,7 @@ async function handleStreaming<
           encryptedChat,
           streamTiming,
           attributionLabels,
+          upstreamAttempt: ctx.upstreamAttempt,
         });
       } catch (interactionError) {
         logger.error(
@@ -2298,9 +2422,13 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        const stream = await openUpstreamWithRetry({
-          open: async () =>
-            withFirstChunk(await provider.executeStream(client, request)),
+        const stream = await openUpstream({
+          ctx,
+          client,
+          open: async (upstreamClient) =>
+            withFirstChunk(
+              await provider.executeStream(upstreamClient, request),
+            ),
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -3020,8 +3148,10 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        result = await openUpstreamWithRetry({
-          open: () => provider.execute(client, request),
+        result = await openUpstream({
+          ctx,
+          client,
+          open: (upstreamClient) => provider.execute(upstreamClient, request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -3075,6 +3205,7 @@ async function handleNonStreaming<
             encryptedChat,
             streamTiming,
             attributionLabels,
+            upstreamAttempt: ctx.upstreamAttempt,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3451,6 +3582,7 @@ async function handleNonStreaming<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        upstreamAttempt: ctx.upstreamAttempt,
       });
 
       if (pluginRegistry && pluginContext) {
@@ -3630,6 +3762,7 @@ async function handleNonStreaming<
       encryptedChat,
       streamTiming,
       attributionLabels,
+      upstreamAttempt: ctx.upstreamAttempt,
     });
     responsePersisted = true;
   } catch (interactionError) {
@@ -3899,6 +4032,44 @@ function planDispatchRewrites(params: {
   return rewritten;
 }
 
+/**
+ * Opens the upstream call: on the request's own client, or across its model
+ * pool's members when it has one. Either way, the provider key that answered
+ * (or failed last) is left in `ctx.upstreamAttempt` and priced in
+ * `ctx.providerApiKeyId`.
+ */
+async function openUpstream<TRequest, T>(params: {
+  ctx: LLMProxyContext<TRequest>;
+  client: unknown;
+  open: (client: unknown) => Promise<T>;
+  isRetryable: (error: unknown) => boolean;
+  shouldContinue: () => boolean;
+  onRetry?: (event: {
+    attempt: number;
+    delayMs: number;
+    error: unknown;
+  }) => void;
+}): Promise<T> {
+  const { ctx, client, open, ...retry } = params;
+  const pool = ctx.modelPool;
+  if (!pool) {
+    return openUpstreamWithRetry({ open: () => open(client), ...retry });
+  }
+  try {
+    return await openThroughModelPool({
+      plan: pool.plan,
+      attempt: ctx.upstreamAttempt,
+      clientFor: pool.clientFor,
+      open,
+      recordFailedAttempt: pool.recordFailedAttempt,
+      ...retry,
+    });
+  } finally {
+    ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
+    pool.setResponseHeaders(ctx.upstreamAttempt);
+  }
+}
+
 function logUpstreamRetry(params: {
   attempt: number;
   delayMs: number;
@@ -4012,11 +4183,13 @@ async function persistProxyInteraction({
   encryptedChat,
   streamTiming,
   attributionLabels,
+  upstreamAttempt,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
   attributionLabels?: AttributionLabels;
+  upstreamAttempt?: UpstreamAttempt;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
@@ -4024,6 +4197,11 @@ async function persistProxyInteraction({
     ...record,
     attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+    providerApiKeyId: upstreamAttempt?.providerApiKeyId,
+    modelPoolId: upstreamAttempt?.modelPoolId,
+    attempt: upstreamAttempt?.attempt,
+    attemptOutcome: upstreamAttempt?.attemptOutcome,
+    failureReason: upstreamAttempt?.failureReason,
   };
   await InteractionModel.create(
     encryptedChat.kind === "redact"

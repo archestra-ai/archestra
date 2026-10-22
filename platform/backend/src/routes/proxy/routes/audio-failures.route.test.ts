@@ -45,10 +45,12 @@ describe.each([
       response.end(audio);
     };
     upstream = createServer((request, response) => {
+      // Count the call when it arrives: a request the proxy aborts while its
+      // body is still in flight still reached the upstream.
+      calls++;
       void (async () => {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
-        calls++;
         response.once("close", () => {
           closed = true;
         });
@@ -426,7 +428,7 @@ describe.each([
     expect(calls).toBe(1);
   });
   test("times out without retrying a stalled upstream", async () => {
-    config.llmProxy.upstreamTimeoutMs = 30;
+    config.llmProxy.upstreamTimeoutMs = 250;
     handler = () => {};
     await expect(
       client.audio.speech.create({

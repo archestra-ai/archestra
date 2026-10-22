@@ -36,6 +36,7 @@ import {
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -49,6 +50,8 @@ vi.mock("@/services/agent-runtime/start-task", () => ({
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const oauthServer = useMswServer();
+// Transfer tickets live in the shared cache so any replica can redeem them.
+setupTestCacheManager();
 
 describe("Agent Runtime routes", () => {
   let app: FastifyInstanceWithZod;

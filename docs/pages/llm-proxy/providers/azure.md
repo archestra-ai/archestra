@@ -96,7 +96,7 @@ curl "https://<archestra-host>/v1/azure/images/generations" \
 
 Image editing, image inputs, and partial-image streaming are unavailable on this endpoint. `stream: true` returns a validation error.
 
-Image parameters are validated against the discovered backing model. For example, DALL-E supports `response_format`; GPT Image rejects it because its response is always base64. Unknown fields return a validation error instead of being discarded.
+Image parameters are validated against the discovered backing model. The proxy preserves `response_format` for compatible legacy models; GPT Image rejects it because its response is always base64. Unknown fields return a validation error instead of being discarded.
 
 ### Send an Audio Turn
 

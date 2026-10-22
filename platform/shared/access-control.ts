@@ -460,6 +460,10 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  [RouteId.AzureRealtimeTurnWithDefaultAgent]: {},
+  [RouteId.AzureRealtimeTurnWithAgent]: {},
+  [RouteId.AzureImagesWithDefaultAgent]: {},
+  [RouteId.AzureImagesWithAgent]: {},
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },

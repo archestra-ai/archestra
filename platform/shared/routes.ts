@@ -431,6 +431,10 @@ export const RouteId = {
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
+  AzureRealtimeTurnWithDefaultAgent: "azureRealtimeTurnWithDefaultAgent",
+  AzureRealtimeTurnWithAgent: "azureRealtimeTurnWithAgent",
+  AzureImagesWithDefaultAgent: "azureImagesWithDefaultAgent",
+  AzureImagesWithAgent: "azureImagesWithAgent",
   AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
   AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 

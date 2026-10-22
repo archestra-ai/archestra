@@ -8,6 +8,7 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   collapseWhitespace,
+  getAzureModelKind,
   getModelReadableMimeTypes,
   hasPersistableAssistantContent,
   isModelSelectionComplete,
@@ -3581,6 +3582,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const conversationModel = conversation.modelId
         ? await ModelModel.findById(conversation.modelId)
         : null;
+      // Media generation is an explicit user action. Never generate a second
+      // image or speech clip merely to name the conversation.
+      if (
+        conversationModel?.provider === "azure" &&
+        getAzureModelKind(conversationModel.modelId) !== "text"
+      ) {
+        return reply.send(conversation);
+      }
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
         inheritFrom:

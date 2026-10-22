@@ -68,6 +68,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "kimi:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "azure:images",
+  "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",

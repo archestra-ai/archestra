@@ -28,6 +28,7 @@ import {
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -343,6 +344,16 @@ export const PublicConfigResponseSchema = z.strictObject({
 let cachedAnalyticsInstanceId: string | null = null;
 let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
 let hasLoggedAnalyticsInstanceIdError = false;
+
+// Shared test workers replace their database between cases; the cached
+// installation identity must not survive that database reset.
+registerProcessLocalCache({
+  clear() {
+    cachedAnalyticsInstanceId = null;
+    pendingAnalyticsInstanceId = null;
+    hasLoggedAnalyticsInstanceIdError = false;
+  },
+});
 
 export async function getPublicConfigResponse(): Promise<
   z.infer<typeof PublicConfigResponseSchema>

@@ -1,5 +1,5 @@
-import { Transform } from "node:stream";
-import multipart from "@fastify/multipart";
+import { Readable } from "node:stream";
+import Busboy from "@fastify/busboy";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 export interface MediaMultipartFile {
@@ -20,45 +20,56 @@ export interface MediaMultipartLimits {
   maxParts?: number;
 }
 
-/** Register once per route scope; parsing happens explicitly in the handler. */
-export async function registerMediaMultipartParser(fastify: FastifyInstance) {
-  if (fastify.hasRequestDecorator("parts")) return;
-  await fastify.register(multipart, { throwFileSizeLimit: true });
-  fastify.addHook("preParsing", (request, _reply, payload, done) => {
+/** Fastify enforces route bodyLimit, including chunked wire bytes and headers. */
+export async function registerMediaMultipartParser(
+  fastify: FastifyInstance,
+  options: { uploadTimeoutMs?: number } = {},
+) {
+  if (fastify.hasDecorator("boundedMediaMultipart")) return;
+  fastify.decorate("boundedMediaMultipart", true);
+  fastify.addHook("onRequest", (request, reply, done) => {
     if (
       !request.headers["content-type"]
         ?.toLowerCase()
         .startsWith("multipart/form-data")
     )
-      return done(null, payload);
-    const maximum = request.routeOptions.bodyLimit;
-    const length = request.headers["content-length"];
-    if (length && Number(length) > maximum) {
-      return done(
-        new MediaMultipartError(413, "Multipart body exceeds the size limit"),
-      );
-    }
-    let received = 0;
-    const bounded = new Transform({
-      transform(chunk, _encoding, next) {
-        received += chunk.length;
-        next(
-          received > maximum
-            ? new MediaMultipartError(
-                413,
-                "Multipart body exceeds the size limit",
-              )
-            : null,
-          chunk,
-        );
-      },
-    });
-    payload.once("error", (error) => bounded.destroy(error));
-    done(null, payload.pipe(bounded));
+      return done();
+    const cleanup = () => {
+      clearTimeout(timer);
+      request.raw.removeListener("end", cleanup);
+      request.raw.removeListener("close", cleanup);
+      reply.raw.removeListener("close", cleanup);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      if (!reply.raw.headersSent) {
+        reply.raw.once("finish", () => request.raw.destroy());
+        void reply.code(408).send({
+          error: {
+            message: "Multipart upload deadline exceeded",
+            type: "invalid_request_error",
+          },
+        });
+      } else request.raw.destroy();
+    }, options.uploadTimeoutMs ?? 120_000);
+    timer.unref();
+    request.raw.once("end", cleanup);
+    request.raw.once("close", cleanup);
+    reply.raw.once("close", cleanup);
+    done();
   });
+  fastify.addContentTypeParser(
+    /^multipart\/form-data(?:;|$)/i,
+    { parseAs: "buffer" },
+    (request, body, done) => {
+      // Middleware and errors must never serialize sensitive upload bytes.
+      bodies.set(request, body as Buffer);
+      done(null, undefined);
+    },
+  );
 }
 
-/** Bounded, memory-only upload parsing. Never authenticate, persist, or log here. */
+/** Bounded, memory-only parsing. No authentication, persistence, or logging. */
 export async function parseMediaMultipart(
   request: FastifyRequest,
   limits: MediaMultipartLimits,
@@ -66,109 +77,130 @@ export async function parseMediaMultipart(
   fields: Record<string, string | string[]>;
   files: MediaMultipartFile[];
 }> {
-  if (!request.isMultipart())
-    throw new MediaMultipartError(415, "Expected multipart/form-data");
+  const raw = bodies.get(request);
+  bodies.delete(request);
+  if (!raw) throw new MediaMultipartError(415, "Expected multipart/form-data");
   const fields: Record<string, string | string[]> = Object.create(null);
   const files: MediaMultipartFile[] = [];
   const arrays = new Set(limits.arrayFields ?? []);
   let total = 0;
-  try {
-    for await (const part of request.parts({
-      limits: {
-        files: limits.maxFiles,
-        fileSize: limits.maxFileBytes,
-        fields: limits.maxFields ?? 32,
-        fieldSize: limits.maxFieldBytes ?? 64 * 1024,
-        fieldNameSize: 128,
-        headerPairs: 32,
-        parts: limits.maxParts ?? 64,
-      },
-    })) {
-      const fieldname = part.fieldname.endsWith("[]")
-        ? part.fieldname.slice(0, -2)
-        : part.fieldname;
+  return new Promise((resolve, reject) => {
+    let parser: Busboy;
+    try {
+      parser = new Busboy({
+        headers: {
+          ...request.headers,
+          "content-type": request.headers["content-type"] ?? "",
+        },
+        limits: {
+          files: limits.maxFiles,
+          fileSize: limits.maxFileBytes + 1,
+          fields: limits.maxFields ?? 32,
+          fieldSize: limits.maxFieldBytes ?? 64 * 1024,
+          fieldNameSize: 128,
+          headerPairs: 32,
+          parts: limits.maxParts ?? 64,
+        },
+      });
+    } catch {
+      reject(new MediaMultipartError(400, "Invalid multipart boundary"));
+      return;
+    }
+    let failed = false;
+    const fail = (status: number, message: string) => {
+      if (failed) return;
+      failed = true;
+      reject(new MediaMultipartError(status, message));
+      parser.destroy();
+    };
+    const nameOf = (name: string) => {
+      const canonical = name.endsWith("[]") ? name.slice(0, -2) : name;
+      if (
+        !canonical ||
+        ["__proto__", "prototype", "constructor"].includes(canonical) ||
+        hasControlCharacters(canonical) ||
+        Buffer.byteLength(name) > 128 ||
+        (name.endsWith("[]") && !arrays.has(canonical))
+      ) {
+        fail(400, "Invalid multipart field name");
+        return undefined;
+      }
+      return canonical;
+    };
+    parser.on("file", (name, stream, originalFilename, _encoding, mimetype) => {
+      const fieldname = nameOf(name);
+      const filename =
+        originalFilename
+          .replaceAll("\\", "/")
+          .split("/")
+          .at(-1)
+          ?.normalize("NFC") ?? "";
       if (
         !fieldname ||
-        ["__proto__", "prototype", "constructor"].includes(fieldname) ||
-        hasControlCharacters(fieldname)
+        !limits.fileFields.includes(fieldname) ||
+        (!arrays.has(fieldname) &&
+          files.some((file) => file.fieldname === fieldname)) ||
+        !filename ||
+        filename === "." ||
+        filename === ".." ||
+        hasControlCharacters(filename) ||
+        Buffer.byteLength(filename) > 255
       ) {
-        throw new MediaMultipartError(400, "Invalid multipart field name");
+        stream.resume();
+        fail(400, "Invalid or duplicate multipart file field");
+        return;
       }
-      if (part.fieldname.endsWith("[]") && !arrays.has(fieldname))
-        throw new MediaMultipartError(400, "Unexpected multipart array field");
-      if (part.type === "file") {
-        if (!limits.fileFields.includes(fieldname))
-          throw new MediaMultipartError(400, "Unexpected multipart file field");
-        if (
-          !arrays.has(fieldname) &&
-          files.some((file) => file.fieldname === fieldname)
-        )
-          throw new MediaMultipartError(400, "Duplicate multipart file field");
-        const chunks: Buffer[] = [];
-        let size = 0;
-        for await (const chunk of part.file) {
-          const bytes = Buffer.from(chunk);
-          size += bytes.length;
-          total += bytes.length;
-          if (size > limits.maxFileBytes || total > limits.maxTotalFileBytes)
-            throw new MediaMultipartError(
-              413,
-              "Multipart files exceed the size limit",
-            );
-          chunks.push(bytes);
+      const file: MediaMultipartFile = {
+        fieldname,
+        filename,
+        mimetype,
+        data: Buffer.alloc(0),
+      };
+      files.push(file);
+      const chunks: Buffer[] = [];
+      let size = 0;
+      stream.on("limit", () =>
+        fail(413, "Multipart file exceeds the size limit"),
+      );
+      stream.on("error", () => fail(400, "Invalid multipart file"));
+      stream.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        total += chunk.length;
+        if (size > limits.maxFileBytes || total > limits.maxTotalFileBytes) {
+          fail(413, "Multipart files exceed the size limit");
+          return;
         }
-        if (part.file.truncated)
-          throw new MediaMultipartError(
-            413,
-            "Multipart file exceeds the size limit",
-          );
-        const filename =
-          part.filename
-            .replaceAll("\\", "/")
-            .split("/")
-            .at(-1)
-            ?.normalize("NFC") ?? "";
-        if (
-          !filename ||
-          filename === "." ||
-          filename === ".." ||
-          hasControlCharacters(filename) ||
-          Buffer.byteLength(filename) > 255
-        )
-          throw new MediaMultipartError(400, "Invalid multipart filename");
-        files.push({
-          fieldname,
-          filename,
-          mimetype: part.mimetype,
-          data: Buffer.concat(chunks, size),
-        });
-      } else {
-        if (part.valueTruncated || part.fieldnameTruncated)
-          throw new MediaMultipartError(
-            413,
-            "Multipart field exceeds the size limit",
-          );
-        if (typeof part.value !== "string")
-          throw new MediaMultipartError(
-            400,
-            "Multipart fields must be strings",
-          );
-        if (Object.hasOwn(fields, fieldname) && !arrays.has(fieldname))
-          throw new MediaMultipartError(400, "Duplicate multipart field");
-        fields[fieldname] = arrays.has(fieldname)
-          ? [...((fields[fieldname] as string[]) ?? []), part.value]
-          : part.value;
+        if (!failed) chunks.push(chunk);
+      });
+      stream.on("end", () => {
+        if (!failed) file.data = Buffer.concat(chunks, size);
+      });
+    });
+    parser.on("field", (name, value, nameTruncated, valueTruncated) => {
+      const fieldname = nameOf(name);
+      if (!fieldname) return;
+      if (nameTruncated || valueTruncated) {
+        fail(413, "Multipart field exceeds the size limit");
+        return;
       }
-    }
-    return { fields, files };
-  } catch (error) {
-    if (error instanceof MediaMultipartError) throw error;
-    const code = (error as { code?: string }).code;
-    throw new MediaMultipartError(
-      code?.includes("LIMIT") || code?.includes("TOO_LARGE") ? 413 : 400,
-      "Invalid or oversized multipart body",
-    );
-  }
+      if (Object.hasOwn(fields, fieldname) && !arrays.has(fieldname)) {
+        fail(400, "Duplicate multipart field");
+        return;
+      }
+      fields[fieldname] = arrays.has(fieldname)
+        ? [...((fields[fieldname] as string[]) ?? []), value]
+        : value;
+    });
+    for (const event of ["partsLimit", "filesLimit", "fieldsLimit"] as const)
+      parser.on(event, () =>
+        fail(413, "Multipart part count exceeds the limit"),
+      );
+    parser.on("error", () => fail(400, "Invalid multipart body"));
+    parser.on("finish", () => {
+      if (!failed) resolve({ fields, files });
+    });
+    Readable.from(raw).pipe(parser);
+  });
 }
 
 class MediaMultipartError extends Error {
@@ -187,3 +219,5 @@ function hasControlCharacters(value: string): boolean {
     return code < 32 || code === 127;
   });
 }
+
+const bodies = new WeakMap<FastifyRequest, Buffer>();

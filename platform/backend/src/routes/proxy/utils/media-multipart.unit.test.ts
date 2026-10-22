@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import Fastify from "fastify";
 import { describe, expect, test } from "vitest";
 import {
@@ -55,6 +56,13 @@ async function upload(
 }
 
 describe("bounded multipart parsing", () => {
+  test("accepts the exact per-file bound", async () => {
+    const form = new FormData();
+    form.append("file", new File([bytes], "input.wav"));
+    expect(
+      (await upload(form, { maxFileBytes: bytes.length })).statusCode,
+    ).toBe(200);
+  });
   test("preserves arbitrary bytes, ordered SDK arrays and safe basename metadata", async () => {
     const form = new FormData();
     form.append("model", "alias");
@@ -149,3 +157,124 @@ describe("bounded multipart parsing", () => {
     }
   });
 });
+
+test("real chunked uploads preserve every byte and enforce aggregate limits without consuming the raw stream twice", async () => {
+  const app = Fastify({ bodyLimit: 1024 });
+  await registerMediaMultipartParser(app);
+  app.post("/", async (request) => {
+    expect(request.body).toBeUndefined();
+    const parsed = await parseMediaMultipart(request, {
+      fileFields: ["file"],
+      maxFiles: 1,
+      maxFileBytes: 64,
+      maxTotalFileBytes: 64,
+    });
+    return {
+      hash: createHash("sha256").update(parsed.files[0].data).digest("hex"),
+    };
+  });
+  const origin = await app.listen({ port: 0, host: "127.0.0.1" });
+  const form = new FormData();
+  form.append("file", new File([bytes], "input.wav"));
+  const wire = new Request(origin, { method: "POST", body: form });
+  const raw = Buffer.from(await wire.arrayBuffer());
+  const type = wire.headers.get("content-type") ?? "";
+  try {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        sendChunked({ origin, type, bytes: raw }),
+      ),
+    );
+    for (const response of results) {
+      expect(response.status).toBe(200);
+      expect(JSON.parse(response.body).hash).toBe(
+        createHash("sha256").update(bytes).digest("hex"),
+      );
+    }
+    expect(
+      (await sendChunked({ origin, type, bytes: Buffer.alloc(1025) })).status,
+    ).toBe(413);
+  } finally {
+    await app.close();
+  }
+});
+
+test("upload deadline and disconnect release the request before the next upload", async () => {
+  const app = Fastify({ bodyLimit: 1024 });
+  await registerMediaMultipartParser(app, { uploadTimeoutMs: 30 });
+  app.post("/", async (request) => {
+    const parsed = await parseMediaMultipart(request, {
+      fileFields: ["file"],
+      maxFiles: 1,
+      maxFileBytes: 64,
+      maxTotalFileBytes: 64,
+    });
+    return { files: parsed.files.length };
+  });
+  const origin = await app.listen({ port: 0, host: "127.0.0.1" });
+  const form = new FormData();
+  form.append("file", new File([bytes], "input.wav"));
+  const wire = new Request(origin, { method: "POST", body: form });
+  const raw = Buffer.from(await wire.arrayBuffer());
+  const type = wire.headers.get("content-type") ?? "";
+  try {
+    expect(
+      (
+        await sendChunked({
+          origin,
+          type,
+          bytes: raw.subarray(0, 30),
+          unfinished: true,
+        })
+      ).status,
+    ).toBe(408);
+    await new Promise<void>((resolve) => {
+      const aborted = httpRequest(origin, {
+        method: "POST",
+        headers: { "content-type": type, "transfer-encoding": "chunked" },
+      });
+      aborted.on("error", () => {});
+      aborted.on("close", resolve);
+      aborted.write(raw.subarray(0, 30));
+      aborted.destroy();
+    });
+    expect((await sendChunked({ origin, type, bytes: raw })).status).toBe(200);
+  } finally {
+    await app.close();
+  }
+});
+
+function sendChunked(params: {
+  origin: string;
+  type: string;
+  bytes: Buffer;
+  unfinished?: boolean;
+}): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const client = httpRequest(
+      params.origin,
+      {
+        method: "POST",
+        headers: {
+          "content-type": params.type,
+          "transfer-encoding": "chunked",
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString(),
+          });
+          client.destroy();
+        });
+      },
+    );
+    client.on("error", reject);
+    for (let offset = 0; offset < params.bytes.length; offset += 7)
+      client.write(params.bytes.subarray(offset, offset + 7));
+    if (!params.unfinished) client.end();
+  });
+}

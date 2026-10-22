@@ -15,7 +15,7 @@ Use every model in your Amazon Bedrock account through Archestra. Connect with a
 2. Choose the authentication method:
    - **API Key**: paste a Bedrock API key.
    - **AWS SigV4**: enter **Access Key ID**, **Secret Access Key**, and an optional **Session Token**.
-   - **Service Account**: use the IAM credentials available to the backend. This requires [`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED).
+   - **Service Account**: use the IAM credentials available to the backend. This requires [`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED).
 3. Choose the **Region** where your models are available.
 4. Click **Test & Create**.
 
@@ -53,7 +53,7 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
      eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
    ```
 
-5. Set [`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED) and restart the deployment. Create the provider key using **Service Account**.
+5. Set [`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED) and restart the deployment. Create the provider key using **Service Account**.
 
 ### Minimum IAM Policy
 
@@ -92,4 +92,4 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 
 ## Model Discovery
 
-Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/reference/configuration#ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS) to a comma-separated list such as `anthropic,amazon` to limit discovered model vendors. [`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`](/docs/reference/configuration#ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS) limits inference-region prefixes such as `us,global`. Empty values allow all.
+Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS) to a comma-separated list such as `anthropic,amazon` to limit discovered model vendors. [`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS) limits inference-region prefixes such as `us,global`. Empty values allow all.

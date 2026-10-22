@@ -12,12 +12,26 @@ Start a task on your laptop, and let Archestra finish it. Your local agent hands
 
 With a [dedicated runtime](/docs/agents/managed-agents), the task runs in its own container, with a live terminal you can watch.
 
+## Start With Connect
+
+You need [Managed Agents set up](/docs/agents/managed-agents/setup) on the deployment. [Connect](/docs/get-started/connect) adds instructions to your local agent's system prompt. By default, they tell it to offer “move this to a managed agent in Archestra” once per session and load the **Managed Agent Handoff** skill when you ask. The prompt makes the agent aware of handoff; the skill supplies the transfer procedure.
+
+1. Connect your local client with the MCP Gateway and shared skills enabled.
+2. Start a new client session. Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code receive updated instructions on their next launch. Other clients need setup again or manual copying, as shown during setup.
+3. Ask to “move this to a managed agent in Archestra”. The client loads the skill, chooses an accessible managed agent, and prepares your task context and files.
+
+To change the suggestion, use **Settings → Connect Page → Instructions for connected agents**, with [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). Turning it off removes this prompt guidance; you can still ask explicitly for the handoff skill.
+
 ## Hand Off a Task
 
-1. Install the **Managed Agent Handoff** skill from [Connect](/docs/get-started/connect).
-2. Ask your local agent to "hand this over to Archestra".
-3. To continue locally, ask it to "bring it back and continue here".
-4. Review the repository patch it returns before you apply it.
+The skill transfers a starting point the remote agent can actually use, including repository changes that exist only on your laptop.
+
+1. Let your local agent inspect staged, unstaged, and untracked changes, and select the files needed for the task. It supplies the repository, exact base commit, changes, goal, and acceptance criteria; a local path alone is not a transfer.
+2. The client starts a managed session and transfers the selected files. Follow-up instructions reuse that session instead of starting another one. Open its run link to check progress and the live terminal.
+3. To continue locally, ask to “bring it back and continue here”. The client coordinates a stopping point and retrieves the result and continuation notes before workspace retention expires.
+4. Review the returned patch against your current local changes. The client checks applicability, reports conflicts, and runs the relevant local checks after applying it.
+
+Processes, installed dependencies, and databases do not transfer automatically. Keep secrets out of ordinary file transfers; use the agent's saved credentials or the [credential transfer](#pass-a-credential) flow. Missing tools or an expired workspace must be resolved before the handoff can continue.
 
 ## What Your Agent Uses
 

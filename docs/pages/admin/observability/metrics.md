@@ -3,7 +3,7 @@ title: Observability Metrics
 sidebarTitle: Metrics
 description: Scrape Archestra's Prometheus metrics and look up every metric name and label
 order: 1
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,11 +21,11 @@ Each process serves its own registry, so scrape every pod:
 
 The Helm chart runs the worker as its own Deployment by default. Sum counters across web and worker pods: an agent run from a schedule reports its LLM metrics from a worker pod.
 
-[`ARCHESTRA_METRICS_PORT`](/docs/reference/configuration#ARCHESTRA_METRICS_PORT) changes the web port. Worker pods serve metrics on their API port, `9000`.
+[`ARCHESTRA_METRICS_PORT`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_PORT) changes the web port. Worker pods serve metrics on their API port, `9000`.
 
 ### Authentication
 
-The endpoint is open by default. Set [`ARCHESTRA_METRICS_SECRET`](/docs/reference/configuration#ARCHESTRA_METRICS_SECRET) to require a bearer token on web and worker pods. Requests without it get `401`.
+The endpoint is open by default. Set [`ARCHESTRA_METRICS_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_SECRET) to require a bearer token on web and worker pods. Requests without it get `401`.
 
 ```yaml
 scrape_configs:
@@ -102,7 +102,7 @@ Users, skills, apps, and client-supplied IDs are not metric labels. Use these so
 
 `llm_time_to_first_byte_seconds` minus `llm_time_to_first_token_seconds` is the time Archestra spends before the upstream call: authentication and guardrails.
 
-Every replica reports the same `llm_active_users` value, so aggregate it with `max()`, not `sum()`. [`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`](/docs/reference/configuration#ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS) sets the refresh interval; `0` turns the metric off.
+Every replica reports the same `llm_active_users` value, so aggregate it with `max()`, not `sum()`. [`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS) sets the refresh interval; `0` turns the metric off.
 
 LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
 
@@ -128,13 +128,13 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 | <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
 | <span id="agent_runtime_completion_deliveries_total"></span>`agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
 | <span id="agent_runtime_crossing_refusals_total"></span>`agent_runtime_crossing_refusals_total` | Counter | `reason` | Runtime tool calls [Guardrails](/docs/agents/guardrails) refused or held at the runtime boundary |
-| <span id="agent_runtime_pending_exports_total"></span>`agent_runtime_pending_exports_total` | Counter | `outcome` | Protected runtime files pinned while their runtime was mid-call (`pinned`), and how each pin ended (`admitted` or `held`). `discard_failed` counts pins the backend could not release; the runtime removes those within 6 hours |
+| <span id="agent_runtime_pending_exports_total"></span>`agent_runtime_pending_exports_total` | Counter | `outcome` | Pending runtime file exports and their outcomes: `pinned`, `admitted`, `held`, or `discard_failed` |
 | <span id="agent_runtime_observed_reads_total"></span>`agent_runtime_observed_reads_total` | Counter | `outcome` | Runtime reads a governed session made while [Guardrails](/docs/agents/guardrails) enforcement was off: `signed` so they pass once it is back on, or `unsigned` because the call could not be recorded |
 | <span id="agent_runtime_health_tasks"></span>`agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
 | <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
 | <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |
 
-`agent_runtime_crossing_refusals_total` reasons: `proof_missing` (a call to a runtime bound to a session carried no proof of its source), `different_session` (its proof names another session), `unverified_session`, `unparented`, `other_organization`, and `not_a_spawn` (the proof or the runtime's session did not check out), `client_blocked` (an unrecognized client while those are blocked), `unbindable` and `address_refused` (a launch Guardrails could not bind or refused), `held` (Guardrails held a value crossing out of the runtime), `altered` (a pinned file changed after it was admitted), and `withheld` (a run result not admitted to the session).
+Filter `agent_runtime_crossing_refusals_total` by `reason` to identify missing session proofs, rejected clients, refused launches, or held runtime output.
 
 `agent_runtime_health_tasks` conditions are `working`, `submitted`, `input_required`, `auth_required`, `failed_recent` (the last 15 minutes), and `completion_pending`. Conditions overlap: a task waiting for authentication also counts as `working`. `agent_runtime_health_age_seconds` conditions are `heartbeat`, `submitted`, and `completion_pending`.
 

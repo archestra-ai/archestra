@@ -32,4 +32,4 @@ Under **Models**, edit a native model and set **Model parameters**, including `n
 
 If you cap the server's context with `OLLAMA_CONTEXT_LENGTH`, also set `num_ctx` on the model. The server does not report that global cap to Archestra. Models marked **Limited for complex tasks** may be less reliable for agents that call tools.
 
-Default endpoints come from [`ARCHESTRA_OLLAMA_BASE_URL`](/docs/reference/configuration#ARCHESTRA_OLLAMA_BASE_URL) and [`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`](/docs/reference/configuration#ARCHESTRA_OLLAMA_NATIVE_BASE_URL). Use a per-key Base URL to override them.
+Default endpoints come from [`ARCHESTRA_OLLAMA_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_OLLAMA_BASE_URL) and [`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_OLLAMA_NATIVE_BASE_URL). Use a per-key Base URL to override them.

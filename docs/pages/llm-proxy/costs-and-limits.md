@@ -93,7 +93,7 @@ Archestra tells the two apart from the credential on each request. You configure
 
 - Subscription use bills $0 and never counts toward a [budget](#set-a-budget). Costs shows it as **Subscription-covered**.
 - A Claude subscription that runs into paid usage credits turns metered. Archestra reads this from Anthropic's response headers.
-- To count every new request as metered, set [`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`](/docs/reference/configuration#ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT). Past requests keep their classification.
+- To count every new request as metered, set [`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT). Past requests keep their classification.
 
 <span id="model-pricing"></span><span id="prompt-caching"></span>
 

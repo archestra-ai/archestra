@@ -736,12 +736,15 @@ class McpClient {
       owner.type === "agent" &&
       !isToolCatalogAccessible(
         tool,
-        await getCallerAccessibleCatalogIds({
-          userId: tokenAuth?.serviceAccountId
-            ? serviceAccountUserId(tokenAuth.serviceAccountId)
-            : tokenAuth?.userId,
-          organizationId: tokenAuth?.organizationId,
-        }),
+        await getCallerAccessibleCatalogIds(
+          {
+            userId: tokenAuth?.serviceAccountId
+              ? serviceAccountUserId(tokenAuth.serviceAccountId)
+              : tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
+          },
+          [tool.catalogId],
+        ),
       )
     ) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);
@@ -5178,13 +5181,15 @@ class McpClient {
       (await agentToolExclusionsService.getActiveExclusionSets(agentId));
     // An assigned tool whose catalog the calling user cannot see does not
     // resolve the resource either (its server is not theirs to read from).
-    const accessibleCatalogIds = await getCallerAccessibleCatalogIds({
-      userId: tokenAuth?.userId,
-      organizationId: tokenAuth?.organizationId,
-    });
-    const matchingTools = (
-      await ToolModel.findToolsByUiResourceUri(agentId, uri)
-    ).filter(
+    const uriTools = await ToolModel.findToolsByUiResourceUri(agentId, uri);
+    const accessibleCatalogIds = await getCallerAccessibleCatalogIds(
+      {
+        userId: tokenAuth?.userId,
+        organizationId: tokenAuth?.organizationId,
+      },
+      uriTools.map(({ catalogId }) => catalogId),
+    );
+    const matchingTools = uriTools.filter(
       (match) =>
         !isToolRowExcluded(match.tool, effectiveExclusions) &&
         isToolCatalogAccessible(match, accessibleCatalogIds),

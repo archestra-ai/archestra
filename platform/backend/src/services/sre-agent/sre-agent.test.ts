@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server";
@@ -8,7 +9,8 @@ import type * as k8s from "@kubernetes/client-node";
 import { beforeEach } from "vitest";
 import { getAppVersion } from "@/app-version";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import mcpClient from "@/clients/mcp-client";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import { buildDaggerEgressPolicies } from "@/k8s/dagger-environment-runtime/network-policy";
@@ -359,6 +361,95 @@ describe("sreAgentService", () => {
         _meta: { archestraError: { code: "unknown_tool" } },
       });
     }
+  });
+
+  test.for([
+    { caller: "platform admin", canUseSre: false },
+    { caller: "service account", canUseSre: false },
+    { caller: "custom role with sre:read", canUseSre: true },
+    { caller: "admin", canUseSre: true },
+  ] as const)("the Kubernetes tools take sre:read: $caller", async ({
+    caller,
+    canUseSre,
+  }, {
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+    makeServiceAccount,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    const [podsLog] = await discoverTools(["pods_log"]);
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminId,
+      environmentId: SRE_ENVIRONMENT_ID,
+    });
+    await AgentToolModel.create(agent.id, podsLog.id, {
+      mcpServerId: server.id,
+    });
+
+    const callerAuth = async (): Promise<{
+      userId: string;
+      tokenAuth: TokenAuthContext;
+    }> => {
+      const base = {
+        tokenId: "caller",
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId,
+      };
+      switch (caller) {
+        case "admin":
+          return { userId: adminId, tokenAuth: { ...base, userId: adminId } };
+        case "service account": {
+          const account = await makeServiceAccount(organizationId);
+          return {
+            userId: serviceAccountUserId(account.id),
+            tokenAuth: { ...base, serviceAccountId: account.id },
+          };
+        }
+        case "platform admin":
+        case "custom role with sre:read": {
+          const user = await makeUser();
+          const role =
+            caller === "platform admin"
+              ? PLATFORM_ADMIN_ROLE_NAME
+              : (
+                  await makeCustomRole(organizationId, {
+                    permission: { sre: ["read"] },
+                  })
+                ).role;
+          await makeMember(user.id, organizationId, { role });
+          return { userId: user.id, tokenAuth: { ...base, userId: user.id } };
+        }
+      }
+    };
+    const { userId, tokenAuth } = await callerAuth();
+
+    const listed = await filterToolsByCallerCatalogAccess(
+      await ToolModel.getMcpToolsByAgent(agent.id),
+      { userId, organizationId },
+    );
+    expect(listed.map(({ id }) => id)).toEqual(canUseSre ? [podsLog.id] : []);
+    if (canUseSre) return;
+    expect(
+      await mcpClient.executeToolCallForOwner(
+        { id: "call_pods_log", name: podsLog.name, arguments: {} },
+        agentOwner(agent.id),
+        tokenAuth,
+      ),
+    ).toMatchObject({
+      isError: true,
+      _meta: { archestraError: { code: "unknown_tool" } },
+    });
   });
 
   test("version 1 of the agent already has its tools", async ({

@@ -1,6 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  PLATFORM_ADMIN_ROLE_NAME,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
@@ -376,12 +375,11 @@ export const sreAgentService = new SreAgentService();
 /**
  * The SRE tools can read other installs' pod specs, whose arguments may carry
  * resolved credentials, so the agent, its catalog item, and its environment
- * are for admins only.
+ * are shared with Admins only. Calling the tools also takes `sre:read`.
  */
 const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
-  ADMIN_ROLE_NAME,
-  PLATFORM_ADMIN_ROLE_NAME,
-].map((id) => ({ subject: { type: "role", id }, actions: ["read", "use"] }));
+  { subject: { type: "role", id: ADMIN_ROLE_NAME }, actions: ["read", "use"] },
+];
 
 /**
  * The organization's default egress (or the built-in public-internet floor)

@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-22
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -21,7 +21,7 @@ Admin holds every permission, including user management, roles, and organization
 
 ### Platform Admin
 
-Platform Admin holds every permission except `log:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs and audit records, and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
+Platform Admin holds every permission except `log:admin`, `auditLog:admin`, `member:impersonate`, and `sre:read`. It manages users, roles, settings, and resources, but sees only its own logs and audit records, cannot sign in as another member, and cannot call the SRE agent's Kubernetes tools. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
 
 ### Editor
 
@@ -174,6 +174,7 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="skill:read"></span>`skill:read` | Open Skills |
 | <span id="skill:create"></span>`skill:create` | Create new agent skills |
 | <span id="skill:delete"></span>`skill:delete` | Permanently delete skills from the trash |
+| <span id="sre:read"></span>`sre:read` | Call the SRE agent's Kubernetes tools, which read this installation's pods, logs, and specs |
 | <span id="team:read"></span>`team:read` | View teams and their members |
 | <span id="team:create"></span>`team:create` | Create new teams |
 | <span id="team:update"></span>`team:update` | Modify team settings |

@@ -96,6 +96,75 @@ describe("Azure resource capability evidence", () => {
       expect(await result).toMatchObject({ status: "known", kind: "image" });
     else await expect(result).rejects.toMatchObject({ statusCode: 400 });
   });
+  test.for([
+    { mime_type: "image/png", bytes: 1024, width: 16, height: 16, valid: true },
+    {
+      mime_type: "image/jpeg",
+      bytes: 1024,
+      width: 16,
+      height: 16,
+      valid: false,
+    },
+    {
+      mime_type: "image/png",
+      bytes: 4194304,
+      width: 16,
+      height: 16,
+      valid: false,
+    },
+    {
+      mime_type: "image/png",
+      bytes: 1024,
+      width: 16,
+      height: 32,
+      valid: false,
+    },
+    {
+      mime_type: "image/png",
+      bytes: 1024,
+      width: undefined,
+      height: undefined,
+      valid: false,
+    },
+  ])("DALL-E 2 edit constraints use validated file metadata: %j", async (image, {
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    backing = "dall-e-2";
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "azure",
+      baseUrl,
+    });
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "azure",
+      apiKeyValue: "synthetic-key",
+      baseUrl,
+    });
+    const validate = (images: unknown[]) =>
+      validateAzureModelOperation({
+        providerApiKeyId: key.id,
+        modelId: "production",
+        operation: "image-edit",
+        parameters: { input_files: { images } },
+      });
+    if (image.valid)
+      expect(await validate([image])).toMatchObject({
+        status: "known",
+        kind: "image",
+      });
+    else
+      await expect(validate([image])).rejects.toMatchObject({
+        statusCode: 400,
+      });
+    await expect(validate([image, image])).rejects.toMatchObject({
+      statusCode: 400,
+    });
+  });
+
   test("explicit deployment flags classify missing backing names without trusting aliases", async ({
     makeOrganization,
     makeSecret,
@@ -234,7 +303,7 @@ describe("Azure resource capability evidence", () => {
     ).toEqual(["text", "audio"]);
     expect(
       (await list()).find((model) => model.id === "production")?.capabilities
-        .outputModalities,
+        ?.outputModalities,
     ).toBeNull();
     expect(
       await resolveAzureModelCapabilities({

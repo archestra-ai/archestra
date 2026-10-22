@@ -2,6 +2,7 @@ import type {
   AzureModelEvidence,
   AzureModelOperation,
 } from "@archestra/shared/azure-models";
+import { z } from "zod";
 import config from "@/config";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import { ApiError } from "@/types/api";
@@ -158,5 +159,34 @@ function validateImageParameters(params: {
       reject("quality");
     if (name === "dall-e-3" && has("n") && body.n !== 1) reject("n");
     if (name === "dall-e-2" && has("style")) reject("style");
+    if (name === "dall-e-2" && params.operation === "image-edit") {
+      // Only trusted upload metadata reaches this validator; the edit handler
+      // owns decoding and validates the bytes before adding input_files.
+      const files = z
+        .object({
+          images: z
+            .array(
+              z
+                .object({
+                  mime_type: z.literal("image/png"),
+                  bytes: z
+                    .number()
+                    .int()
+                    .positive()
+                    .lt(4 * 1024 * 1024),
+                  width: z.number().int().positive(),
+                  height: z.number().int().positive(),
+                })
+                .refine((image) => image.width === image.height),
+            )
+            .length(1),
+        })
+        .safeParse(body.input_files);
+      if (!files.success)
+        throw new ApiError(
+          400,
+          "DALL-E 2 edits require exactly one square PNG smaller than 4 MiB.",
+        );
+    }
   }
 }

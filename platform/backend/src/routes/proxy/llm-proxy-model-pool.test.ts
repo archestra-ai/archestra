@@ -82,6 +82,13 @@ describe("Model pools - LLM Proxy", () => {
         (await makeSecret({ secret: { apiKey: "sk-healthy" } })).id,
         { provider: "openai" },
       );
+      const { value: virtualKey, virtualKey: virtualKeyRow } =
+        await VirtualApiKeyModel.create({
+          name: "pinned-to-limited",
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: limited.id },
+          ],
+        });
       const pool = await ModelPoolModel.create({
         organizationId: proxy.organizationId,
         input: {
@@ -102,11 +109,8 @@ describe("Model pools - LLM Proxy", () => {
               enabled: true,
             },
           ],
+          virtualApiKeyIds: [virtualKeyRow.id],
         },
-      });
-      const { value: virtualKey } = await VirtualApiKeyModel.create({
-        name: "pinned-to-limited",
-        providerApiKeys: [{ provider: "openai", providerApiKeyId: limited.id }],
       });
 
       const response = await app.inject({

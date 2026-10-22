@@ -85,6 +85,14 @@ const labTest = test.extend<{
           hits: 0,
         });
       }
+      const virtual = await VirtualApiKeyModel.create({
+        organizationId: org.id,
+        name: "Lab client",
+        ...accessGrants("org"),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: deployments[0].keyId },
+        ],
+      });
       await ModelPoolModel.create({
         organizationId: org.id,
         input: {
@@ -96,15 +104,8 @@ const labTest = test.extend<{
             weight: member.weight ?? 1,
             enabled: true,
           })),
+          virtualApiKeyIds: [virtual.virtualKey.id],
         },
-      });
-      const virtual = await VirtualApiKeyModel.create({
-        organizationId: org.id,
-        name: "Lab client",
-        ...accessGrants("org"),
-        providerApiKeys: [
-          { provider: "openai", providerApiKeyId: deployments[0].keyId },
-        ],
       });
       token = virtual.value;
       server.use(

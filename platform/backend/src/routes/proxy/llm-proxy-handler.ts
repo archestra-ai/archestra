@@ -313,6 +313,8 @@ export type LLMProxyAuthOverride = {
   authMethod?: InteractionAuthMethod;
   /** Model Router virtual key ID, preserved for usage limits and interaction attribution. */
   virtualKeyId?: string;
+  /** A model pool the Model Router already let this caller use. */
+  modelPoolId?: string;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -1270,9 +1272,9 @@ export async function handleLLMProxy<
       requestAdapter.getModel(),
     );
 
-    // A request for a model pool's name is served by the pool's members,
-    // whatever key the caller resolved to. Members on a wire the client's
-    // can't reach are left out of the plan.
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
     const poolWire = openAiCodexPassthrough
       ? null
       : inboundPoolWire(provider.interactionType);
@@ -1281,6 +1283,11 @@ export async function handleLLMProxy<
           organizationId: resolvedAgent.organizationId,
           name: actualModel,
           inbound: poolWire,
+          caller: {
+            virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+            providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+          },
+          grantedPoolId: authOverride?.modelPoolId,
           sessionId,
         })
       : null;

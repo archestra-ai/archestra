@@ -1,5 +1,5 @@
 import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { ModelPool, ModelPoolInput, ModelPoolMember } from "@/types";
 
 /** Model pools and their members (provider keys, each with its own model id). */
@@ -84,7 +84,7 @@ class ModelPoolModel {
     organizationId: string;
     input: ModelPoolInput;
   }): Promise<ModelPool> {
-    const { members, ...fields } = params.input;
+    const { members, virtualApiKeyIds, ...fields } = params.input;
     const id = await db.transaction(async (tx) => {
       const [pool] = await tx
         .insert(schema.modelPoolsTable)
@@ -93,6 +93,7 @@ class ModelPoolModel {
       await tx
         .insert(schema.modelPoolMembersTable)
         .values(members.map((member) => ({ ...member, poolId: pool.id })));
+      await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return pool.id;
     });
     return (await ModelPoolModel.findById({
@@ -101,13 +102,13 @@ class ModelPoolModel {
     })) as ModelPool;
   }
 
-  /** Replaces the pool's fields and its whole member list. */
+  /** Replaces the pool's fields, its whole member list and its virtual keys. */
   static async update(params: {
     organizationId: string;
     id: string;
     input: ModelPoolInput;
   }): Promise<ModelPool | null> {
-    const { members, ...fields } = params.input;
+    const { members, virtualApiKeyIds, ...fields } = params.input;
     const updated = await db.transaction(async (tx) => {
       const [pool] = await tx
         .update(schema.modelPoolsTable)
@@ -126,6 +127,10 @@ class ModelPoolModel {
       await tx
         .insert(schema.modelPoolMembersTable)
         .values(members.map((member) => ({ ...member, poolId: pool.id })));
+      await tx
+        .delete(schema.modelPoolVirtualApiKeysTable)
+        .where(eq(schema.modelPoolVirtualApiKeysTable.poolId, pool.id));
+      await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return true;
     });
     return updated ? ModelPoolModel.findById(params) : null;
@@ -187,11 +192,41 @@ class ModelPoolModel {
       list.push(member);
       byPool.set(member.poolId, list);
     }
+    const grants = await db
+      .select()
+      .from(schema.modelPoolVirtualApiKeysTable)
+      .where(
+        inArray(
+          schema.modelPoolVirtualApiKeysTable.poolId,
+          pools.map((pool) => pool.id),
+        ),
+      );
+    const keysByPool = new Map<string, string[]>();
+    for (const grant of grants) {
+      const list = keysByPool.get(grant.poolId) ?? [];
+      list.push(grant.virtualApiKeyId);
+      keysByPool.set(grant.poolId, list);
+    }
     return pools.map((pool) => ({
       ...pool,
       members: byPool.get(pool.id) ?? [],
+      virtualApiKeyIds: keysByPool.get(pool.id) ?? [],
     }));
   }
+}
+
+async function insertVirtualApiKeys(
+  tx: Transaction,
+  poolId: string,
+  virtualApiKeyIds: string[],
+): Promise<void> {
+  if (virtualApiKeyIds.length === 0) return;
+  await tx.insert(schema.modelPoolVirtualApiKeysTable).values(
+    [...new Set(virtualApiKeyIds)].map((virtualApiKeyId) => ({
+      poolId,
+      virtualApiKeyId,
+    })),
+  );
 }
 
 export default ModelPoolModel;

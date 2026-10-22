@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -33,6 +34,7 @@ import {
   useUpdateModelPool,
 } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
+import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MemberStatus } from "./member-status";
 
 type PoolFormValues = {
@@ -44,6 +46,7 @@ type PoolFormValues = {
     weight: number;
     enabled: boolean;
   }[];
+  virtualApiKeyIds: string[];
 };
 
 /**
@@ -109,6 +112,18 @@ export function PoolEditor({
     [models],
   );
 
+  // Pass-through keys carry the caller's own provider key, so they can't
+  // spend a pool's keys.
+  const { data: virtualKeyPage } = useAllVirtualApiKeys({
+    limit: 100,
+    keyType: "standard",
+    toastOnError: false,
+  });
+  const virtualKeyOptions = (virtualKeyPage?.data ?? []).map((key) => ({
+    value: key.id,
+    label: key.name,
+  }));
+
   const createPool = useCreateModelPool();
   const updatePool = useUpdateModelPool();
   const deletePool = useDeleteModelPool();
@@ -122,6 +137,7 @@ export function PoolEditor({
         ...member,
         modelId: member.modelId.trim(),
       })),
+      virtualApiKeyIds: values.virtualApiKeyIds,
     };
     const onSuccess = (saved: { id: string } | undefined) => {
       if (saved) onSaved(saved.id);
@@ -219,9 +235,8 @@ export function PoolEditor({
       </div>
 
       <p className="-mt-3 text-sm text-muted-foreground">
-        Clients ask for this name. A request for it, on any key or through the
-        Model Router, is balanced across the members below, whichever provider
-        each one is on.
+        Clients ask for this name. A request for it is balanced across the
+        members below, whichever provider each one is on.
       </p>
       {otherPool ? (
         <InlineNotice>
@@ -463,7 +478,31 @@ export function PoolEditor({
         </div>
       </Step>
 
-      <Step number={3} title="Reliability">
+      <Step number={3} title="Who can use it">
+        <Controller
+          control={form.control}
+          name="virtualApiKeyIds"
+          render={({ field }) => (
+            <MultiSelectCombobox
+              ariaLabel="Virtual keys that can use this pool"
+              options={virtualKeyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="Add virtual keys"
+              emptyMessage="No virtual keys found."
+              className="max-w-xl"
+              disabled={!canEdit}
+            />
+          )}
+        />
+        <p className="text-sm text-muted-foreground">
+          A virtual key reaches this pool only when it is listed here, as it
+          reaches a provider key only when mapped to one. Agents and chats reach
+          it when their own provider key is a member.
+        </p>
+      </Step>
+
+      <Step number={4} title="Reliability">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {RELIABILITY_RULES.map((rule) => (
             <div
@@ -612,6 +651,7 @@ function toFormValues(pool: ModelPool | null): PoolFormValues {
         weight: member.weight,
         enabled: member.enabled,
       })) ?? [],
+    virtualApiKeyIds: pool?.virtualApiKeyIds ?? [],
   };
 }
 

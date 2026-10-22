@@ -59,16 +59,47 @@ export interface ModelPoolPlan {
   members: PlannedMember[];
 }
 
+/** Who is calling, as far as pool access goes. */
+export interface ModelPoolCaller {
+  /** The virtual key the request authenticated with, if any. */
+  virtualKeyId?: string;
+  /** Provider keys the caller may already use. */
+  providerApiKeyIds: string[];
+}
+
+/**
+ * Whether a caller may spend a pool's member keys. A virtual key needs the
+ * pool granted to it, as it needs a provider key mapped to it. Any other
+ * caller (an agent, the chat, an app) must already use one of the pool's
+ * member keys: the admin who put that key in the pool chose the other members
+ * as its backups.
+ */
+export function mayUseModelPool(params: {
+  pool: Pick<ModelPool, "members" | "virtualApiKeyIds">;
+  caller: ModelPoolCaller;
+}): boolean {
+  const { pool, caller } = params;
+  if (caller.virtualKeyId) {
+    return pool.virtualApiKeyIds.includes(caller.virtualKeyId);
+  }
+  return pool.members.some((member) =>
+    caller.providerApiKeyIds.includes(member.providerApiKeyId),
+  );
+}
+
 /**
  * The plan for a request whose model is a pool's name, or null when no pool
- * has that name or none of its members can answer the client's wire. The
- * session id keeps one conversation on one member while it is healthy, which
- * keeps the provider's prompt cache warm.
+ * has that name, the caller may not use it, or none of its members can answer
+ * the client's wire. The session id keeps one conversation on one member
+ * while it is healthy, which keeps the provider's prompt cache warm.
  */
 export async function planModelPool(params: {
   organizationId: string;
   name: string;
   inbound: PoolWire;
+  caller: ModelPoolCaller;
+  /** Set when the Model Router already let this caller use the pool. */
+  grantedPoolId?: string;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
   const pool = await ModelPoolModel.findByName({
@@ -76,6 +107,12 @@ export async function planModelPool(params: {
     name: params.name,
   });
   if (!pool) return null;
+  if (
+    pool.id !== params.grantedPoolId &&
+    !mayUseModelPool({ pool, caller: params.caller })
+  ) {
+    return null;
+  }
   const reachable = pool.members.filter((member) =>
     canReachMember(params.inbound, member.provider),
   );

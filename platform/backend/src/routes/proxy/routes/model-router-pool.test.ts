@@ -14,8 +14,8 @@ import { useMswServer } from "@/test/msw";
 import modelRouterRoutes from "./model-router";
 
 // One model on two providers: Z.ai answers on the OpenAI wire and Bedrock on
-// Converse. The caller's virtual key holds neither key; the pool's name is
-// enough. Only the HTTP upstreams are mocked.
+// Converse. The caller's virtual key holds neither key; the pool granted to it
+// is enough. Only the HTTP upstreams are mocked.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 setupTestCacheManager();
@@ -28,6 +28,8 @@ const poolTest = test.extend<{
     app: FastifyInstanceWithZod;
     agentId: string;
     token: string;
+    /** A virtual key in the same org without the pool. */
+    ungrantedToken: string;
     poolId: string;
     zaiKeyId: string;
     bedrockKeyId: string;
@@ -59,6 +61,12 @@ const poolTest = test.extend<{
       (await makeSecret({ secret: { apiKey: "sk-unused" } })).id,
       { provider: "openai" },
     );
+    const virtual = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "OpenAI-only router key",
+      ...accessGrants("org"),
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+    });
     const pool = await ModelPoolModel.create({
       organizationId: org.id,
       input: {
@@ -79,13 +87,14 @@ const poolTest = test.extend<{
             enabled: true,
           },
         ],
+        virtualApiKeyIds: [virtual.virtualKey.id],
       },
     });
-    const virtual = await VirtualApiKeyModel.create({
+    const ungranted = await VirtualApiKeyModel.create({
       organizationId: org.id,
-      name: "OpenAI-only router key",
+      name: "Router key without the pool",
       ...accessGrants("org"),
-      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+      providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
     });
     const app = createFastifyInstance();
     await app.register(modelRouterRoutes);
@@ -94,6 +103,7 @@ const poolTest = test.extend<{
         app,
         agentId: agent.id,
         token: virtual.value,
+        ungrantedToken: ungranted.value,
         poolId: pool.id,
         zaiKeyId: zai.id,
         bedrockKeyId: bedrock.id,
@@ -116,6 +126,44 @@ poolTest("lists the pool's name first", async ({ router }) => {
     owned_by: "model-pool",
   });
 });
+
+poolTest(
+  "keeps the pool from a virtual key it isn't granted to",
+  async ({ router }) => {
+    let zaiCalls = 0;
+    server.use(
+      http.post(`${zaiOrigin}/chat/completions`, () => {
+        zaiCalls++;
+        return HttpResponse.json({}, { status: 500 });
+      }),
+    );
+    const models = await router.app.inject({
+      method: "GET",
+      url: `/v1/model-router/${router.agentId}/models`,
+      headers: { authorization: `Bearer ${router.ungrantedToken}` },
+    });
+    expect(models.statusCode, models.body).toBe(200);
+    expect(
+      models
+        .json()
+        .data.filter((m: { owned_by: string }) => m.owned_by === "model-pool"),
+    ).toEqual([]);
+
+    // It maps the Z.ai key, but asking for the pool's name doesn't reach it.
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/chat/completions`,
+      headers: { authorization: `Bearer ${router.ungrantedToken}` },
+      payload: {
+        model: "glm-5",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.headers["x-archestra-pool"]).toBeUndefined();
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(zaiCalls).toBe(0);
+  },
+);
 
 for (const stream of [false, true]) {
   poolTest(

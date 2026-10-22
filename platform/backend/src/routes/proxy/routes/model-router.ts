@@ -96,6 +96,7 @@ import {
   handleLLMProxy,
   type LLMProxyAuthOverride,
 } from "../llm-proxy-handler";
+import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
 import {
   buildRoutableModelId,
   listRoutableModels,
@@ -493,9 +494,10 @@ async function routeChatCompletion(
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
   // A model pool's name is served by the pool's members, LiteLLM style: the
-  // proxy picks a member and its key, so the caller's own keys don't matter.
-  if (await isModelPoolName({ auth, model: body.model })) {
-    applyModelPoolAuthOverride({ request, auth });
+  // proxy picks a member and its key, when the caller may use the pool.
+  const poolId = await usableModelPoolId({ auth, model: body.model });
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
     return handleLLMProxy(body, request, reply, openaiAdapterFactory);
   }
   const resolution = await resolveModelRoute({
@@ -919,7 +921,9 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   });
   // Pools come first: their names are what clients are meant to ask for.
   const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
-    (pool) => pool.members.some((member) => member.enabled),
+    (pool) =>
+      pool.members.some((member) => member.enabled) &&
+      mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
   );
 
   return {
@@ -1095,21 +1099,33 @@ function assertNever(value: never): never {
   throw new ApiError(500, `Unhandled model router provider "${value}".`);
 }
 
-async function isModelPoolName(params: {
+/** The pool named `model` when the caller may use it and it has members. */
+async function usableModelPoolId(params: {
   auth: ModelRouterAuth;
   model: string;
-}): Promise<boolean> {
+}): Promise<string | null> {
   const pool = await ModelPoolModel.findByName({
     organizationId: params.auth.organizationId,
     name: params.model.trim(),
   });
-  return (pool?.members.length ?? 0) > 0;
+  if (!pool || pool.members.length === 0) return null;
+  return mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) })
+    ? pool.id
+    : null;
 }
 
-/** The caller's identity, with no key: each pool member brings its own. */
+function modelPoolCaller(auth: ModelRouterAuth): ModelPoolCaller {
+  return {
+    virtualKeyId:
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
+    providerApiKeyIds: getMappedApiKeyIds(auth),
+  };
+}
+
 function applyModelPoolAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
+  poolId: string;
 }): void {
   (
     params.request as FastifyRequest & {
@@ -1119,6 +1135,7 @@ function applyModelPoolAuthOverride(params: {
     apiKey: undefined,
     baseUrl: undefined,
     ...modelRouterCaller(params.auth),
+    modelPoolId: params.poolId,
   };
 }
 

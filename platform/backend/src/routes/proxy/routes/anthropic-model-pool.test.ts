@@ -37,6 +37,13 @@ for (const stream of [false, true]) {
       (await makeSecret({ secret: { apiKey: "zai-key" } })).id,
       { provider: "zhipuai", baseUrl: zaiOrigin },
     );
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Claude Code",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: anthropic.id },
+      ],
+    });
     await ModelPoolModel.create({
       organizationId: org.id,
       input: {
@@ -50,14 +57,8 @@ for (const stream of [false, true]) {
             enabled: true,
           },
         ],
+        virtualApiKeyIds: [virtualKey.id],
       },
-    });
-    const { value } = await VirtualApiKeyModel.create({
-      organizationId: org.id,
-      name: "Claude Code",
-      providerApiKeys: [
-        { provider: "anthropic", providerApiKeyId: anthropic.id },
-      ],
     });
 
     let upstream: Record<string, unknown> | undefined;

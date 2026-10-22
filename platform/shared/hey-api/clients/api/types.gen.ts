@@ -91671,6 +91671,7 @@ export type GetModelPoolsResponses = {
             benchedUntil: string | null;
             benchReason: string | null;
         }>;
+        virtualApiKeyIds: Array<string>;
     }>;
 };
 
@@ -91686,6 +91687,7 @@ export type CreateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        virtualApiKeyIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -91782,6 +91784,7 @@ export type CreateModelPoolResponses = {
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         }>;
+        virtualApiKeyIds: Array<string>;
     };
 };
 
@@ -91885,6 +91888,7 @@ export type UpdateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        virtualApiKeyIds?: Array<string>;
     };
     path: {
         id: string;
@@ -91983,6 +91987,7 @@ export type UpdateModelPoolResponses = {
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         }>;
+        virtualApiKeyIds: Array<string>;
     };
 };
 

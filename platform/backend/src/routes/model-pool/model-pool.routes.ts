@@ -1,7 +1,11 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  ModelPoolModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -47,6 +51,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       await assertValidMembers({ organizationId, input: body });
+      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -68,6 +73,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, params, body }, reply) => {
       await assertValidMembers({ organizationId, input: body });
+      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,
@@ -161,6 +167,27 @@ async function assertValidMembers(params: {
       throw new ApiError(
         400,
         `Provider key "${key.name}" is on ${key.provider}, which a pool can't send requests to yet.`,
+      );
+    }
+  }
+}
+
+/** Every virtual key is a standard key of the organization. */
+async function assertValidVirtualApiKeys(params: {
+  organizationId: string;
+  input: ModelPoolInput;
+}): Promise<void> {
+  const keys = await VirtualApiKeyModel.findSummariesByIds({
+    ids: params.input.virtualApiKeyIds,
+    organizationId: params.organizationId,
+  });
+  for (const id of params.input.virtualApiKeyIds) {
+    const key = keys.get(id);
+    if (!key) throw new ApiError(400, `Virtual key ${id} not found.`);
+    if (key.keyType !== "standard") {
+      throw new ApiError(
+        400,
+        `Virtual key "${key.name}" passes the caller's own provider key through, so it can't use a pool.`,
       );
     }
   }

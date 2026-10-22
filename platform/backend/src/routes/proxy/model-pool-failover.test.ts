@@ -2,6 +2,7 @@ import { ModelPoolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
+  type ModelPoolCaller,
   type ModelPoolPlan,
   openThroughModelPool,
   orderPoolMembers,
@@ -113,6 +114,7 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 2),
         ],
+        virtualApiKeyIds: [],
       },
     });
 
@@ -120,6 +122,7 @@ describe("planModelPool", () => {
       organizationId: org.id,
       name: "glm-5",
       inbound: "openai-chat",
+      caller: { providerApiKeyIds: [zai.id] },
     });
     expect(plan).toEqual({
       poolId: pool.id,
@@ -142,6 +145,7 @@ describe("planModelPool", () => {
         organizationId: org.id,
         name: "glm-4.6",
         inbound: "openai-chat",
+        caller: { providerApiKeyIds: [zai.id] },
       }),
     ).resolves.toBeNull();
   });
@@ -165,6 +169,7 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 1),
         ],
+        virtualApiKeyIds: [],
       },
     });
 
@@ -173,6 +178,7 @@ describe("planModelPool", () => {
       organizationId: org.id,
       name: "glm-5",
       inbound: "anthropic",
+      caller: { providerApiKeyIds: [zai.id] },
     });
     expect(plan?.members.map((m) => m.providerApiKeyId)).toEqual([zai.id]);
     // Converse reaches only Converse members.
@@ -180,10 +186,59 @@ describe("planModelPool", () => {
       organizationId: org.id,
       name: "glm-5",
       inbound: "bedrock-converse",
+      caller: { providerApiKeyIds: [zai.id] },
     });
     expect(conversePlan?.members.map((m) => m.providerApiKeyId)).toEqual([
       bedrock.id,
     ]);
+  });
+
+  test("plans the pool only for callers that may use it", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+    makeVirtualApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    const openai = await makeLlmProviderApiKey(org.id, null);
+    const granted = await makeVirtualApiKey(org.id, {
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+    });
+    const notGranted = await makeVirtualApiKey(org.id, {
+      providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "glm-5",
+        members: [member(zai.id, "glm-5", 1)],
+        virtualApiKeyIds: [granted.id],
+      },
+    });
+    const plan = (caller: ModelPoolCaller, grantedPoolId?: string) =>
+      planModelPool({
+        organizationId: org.id,
+        name: "glm-5",
+        inbound: "openai-chat",
+        caller,
+        grantedPoolId,
+      });
+
+    // A virtual key needs the pool granted, even when it maps a member's key.
+    expect(
+      await plan({ virtualKeyId: granted.id, providerApiKeyIds: [openai.id] }),
+    ).not.toBeNull();
+    expect(
+      await plan({ virtualKeyId: notGranted.id, providerApiKeyIds: [zai.id] }),
+    ).toBeNull();
+    // Any other caller must already use a member's key.
+    expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();
+    expect(await plan({ providerApiKeyIds: [openai.id] })).toBeNull();
+    expect(await plan({ providerApiKeyIds: [] })).toBeNull();
+    // The Model Router passes on a pool it already let the caller use.
+    expect(await plan({ providerApiKeyIds: [] }, pool.id)).not.toBeNull();
   });
 
   test("moves a member that failed over behind the healthy ones", async ({
@@ -201,12 +256,14 @@ describe("planModelPool", () => {
           member(first.id, "claude-haiku-4-5", 1),
           member(second.id, "claude-haiku-4-5", 2),
         ],
+        virtualApiKeyIds: [],
       },
     });
     const planParams = {
       organizationId: org.id,
       name: "claude-haiku-4-5",
       inbound: "anthropic" as const,
+      caller: { providerApiKeyIds: [first.id] },
     };
     const plan = (await planModelPool(planParams)) as ModelPoolPlan;
 

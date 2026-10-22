@@ -205,6 +205,7 @@ export { default as modelsTable } from "./model";
 export { default as modelLabelsTable } from "./model-label";
 export { default as modelPoolsTable } from "./model-pool";
 export { default as modelPoolMembersTable } from "./model-pool-member";
+export { default as modelPoolVirtualApiKeysTable } from "./model-pool-virtual-api-key";
 export { default as modelTeamsTable } from "./model-team";
 export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";

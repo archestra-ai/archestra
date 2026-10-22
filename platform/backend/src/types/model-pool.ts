@@ -15,6 +15,8 @@ export const SelectModelPoolSchema = createSelectSchema(
   schema.modelPoolsTable,
 ).extend({
   members: z.array(SelectModelPoolMemberSchema),
+  /** Virtual keys that may call the pool by its name. */
+  virtualApiKeyIds: z.array(z.string()),
 });
 
 /** A pool as the admin page lists it: each member with whether it is benched. */
@@ -38,6 +40,7 @@ export const ModelPoolMemberInputSchema = z.object({
 export const ModelPoolInputSchema = z.object({
   name: z.string().trim().min(1).max(512),
   members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
+  virtualApiKeyIds: z.array(z.string().uuid()).max(500).default([]),
 });
 
 export type ModelPoolMember = z.infer<typeof SelectModelPoolMemberSchema>;

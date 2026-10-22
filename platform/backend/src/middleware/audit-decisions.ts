@@ -869,6 +869,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child: pool × provider key; parent (model pool) audited",
   },
+  modelPoolVirtualApiKeysTable: {
+    audited: false,
+    reason: "join: pool × virtual key; parent (model pool) audited",
+  },
   llmProviderApiKeyModelsTable: {
     audited: false,
     reason: "join: provider key × model; parent audited",

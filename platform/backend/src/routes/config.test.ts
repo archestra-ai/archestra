@@ -6,7 +6,15 @@ import {
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { OrganizationModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from "@/test";
 import type { User } from "@/types";
 
 describe("config routes", () => {
@@ -45,11 +53,15 @@ describe("config routes", () => {
     await app.close();
   });
 
-  test("returns public config without authentication", async () => {
+  test.for([
+    1, 2,
+  ])("returns public config without authentication for isolated database %s", async () => {
+    const expectedAnalyticsState = await OrganizationModel.getAnalyticsState();
     const getAnalyticsStateSpy = vi.spyOn(
       OrganizationModel,
       "getAnalyticsState",
     );
+    onTestFinished(() => getAnalyticsStateSpy.mockRestore());
 
     const response = await app.inject({
       method: "GET",
@@ -57,6 +69,9 @@ describe("config routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().analytics.instanceId).toBe(
+      expectedAnalyticsState.analyticsInstanceId,
+    );
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),

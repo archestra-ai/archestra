@@ -1,11 +1,14 @@
 import {
+  A2A_OAUTH_SCOPE,
   ADMIN_ROLE_NAME,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   MEMBER_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach } from "vitest";
+import { executeA2AMessage } from "@/agents/a2a-executor";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -13,13 +16,19 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentModel,
   AgentToolModel,
+  McpOauthClientModel,
   McpServerModel,
+  OAuthAccessTokenModel,
   ToolModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import agentRoutes from "@/routes/agent";
 import agentToolRoutes from "@/routes/agent-tool";
 import chatRoutes from "@/routes/chat/routes";
+import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import mcpOauthClientsRoutes from "@/routes/mcp-oauth-clients";
+import mcpServerRoutes from "@/routes/mcp-server";
+import toolRoutes from "@/routes/tool";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -54,42 +63,14 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     makeCustomRole,
     seedAndAssignArchestraTools,
   }) => {
-    const organizationId = (await makeOrganization()).id;
-    const admin = await makeUser();
-    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    const tools = await ToolModel.bulkCreateToolsIfNotExists(
-      SRE_AGENT_TOOL_NAMES.map((rawName) => ({
-        name: ToolModel.slugifyName(SRE_SERVER_NAME, rawName),
-        rawToolName: rawName,
-        description: `Kubernetes ${rawName}`,
-        parameters: { type: "object", properties: {} },
-        catalogId: SRE_CATALOG_ID,
-      })),
-    );
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: admin.id,
-      mcpServerId: server.id,
+    const { organizationId, admin, tools, envAgent } = await seedSre({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      seedAndAssignArchestraTools,
     });
-    // An org-wide agent in the SRE environment an admin gave a Kubernetes tool.
-    const envAgent = await makeAgent({
-      organizationId,
-      authorId: admin.id,
-      agentType: "agent",
-      environmentId: SRE_ENVIRONMENT_ID,
-      access: "org",
-    });
-    await db
-      .update(schema.agentsTable)
-      .set({ accessAllTools: true })
-      .where(eq(schema.agentsTable.id, envAgent.id));
-    await seedAndAssignArchestraTools(envAgent.id);
     const [podsLog] = tools;
-    await AgentToolModel.create(envAgent.id, podsLog.id, {
-      mcpServerId: server.id,
-    });
 
     const user: User = await (async () => {
       switch (caller) {
@@ -195,6 +176,148 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
       await app.close();
     }
   });
+
+  test.for([
+    { caller: "platform admin", canUse: false },
+    { caller: "member", canUse: false },
+    { caller: "admin", canUse: true },
+  ] as const)("$caller: server inspection, tool rows, delegation and OAuth clients", async ({
+    caller,
+    canUse,
+  }, {
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { organizationId, admin, server, tools, envAgent } = await seedSre({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      seedAndAssignArchestraTools,
+    });
+    const user =
+      caller === "admin"
+        ? admin
+        : await (async () => {
+            const created = await makeUser();
+            await makeMember(created.id, organizationId, {
+              role:
+                caller === "member"
+                  ? MEMBER_ROLE_NAME
+                  : PLATFORM_ADMIN_ROLE_NAME,
+            });
+            return created;
+          })();
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, { user, organizationId });
+    });
+    await app.register(agentToolRoutes);
+    await app.register(mcpServerRoutes);
+    await app.register(toolRoutes);
+    await app.register(mcpOauthClientsRoutes);
+    const send = (method: "GET" | "POST", url: string, payload?: object) =>
+      app.inject({ method, url, payload });
+    const lists = async (url: string, id: string) => {
+      const response = await send("GET", url);
+      return response.statusCode === 200 && response.body.includes(id);
+    };
+
+    try {
+      for (const payload of [
+        { method: "tools/list" },
+        { method: "tools/call", toolName: "pods_log", toolArguments: {} },
+      ]) {
+        const { statusCode } = await send(
+          "POST",
+          `/api/mcp_server/${server.id}/inspect`,
+          payload,
+        );
+        // Past the gate the inspection fails only because no server runs.
+        expect(statusCode === 404, payload.method).toBe(!canUse);
+      }
+      expect(
+        await lists(`/api/mcp_server/${server.id}/tools`, tools[0].id),
+      ).toBe(canUse);
+      const listedTools: string[] = [];
+      for (let offset = 0; ; offset += 100) {
+        const page = (
+          await send("GET", `/api/tools?limit=100&offset=${offset}`)
+        ).json();
+        listedTools.push(...page.data.map(({ id }: { id: string }) => id));
+        if (!page.pagination.hasNext) break;
+      }
+      expect(listedTools.includes(tools[0].id)).toBe(canUse);
+      if (caller === "member") return;
+      expect(await lists("/api/agent-delegations", SRE_AGENT_ID)).toBe(canUse);
+      expect(
+        (
+          await send("POST", `/api/agents/${envAgent.id}/delegations`, {
+            targetAgentIds: [SRE_AGENT_ID],
+          })
+        ).statusCode,
+      ).toBe(canUse ? 200 : 404);
+      expect(
+        (
+          await send("POST", "/api/mcp-oauth-clients", {
+            name: "sre",
+            grantType: "authorization_code",
+            redirectUris: ["https://app.example.com/callback"],
+            allowedGatewayIds: [SRE_AGENT_ID],
+          })
+        ).statusCode,
+      ).toBe(canUse ? 200 : 404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("A2A refuses the SRE agent to an unbound client and to the system caller", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { organizationId, admin, envAgent } = await seedSre({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      seedAndAssignArchestraTools,
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId,
+      authorId: admin.id,
+      name: "service",
+      allowedGatewayIds: [SRE_AGENT_ID, envAgent.id],
+    });
+    const token = `mcp_at_${crypto.randomUUID()}`;
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(token),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [A2A_OAUTH_SCOPE],
+      referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
+    });
+    expect(
+      await validateMCPGatewayToken(envAgent.id, token, "a2a"),
+    ).not.toBeNull();
+    expect(
+      await validateMCPGatewayToken(SRE_AGENT_ID, token, "a2a"),
+    ).toBeNull();
+    await expect(
+      executeA2AMessage({
+        agentId: SRE_AGENT_ID,
+        message: "Why did a pod restart?",
+        organizationId,
+        userId: "system",
+      }),
+    ).rejects.toThrow(`Agent ${SRE_AGENT_ID} not found`);
+  });
 });
 
 /** An admin sharing the SRE agent with a role. */
@@ -215,4 +338,67 @@ async function shareWithRole(organizationId: string, roleId: string) {
     ],
   });
   if (!replaced) throw new Error("the SRE agent policy changed meanwhile");
+}
+
+/** The seeded SRE install and agent, and an agent in the SRE environment. */
+async function seedSre(fixtures: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<User>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    overrides: { role: string },
+  ) => Promise<unknown>;
+  makeAgent: (overrides: {
+    organizationId: string;
+    authorId: string;
+    agentType: "agent";
+    environmentId: string;
+    access: "org";
+  }) => Promise<{ id: string; name: string }>;
+  seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
+}) {
+  const {
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  } = fixtures;
+  const organizationId = (await makeOrganization()).id;
+  const admin = await makeUser();
+  await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+  await sreAgentService.seed();
+  const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+  const tools = await ToolModel.bulkCreateToolsIfNotExists(
+    SRE_AGENT_TOOL_NAMES.map((rawName) => ({
+      name: ToolModel.slugifyName(SRE_SERVER_NAME, rawName),
+      rawToolName: rawName,
+      description: `Kubernetes ${rawName}`,
+      parameters: { type: "object", properties: {} },
+      catalogId: SRE_CATALOG_ID,
+    })),
+  );
+  await sreAgentService.ensureAgent({
+    organizationId,
+    authorId: admin.id,
+    mcpServerId: server.id,
+  });
+  // An org-wide agent in the SRE environment an admin gave a Kubernetes tool.
+  const envAgent = await makeAgent({
+    organizationId,
+    authorId: admin.id,
+    agentType: "agent",
+    environmentId: SRE_ENVIRONMENT_ID,
+    access: "org",
+  });
+  await db
+    .update(schema.agentsTable)
+    .set({ accessAllTools: true })
+    .where(eq(schema.agentsTable.id, envAgent.id));
+  await seedAndAssignArchestraTools(envAgent.id);
+  await AgentToolModel.create(envAgent.id, tools[0].id, {
+    mcpServerId: server.id,
+  });
+  return { organizationId, admin, server, tools, envAgent };
 }

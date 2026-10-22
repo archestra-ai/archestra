@@ -44,6 +44,11 @@ import {
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import {
+  assertMayConnect,
+  callerOf,
+  type GatedCaller,
+} from "@/auth/permission-gated";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -1542,6 +1547,7 @@ class McpClient {
             return await executeToolCall(
               () =>
                 this.getTransport(
+                  callerOf(tokenAuth),
                   catalogItem,
                   targetMcpServerId,
                   resetSecrets,
@@ -1638,6 +1644,7 @@ class McpClient {
         return executeToolCall(
           () =>
             this.getTransport(
+              callerOf(tokenAuth),
               catalogItem,
               targetMcpServerId,
               secrets,
@@ -1683,6 +1690,7 @@ class McpClient {
             }
 
             return this.getTransportWithKind(
+              callerOf(tokenAuth),
               catalogItem,
               targetMcpServerId,
               resolvedSecrets,
@@ -2838,6 +2846,7 @@ class McpClient {
   }
 
   private async getTransportWithKind(
+    caller: GatedCaller,
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
@@ -2849,6 +2858,7 @@ class McpClient {
       headerValue: string;
     },
   ): Promise<Transport> {
+    await assertMayConnect(catalogItem.id, caller);
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
@@ -3187,6 +3197,7 @@ class McpClient {
   }
 
   private async getTransport(
+    caller: GatedCaller,
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
@@ -3218,6 +3229,7 @@ class McpClient {
       targetMcpServerId,
     );
     return this.getTransportWithKind(
+      caller,
       catalogItem,
       targetMcpServerId,
       resolvedSecrets,
@@ -3549,6 +3561,7 @@ class McpClient {
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
         this.getTransport(
+          callerOf(tokenAuth),
           catalogItem,
           targetMcpServerId,
           updatedSecret,
@@ -4276,6 +4289,7 @@ class McpClient {
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
+          { kind: "internal", purpose: "tool-discovery" },
           catalogItem,
           mcpServerId,
           secrets,
@@ -4419,6 +4433,7 @@ class McpClient {
    * Connect to a running MCP server and list tools or call a tool.
    */
   async inspectServer(params: {
+    caller: GatedCaller;
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
@@ -4442,6 +4457,7 @@ class McpClient {
 
     const runInspection = async (): Promise<unknown> => {
       const transport = await this.getTransport(
+        params.caller,
         catalogItem,
         mcpServerId,
         secrets,
@@ -4543,7 +4559,8 @@ class McpClient {
   private async withDirectServerClient<T>(
     mcpServerId: string,
     run: (client: Client, session: DirectServerSession) => Promise<T>,
-    options?: {
+    options: {
+      caller: GatedCaller;
       clientName?: string;
       capabilities?: ClientCapabilitiesWithExtensions;
       owner?: ToolOwner;
@@ -4579,6 +4596,7 @@ class McpClient {
             })
           : null);
       const transport = await this.getTransport(
+        options.caller,
         catalogItem,
         mcpServerId,
         secrets,
@@ -4628,6 +4646,7 @@ class McpClient {
 
   /** Fresh source-scoped session for Skills discovery and live reads. */
   async withSkillsSession<T>(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     run: (client: Client, session: DirectServerSession) => Promise<T>;
     owner?: ToolOwner;
@@ -4635,6 +4654,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
   }): Promise<T> {
     return this.withDirectServerClient(params.mcpServerId, params.run, {
+      caller: params.caller,
       clientName: "archestra-skills-client",
       capabilities: {
         extensions: MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
@@ -4647,6 +4667,7 @@ class McpClient {
 
   /** Read a UI (`ui://`) resource directly from one installed server. */
   async readResourceForServer(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     uri: string;
   }): Promise<unknown> {
@@ -4654,35 +4675,42 @@ class McpClient {
       uri: params.uri,
       mcpServerId: params.mcpServerId,
       read: () =>
-        this.withDirectServerClient(params.mcpServerId, (client) =>
-          this.raceWithTimeout(
-            client.readResource({ uri: params.uri }),
-            30000,
-            "Read resource timeout",
-          ),
+        this.withDirectServerClient(
+          params.mcpServerId,
+          (client) =>
+            this.raceWithTimeout(
+              client.readResource({ uri: params.uri }),
+              30000,
+              "Read resource timeout",
+            ),
+          { caller: params.caller },
         ),
     });
   }
 
   /** Call a tool directly on one installed server (server-scoped run path). */
   async callToolForServer(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     name: string;
     arguments?: Record<string, unknown>;
   }): Promise<unknown> {
-    return this.withDirectServerClient(params.mcpServerId, (client) =>
-      this.raceWithTimeout(
-        client.callTool(
-          {
-            name: params.name,
-            arguments: params.arguments ?? {},
-          },
-          undefined,
-          { timeout: config.mcpGateway.toolCallTimeoutMs },
+    return this.withDirectServerClient(
+      params.mcpServerId,
+      (client) =>
+        this.raceWithTimeout(
+          client.callTool(
+            {
+              name: params.name,
+              arguments: params.arguments ?? {},
+            },
+            undefined,
+            { timeout: config.mcpGateway.toolCallTimeoutMs },
+          ),
+          config.mcpGateway.toolCallTimeoutMs,
+          "Tool call timeout",
         ),
-        config.mcpGateway.toolCallTimeoutMs,
-        "Tool call timeout",
-      ),
+      { caller: params.caller },
     );
   }
 
@@ -5293,6 +5321,7 @@ class McpClient {
       }
 
       const transport = await this.getTransport(
+        callerOf(tokenAuth),
         catalogItem,
         server.id,
         secrets,
@@ -5564,6 +5593,7 @@ class McpClient {
           execute: async <T>(operation: (client: Client) => Promise<T>) => {
             const connectAndRun = async () => {
               const transport = await this.getTransport(
+                callerOf(tokenAuth),
                 catalogItem,
                 targetMcpServerId,
                 secretResult.secrets,

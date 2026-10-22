@@ -942,6 +942,7 @@ describe("MCP Gateway (stateless mode)", () => {
     );
     const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
       server.catalogId,
+      { kind: "caller" },
     );
     const launchToolName = launchTool.name;
 

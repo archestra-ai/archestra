@@ -23,8 +23,10 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
+  dropHiddenAgents,
   gatedAgentsFence,
   gatedCatalogToolsFence,
+  hiddenAgentIds,
 } from "@/auth/permission-gated";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -211,7 +213,7 @@ class AgentToolModel {
       return results.filter((r) => userAccessibleAgentIds.includes(r.id));
     }
 
-    return results;
+    return userId ? dropHiddenAgents(results, userId) : results;
   }
 
   /**
@@ -315,11 +317,16 @@ class AgentToolModel {
     }
 
     const results = await query;
+    const hidden = new Set(
+      userId ? await hiddenAgentIds({ userId, organizationId }) : [],
+    );
 
     // Filter out null targetAgentIds (shouldn't happen but TypeScript needs this)
     return results.filter(
       (r): r is typeof r & { targetAgentId: string } =>
-        r.targetAgentId !== null,
+        r.targetAgentId !== null &&
+        !hidden.has(r.targetAgentId) &&
+        !hidden.has(r.sourceAgentId),
     );
   }
 

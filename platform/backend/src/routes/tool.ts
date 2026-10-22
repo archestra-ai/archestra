@@ -38,6 +38,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await ToolModel.findAll({
           userId: user.id,
+          organizationId,
           isAgentAdmin,
           pagination: query,
         }),

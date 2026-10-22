@@ -49,6 +49,7 @@ import {
   canSeeAgent,
   dropHiddenAgents,
   gatedAgentsFence,
+  hiddenAgentIds,
   isPermissionGatedAgent,
 } from "@/auth/permission-gated";
 import { LRUCacheManager } from "@/cache-manager";
@@ -1249,8 +1250,12 @@ class AgentModel {
   }
 
   /** The delegation canvas needs nodes, not editable agents or their assigned tools. */
-  static async findDelegationGraphNodes(organizationId: string) {
+  static async findDelegationGraphNodes(
+    organizationId: string,
+    userId: string,
+  ) {
     const table = schema.agentsTable;
+    const hidden = await hiddenAgentIds({ userId, organizationId });
     return db
       .select({ id: table.id, name: table.name, agentType: table.agentType })
       .from(table)
@@ -1259,6 +1264,7 @@ class AgentModel {
           eq(table.organizationId, organizationId),
           eq(table.agentType, "agent"),
           notDeleted(table),
+          hidden.length > 0 ? notInArray(table.id, hidden) : undefined,
         ),
       )
       .orderBy(desc(table.createdAt), desc(table.id));

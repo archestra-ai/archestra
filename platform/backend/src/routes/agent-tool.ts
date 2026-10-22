@@ -751,7 +751,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate all target agents exist and are internal agents
       for (const targetAgentId of body.targetAgentIds) {
-        const targetAgent = await AgentModel.findById(targetAgentId);
+        const targetAgent = await AgentModel.findById(
+          targetAgentId,
+          user.id,
+          true,
+        );
         if (!targetAgent) {
           throw new ApiError(404, `Target agent ${targetAgentId} not found`);
         }
@@ -926,8 +930,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const [connections, agents] = await Promise.all([
-        AgentToolModel.getAllDelegationConnections(organizationId),
-        AgentModel.findDelegationGraphNodes(organizationId),
+        AgentToolModel.getAllDelegationConnections(
+          organizationId,
+          user.id,
+          true,
+        ),
+        AgentModel.findDelegationGraphNodes(organizationId, user.id),
       ]);
 
       return reply.send({

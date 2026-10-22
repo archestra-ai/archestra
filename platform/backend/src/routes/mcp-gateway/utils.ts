@@ -70,6 +70,7 @@ import {
 } from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { callerOf, canUseAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
@@ -2100,6 +2101,26 @@ export async function authenticateMCPGatewayRequest(
   tokenValue: string,
   lookups?: RequestLookups,
   requiredOAuthScope: "mcp" | "a2a" = MCP_GATEWAY_OAUTH_SCOPE,
+): Promise<GatewayAuthOutcome> {
+  const outcome = await authenticateUngated(
+    profileId,
+    tokenValue,
+    lookups,
+    requiredOAuthScope,
+  );
+  // A permission-gated agent is reached only by a token whose user or service
+  // account holds the permission: no grant or OAuth client stands in for it.
+  return outcome.result &&
+    !(await canUseAgent(profileId, callerOf(outcome.result)))
+    ? { result: null, reason: "invalid_token" }
+    : outcome;
+}
+
+async function authenticateUngated(
+  profileId: string,
+  tokenValue: string,
+  lookups: RequestLookups | undefined,
+  requiredOAuthScope: "mcp" | "a2a",
 ): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const authCacheKey = `${tokenHashes.cacheKey}:${requiredOAuthScope}`;

@@ -107,7 +107,10 @@ async function canRunServerTools(params: {
   // server's tools would still resolve. Its prompt could only fail.
   const installs = await McpServerModel.findByCatalogId(server.catalogId);
   if (installs.length === 0) return false;
-  const [tool] = await ToolModel.findByCatalogId(server.catalogId);
+  const [tool] = await ToolModel.findByCatalogId(server.catalogId, {
+    kind: "internal",
+    purpose: "docs-server",
+  });
   if (!tool) return false;
   const resolved = await resolveDynamicTool({
     toolName: tool.name,

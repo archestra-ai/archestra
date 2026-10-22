@@ -237,6 +237,7 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
     expect(mockCreateServerScopedServer).toHaveBeenCalledWith({
       mcpServerId: server.id,
       catalogId: catalog.id,
+      caller: { kind: "caller", userId: user.id, organizationId: org.id },
     });
   });
 
@@ -272,6 +273,7 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
     expect(mockCreateServerScopedServer).toHaveBeenCalledWith({
       mcpServerId: server.id,
       catalogId: catalog.id,
+      caller: { kind: "caller", userId: user.id, organizationId: org.id },
     });
   });
 });

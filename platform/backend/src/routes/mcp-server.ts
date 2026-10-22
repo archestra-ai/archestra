@@ -566,6 +566,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (existingPersonal) {
             const catalogTools = await ToolModel.findByCatalogId(
               serverData.catalogId,
+              { kind: "internal", purpose: "install" },
             );
             const toolIds = catalogTools.map((t) => t.id);
             if (toolIds.length > 0) {
@@ -2163,7 +2164,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
-        ? await ToolModel.findByCatalogId(mcpServer.catalogId)
+        ? await ToolModel.findByCatalogId(mcpServer.catalogId, {
+            kind: "caller",
+            userId: user.id,
+            organizationId,
+          })
         : [];
 
       return reply.send(tools);
@@ -2261,6 +2266,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const result = await mcpClient.inspectServer({
+          caller: { kind: "caller", userId: user.id, organizationId },
           catalogItem,
           mcpServerId: mcpServer.id,
           secrets,

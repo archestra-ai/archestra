@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { KILO_CLIENT } from "../opencode-family";
+import { publicManagedCatalog } from "./opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -433,6 +434,141 @@ describe("managed catalog plugin", () => {
     expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
+  test("V1 tells the client which catalog models read images, on the catalog provider and its native alias", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-reads-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.XDG_CACHE_HOME = path.join(root, "cache");
+    process.env.HOME = root;
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "opencode-primary.key"),
+      "managed-secret\n",
+      { mode: 0o600 },
+    );
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+        mcp: null,
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: publicManagedCatalog({
+          primaryProviders: [
+            {
+              provider: "openai",
+              name: "OpenAI",
+              models: [
+                {
+                  id: "vision",
+                  name: "vision",
+                  context: null,
+                  output: null,
+                  inputModalities: ["text", "image", "pdf"],
+                },
+                {
+                  id: "unknown",
+                  name: "unknown",
+                  context: null,
+                  output: null,
+                  inputModalities: null,
+                },
+              ],
+            },
+          ],
+          ordinaryBaseUrl: "https://deployment.example/v1",
+          routingAgentId: "agent",
+        }),
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config: {
+      provider: Record<string, { models: Record<string, object> }>;
+    } = { provider: {} };
+    await hooks.config(config);
+    for (const id of ["archestra-openai", "openai"]) {
+      expect(config.provider[id].models.vision).toMatchObject({
+        id: "openai:vision",
+        modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+        attachment: true,
+      });
+      expect(config.provider[id].models.unknown).not.toHaveProperty(
+        "modalities",
+      );
+      expect(config.provider[id].models.unknown).not.toHaveProperty(
+        "attachment",
+      );
+    }
+  });
+
+  test("V2 replaces the SDK's default input list with what each catalog model reads", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-reads-"));
+    roots.push(root);
+    const revision = path.join(root, "revision");
+    await writeFakeOpenCodePluginSdk(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: path.join(root, "missing.key"),
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const vendor = catalog.providers["archestra-vendor"];
+    await writeFile(
+      path.join(revision, "routing.mjs"),
+      renderOpenCodeRoutingPluginV2({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          ...catalog,
+          providers: {
+            "archestra-vendor": {
+              ...vendor,
+              models: {
+                "fixture/model": {
+                  ...vendor.models["fixture/model"],
+                  modalities: { input: ["text"], output: ["text"] },
+                  attachment: false,
+                },
+                "fixture/unknown": {
+                  name: "Unknown",
+                  id: "vendor:fixture/unknown",
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+    const result = await run(path.join(revision, "routing.mjs"));
+    expect(result.vendor.models["fixture/model"].capabilities?.input).toEqual([
+      "text",
+    ]);
+    expect(result.vendor.models["fixture/unknown"].capabilities?.input).toEqual(
+      ["text", "image"],
+    );
+  });
+
   test("a supplied empty catalog is authoritative and an omitted catalog is not", async () => {
     expect(
       renderOpenCodeRoutingPlugin({
@@ -665,7 +801,7 @@ async function writeFakeOpenCodePluginSdk(revision: string) {
   await writeFile(
     path.join(sdk, "index.js"),
     `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
+export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, capabilities: { tools: true, input: ["text", "image"], output: ["text"] }, limit: { context: 1, output: 1 } }) } };`,
   );
 }
 
@@ -715,7 +851,10 @@ function run(file: string): Promise<{
       settings: Record<string, string>;
       headers: Record<string, string>;
     };
-    models: Record<string, { id: string; modelID: string }>;
+    models: Record<
+      string,
+      { id: string; modelID: string; capabilities?: { input: string[] } }
+    >;
   };
   openai: {
     provider: { settings: Record<string, string> };

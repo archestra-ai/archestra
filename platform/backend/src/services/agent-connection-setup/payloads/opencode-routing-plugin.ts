@@ -265,7 +265,8 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
         const previous = config.provider[id] ?? {};
         config.provider[id] = { ...previous, name: definition.name ?? previous.name, npm: definition.npm ?? previous.npm,
           options: { baseURL: routes[id], ...(managedKey ? { apiKey: managedKey } : {}), headers: {} },
-          models: Object.fromEntries(Object.entries(definition.models ?? {}).map(([modelId, model]) => [modelId, { name: model.name ?? modelId, id: model.id ?? modelId, ...(model.limit ? { limit: model.limit } : {}) }])),
+          models: Object.fromEntries(Object.entries(definition.models ?? {}).map(([modelId, model]) => [modelId, { name: model.name ?? modelId, id: model.id ?? modelId, ...(model.limit ? { limit: model.limit } : {}),
+            ...(model.modalities ? { modalities: model.modalities } : {}), ...(typeof model.attachment === "boolean" ? { attachment: model.attachment } : {}) }])),
         };
       }
       const nativeCredential = (providerId) => {
@@ -555,6 +556,7 @@ export default {
             const defaults = sdk.Model.Info.default(providerID, sdk.Model.ID.make(modelId));
             return { ...defaults, name: model.name ?? modelId, modelID: sdk.Model.ID.make(model.id ?? modelId),
               limit: { ...defaults.limit, ...(model.limit?.context > 0 ? { context: model.limit.context } : {}), ...(model.limit?.output > 0 ? { output: model.limit.output } : {}) },
+              ...(model.modalities?.input?.length ? { capabilities: { ...defaults.capabilities, input: [...model.modalities.input] } } : {}),
             };
           });
           const info = { ...sdk.Provider.Info.empty(providerID), name: definition.name ?? id, activation: "enabled",

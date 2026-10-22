@@ -244,6 +244,9 @@ export async function getVirtualKeyProviderCatalog(
           name: model.modelId,
           context: model.customContextLength ?? model.contextLength,
           output: model.customOutputLength ?? model.outputLength,
+          inputModalities: model.inputModalities?.length
+            ? model.inputModalities
+            : null,
         })),
     }))
     .filter((entry) => entry.models.length > 0);

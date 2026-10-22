@@ -112,17 +112,30 @@ describe.each([
           }),
         );
       };
-      await expect(
-        client.audio.speech.create({
+      const failure = await client.audio.speech
+        .create({
           model: "tts-alias",
           input: "Synthetic.",
           voice: "alloy",
           response_format: "wav",
-        }),
-      ).rejects.toMatchObject({ status });
+        })
+        .then(
+          () => undefined,
+          (error: InstanceType<typeof OpenAI.APIError>) => error,
+        );
+      expect(failure).toMatchObject({ status });
+      expect(failure?.headers?.get("retry-after")).toBe("17");
       expect(calls).toBe(1);
       const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
       expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        inputTokens: null,
+        outputTokens: null,
+        cost: null,
+        response: {
+          __mediaUsage: { tokensAvailable: false, costAvailable: false },
+        },
+      });
       expect(JSON.stringify(rows)).not.toContain("PRIVATE_AUDIO_BYTES");
       expect(
         JSON.stringify([

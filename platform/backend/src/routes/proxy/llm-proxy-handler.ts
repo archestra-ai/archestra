@@ -131,6 +131,7 @@ import {
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -2069,7 +2070,14 @@ async function handleStreaming<
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
-        response: response as InteractionResponse,
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(response, {
+              inputTokens: 0,
+              outputTokens: 0,
+              usageUnavailable: true,
+              costUnavailable: true,
+            })
+          : response) as InteractionResponse,
         model: actualModel,
         inputTokens: provider.unavailableUsageAccounting ? null : 0,
         outputTokens: provider.unavailableUsageAccounting ? null : 0,

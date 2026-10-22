@@ -215,6 +215,38 @@ describe.each([
           expect(result.requests).toBe(provider === "azure" ? 4 : 2);
           expectedRequests += result.requests;
         }
+        const otherProvider = provider === "azure" ? "openai" : "azure";
+        const otherKey = await makeLlmProviderApiKey(
+          agent.organizationId,
+          secret.id,
+          { provider: otherProvider },
+        );
+        const { value: wrongProviderToken } = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          name: "Provider isolation fixture",
+          authorId: user.id,
+          scope: "personal",
+          providerApiKeys: [
+            { provider: otherProvider, providerApiKeyId: otherKey.id },
+          ],
+        });
+        const wrongProviderClient = new SDK({
+          baseURL: `${url}/v1/${provider}`,
+          apiKey: wrongProviderToken,
+          maxRetries: 0,
+        });
+        await expect(
+          operation === "speech"
+            ? wrongProviderClient.audio.speech.create({
+                model: "tts-alias",
+                input: "Synthetic.",
+                voice: "alloy",
+              })
+            : wrongProviderClient.audio[operation].create({
+                model: "transcribe-alias",
+                file: new File([audio], "synthetic.wav"),
+              }),
+        ).rejects.toMatchObject({ status: 400 });
         expect(received).toHaveLength(expectedRequests);
         for (const request of received) {
           expect(request.model).toBe(

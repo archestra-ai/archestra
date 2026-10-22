@@ -145,6 +145,7 @@ export async function listRoutableModels(params: {
             (params.includeMedia &&
               [
                 "image-generation",
+                "image-edit",
                 "audio-speech",
                 "audio-transcription",
                 "audio-translation",
@@ -163,7 +164,7 @@ export async function listRoutableModels(params: {
           (params.includeEmbeddings && ModelModel.supportsEmbeddings(model)) ||
           (params.includeMedia &&
             !model.ignored &&
-            ["azure", "openai", "gemini"].includes(model.provider) &&
+            ["openai", "gemini"].includes(model.provider) &&
             (model.outputModalities?.includes("image") ||
               (model.provider === "openai" &&
                 (model.inputModalities?.includes("audio") ||

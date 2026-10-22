@@ -70,6 +70,19 @@ test("the same Azure alias binds to the selected resource's evidence and credent
       ],
       "azure",
     );
+    if (kind === "image") {
+      const unclassified = await ModelModel.upsert({
+        externalId: "azure/unclassified",
+        provider: "azure",
+        modelId: "unclassified",
+        inputModalities: ["text"],
+        outputModalities: ["image"],
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+        unclassified.id,
+      ]);
+    }
     keys.push(
       await VirtualApiKeyModel.create({
         organizationId: agent.organizationId,
@@ -91,6 +104,9 @@ test("the same Azure alias binds to the selected resource's evidence and credent
   const image = new OpenAI({ baseURL, apiKey: keys[0].value, maxRetries: 0 });
   const text = new OpenAI({ baseURL, apiKey: keys[1].value, maxRetries: 0 });
   try {
+    const listed = (await image.models.list()).data.map((item) => item.id);
+    expect(listed).toContain("azure:production");
+    expect(listed).not.toContain("azure:unclassified");
     expect(
       (
         await image.images.generate({
@@ -203,6 +219,32 @@ describe.each([
         textModel.id,
         embeddingModel.id,
       ]);
+      if (provider === "azure") {
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          providerKey.id,
+          [
+            {
+              id: model.id,
+              modelId: model.modelId,
+              azureCapabilities: {
+                kind: "image",
+                underlyingModelName: "gpt-image-1",
+                operations: ["image-generation", "image-edit"],
+                source: "deployment",
+                configurationHash: azureCapabilityConfigurationHash({
+                  baseUrl: providerKey.baseUrl,
+                  inferenceBaseUrl: providerKey.inferenceBaseUrl,
+                  extraHeaders: providerKey.extraHeaders,
+                  secretId: providerKey.secretId,
+                }),
+              },
+            },
+            { id: textModel.id, modelId: textModel.modelId },
+            { id: embeddingModel.id, modelId: embeddingModel.modelId },
+          ],
+          "azure",
+        );
+      }
       mappings.push({ provider, providerApiKeyId: providerKey.id });
       imageModels.push(`${provider}:${modelId}`);
     }

@@ -5,6 +5,7 @@ import type {
   PricedBillingUsage,
 } from "@/utils/billable-usage";
 import { componentCacheCosts } from "@/utils/billable-usage";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * LLM Proxy Helpers
@@ -613,7 +614,10 @@ export function buildInteractionRecord(params: {
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
-    response: params.response as InteractionResponse,
+    response: withMediaUsageAvailability(
+      params.response,
+      params.usage,
+    ) as InteractionResponse,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization

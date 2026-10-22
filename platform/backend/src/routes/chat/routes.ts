@@ -8,6 +8,7 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   collapseWhitespace,
+  getAzureModelKind,
   getModelReadableMimeTypes,
   hasPersistableAssistantContent,
   isModelSelectionComplete,
@@ -154,7 +155,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
-import { NewSessionPolicySchema } from "@/types/guardrails-policy";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
@@ -2524,9 +2524,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .object({
               trust: z.string(),
               audience: z.string(),
-              policyRevision: z.number().int().nullable(),
-              // `snapshot` while new sessions keep the policy they open with.
-              newSessionPolicy: NewSessionPolicySchema,
+              policyRevision: z.number().int(),
             })
             .nullable(),
         ),
@@ -2564,15 +2562,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
       )
         return reply.send(null);
-      const status = await getOpenappaStatus({
-        organizationId,
-        sessionId: id,
-      });
       return reply.send(
-        status && {
-          ...status,
-          newSessionPolicy: deployment.newSessionPolicy,
-        },
+        await getOpenappaStatus({
+          organizationId,
+          sessionId: id,
+        }),
       );
     },
   );
@@ -3588,6 +3582,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const conversationModel = conversation.modelId
         ? await ModelModel.findById(conversation.modelId)
         : null;
+      // Media generation is an explicit user action. Never generate a second
+      // image or speech clip merely to name the conversation.
+      if (
+        conversationModel?.provider === "azure" &&
+        getAzureModelKind(conversationModel.modelId) !== "text"
+      ) {
+        return reply.send(conversation);
+      }
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
         inheritFrom:

@@ -4,8 +4,6 @@ import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import {
   type EffectivePolicy,
-  type RetainedAnnotators,
-  RetainedAnnotatorsSchema,
   type ServedComposition,
   ServedCompositionSchema,
 } from "@/types/openappa-batteries";
@@ -14,12 +12,7 @@ const table = schema.openappaEffectivePoliciesTable;
 
 export type EffectivePolicyValues = Pick<
   EffectivePolicy,
-  | "content"
-  | "contentHash"
-  | "rootRevision"
-  | "installFingerprint"
-  | "served"
-  | "retainedAnnotators"
+  "content" | "contentHash" | "rootRevision" | "installFingerprint" | "served"
 > & { error: string | null };
 
 class OpenAppaEffectivePolicyModel {
@@ -130,30 +123,9 @@ const unreadable = registerProcessLocalCache(new Set<string>());
 
 /** A stored row with its records parsed. */
 function read(
-  row: Omit<EffectivePolicy, "served" | "retainedAnnotators"> & {
-    served: unknown;
-    retainedAnnotators: unknown;
-  },
+  row: Omit<EffectivePolicy, "served"> & { served: unknown },
 ): EffectivePolicy {
-  return {
-    ...row,
-    served: readServed(row),
-    retainedAnnotators: readRetained(row),
-  };
-}
-
-/**
- * A stored record of kept annotators, or null when it is absent, not one this
- * build reads, or describes other bytes than the row's.
- */
-function readRetained(row: {
-  contentHash: string;
-  retainedAnnotators: unknown;
-}): RetainedAnnotators | null {
-  const parsed = RetainedAnnotatorsSchema.safeParse(row.retainedAnnotators);
-  return parsed.success && parsed.data.contentHash === row.contentHash
-    ? parsed.data
-    : null;
+  return { ...row, served: readServed(row) };
 }
 
 /** A stored `served` record, or null when it is absent or not one this build reads. */

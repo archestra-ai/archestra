@@ -41,7 +41,7 @@ test.describe("Audit log UI", {
     ).toBeVisible({ timeout: 15_000 });
 
     // Column headers are stable and part of the visual contract.
-    for (const column of ["Event", "Actor", "Request", "Time"]) {
+    for (const column of ["Event", "Actor", "Status", "Time"]) {
       await expect(
         adminPage.getByRole("columnheader", { name: column }),
       ).toBeVisible();

@@ -212,23 +212,37 @@ describe("session receipt restore", () => {
     ).toEqual(["session-1"]);
   });
 
-  test("puts the session label on the bottom glyph line", () => {
+  test("formats a single-line Appa crown receipt", () => {
     expect(formatSessionReceipt("AAA-AAAA")).toBe(
-      `${MARK_TOP}\n${MARK_BOTTOM}  protected session AAA-AAAA`,
+      `${MARK_TOP}  protected session AAA-AAAA`,
     );
   });
 
-  test("strips the previous top-line label layout", () => {
-    const legacy = `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`;
-    expect(stripSessionReceipts(`keep${legacy}`)).toEqual({
+  test("strips legacy two-line and Markdown-collapsed receipt layouts", () => {
+    const topLabel = `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`;
+    const collapsedTopLabel = `${MARK_TOP}  protected session EEE-EEEE ${MARK_BOTTOM}`;
+    const bottomLabel = `${MARK_TOP}\n${MARK_BOTTOM}  protected session BBB-BBBB`;
+    const collapsed = `${MARK_TOP} ${MARK_BOTTOM}  protected session CCC-CCCC`;
+    const collapsedSingleSpace = `${MARK_TOP} ${MARK_BOTTOM} protected session DDD-DDDD`;
+    expect(
+      stripSessionReceipts(
+        `keep${topLabel}\n\n${collapsedTopLabel}\n\n${bottomLabel}\n\n${collapsed}\n\n${collapsedSingleSpace}`,
+      ),
+    ).toEqual({
       text: "keep",
-      codes: ["AAA-AAAA"],
+      codes: ["AAA-AAAA", "EEE-EEEE", "BBB-BBBB", "CCC-CCCC", "DDD-DDDD"],
     });
   });
 
   test("near-miss wording and marks are not receipts", () => {
     const code = "XK7-Q2M9";
     const misses = [
+      `${MARK_TOP}  protected sessions ${code}`,
+      `${MARK_TOP}  guarded session ${code}`,
+      `${MARK_TOP} protected session ${code}`,
+      `${MARK_TOP}  protected session  ${code}`,
+      `${MARK_TOP}  protected session xk7-q2m9`,
+      `${MARK_TOP}  protected session ILO-UXYZ`,
       `${MARK_TOP}\n${MARK_BOTTOM}  protected sessions ${code}`,
       `${MARK_TOP}\n${MARK_BOTTOM}  guarded session ${code}`,
       `${MARK_TOP}\n▄▄▄▄▄▄▄  protected session ${code}`,

@@ -8,14 +8,6 @@ export type UnsupportedAppaClientAction = z.infer<
   typeof UnsupportedAppaClientActionSchema
 >;
 
-/**
- * The policy a new session decides under. `live`: every session follows its
- * organization's current policy. `snapshot`: a new session keeps the policy it
- * opens with, and no policy revision is published while it is selected.
- */
-export const NewSessionPolicySchema = z.enum(["live", "snapshot"]);
-export type NewSessionPolicy = z.infer<typeof NewSessionPolicySchema>;
-
 export const GuardrailsPolicySchema = createSelectSchema(
   guardrailsPolicyRevisionsTable,
 ).extend({ updatedAt: z.coerce.date().nullable() });

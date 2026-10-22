@@ -2,6 +2,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
 import type { McpGatewayTask } from "@/types/mcp-gateway-task";
+import { clientErrorMessage } from "@/utils/db";
 import { COMPLETE_RESULT_TYPE } from "./protocol";
 
 /**
@@ -189,7 +190,7 @@ export async function runToolCallMaybeTask(params: {
             isRecord(error) && typeof error.code === "number"
               ? error.code
               : -32603,
-          message: error instanceof Error ? error.message : String(error),
+          message: clientErrorMessage(error, String(error)),
         },
       };
     }

@@ -1,6 +1,6 @@
 ---
-title: Hand Off Work
-description: Hand a task from your coding agent to Agent Runtime, then bring the result back
+title: Remote Agents
+description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
 lastUpdated: 2026-10-14
@@ -8,13 +8,13 @@ lastUpdated: 2026-10-14
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to an agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
+Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to a Remote Agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
 
 With a [dedicated runtime](/docs/agents/runtime), the task runs in its own container, with a live terminal you can watch.
 
 ## Hand Off a Task
 
-1. Install the **Agent Runtime Handoff** skill from [Connect](/docs/get-started/connect).
+1. Install the **Remote Agents Handoff** skill from [Connect](/docs/get-started/connect).
 2. Ask your coding agent to "hand this over to Archestra".
 3. To continue locally, ask it to "bring it back and continue here".
 4. Review the repository patch it returns before you apply it.
@@ -42,9 +42,9 @@ A file you read or download while the run is in the middle of a tool call comes 
 
 If a request is refused:
 
-- **"Guardrails do not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- **"OpenAPPA does not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 - **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
-- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a connected client's runtime calls, usually because the client's model requests did not go through the LLM Proxy, or because the model made a steer or write while Guardrails were off. Retry it from the conversation that started the run. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client).
+- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a model's runtime tool calls. A script or a client whose model requests skip the LLM Proxy gets this. Make the call as a tool call from the run's own conversation or from the one that started it. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client). Once a [yell with **Break the glass** on](/docs/agents/guardrails/policies#yells) turns Guardrails off for the run's session or the session that started it, its calls need no proof.
 - **"The protected file could not be admitted":** Guardrails held the file's bytes from your session. The ruling after the message says why and names any plan that lets them through.
 
 ## Pass a Credential

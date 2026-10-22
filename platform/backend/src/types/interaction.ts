@@ -50,6 +50,12 @@ export const InteractionSessionPreviewSchema = z.object({
   contentNotStored: z.boolean(),
   lastUserMessagePreview: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
+  /**
+   * What the request produced: the tools its response asked for, else the
+   * start of its reply. Rows written before these existed have neither.
+   */
+  responseToolNames: z.array(z.string()).optional(),
+  responseTextPreview: z.string().nullable().optional(),
 });
 export type InteractionSessionPreview = z.infer<
   typeof InteractionSessionPreviewSchema
@@ -195,6 +201,8 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Azure.API.ImageGenerationRequestSchema,
+  Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
 ]);
 
@@ -248,6 +256,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
@@ -376,6 +385,18 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   requestType: RequestTypeSchema,
   /** Origin of the call (`chat`, `chat:compaction`, …). Used to badge sub-agent rows. */
   source: InteractionSourceSchema.nullable().optional(),
+  /**
+   * The latest user text this request carried, from its stored preview: names
+   * a turn by the prompt it served. Null when none was captured.
+   */
+  userMessagePreview: z.string().nullable().optional(),
+  /**
+   * What this request produced, from its stored preview: the tools its
+   * response asked for, else the start of its reply. One prompt drives many
+   * requests in an agent loop, so this is what tells them apart.
+   */
+  responseToolNames: z.array(z.string()).nullable().optional(),
+  responseTextPreview: z.string().nullable().optional(),
 });
 
 /**
@@ -719,6 +740,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:realtime"]),
+    request: withReadFallback(Azure.API.RealtimeTurnRequestSchema),
+    processedRequest: withReadFallback(Azure.API.RealtimeTurnRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:images"]),
+    request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
+    processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ImageGenerationResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:responses"]),
     request: withReadFallback(Azure.API.ResponsesRequestSchema),
     processedRequest: withReadFallback(Azure.API.ResponsesRequestSchema)
@@ -816,6 +857,13 @@ export const InsertInteractionSchema = createInsertSchema(
   // Override profileId - required for proxy interactions, nullable for system interactions
   // (e.g., knowledge base embeddings/reranking have no associated profile)
   profileId: z.string().uuid().nullable(),
+  /** Accounting metadata is stored separately from encrypted log content. */
+  billingAttribution: z
+    .custom<import("@/utils/billable-usage").BillingAttribution>()
+    .optional(),
+  billingUsage: z
+    .custom<import("@/utils/billable-usage").PricedBillingUsage>()
+    .optional(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
@@ -935,6 +983,12 @@ export const SessionSummarySchema = z.object({
     ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
+  connectorName: z
+    .string()
+    .nullable()
+    .describe(
+      "Name of the knowledge-base connector a knowledge:* session ran for, when exactly one connector owns it.",
+    ),
 });
 
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;

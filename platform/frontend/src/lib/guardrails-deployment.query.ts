@@ -5,7 +5,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
-const queryKey = ["guardrails-deployment"];
+export const guardrailsDeploymentQueryKey = ["guardrails-deployment"];
+const queryKey = guardrailsDeploymentQueryKey;
 /**
  * `anyMember`: read it without organization settings access. Every member can
  * read the status (the Connect page shows it); other callers keep it to the
@@ -70,28 +71,6 @@ export function useUpdateUnsupportedClientAction() {
     ) => {
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
         body: { unsupportedClientAction },
-      });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      client.setQueryData(queryKey, data);
-      client.invalidateQueries({ queryKey });
-    },
-  });
-}
-
-export function useUpdateNewSessionPolicy() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      newSessionPolicy: archestraApiTypes.GetGuardrailsDeploymentResponses[200]["newSessionPolicy"],
-    ) => {
-      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: { newSessionPolicy },
       });
       if (error) {
         handleApiError(error);

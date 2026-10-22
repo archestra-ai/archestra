@@ -25,9 +25,11 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
+import { superyellSession } from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -413,6 +415,110 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(read)).not.toContain("RAW ARTIFACT");
     expect(steer).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
+  });
+
+  for (const superyelled of ["run", "parent"] as const) {
+    test(`no proof reads, steers and writes a bound run after its ${superyelled} was superyelled`, async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    }) => {
+      const seeded = await seededRun({
+        makeAgent,
+        makeMember,
+        makeOrganization,
+        makeUser,
+        seedAndAssignArchestraTools,
+      });
+      await superyellSession(
+        superyelled === "run"
+          ? { ...seeded.child, parent_id: PARENT }
+          : proofSession(seeded.organizationId),
+      );
+      await db.insert(schema.a2aArtifactsTable).values({
+        taskId: seeded.task.id,
+        name: "agent-response",
+        parts: [{ text: "RAW ARTIFACT" }],
+      });
+      const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+      const write = vi
+        .spyOn(workspaceFiles, "accessAgentWorkspaceFile")
+        .mockResolvedValue({ path: "note.txt", size: 10, sha256: "0" });
+      // The proxy signs no proof for a session OpenAPPA no longer governs, so
+      // the run's own calls and its parent's both arrive without one.
+      const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+      const read = await executeArchestraTool(
+        TOOL_GET_RUN_FULL_NAME,
+        { task_id: seeded.task.id },
+        context,
+      );
+      const steered = await executeArchestraTool(
+        TOOL_STEER_RUN_FULL_NAME,
+        { task_id: seeded.task.id, message: "Carry on" },
+        context,
+      );
+      const written = await executeArchestraTool(
+        TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
+        { task_id: seeded.task.id, path: "note.txt", content: "PLAIN FILE" },
+        context,
+      );
+
+      for (const result of [read, steered, written]) {
+        expect(result.isError).not.toBe(true);
+      }
+      expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
+      expect(steer).toHaveBeenCalledOnce();
+      expect(write).toHaveBeenCalledOnce();
+      // The gateway only reads: the run's own record is the proxy's to write.
+      const records = await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [seeded.child.session_id],
+      });
+      expect(records).toHaveLength(superyelled === "run" ? 1 : 0);
+    });
+  }
+
+  test("a proof from another session is still refused by a superyelled run", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await superyellSession({ ...seeded.child, parent_id: PARENT });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const stranger = {
+      ...seeded.context,
+      openappaRuntimeCall: {
+        session: {
+          organization_id: seeded.organizationId,
+          caller_id: "user:stranger",
+          session_id: "user:stranger|conversation",
+        },
+        toolCallId: "call-1",
+        spawn: false,
+      },
+    };
+
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "SECRET STEER" },
+      stranger,
+    );
+
+    expect(steered.isError).toBe(true);
+    expect(JSON.stringify(steered)).toContain("bound to a different session");
+    expect(steer).not.toHaveBeenCalled();
   });
 
   test("a classified spawn that resolves in-process is refused", async ({

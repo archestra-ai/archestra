@@ -614,11 +614,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Agent Sandbox owns the runtime Pod and persistent workspace lifecycle.
-# Transcript recovery verifies the retained claim belongs to its Sandbox.
+# Agent Sandbox owns persistent workspaces; transcript recovery reads them.
+# Dagger owns rebuildable engine caches and lists/deletes orphaned cache claims.
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["get"]
+  verbs: ["get", "list", "delete"]
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes"]
   verbs: ["get", "list", "create", "patch", "delete"]

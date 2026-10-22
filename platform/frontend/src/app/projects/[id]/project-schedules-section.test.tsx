@@ -450,11 +450,12 @@ describe("ProjectSchedulesSection default agent", () => {
     await waitFor(() => expect(agentPicker()).toHaveTextContent("Test1 Agent"));
     expect(schedulePicker()).toHaveTextContent("Manual");
     expect(screen.queryByText("Timezone")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Name"), "On-demand report");
-    await userEvent.type(
-      screen.getByLabelText("Task prompt"),
-      "Write a report",
-    );
+    const nameInput = screen.getByRole("textbox", { name: "Name" });
+    const promptInput = screen.getByRole("textbox", { name: "Task prompt" });
+    expect(nameInput).toBeRequired();
+    expect(promptInput).toBeRequired();
+    await userEvent.type(nameInput, "On-demand report");
+    await userEvent.type(promptInput, "Write a report");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false, projectId: "project-1" }),

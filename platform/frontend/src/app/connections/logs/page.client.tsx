@@ -28,6 +28,8 @@ export default function ConnectionLogsPage() {
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
         const params = new URLSearchParams(searchParams.toString());
+        params.delete("cursor");
+        params.delete("page");
         for (const [key, value] of Object.entries({ startDate, endDate })) {
           if (value) params.set(key, value);
           else params.delete(key);

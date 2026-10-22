@@ -34,6 +34,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import type { BillingUsage, PricedBillingUsage } from "@/utils/billable-usage";
 
 import type { GatewayAgent } from "./agent";
 
@@ -402,6 +403,13 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   /** Current accumulated state */
   readonly state: StreamAccumulatorState;
 
+  /**
+   * The id and model of the response the client sees, when they differ from
+   * `state`: a wrapper that serves another wire format keeps the inner
+   * provider's values there.
+   */
+  readonly clientResponse?: { id: string; model: string };
+
   // ---------------------------------------------------------------------------
   // Chunk Processing
   // ---------------------------------------------------------------------------
@@ -531,6 +539,19 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 // ADAPTER FACTORY INTERFACE
 // =============================================================================
 
+/** What the handler knows about a stream when it ends it with an error. */
+export interface StreamErrorFrameContext {
+  /** The id of the response the client has open, when known. */
+  responseId?: string;
+  /** The model that answered, when known. */
+  model?: string;
+  /**
+   * True when the client already received a terminal event for the
+   * response, so the error frame must not end it a second time.
+   */
+  terminalSent?: boolean;
+}
+
 /**
  * Factory for creating adapters for a specific provider
  *
@@ -571,7 +592,17 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error at the client, which reports the framing problem instead of the real
    * upstream cause.
    */
-  readonly formatStreamErrorFrame?: (event: unknown) => string;
+  readonly formatStreamErrorFrame?: (
+    event: unknown,
+    context?: StreamErrorFrameContext,
+  ) => string;
+
+  /**
+   * Whether a write to the client carries a terminal event of this stream.
+   * Set when `formatStreamErrorFrame` ends the response itself, so the
+   * handler can tell it that the client already has a terminal.
+   */
+  readonly carriesStreamTerminal?: (data: string | Uint8Array) => boolean;
 
   /**
    * Set by adapters that serve a client wire format different from the
@@ -669,6 +700,15 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
  * Token usage from response
  */
 export interface UsageView {
+  /** Disjoint provider billing components; primary token fields remain unchanged. */
+  billingUsage?: BillingUsage;
+  /** Internal quote attached to this normalized request snapshot, never forwarded. */
+  billingQuote?: {
+    providerApiKeyId?: string;
+    model: string;
+    provider: SupportedProvider;
+    priced: PricedBillingUsage;
+  };
   /** Uncached input tokens only (normalized across providers). */
   inputTokens: number;
   outputTokens: number;

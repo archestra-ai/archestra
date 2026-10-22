@@ -52,6 +52,7 @@ import {
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
@@ -1772,6 +1773,11 @@ async function discoverLocalMcpServerTools(params: {
     if (toolsToCreate.length > 0) {
       const createdTools =
         await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+      await recordInstallToolDescriptions({
+        mcpServerId: mcpServer.id,
+        syncedTools: createdTools,
+        reported: toolsToCreate,
+      });
       await assignDiscoveredToolsToAgents({
         agentIds: args.agentIds ?? [],
         toolIds: createdTools.map((tool) => tool.id),
@@ -1836,6 +1842,11 @@ async function discoverRemoteMcpServerTools(params: {
       }));
       const createdTools =
         await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+      await recordInstallToolDescriptions({
+        mcpServerId: mcpServer.id,
+        syncedTools: createdTools,
+        reported: toolsToCreate,
+      });
       await assignDiscoveredToolsToAgents({
         agentIds: args.agentIds ?? [],
         toolIds: createdTools.map((tool) => tool.id),

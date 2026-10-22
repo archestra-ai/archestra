@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
@@ -125,9 +125,9 @@ test("fills a delta thread from its stored rows in one pass, with the previews e
 
   const { result, statements } = await recordQueries(() => runToCompletion());
   expect(result).toEqual({ filled: ids.length, failed: 0 });
-  // Each thread is sized and read once (two statements per thread); no row
-  // loads its own chain through the delta manager.
-  expect(statements.filter((s) => /thread_id = \$/.test(s))).toHaveLength(4);
+  // Each thread's rows are listed once; no row loads its own chain through
+  // the delta manager.
+  expect(statements.filter((s) => /thread_id = \$/.test(s))).toHaveLength(2);
   expect(
     statements.filter((s) => s.includes("processed_request_shared_prefix")),
   ).toHaveLength(0);
@@ -169,7 +169,7 @@ test("folds a missing row through an ancestor that already has a preview", async
   ).toEqual(written);
 });
 
-test("leaves a thread over the memory budget to the list and reports its rows", async ({
+test("fills a thread longer than one chunk, chunk by chunk", async ({
   makeOrganization,
   makeAgent,
 }) => {
@@ -177,21 +177,99 @@ test("leaves a thread over the memory budget to the list and reports its rows", 
   const agent = await makeAgent({ organizationId: org.id });
   const ids = await seedClaudeCodeSession({
     agentId: agent.id,
-    sessionId: "large-session",
-    turns: 2,
+    sessionId: "long-session",
+    turns: 5,
   });
+  const stored = await readRows(ids);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
   await clearPreviews(ids);
   InteractionDeltaManager.reset();
 
-  expect(
-    await interactionSessionPreviewBackfill.run({ threadStoredBytesLimit: 1 }),
-  ).toEqual({ filled: 0, failed: ids.length, complete: true });
-  expect(
-    (await readRows(ids)).every((row) => row.sessionPreview === null),
-  ).toBe(true);
+  // Eleven rows in the conversation thread, three per chunk: every chunk
+  // after the first folds from a parent loaded by an earlier one.
+  const { result, statements } = await recordQueries(() =>
+    interactionSessionPreviewBackfill.run({ chunkRows: 3 }),
+  );
+  expect(result).toEqual({ filled: ids.length, failed: 0, complete: true });
+  const chunkLoads = statements.filter((s) =>
+    /from "interactions" where "interactions"\."id" in \(/i.test(s),
+  );
+  expect(chunkLoads.length).toBeGreaterThanOrEqual(4);
 
-  // The next pass, with the budget back, fills them.
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
+});
+
+test("resumes a thread cut short by the run's budget on the next run", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const ids = await seedClaudeCodeSession({
+    agentId: agent.id,
+    sessionId: "budget-session",
+    turns: 4,
+  });
+  const stored = await readRows(ids);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
+  const thread = stored.find(
+    (row) => row.threadId !== null && ids.indexOf(row.id) > 0,
+  );
+  if (!thread?.threadId) throw new Error("expected a delta thread");
+  await clearPreviews(ids);
+  InteractionDeltaManager.reset();
+
+  // A deadline already past: one chunk is filled, the rest waits.
+  const first = await InteractionModel.fillThreadSessionPreviews({
+    sessionId: "budget-session",
+    threadId: thread.threadId,
+    chunkRows: 2,
+    chunkBytes: 1 << 20,
+    deadline: Date.now(),
+  });
+  expect(first).toEqual({ filled: 2, failed: 0, complete: false });
+
+  // The next run folds the filled rows again as ancestors and finishes.
+  expect(await runToCompletion()).toEqual({
+    filled: ids.length - 2,
+    failed: 0,
+  });
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
+});
+
+test("folds a child listed before its parent", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const ids = await seedClaudeCodeSession({
+    agentId: agent.id,
+    sessionId: "skewed-session",
+    turns: 3,
+  });
+  const stored = await readRows(ids);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
+  // A clock that stepped back between two writes: the newest row's timestamp
+  // now precedes every row before it.
+  await db
+    .update(schema.interactionsTable)
+    .set({ createdAt: sql`created_at - interval '1 day'` })
+    .where(eq(schema.interactionsTable.id, ids[ids.length - 1]));
+  await clearPreviews(ids);
+  InteractionDeltaManager.reset();
+
   expect(await runToCompletion()).toEqual({ filled: ids.length, failed: 0 });
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
 });
 
 test("fills a row that stores its whole request", async ({

@@ -1,6 +1,7 @@
 import {
   type CompleteModelSelection,
   MODEL_MARKER_PATTERNS,
+  PROVIDER_FAST_MODEL_PATTERNS,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -16,6 +17,10 @@ import {
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LinkedApiKey, LlmProviderApiKey, Model } from "@/types";
+import type {
+  ProviderModelPricing,
+  ProviderPricedModel,
+} from "@/types/provider-model-pricing";
 import ModelModel from "./model";
 
 /**
@@ -23,6 +28,43 @@ import ModelModel from "./model";
  * Manages the many-to-many relationship between chat_api_keys and models.
  */
 class LlmProviderApiKeyModelLinkModel {
+  static async findModelForPricing(params: {
+    provider: SupportedProvider;
+    modelId: string;
+    apiKeyId?: string;
+  }): Promise<ProviderPricedModel | null> {
+    const model = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.modelId,
+    );
+    if (!model || !params.apiKeyId) return model;
+    const prices = await LlmProviderApiKeyModelLinkModel.findProviderPricing({
+      apiKeyId: params.apiKeyId,
+      modelIds: [model.id],
+    });
+    return ModelModel.withProviderPricing(model, [
+      prices.get(model.id) ?? null,
+    ]);
+  }
+
+  static async findProviderPricing(params: {
+    apiKeyId?: string;
+    modelIds: string[];
+  }): Promise<Map<string, ProviderModelPricing | null>> {
+    if (!params.apiKeyId || !params.modelIds.length) return new Map();
+    const links = schema.llmProviderApiKeyModelsTable;
+    const rows = await db
+      .select({ modelId: links.modelId, pricing: links.providerPricing })
+      .from(links)
+      .where(
+        and(
+          eq(links.apiKeyId, params.apiKeyId),
+          inArray(links.modelId, params.modelIds),
+        ),
+      );
+    return new Map(rows.map((row) => [row.modelId, row.pricing]));
+  }
+
   /**
    * Link multiple models to an API key.
    * This performs a bulk insert, ignoring duplicates.
@@ -151,6 +193,7 @@ class LlmProviderApiKeyModelLinkModel {
       id: string;
       modelId: string;
       recommendedForAgents?: boolean | null;
+      providerPricing?: ProviderModelPricing | null;
     }>,
     provider: SupportedProvider,
     options: { overwriteRecommendedForAgents?: boolean } = {},
@@ -195,6 +238,7 @@ class LlmProviderApiKeyModelLinkModel {
           isBest: model.id === bestModel?.id,
           recommendedForAgents: model.recommendedForAgents ?? null,
           syncedAt,
+          providerPricing: model.providerPricing ?? null,
         }));
 
         // Batch insert
@@ -212,6 +256,7 @@ class LlmProviderApiKeyModelLinkModel {
               set: {
                 isBest: sql`excluded.is_best`,
                 syncedAt: sql`excluded.synced_at`,
+                providerPricing: sql`excluded.provider_pricing`,
                 recommendedForAgents: options.overwriteRecommendedForAgents
                   ? sql`excluded.recommended_for_agents`
                   : sql`COALESCE(excluded.recommended_for_agents, ${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`,
@@ -242,9 +287,12 @@ class LlmProviderApiKeyModelLinkModel {
     const links = schema.llmProviderApiKeyModelsTable;
     const keys = schema.llmProviderApiKeysTable;
 
-    return await db
+    const results = await db
       .select({
         model: schema.modelsTable,
+        pricing: sql<
+          Array<ProviderModelPricing | null>
+        >`coalesce(json_agg(${links.providerPricing}) FILTER (WHERE ${keys.id} IS NOT NULL ${keyFilter ? sql`AND ${inArray(keys.id, keyFilter)}` : sql``}), '[]'::json)`,
         isBest: sql<boolean>`bool_or(${links.isBest})`,
         apiKeys: sql<LinkedApiKey[]>`coalesce(
           json_agg(
@@ -286,6 +334,10 @@ class LlmProviderApiKeyModelLinkModel {
         asc(schema.modelsTable.provider),
         asc(schema.modelsTable.modelId),
       );
+    return results.map(({ pricing, ...row }) => ({
+      ...row,
+      model: ModelModel.withProviderPricing(row.model, pricing),
+    }));
   }
 
   /** The non-ignored models each of the given keys serves. */
@@ -452,6 +504,9 @@ class LlmProviderApiKeyModelLinkModel {
     const results = await db
       .select({
         model: schema.modelsTable,
+        pricing: sql<
+          Array<ProviderModelPricing | null>
+        >`json_agg(${schema.llmProviderApiKeyModelsTable.providerPricing})`,
         isBest:
           sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
             "is_best_agg",
@@ -477,7 +532,7 @@ class LlmProviderApiKeyModelLinkModel {
       );
 
     return results.map((r) => ({
-      model: r.model,
+      model: ModelModel.withProviderPricing(r.model, r.pricing),
       isBest: r.isBest,
       recommendedForAgents: r.recommendedForAgents,
     }));
@@ -581,6 +636,28 @@ class LlmProviderApiKeyModelLinkModel {
         apiKeyId: row.apiKeyId,
         isBest: row.isBest,
       }));
+  }
+
+  /**
+   * The key's preferred fast-tier chat model (`PROVIDER_FAST_MODEL_PATTERNS`),
+   * or null when its provider has no fast tier or the key serves none of it.
+   */
+  static async getFastModel(params: {
+    apiKeyId: string;
+    provider: SupportedProvider;
+  }): Promise<Model | null> {
+    const patterns = PROVIDER_FAST_MODEL_PATTERNS[params.provider];
+    if (!patterns) return null;
+    const models = (
+      await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(params.apiKeyId)
+    )
+      .filter(
+        (model) =>
+          ModelModel.supportsTextChat(model) &&
+          !PRO_TIER_MODEL_ID.test(model.modelId),
+      )
+      .sort((a, b) => a.modelId.localeCompare(b.modelId));
+    return findFirstMatchByPatternPriority(models, patterns) ?? null;
   }
 
   static async getBestModel(apiKeyId: string): Promise<Model | null> {
@@ -722,10 +799,13 @@ export function selectionKey(selection: CompleteModelSelection): string {
  * Patterns are checked in order (first pattern = highest priority).
  * For each pattern, returns the first alphabetically sorted match.
  */
-function findFirstMatchByPatternPriority(
-  sortedModels: Array<{ id: string; modelId: string }>,
+/** A `pro` token: the reasoning tier above a fast model of the same name. */
+const PRO_TIER_MODEL_ID = /(?:^|[-/])pro(?:[-/:]|$)/i;
+
+function findFirstMatchByPatternPriority<T extends { modelId: string }>(
+  sortedModels: T[],
   patterns: string[],
-): { id: string; modelId: string } | undefined {
+): T | undefined {
   for (const pattern of patterns) {
     const match = sortedModels.find((m) =>
       m.modelId.toLowerCase().includes(pattern.toLowerCase()),

@@ -603,11 +603,6 @@ describe("SessionDetailPage tool calls", () => {
       ).getByText("OPS-12: Rotate keys"),
     ).toBeVisible();
     expect(within(overview).queryByText("OPS-12: Rotate keys")).toBeNull();
-
-    await user.dblClick(rows[1]);
-    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
-      "/mcp/logs/lookup",
-    );
   });
 
   it("collapses a run_tool dispatch into the tool it ran", async () => {

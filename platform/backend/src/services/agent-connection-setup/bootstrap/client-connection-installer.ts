@@ -2,6 +2,7 @@ import {
   CONNECT_SETUP_PARTS,
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
 
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
@@ -228,6 +229,7 @@ async function applySetup({ scriptPath, origin, platform }) {
     const child = platform === 'windows'
       ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit', env: installerEnv })
       : spawnSync('bash', [filename], { stdio: 'inherit', env: installerEnv });
+    if (child.status === ${SETUP_STOPPED_EXIT_CODE}) throw new Error('Setup stopped.');
     if (child.error || child.status !== 0) throw new Error('Setup failed. Review the output above and start the installer again after fixing the problem.');
     if (marker) return JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
     console.log('Setup applied. Restart or reload your client if needed. Complete its MCP sign-in if prompted.');

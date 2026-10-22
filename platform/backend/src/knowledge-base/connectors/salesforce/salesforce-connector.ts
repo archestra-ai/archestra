@@ -182,6 +182,8 @@ export class SalesforceConnector extends BaseConnector {
 
   /** Per-permission-pass state; re-armed by every permission hook entry. */
   private permConnection: Connection | null = null;
+  /** Secrets observed during this connector instance, including renewed tokens. */
+  private readonly authSecrets = new Set<string>();
   /** Object name → OWD sharing model (null = metadata read failed). */
   private sharingModelCache = new Map<string, string | null>();
   /** Salesforce user id → email (null = inactive/unresolvable). */
@@ -209,12 +211,22 @@ export class SalesforceConnector extends BaseConnector {
       };
     }
 
-    // Validate loginUrl is a proper HTTP(S) URL (matching Linear's URL check)
-    if (!/^https?:\/\/.+/.test(parsed.loginUrl)) {
-      return {
-        valid: false,
-        error: "loginUrl must be a valid HTTP(S) URL",
-      };
+    if (parsed.authMethod === "oauth_client_credentials") {
+      if (!parsed.clientId) {
+        return {
+          valid: false,
+          error: "Salesforce OAuth consumer key is required",
+        };
+      }
+      if (!isSalesforceMyDomainUrl(parsed.loginUrl)) {
+        return {
+          valid: false,
+          error:
+            "loginUrl must be an HTTPS Salesforce My Domain origin (production or sandbox)",
+        };
+      }
+    } else if (!/^https?:\/\/.+/.test(parsed.loginUrl)) {
+      return { valid: false, error: "loginUrl must be a valid HTTP(S) URL" };
     }
 
     if (parsed.advancedObjectConfigJson) {
@@ -268,14 +280,14 @@ export class SalesforceConnector extends BaseConnector {
     try {
       const conn = await this.createConnection({
         credentials: params.credentials,
-        loginUrl: parsed.loginUrl,
+        config: parsed,
       });
 
       await conn.query(TEST_CONNECTION_SOQL);
       this.log.debug("Salesforce connection test successful");
       return { success: true };
     } catch (error) {
-      const message = extractErrorMessage(error);
+      const message = this.redactError(error);
       this.log.error({ error: message }, "Salesforce connection test failed");
       return { success: false, error: `Connection failed: ${message}` };
     }
@@ -292,7 +304,7 @@ export class SalesforceConnector extends BaseConnector {
     try {
       const conn = await this.createConnection({
         credentials: params.credentials,
-        loginUrl: parsed.loginUrl,
+        config: parsed,
       });
 
       const advancedConfig = parseAdvancedObjectConfig(
@@ -345,7 +357,7 @@ export class SalesforceConnector extends BaseConnector {
 
     const conn = await this.createConnection({
       credentials: params.credentials,
-      loginUrl: parsed.loginUrl,
+      config: parsed,
     });
 
     const advancedConfig = parseAdvancedObjectConfig(
@@ -415,7 +427,7 @@ export class SalesforceConnector extends BaseConnector {
     }
     const conn = await this.createConnection({
       credentials: params.credentials,
-      loginUrl: config.loginUrl,
+      config,
     });
     this.initPermissionPass(conn);
     this.mappedEmailResolver = params.resolveMappedEmail ?? null;
@@ -460,7 +472,7 @@ export class SalesforceConnector extends BaseConnector {
     }
     const conn = await this.createConnection({
       credentials: params.credentials,
-      loginUrl: config.loginUrl,
+      config,
     });
     this.initPermissionPass(conn);
 
@@ -502,7 +514,7 @@ export class SalesforceConnector extends BaseConnector {
         // Per-group failure isolation: one unreadable group fail-closes its
         // own grants only, never the whole enumeration.
         this.log.warn(
-          { groupId: group.Id, error: extractErrorMessage(error) },
+          { groupId: group.Id, error: this.redactError(error) },
           "Could not resolve Salesforce group members; the group's grants stay fail-closed",
         );
         members = [];
@@ -545,7 +557,7 @@ export class SalesforceConnector extends BaseConnector {
         }
       } catch (error) {
         this.log.debug(
-          { objectName: spec.objectName, error: extractErrorMessage(error) },
+          { objectName: spec.objectName, error: this.redactError(error) },
           "Could not enumerate record owners for the direct-grants roster",
         );
       }
@@ -569,7 +581,7 @@ export class SalesforceConnector extends BaseConnector {
         }
       } catch (error) {
         this.log.debug(
-          { objectName: spec.objectName, error: extractErrorMessage(error) },
+          { objectName: spec.objectName, error: this.redactError(error) },
           "Could not enumerate share grantees for the direct-grants roster",
         );
       }
@@ -602,7 +614,7 @@ export class SalesforceConnector extends BaseConnector {
     }
     const conn = await this.createConnection({
       credentials: params.credentials,
-      loginUrl: config.loginUrl,
+      config,
     });
 
     const specs = buildObjectSyncSpecs({
@@ -637,7 +649,7 @@ export class SalesforceConnector extends BaseConnector {
         isDirty = records.records.length > 0;
       } catch (error) {
         this.log.debug(
-          { objectName, error: extractErrorMessage(error) },
+          { objectName, error: this.redactError(error) },
           "Record drift probe failed for object",
         );
       }
@@ -706,7 +718,7 @@ export class SalesforceConnector extends BaseConnector {
     }
     const conn = await this.createConnection({
       credentials: params.credentials,
-      loginUrl: config.loginUrl,
+      config,
     });
     this.initPermissionPass(conn);
     this.mappedEmailResolver = params.resolveMappedEmail ?? null;
@@ -811,7 +823,7 @@ export class SalesforceConnector extends BaseConnector {
       queryResult = (await conn.query(soql)) as SfQueryResult;
     } catch (error) {
       // Per-object resilience: record the failure and continue
-      const message = extractErrorMessage(error);
+      const message = this.redactError(error);
       this.log.warn(
         { objectName: objectSpec.objectName, error: message },
         "Salesforce object query failed, skipping object",
@@ -860,7 +872,7 @@ export class SalesforceConnector extends BaseConnector {
           failures.push({
             itemId: String(record.Id ?? "unknown"),
             resource: `salesforce.${objectSpec.objectName}`,
-            error: extractErrorMessage(error),
+            error: this.redactError(error),
           });
         }
       }
@@ -929,7 +941,7 @@ export class SalesforceConnector extends BaseConnector {
         queryResult = (await conn.queryMore(nextUrl)) as SfQueryResult;
       } catch (error) {
         throw new Error(
-          `Salesforce pagination failed for ${objectSpec.objectName}: ${extractErrorMessage(error)}`,
+          `Salesforce pagination failed for ${objectSpec.objectName}: ${this.redactError(error)}`,
         );
       }
     }
@@ -1109,7 +1121,7 @@ export class SalesforceConnector extends BaseConnector {
       }
     } catch (error) {
       this.log.warn(
-        { objectName, error: extractErrorMessage(error) },
+        { objectName, error: this.redactError(error) },
         "Could not read the object's sharing model; treating it as Private (fail-closed)",
       );
     }
@@ -1170,7 +1182,7 @@ export class SalesforceConnector extends BaseConnector {
         } catch (error) {
           this.shareTableBroken.add(objectName);
           this.log.warn(
-            { objectName, shareObject, error: extractErrorMessage(error) },
+            { objectName, shareObject, error: this.redactError(error) },
             "Share table unavailable; the object's records resolve owner-only for this pass (fail-closed)",
           );
         }
@@ -1286,7 +1298,7 @@ export class SalesforceConnector extends BaseConnector {
         );
       } catch (error) {
         this.log.warn(
-          { error: extractErrorMessage(error) },
+          { error: this.redactError(error) },
           "Could not resolve Salesforce user emails; those principals drop fail-closed",
         );
         rows = [];
@@ -1341,23 +1353,27 @@ export class SalesforceConnector extends BaseConnector {
 
   /** query + queryMore loop (jsforce pages large result sets). */
   private async queryAll<T>(conn: Connection, soql: string): Promise<T[]> {
-    await this.rateLimit();
-    let result = (await conn.query(soql)) as unknown as {
-      done: boolean;
-      records: T[];
-      nextRecordsUrl?: string;
-    };
-    const records = [...result.records];
-    while (!result.done && result.nextRecordsUrl) {
+    try {
       await this.rateLimit();
-      result = (await conn.queryMore(result.nextRecordsUrl)) as unknown as {
+      let result = (await conn.query(soql)) as unknown as {
         done: boolean;
         records: T[];
         nextRecordsUrl?: string;
       };
-      records.push(...result.records);
+      const records = [...result.records];
+      while (!result.done && result.nextRecordsUrl) {
+        await this.rateLimit();
+        result = (await conn.queryMore(result.nextRecordsUrl)) as unknown as {
+          done: boolean;
+          records: T[];
+          nextRecordsUrl?: string;
+        };
+        records.push(...result.records);
+      }
+      return records;
+    } catch (error) {
+      throw new Error(this.redactError(error));
     }
-    return records;
   }
 
   /** Surface principals dropped this pass (fail-closed under-grant). */
@@ -1376,28 +1392,150 @@ export class SalesforceConnector extends BaseConnector {
     });
   }
 
-  /** Create an authenticated jsforce Connection. */
+  /** Authenticate and renew through the same supported server-to-server flow. */
   private async createConnection(params: {
     credentials: ConnectorCredentials;
-    loginUrl: string;
+    config: SalesforceConfig;
+  }): Promise<Connection> {
+    const validation = await this.validateConfig(params.config);
+    if (!validation.valid) throw new Error(validation.error);
+    if (params.config.authMethod !== "oauth_client_credentials") {
+      return this.createLegacyConnection(params);
+    }
+    const clientSecret = params.credentials.apiToken?.trim();
+    if (!clientSecret) {
+      throw new Error("Missing Salesforce OAuth consumer secret");
+    }
+    this.authSecrets.add(clientSecret);
+
+    const authorize = async (conn: Connection) => {
+      try {
+        await conn.authorize({ grant_type: "client_credentials" });
+        if (!conn.accessToken || !isSalesforceInstanceUrl(conn.instanceUrl)) {
+          throw new Error("Invalid Salesforce OAuth token response");
+        }
+        this.authSecrets.add(conn.accessToken);
+      } catch {
+        // OAuth errors can echo the submitted secret or response token. Never
+        // persist, log, or return the provider's raw authentication error.
+        throw new Error(
+          "Salesforce OAuth authentication failed. Check the My Domain URL, consumer key and secret, client credentials flow, and execution user in Salesforce.",
+        );
+      }
+    };
+    let lastRefreshAt: number | undefined;
+    const conn = new Connection({
+      loginUrl: params.config.loginUrl,
+      oauth2: {
+        loginUrl: params.config.loginUrl,
+        clientId: params.config.clientId,
+        clientSecret,
+      },
+      // Client credentials has no refresh token. Re-authorize on session expiry;
+      // jsforce coordinates concurrent refreshes and retries the failed request.
+      refreshFn: (connection, callback) => {
+        // Stop jsforce's recursive retry when Salesforce also rejects the newly
+        // issued token (for example, an execution user without API access).
+        if (
+          lastRefreshAt !== undefined &&
+          Date.now() - lastRefreshAt < 60_000
+        ) {
+          callback(
+            new Error(
+              "Salesforce rejected a renewed OAuth session. Check the app execution user’s API access.",
+            ),
+          );
+          return;
+        }
+        lastRefreshAt = Date.now();
+        authorize(connection).then(
+          () => callback(null, connection.accessToken ?? undefined),
+          (error: Error) => callback(error),
+        );
+      },
+    });
+    await authorize(conn);
+    this.log.debug("Salesforce OAuth authentication successful");
+    return conn;
+  }
+
+  /** Compatibility path for pre-existing connectors only; never an OAuth fallback. */
+  private async createLegacyConnection(params: {
+    credentials: ConnectorCredentials;
+    config: SalesforceConfig;
   }): Promise<Connection> {
     const username = params.credentials.email?.trim();
     const passwordAndToken = params.credentials.apiToken?.trim();
     if (!username || !passwordAndToken) {
       throw new Error("Missing Salesforce username or password+security token");
     }
-
-    const conn = new Connection({ loginUrl: params.loginUrl });
-    await conn.login(username, passwordAndToken);
-    this.log.debug(
-      { instanceUrl: conn.instanceUrl },
-      "Salesforce login successful",
+    this.authSecrets.add(passwordAndToken);
+    this.log.warn(
+      "Salesforce username/password authentication is deprecated and retires in Summer ’27. Migrate this existing connector to OAuth client credentials.",
     );
+    const conn = new Connection({ loginUrl: params.config.loginUrl });
+    conn.on("refresh", (token: string) => {
+      if (token) this.authSecrets.add(token);
+    });
+    try {
+      await conn.login(username, passwordAndToken);
+      if (conn.accessToken) this.authSecrets.add(conn.accessToken);
+    } catch {
+      throw new Error(
+        "Salesforce legacy login failed. Check the username, password/security token, and whether SOAP login is still enabled. Migrate to OAuth client credentials.",
+      );
+    }
     return conn;
+  }
+
+  private redactError(error: unknown): string {
+    let message = extractErrorMessage(error);
+    for (const secret of this.authSecrets) {
+      message = message.replaceAll(secret, "[REDACTED]");
+    }
+    return message;
   }
 }
 
 // ===== Internal helpers =====
+
+function isSalesforceInstanceUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.endsWith(".salesforce.com") &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      url.pathname === "/" &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isSalesforceMyDomainUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      /^[a-z0-9-]+\.(?:(?:sandbox|develop|scratch|trailblaze|demo|free|patch)\.)?my\.salesforce\.com$/.test(
+        url.hostname,
+      ) &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      (url.pathname === "/" || url.pathname === "") &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
 
 function parseSalesforceConfig(
   config: Record<string, unknown>,

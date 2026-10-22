@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -6,6 +7,7 @@ import {
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -69,6 +71,7 @@ import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
+  ApiError,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
@@ -410,6 +413,21 @@ const ListAgentRunsOutputSchema = z.object({
 /** How much artifact text get_run inlines; the tail is the useful end. */
 const MAX_INLINED_OUTPUT_CHARS = 20_000;
 const MAX_LISTED_RUNS = 50;
+// Bounded by the API body limit (a base64 payload plus JSON-RPC envelope must
+// fit in one request) and by what a channel thread can reasonably hold. A file
+// read from the workspace by path is held to the same cap.
+const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+/** Where an Agent Runtime's retained workspace is mounted in its container. */
+const RUN_WORKSPACE_ROOT = "/home/node/workspace";
+const RunFileNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
+    "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+  );
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -447,6 +465,7 @@ const registry = defineArchestraTools([
       encoding: z.enum(["utf8", "base64"]).default("utf8"),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -455,6 +474,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         const read = async () => {
           const result = await accessAgentWorkspaceFile({
             actor,
@@ -465,9 +485,7 @@ const registry = defineArchestraTools([
           const content =
             args.encoding === "base64"
               ? (content_base64 ?? "")
-              : new TextDecoder("utf-8", { fatal: true }).decode(
-                  Buffer.from(content_base64 ?? "", "base64"),
-                );
+              : decodeWorkspaceText(content_base64 ?? "");
           return { metadata, content };
         };
         if (access.kind !== "parent") {
@@ -503,10 +521,12 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(
+        return workspaceFileError({
+          direct,
           error,
-          "reading workspace file; use base64 encoding for binary content",
-        );
+          failure: `Could not read ${args.path} from the run's workspace`,
+          action: "reading workspace file",
+        });
       }
     },
   }),
@@ -514,7 +534,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
     title: "Transfer Workspace File",
     description:
-      "Copy a file between this machine and an Agent Runtime workspace without reading it. " +
+      "Copy a file between this machine and a Remote Agent's workspace without reading it. " +
       "Use this to move deliverables, archives, and binaries of any size, including small ones: " +
       "the bytes travel directly and never enter the conversation. " +
       "Authorize the transfer here, then run the returned command in a shell. " +
@@ -553,6 +573,7 @@ const registry = defineArchestraTools([
         .describe("Upload only: the local file's sha256, as hex."),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -561,6 +582,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         if (
           args.direction === "upload" &&
           (args.size === undefined || !args.sha256)
@@ -617,7 +639,12 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(error, "authorizing a workspace file transfer");
+        return workspaceFileError({
+          direct,
+          error,
+          failure: `Could not authorize the ${args.direction} of ${args.path}`,
+          action: "authorizing a workspace file transfer",
+        });
       }
     },
   }),
@@ -634,6 +661,7 @@ const registry = defineArchestraTools([
       overwrite: z.boolean().default(false),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -642,6 +670,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         if (access.kind === "parent") {
           await admitRuntimeSteer({
             crossing: access.crossing,
@@ -666,7 +695,12 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(error, "writing workspace file");
+        return workspaceFileError({
+          direct,
+          error,
+          failure: `Could not write ${args.path} to the run's workspace`,
+          action: "writing workspace file",
+        });
       }
     },
   }),
@@ -678,7 +712,7 @@ const registry = defineArchestraTools([
       `Hand local work over to ${DEFAULT_APP_NAME}, or spin it up there, as a durable agent run and return immediately with its id. ` +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
       "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
-      "For repository handoffs, first load the Agent Runtime Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
+      "For repository handoffs, first load the Remote Agents Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_run. " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",
@@ -1200,28 +1234,119 @@ const registry = defineArchestraTools([
   }),
 
   defineArchestraTool({
+    shortName: TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+    title: "Post Run Message",
+    description:
+      "Post a brief update to the Slack thread an active Agent Runtime run reports to. " +
+      "Use before the turn ends for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. " +
+      "Posting does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. " +
+      "Read the current task_id from ARCHESTRA_AGENT_RUNTIME_TASK_ID. " +
+      "The final answer is posted automatically; do not repeat it here.",
+    schema: z.object({
+      task_id: z.string().uuid(),
+      message: z.string().trim().min(1).max(2_000),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+        });
+        if ("error" in task) return errorResult(task.error);
+
+        const session = await AgentRunModel.findByTaskId(task.row.id);
+        if (!session || session.actorUserId !== actor.id) {
+          return errorResult(
+            "Only the person the runtime run acts as can post updates for it.",
+          );
+        }
+        if (session.endedAt || task.row.state !== "TASK_STATE_WORKING") {
+          return errorResult(
+            "This runtime run is not active. No message was posted.",
+          );
+        }
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: task.row.id,
+        });
+        if (access.kind === "error") return access.result;
+        if (access.kind === "parent") {
+          return errorResult(
+            "A protected runtime cannot post updates from another session.",
+          );
+        }
+        const target = session.completionTarget;
+        if (!target || target.type !== "chatops") {
+          return errorResult(
+            "This runtime run does not report to a Slack thread.",
+          );
+        }
+        const agent = await AgentModel.findById(session.agentId);
+        const { chatOpsManager } = await import(
+          "@/agents/chatops/chatops-manager"
+        );
+        const sent = await chatOpsManager.notifyBindingThread({
+          taskId: task.row.id,
+          bindingId: target.bindingId,
+          threadId: target.threadId,
+          pinnedAgentId: target.pinnedAgentId,
+          agentName: agent?.name,
+          text: args.message,
+          progress: true,
+          ...(target.originatingTaskId === task.row.id && {
+            muteMarkerAtStart: target.muteMarkerAtStart,
+          }),
+        });
+        return structuredSuccessResult(
+          { sent, task_id: task.row.id },
+          sent
+            ? "Progress update posted to the run's Slack thread."
+            : "No update was posted because the thread is muted or the message requests silence.",
+        );
+      } catch (error) {
+        return catchError(error, "posting the run update");
+      }
+    },
+  }),
+
+  defineArchestraTool({
     shortName: TOOL_POST_RUN_FILE_SHORT_NAME,
     title: "Post Run File",
     description:
       "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread.",
+      "runs delegated from a bound messaging channel have such a thread. " +
+      "From inside the run, pass path: the file is read from the run's own workspace, so its bytes never enter the conversation. " +
+      `Copy a file that is outside ${RUN_WORKSPACE_ROOT} into it first. ` +
+      "Pass content_base64 only for a small file that is not in the workspace. Exactly one of the two is required. " +
+      `Files up to ${MAX_RUN_FILE_BYTES / 1024 / 1024} MB.`,
     schema: z.object({
       task_id: z.string().uuid(),
-      filename: z
+      path: z
         .string()
-        .trim()
         .min(1)
-        .max(120)
-        .regex(
-          /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
-          "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+        .max(4096)
+        .optional()
+        .describe(
+          `The file in the run's own workspace, relative to ${RUN_WORKSPACE_ROOT} (for example demo/demo.mp4) or absolute under it.`,
         ),
-      content_base64: z.string().min(1),
+      filename: RunFileNameSchema.optional().describe(
+        "Name shown in the thread. Defaults to the last part of path; required with content_base64.",
+      ),
+      content_base64: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("The file's bytes, base64-encoded, when there is no path."),
       comment: z.string().trim().max(2_000).optional(),
     }),
     handler: async ({ args, context }) => {
       try {
+        // Malformed arguments are refused before any run or Guardrails lookup.
+        const input = runFileInput(args);
+        if ("error" in input) return errorResult(input.error);
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
           taskId: args.task_id,
@@ -1260,15 +1385,12 @@ const registry = defineArchestraTools([
           );
         }
 
-        const data = Buffer.from(args.content_base64, "base64");
-        if (data.length === 0) {
-          return errorResult("content_base64 decoded to an empty file.");
-        }
-        if (data.length > MAX_RUN_FILE_BYTES) {
-          return errorResult(
-            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`,
-          );
-        }
+        const file =
+          input.kind === "bytes"
+            ? input
+            : await readRunFile({ actor, taskId: task.row.id, input });
+        if ("error" in file) return errorResult(file.error);
+        const { filename, data } = file;
 
         const { chatOpsManager } = await import(
           "@/agents/chatops/chatops-manager"
@@ -1277,7 +1399,7 @@ const registry = defineArchestraTools([
           bindingId: target.bindingId,
           threadId: target.threadId,
           pinnedAgentId: target.pinnedAgentId,
-          filename: args.filename,
+          filename,
           data,
           comment: args.comment,
         });
@@ -1292,10 +1414,6 @@ const registry = defineArchestraTools([
   }),
 ]);
 
-// Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
-// must fit in one request) and by what a channel thread can reasonably hold.
-const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
-
 /** Quote a value for a POSIX shell so a path or token cannot break the command
  * the model is told to run. */
 function shellQuoteArgument(value: string): string {
@@ -1306,6 +1424,170 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 // === Internal helpers ===
+
+type RunFileInput =
+  | { kind: "bytes"; filename: string; data: Buffer }
+  | { kind: "path"; path: string; filename: string };
+
+/**
+ * Checks `post_run_file`'s arguments without touching the run: exactly one of
+ * path and content_base64, a plain file name, and bytes within the cap.
+ */
+function runFileInput(args: {
+  path?: string;
+  filename?: string;
+  content_base64?: string;
+}): RunFileInput | { error: string } {
+  const hasPath = args.path !== undefined;
+  const hasBytes = args.content_base64 !== undefined;
+  if (hasPath === hasBytes) {
+    return {
+      error:
+        "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
+    };
+  }
+  if (args.content_base64 !== undefined) {
+    if (!args.filename) {
+      return { error: "Pass filename with content_base64." };
+    }
+    const data = Buffer.from(args.content_base64, "base64");
+    if (data.length === 0) {
+      return { error: "content_base64 decoded to an empty file." };
+    }
+    if (data.length > MAX_RUN_FILE_BYTES) {
+      return { error: tooLarge(data.length) };
+    }
+    return { kind: "bytes", filename: args.filename, data };
+  }
+  const relative = stripWorkspaceRoot(args.path ?? "");
+  if (relative === "") {
+    return {
+      error: `Pass the path of a file in the run's workspace, for example demo/demo.mp4 or ${RUN_WORKSPACE_ROOT}/demo/demo.mp4.`,
+    };
+  }
+  const filename = RunFileNameSchema.safeParse(
+    args.filename ?? path.posix.basename(relative),
+  );
+  if (!filename.success) {
+    return {
+      error: `The file name ${JSON.stringify(path.posix.basename(relative))} is not a plain file name. Pass filename (letters, digits, dot, dash, underscore, space).`,
+    };
+  }
+  return { kind: "path", path: relative, filename: filename.data };
+}
+
+/**
+ * The model in the run sees its files at absolute paths, so an absolute path
+ * under the workspace root, or one starting with ./, names the same file. The
+ * root itself names no file and comes back empty. Any other value comes back
+ * unchanged, so the result is not always relative: the transfer helper refuses
+ * an absolute path outside the workspace.
+ */
+function stripWorkspaceRoot(value: string): string {
+  if (value === RUN_WORKSPACE_ROOT) return "";
+  const relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
+    ? value.slice(RUN_WORKSPACE_ROOT.length + 1)
+    : value;
+  return relative.replace(/^(\.\/)+/, "");
+}
+
+/**
+ * Reads a file from the run's own workspace through the transfer helper,
+ * which refuses traversal, symlinks and anything that is not a regular file.
+ * The file is pinned first, so its size is checked before any byte is read
+ * and the bytes read are the pinned version's.
+ */
+async function readRunFile(params: {
+  actor: A2AActor;
+  taskId: string;
+  input: Extract<RunFileInput, { kind: "path" }>;
+}): Promise<{ filename: string; data: Buffer } | { error: string }> {
+  const { input } = params;
+  const where = { actor: params.actor, taskId: params.taskId };
+  try {
+    const snapshot = await workspaceTransferTickets.pinFile({
+      ...where,
+      path: input.path,
+    });
+    try {
+      if (snapshot.size === 0) {
+        return { error: `${input.path} is empty in the run's workspace.` };
+      }
+      if (snapshot.size > MAX_RUN_FILE_BYTES) {
+        return { error: tooLarge(snapshot.size) };
+      }
+      const data = await workspaceTransferTickets.readPinned({
+        ...where,
+        snapshot,
+      });
+      return { filename: input.filename, data };
+    } finally {
+      await workspaceTransferTickets
+        .discardExport({ ...where, transferId: snapshot.transferId })
+        .catch((error) =>
+          logger.warn(
+            { err: error, taskId: params.taskId },
+            "Could not release a run file pinned for posting",
+          ),
+        );
+    }
+  } catch (error) {
+    const reason = workspaceRefusal(error);
+    if (reason !== undefined) {
+      return {
+        error: `Could not read ${input.path} from the run's workspace: ${reason}`,
+      };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Says why a file tool failed when the caller reads its own runtime. A
+ * Guardrails parent (`direct: false`) gets only the generic message: nothing
+ * about the file, not even whether it exists, may reach the parent before the
+ * file crosses.
+ */
+function workspaceFileError(params: {
+  direct: boolean;
+  error: unknown;
+  failure: string;
+  action: string;
+}): CallToolResult {
+  const reason = params.direct ? workspaceRefusal(params.error) : undefined;
+  if (reason === undefined) return catchError(params.error, params.action);
+  logger.info({ err: params.error }, `Refused ${params.action}`);
+  return errorResult(`${params.failure}: ${reason}`);
+}
+
+/**
+ * The file helper's refusals (a missing file, a path rule, a size limit) and
+ * the workspace gate's lifecycle answers say what the caller can fix and never
+ * carry file bytes. Anything else is not for the caller.
+ */
+function workspaceRefusal(error: unknown): string | undefined {
+  return error instanceof ApiError && error.statusCode < 500
+    ? error.message
+    : undefined;
+}
+
+/** Strict UTF-8, so binary bytes are refused instead of mangled. */
+function decodeWorkspaceText(contentBase64: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.from(contentBase64, "base64"),
+    );
+  } catch {
+    throw new ApiError(
+      400,
+      "This file is not UTF-8 text. Read it with encoding base64.",
+    );
+  }
+}
+
+function tooLarge(bytes: number): string {
+  return `The file is ${Math.round(bytes / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`;
+}
 
 /**
  * The refusal as a prompt: the exact keys still needed, and a deep link into

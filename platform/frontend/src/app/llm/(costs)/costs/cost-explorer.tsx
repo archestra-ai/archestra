@@ -3,7 +3,7 @@
 // and the REST call that returns the same data.
 
 import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,7 +43,6 @@ import {
   QueryChip,
   Segmented,
   SummaryTable,
-  ViewPills,
 } from "./cost-explorer-parts";
 import { fmtMetric, KpiTile } from "./cost-overview";
 
@@ -65,6 +64,22 @@ export default function CostExplorer() {
     timeframe,
     enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
   });
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [settledHeight, setSettledHeight] = useState<number>();
+  const isLoading = cube.isLoading || kpis.isCostPending;
+  // A range change replaces a potentially long table with a few skeletons.
+  // Reserve its settled height until the response arrives so the browser does
+  // not clamp the page's scroll offset to the shorter loading layout.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || isLoading) return;
+    const observer = new ResizeObserver(() => {
+      setSettledHeight(content.getBoundingClientRect().height);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [isLoading]);
 
   const update = (patch: Partial<PivotQuery>) => {
     setQ((prev) => normalize({ ...prev, ...patch }));
@@ -126,7 +141,12 @@ export default function CostExplorer() {
   const pivotBySplit = hasSplit && pivotCols === "split";
 
   return (
-    <div className="space-y-4">
+    <div
+      ref={contentRef}
+      className="space-y-4"
+      aria-busy={isLoading}
+      style={isLoading ? { minHeight: settledHeight } : undefined}
+    >
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
         <KpiTile
           label="API spend"
@@ -134,8 +154,6 @@ export default function CostExplorer() {
           caption="Metered API-key charges"
           series={kpis.billed.series}
           pending={kpis.isCostPending}
-          active={q.metric === "billed"}
-          onClick={() => update({ metric: "billed" })}
         />
         <KpiTile
           label="Subscription usage estimate"
@@ -145,8 +163,6 @@ export default function CostExplorer() {
           series={kpis.subscription.series}
           estimate
           colorClass="text-muted-foreground"
-          active={q.metric === "subscription"}
-          onClick={() => update({ metric: "subscription" })}
         />
         <KpiTile
           label="Requests"
@@ -155,8 +171,6 @@ export default function CostExplorer() {
           series={kpis.requests.series}
           pending={kpis.isUsagePending}
           colorClass="text-chart-2"
-          active={q.metric === "requests"}
-          onClick={() => update({ metric: "requests" })}
         />
         <KpiTile
           label="Tokens"
@@ -165,30 +179,14 @@ export default function CostExplorer() {
           series={kpis.tokens.series}
           pending={kpis.isUsagePending}
           colorClass="text-chart-3"
-          active={q.metric === "tokens"}
-          onClick={() => update({ metric: "tokens" })}
         />
         <KpiTile
           label="Active people"
           value={String(kpis.people.value)}
           caption={`Using ${appName} in selected period`}
           pending={kpis.isPeoplePending}
-          active={q.group === "person"}
-          onClick={() => update({ metric: "requests", group: "person" })}
         />
       </div>
-      <ViewPills
-        label="Saved views"
-        items={SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => ({
-          id: v.id,
-          label: v.label,
-          active: activeView?.id === v.id,
-          onSelect: () => {
-            setQ(v.q);
-            setFocus(new Set());
-          },
-        }))}
-      />
 
       <section
         aria-label="Cost explorer"
@@ -196,6 +194,32 @@ export default function CostExplorer() {
       >
         {/* Query bar */}
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+          {/* A saved view is a preset of the controls beside it; changing
+              any of them makes the view custom. */}
+          <QueryChip
+            label="View"
+            className="max-sm:grow"
+            value={activeView?.id ?? CUSTOM_VIEW}
+            options={[
+              ...SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => ({
+                id: v.id,
+                label: v.label,
+              })),
+              ...(activeView
+                ? []
+                : [{ id: CUSTOM_VIEW, label: "Custom", disabled: true }]),
+            ]}
+            onChange={(id) => {
+              const view = SAVED_VIEWS.find((v) => v.id === id);
+              if (!view) return;
+              setQ(view.q);
+              setFocus(new Set());
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className="mx-0.5 h-5 w-px bg-border max-sm:hidden"
+          />
           <QueryChip
             label="Show"
             className="max-sm:grow"
@@ -535,3 +559,5 @@ function Empty({ text }: { text: string }) {
     </div>
   );
 }
+
+const CUSTOM_VIEW = "custom";

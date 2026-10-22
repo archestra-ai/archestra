@@ -128,6 +128,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { describeToolsForCaller } from "@/services/mcp-install-tool-descriptions";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
@@ -325,7 +326,10 @@ export async function buildAgentMcpToolList(params: {
   tokenAuth?: Pick<
     TokenAuthContext,
     "userId" | "organizationId" | "isSessionAuth" | "serviceAccountId"
-  >;
+  > &
+    Partial<
+      Pick<TokenAuthContext, "teamId" | "isOrganizationToken" | "isExternalIdp">
+    >;
   lookups?: RequestLookups;
 }): Promise<{
   tools: McpListTool[];
@@ -374,13 +378,20 @@ export async function buildAgentMcpToolList(params: {
   // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
   // be excluded from tools/list (with a warning), so one malformed upstream
   // definition cannot poison the rest of the list.
-  const mcpTools = fetchedMcpTools.filter(
-    (tool) =>
-      !isToolRejectedForMcpHeaders({
-        toolName: tool.name,
-        inputSchema: tool.parameters,
-      }),
-  );
+  //
+  // Each tool is then described the way the installation its tools/call would
+  // run through describes it, not as whichever installation synced last.
+  const mcpTools = await describeToolsForCaller({
+    tools: fetchedMcpTools.filter(
+      (tool) =>
+        !isToolRejectedForMcpHeaders({
+          toolName: tool.name,
+          inputSchema: tool.parameters,
+        }),
+    ),
+    agentId,
+    tokenAuth,
+  });
 
   // A tools/list is served to one of two surfaces, and the whole gateway/chat
   // difference lives in this policy. An internal chat (agentType "agent") is
@@ -2850,7 +2861,7 @@ async function buildSearchToolsDescription(params: {
     (name) =>
       archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
   )
-    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the

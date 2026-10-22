@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
@@ -95,6 +96,18 @@ function paths(path: string): [string] {
 
 function getJson(path: string, body: JsonBodyType): HttpHandler[] {
   return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
+}
+
+function notFound(path: string): HttpHandler[] {
+  return paths(path).map((url) => http.get(url, () => notFoundResponse()));
+}
+
+/** The backend's 404 body for a missing item. */
+function notFoundResponse(message = "Not found") {
+  return HttpResponse.json(
+    { error: { message, type: "api_not_found_error" } },
+    { status: 404 },
+  );
 }
 
 function statisticsJson(
@@ -200,6 +213,11 @@ export const handlers: HttpHandler[] = [
       },
     ),
   ),
+  // Read-back routes for API clients such as Terraform; no install or binding
+  // is seeded, so single reads answer as the backend does for an unknown id.
+  ...getJson("/api/openappa/credential-bindings", []),
+  ...notFound("/api/openappa/credential-bindings/:variable"),
+  ...notFound("/api/openappa/battery-installs/:id"),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [
@@ -390,15 +408,11 @@ export const handlers: HttpHandler[] = [
       "nav:model-providers",
       "nav:mcp-registry",
       "nav:guardrails",
-      "feedback:popup",
     ],
   }),
   ...postJson("/api/onboarding/seen-nav-items", { items: [] }),
   ...getJson("/api/onboarding/survey-eligibility", { eligible: false }),
   ...postJson("/api/onboarding/survey", { ok: true }),
-  ...getJson("/api/onboarding/feedback-popup-activation", {
-    activatedAt: null,
-  }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
@@ -436,6 +450,25 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  ...getJson("/api/chatops/config/slack", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    connectionMode: "socket",
+  }),
+  ...getJson("/api/chatops/config/ms-teams", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    tenantId: null,
+  }),
+  ...getJson("/api/chatops/config/telegram", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+  }),
   // The record's Slack bot section: no bots, Slack not connected. The agent
   // edit page mounts it on every step, so it is read whichever step opens.
   ...getJson("/api/chatops/config/slack/agents", {
@@ -498,15 +531,7 @@ export const handlers: HttpHandler[] = [
       );
       return server
         ? HttpResponse.json(server)
-        : HttpResponse.json(
-            {
-              error: {
-                message: "MCP server not found",
-                type: "api_not_found_error",
-              },
-            },
-            { status: 404 },
-          );
+        : notFoundResponse("MCP server not found");
     }),
   ),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
@@ -784,6 +809,30 @@ export const handlers: HttpHandler[] = [
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
   ...getJson("/api/llm-proxy", makeAgent()),
+
+  // The connection approval page an installer opens (/connection with a
+  // connectRequest): its request, the skill names it lists, and the setup it
+  // prepares (on the server with the document, else in the browser).
+  ...getJson("/api/client-connections/:id", {
+    clientId: "opencode",
+    platform: "linux",
+    exclude: [],
+    gateway: null,
+    plugins: null,
+    deviceName: "test-laptop",
+    userCode: "ABCD-1234",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
+  ...getJson("/api/skills/names", { data: [], total: 0 }),
+  ...postJson("/api/connection-setups", {
+    id: "setup-1",
+    // A mock of the setup command, on the loopback address the platform
+    // dials itself by (see shared/loopback-dial.test.ts).
+    command: `curl -fsSL '${DEFAULT_INTERNAL_API_BASE_URL}/api/connection-setups/tok' | bash`,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    tokenStart: "tok",
+    plugins: [],
+  }),
 
   // The static marketplace (the primary install path in the /connection step).
   ...getJson("/api/skill-marketplace", skillMarketplaceSeed),

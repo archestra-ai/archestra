@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Search,
   Sparkles,
   Square,
   Trash2,
@@ -24,6 +25,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { AgentIcon } from "@/components/agent-icon";
 import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
@@ -66,6 +68,7 @@ import {
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { SHORTCUT_SEARCH } from "@/consts";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   SIDEBAR_PINNED_RUNS,
@@ -113,6 +116,11 @@ import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+// Fades an overflowing title out at the right edge instead of an ellipsis.
+// flex-1 stretches the box across the row, so short titles never reach the
+// faded strip. text-clip! beats SidebarMenuButton's last-span `truncate`.
+const TITLE_FADE_CLASS =
+  "min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip! [mask-image:linear-gradient(to_right,#000_calc(100%_-_1.5rem),transparent)]";
 
 function ChatListFadeIn({
   fadeIn,
@@ -441,7 +449,7 @@ export function ChatSidebarSection({
                   className="h-3.5 w-3.5 shrink-0"
                   aria-label="Scheduled task"
                 />
-                <span className="truncate">
+                <span className={TITLE_FADE_CLASS}>
                   {conv.scheduledRun.scheduleName}
                 </span>
               </IntentPrefetchLink>
@@ -491,11 +499,10 @@ export function ChatSidebarSection({
           className={cn(
             "relative flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
             isCurrentConversation && "bg-sidebar-accent",
-            // Reserve the menu gutter only while the menu trigger is visible.
-            // With a status indicator the gutter opens left of it instead,
-            // so the indicator keeps its column.
-            showChatMenu && !hasIndicator && "hover:pr-7 focus-within:pr-7",
-            showChatMenu && !hasIndicator && isMenuOpen && "pr-7",
+            // The status indicator and the menu trigger share one right-edge
+            // slot; reserve its gutter while either is visible.
+            showChatMenu && "hover:pr-7 focus-within:pr-7",
+            showChatMenu && (hasIndicator || isMenuOpen) && "pr-7",
           )}
         >
           {editingId === conv.id ? (
@@ -594,7 +601,7 @@ export function ChatSidebarSection({
                       Generating...
                     </span>
                   ) : hasRecentlyGeneratedTitle ? (
-                    <span key="typing" className="truncate">
+                    <span key="typing" className={TITLE_FADE_CLASS}>
                       <TypingText
                         text={
                           displayTitle.length > MAX_TITLE_LENGTH
@@ -610,43 +617,11 @@ export function ChatSidebarSection({
                     <TruncatedText
                       message={displayTitle}
                       maxLength={MAX_TITLE_LENGTH}
-                      className="truncate"
+                      className={TITLE_FADE_CLASS}
                       showTooltip={false}
                     />
                   )}
                 </span>
-                {/* One fixed slot for both, so the spinner and the smaller dot
-                  share a center line down the list. */}
-                {hasIndicator && (
-                  <span
-                    className={cn(
-                      "ml-1 flex size-4 shrink-0 items-center justify-center",
-                      showChatMenu &&
-                        "group-hover/menu-sub-item:ml-7 group-focus-within/menu-sub-item:ml-7",
-                      showChatMenu && isMenuOpen && "ml-7",
-                    )}
-                  >
-                    {isGenerating ? (
-                      <Loader2
-                        aria-label="Generating"
-                        data-testid={getChatItemGeneratingIndicatorTestId(
-                          conv.id,
-                        )}
-                        className="size-3.5 animate-spin text-muted-foreground"
-                      />
-                    ) : (
-                      <span
-                        role="img"
-                        aria-label="New messages"
-                        data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
-                        className={cn(
-                          "size-2 rounded-full",
-                          ATTENTION_DOT_CLASS.attention,
-                        )}
-                      />
-                    )}
-                  </span>
-                )}
               </IntentPrefetchLink>
             </SidebarMenuButton>
           )}
@@ -662,6 +637,36 @@ export function ChatSidebarSection({
               }}
             />
           )}
+          {/* Same slot as the menu trigger, so the spinner, the dot and the
+              "more" button all share one column; the trigger replaces the
+              indicator while it is visible. */}
+          {showChatMenu && hasIndicator && (
+            <span
+              className={cn(
+                "pointer-events-none absolute right-1 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center transition-opacity",
+                "group-hover/menu-sub-item:opacity-0 group-has-[[aria-haspopup=menu]:focus-visible]/menu-sub-item:opacity-0",
+                isMenuOpen && "opacity-0",
+              )}
+            >
+              {isGenerating ? (
+                <Loader2
+                  aria-label="Generating"
+                  data-testid={getChatItemGeneratingIndicatorTestId(conv.id)}
+                  className="size-3.5 animate-spin text-muted-foreground"
+                />
+              ) : (
+                <span
+                  role="img"
+                  aria-label="New messages"
+                  data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                  className={cn(
+                    "size-2 rounded-full",
+                    ATTENTION_DOT_CLASS.attention,
+                  )}
+                />
+              )}
+            </span>
+          )}
           {showChatMenu && (
             <ConversationRowMenu
               conversation={conv}
@@ -669,7 +674,7 @@ export function ChatSidebarSection({
               onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
               onRename={() => handleStartEdit(conv.id, displayTitle)}
               triggerClassName={cn(
-                hasIndicator ? "right-9" : "right-1",
+                "right-1",
                 isMenuOpen
                   ? "opacity-100"
                   : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -740,7 +745,7 @@ export function ChatSidebarSection({
                 <TruncatedText
                   message={run.title}
                   maxLength={MAX_TITLE_LENGTH}
-                  className="truncate"
+                  className={TITLE_FADE_CLASS}
                   showTooltip={false}
                 />
               </span>
@@ -884,7 +889,7 @@ export function ChatSidebarSection({
               <TruncatedText
                 message={project.name}
                 maxLength={MAX_TITLE_LENGTH}
-                className="truncate"
+                className={TITLE_FADE_CLASS}
                 showTooltip={false}
               />
             </span>
@@ -963,7 +968,7 @@ export function ChatSidebarSection({
               <TruncatedText
                 message={appItem.name}
                 maxLength={MAX_TITLE_LENGTH}
-                className="truncate"
+                className={TITLE_FADE_CLASS}
                 showTooltip={false}
               />
             </span>
@@ -1048,7 +1053,10 @@ export function ChatSidebarSection({
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>
           {pinnedItems.length > 0 && (
-            <CollapsibleSidebarGroup label="Pinned">
+            <CollapsibleSidebarGroup
+              label="Pinned"
+              action={<SearchLabelAction />}
+            >
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1086,7 +1094,16 @@ export function ChatSidebarSection({
           )}
 
           {recentChatGroups.map((group, groupIndex) => (
-            <CollapsibleSidebarGroup key={group.label} label={group.label}>
+            <CollapsibleSidebarGroup
+              key={group.label}
+              label={group.label}
+              // Search rides on whichever label comes first.
+              action={
+                pinnedItems.length === 0 && groupIndex === 0 ? (
+                  <SearchLabelAction />
+                ) : undefined
+              }
+            >
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -1172,9 +1189,12 @@ export function ChatSidebarSection({
 
 function CollapsibleSidebarGroup({
   label,
+  action,
   children,
 }: {
   label: string;
+  /** Sits at the label's right end, in the rows' indicator column. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -1185,7 +1205,7 @@ function CollapsibleSidebarGroup({
             <Button
               variant="ghost"
               size="sm"
-              className="group/section w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
+              className="group/section min-w-0 flex-1 justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
             >
               <span>{label}</span>
               <ChevronDown
@@ -1194,10 +1214,41 @@ function CollapsibleSidebarGroup({
               />
             </Button>
           </CollapsibleTrigger>
+          {action}
         </SidebarGroupLabel>
         <CollapsibleContent>{children}</CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+  );
+}
+
+/**
+ * Opens the search palette, which Cmd/Ctrl+K also toggles. Hovering swaps the
+ * magnifier for the shortcut, so the click that would open search teaches the
+ * key instead.
+ */
+function SearchLabelAction() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <UnstyledButton
+      type="button"
+      aria-label="Search"
+      className="group/search mr-1 flex h-5 min-w-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/70 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+      onClick={() => {
+        if (isMobile) setOpenMobile(false);
+        window.dispatchEvent(new CustomEvent("open-conversation-search"));
+      }}
+    >
+      <Search
+        aria-hidden
+        className="size-4 group-hover/search:hidden group-focus-visible/search:hidden"
+      />
+      <ShortcutHint
+        modifier="mod"
+        letter={SHORTCUT_SEARCH.label}
+        className="ml-0 hidden group-hover/search:inline group-focus-visible/search:inline"
+      />
+    </UnstyledButton>
   );
 }
 

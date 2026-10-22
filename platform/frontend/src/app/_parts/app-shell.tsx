@@ -261,7 +261,6 @@ export function AppShell({ children }: AppShellProps) {
           <ConversationSearchProvider />
           <AfterIdle>
             <OnboardingSurveyDialog />
-            <FeedbackPopupDialog />
           </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
@@ -309,12 +308,6 @@ function AfterIdle({ children }: { children: React.ReactNode }) {
 const OnboardingSurveyDialog = lazyComponent(() =>
   import("@/components/onboarding-survey-dialog").then(
     (m) => m.OnboardingSurveyDialog,
-  ),
-);
-
-const FeedbackPopupDialog = lazyComponent(() =>
-  import("@/components/feedback-popup-dialog").then(
-    (m) => m.FeedbackPopupDialog,
   ),
 );
 

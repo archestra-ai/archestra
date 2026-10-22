@@ -16,7 +16,7 @@ An agent is a reusable assistant: instructions, a model, and the tools, knowledg
 ## Create an Agent
 
 1. Go to **Agents** and click **Add Agent**.
-2. Start from scratch, or pick a template under **Coding agents**.
+2. Start from scratch, or pick a template under **Agent Runtimes**.
 3. On **Configuration**, enter a name and instructions, and choose the model.
 4. Click **Continue setup** to choose tools, knowledge, skills, subagents, and messaging channels.
 5. Click **Create**, then **Chat** to send your first task.

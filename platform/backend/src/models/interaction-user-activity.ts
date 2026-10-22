@@ -14,7 +14,10 @@ import * as schema from "@/database/schemas";
 import type { InteractionUserActivityState } from "@/types/interaction-user-activity";
 
 export default class InteractionUserActivityModel {
-  static async append(values: typeof schema.interactionsTable.$inferInsert) {
+  static async append(
+    values: typeof schema.interactionsTable.$inferInsert,
+    tx?: Transaction,
+  ) {
     const columns = getTableColumns(schema.interactionsTable);
     const payload: Record<string, string | null> = {};
     for (const [key, column] of Object.entries(columns)) {
@@ -53,7 +56,7 @@ export default class InteractionUserActivityModel {
         (typeof schema.interactionsTable.$inferSelect)[Key]
       >;
     };
-    const [interaction] = await db
+    const [interaction] = await (tx ?? db)
       .select(selected)
       .from(
         sql`interaction_user_activity_append(${JSON.stringify(payload)}::jsonb) AS interactions`,

@@ -69,6 +69,7 @@ export function makeSessionSummary(
     contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
+    connectorName: null,
     ...overrides,
   };
 }

@@ -9,31 +9,29 @@ describe("usage exploration", () => {
     const user = userEvent.setup();
     render(<UsageContent {...makeUsageData()} />);
     expect(screen.getByRole("button", { name: /^pivot$/i })).toBeDisabled();
-    await user.click(
-      screen.getByRole("button", { name: "Activity over time" }),
-    );
+    await view(user, "Activity over time");
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
     const table = screen.getByRole("table");
     expect(within(table).getAllByText("3")).toHaveLength(4);
     expect(within(table).queryByText("example-model")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Usage by client" }));
+    await view(user, "Usage by client");
     expect(screen.getByRole("button", { name: /^pivot$/i })).toBeDisabled();
     expect(
       within(screen.getByRole("table")).getByText("Not reported"),
     ).toBeInTheDocument();
   });
-  it("keeps token mix and context in the explorer and lets a billed tile leave a non-billing grouping", async () => {
+  it("keeps token mix and context in the explorer and lets a billed view leave a non-billing grouping", async () => {
     const user = userEvent.setup();
     render(<UsageContent {...makeUsageData()} />);
-    await user.click(screen.getByRole("button", { name: "Token mix" }));
+    await view(user, "Token mix");
     expect(
       within(screen.getByRole("table")).getByText("Cache writes"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Context size" }));
+    await view(user, "Context size");
     expect(
       within(screen.getByRole("table")).getByText("Under 32K"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Billed spend \$/ }));
+    await view(user, "Spend by model");
     expect(
       screen.getByRole("button", { name: "by Model" }),
     ).toBeInTheDocument();
@@ -45,7 +43,8 @@ describe("usage exploration", () => {
     const user = userEvent.setup();
     const write = vi.spyOn(navigator.clipboard, "writeText");
     render(<UsageContent {...makeUsageData()} />);
-    await user.click(screen.getByRole("button", { name: /^Tokens / }));
+    await user.click(screen.getByRole("button", { name: /^Show / }));
+    await user.click(screen.getByRole("menuitem", { name: "Tokens" }));
     await user.click(screen.getByRole("button", { name: "split by None" }));
     await user.click(screen.getByRole("menuitem", { name: "Input / output" }));
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
@@ -70,3 +69,8 @@ describe("usage exploration", () => {
     ).toBeInTheDocument();
   });
 });
+
+async function view(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("button", { name: /^View / }));
+  await user.click(screen.getByRole("menuitem", { name }));
+}

@@ -68,6 +68,8 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "kimi:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "azure:images",
+  "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
@@ -974,6 +976,23 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   // chat one — the retrieval-quality flagship first.
   voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
   jev: ["jev"],
+};
+
+/**
+ * Fast-tier models per provider, most- to least-preferred, matched as
+ * substrings of a key's synced model ids like {@link MODEL_MARKER_PATTERNS};
+ * a `pro` variant never matches. For short, latency-bound internal calls such
+ * as guardrail annotation. A provider without an entry has no fast default
+ * and keeps its usual model.
+ */
+export const PROVIDER_FAST_MODEL_PATTERNS: Partial<
+  Record<SupportedProvider, string[]>
+> = {
+  anthropic: ["claude-haiku-5-5"],
+  bedrock: ["claude-haiku-5-5"],
+  openai: ["gpt-6-luna", "gpt-5.6-luna"],
+  openrouter: ["anthropic/claude-haiku-5.5", "openai/gpt-6-luna"],
+  gemini: ["gemini-3.5-flash-lite"],
 };
 
 /**

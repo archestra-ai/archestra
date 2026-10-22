@@ -4,6 +4,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useLlmModels, useModelsWithApiKeys } from "./llm-models.query";
+import { llmModelsQueryKey } from "./llm-models-query-keys";
+import { availableLlmProviderApiKeysQueryKey } from "./llm-provider-api-keys-query-keys";
 import { PERSISTED_QUERY_META } from "./query-persistence";
 
 vi.mock("@archestra/shared", () => ({
@@ -67,6 +69,38 @@ describe("useLlmModels", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toHaveLength(1);
     expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
+  });
+
+  // Adding the first key refetches the full list; until that lands the cache
+  // still holds the empty answer from before the key's models were synced.
+  // The sole key's list must wait for the refetch, not latch that empty list.
+  it("does not seed the sole key's models from a list being refetched", async () => {
+    let resolveRefetch: (value: unknown) => void = () => {};
+    vi.mocked(archestraApiSdk.getLlmModels).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefetch = resolve;
+      }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+    });
+    queryClient.setQueryData(llmModelsQueryKey(null), []);
+    queryClient.setQueryData(
+      availableLlmProviderApiKeysQueryKey(undefined, undefined),
+      [{ id: "key-1" }],
+    );
+    renderHook(() => useLlmModels(), {
+      wrapper: createWrapper(queryClient),
+    });
+    void queryClient.invalidateQueries({ queryKey: llmModelsQueryKey(null) });
+
+    const { result } = renderHook(() => useLlmModels({ apiKeyId: "key-1" }), {
+      wrapper: createWrapper(queryClient),
+    });
+    resolveRefetch(makeGetLlmModelsResult([makeModel()]));
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
   });
 });
 

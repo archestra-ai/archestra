@@ -18,7 +18,7 @@ import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -594,7 +594,7 @@ export async function assertPlatformAuthenticated(params: {
   /** A passthrough virtual key from `X-Archestra-Virtual-Key` was validated. */
   wasPassthroughKeyValidated: boolean;
   wasJwksAuthenticated: boolean;
-  /** The request carried a valid in-process proof (see `takeInternalCall`). */
+  /** The request carried a valid in-process proof (see `internalCallProvenance`). */
   isInternalCall: boolean;
   /**
    * True when the backend authenticates upstream with its OWN credentials and
@@ -1176,7 +1176,7 @@ async function authenticatePassthroughProxyRequest(params: {
   // keyless-provider allowance in the instrumented handler. The proof is a
   // per-process secret, so a request arriving through the frontend rewrite
   // cannot satisfy it. Taking it also keeps it off the forwarded request.
-  const proof = takeInternalCall(request.headers);
+  const proof = internalCallProvenance(request);
   if (proof.inProcess || proof.guardrail) return;
 
   const unauthenticated = new ApiError(
@@ -1199,6 +1199,7 @@ async function authenticatePassthroughProxyRequest(params: {
   }
 
   const presentedCredential = passthroughToken ?? bearerToken ?? undefined;
+  let authenticatedBearer = false;
   await virtualKeyRateLimiter.check({
     ip: request.ip,
     credential: presentedCredential,
@@ -1229,6 +1230,7 @@ async function authenticatePassthroughProxyRequest(params: {
             agent.organizationId,
           ));
         if (!member) throw unauthenticated;
+        authenticatedBearer = true;
         return;
       }
       // Token validity and expiry are the whole bar here. The provider-mapping
@@ -1236,11 +1238,15 @@ async function authenticatePassthroughProxyRequest(params: {
       // to use, and a pass-through forwards none — so requiring it would reject
       // otherwise-valid platform credentials for no security gain.
       await validateVirtualApiKeyToken(bearerToken);
+      authenticatedBearer = true;
       return;
     }
 
     const agent = await resolveAgent(agentId);
-    if (await attemptJwksAuth(request, agent, provider)) return;
+    if (await attemptJwksAuth(request, agent, provider)) {
+      authenticatedBearer = true;
+      return;
+    }
     if (
       await validateLlmOAuthAccessToken({
         tokenValue: bearerToken,
@@ -1249,6 +1255,7 @@ async function authenticatePassthroughProxyRequest(params: {
         requestedModel: requestedModelFromBody(request),
       })
     ) {
+      authenticatedBearer = true;
       return;
     }
     throw unauthenticated;
@@ -1256,6 +1263,9 @@ async function authenticatePassthroughProxyRequest(params: {
 
   try {
     await authenticate();
+    if (authenticatedBearer && bearerToken) {
+      stripAuthenticatedBearer(request, bearerToken);
+    }
     await virtualKeyRateLimiter.recordSuccess({
       credential: presentedCredential,
     });
@@ -1267,5 +1277,71 @@ async function authenticatePassthroughProxyRequest(params: {
       });
     }
     throw error;
+  }
+}
+
+/**
+ * A bearer accepted by the platform is not an upstream credential. Match the
+ * validated value rather than a token prefix: IdP/OAuth tokens have other
+ * formats, and a downstream Archestra may legitimately use an arch_ key.
+ * Keep distinct caller-supplied provider credentials intact.
+ */
+function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
+  const headerNames = new Set([
+    "authorization",
+    "x-api-key",
+    "api-key",
+    "x-goog-api-key",
+  ]);
+  const stripValue = (value: string): string | undefined => {
+    // Node joins repeated credential headers with commas. Remove matching
+    // credentials from that list without discarding a separate provider key.
+    const values = value.split(",");
+    const retained = values.filter((entry) => {
+      const credential = entry.trim();
+      return (
+        credential !== token &&
+        credential.match(/^Bearer\s+(.+)$/i)?.[1] !== token
+      );
+    });
+    if (retained.length === values.length) return value;
+    return retained.length
+      ? retained.map((entry) => entry.trim()).join(", ")
+      : undefined;
+  };
+  for (const headers of new Set([request.headers, request.raw.headers])) {
+    for (const name of headerNames) {
+      const value = headers[name];
+      if (value === undefined) continue;
+      const retained = (Array.isArray(value) ? value : [value])
+        .map(stripValue)
+        .filter((entry) => entry !== undefined);
+      if (retained.length === 0) delete headers[name];
+      else headers[name] = Array.isArray(value) ? retained : retained[0];
+    }
+  }
+  const rawHeaders = request.raw.rawHeaders;
+  if (rawHeaders) {
+    for (let i = rawHeaders.length - 2; i >= 0; i -= 2) {
+      if (!headerNames.has(rawHeaders[i].toLowerCase())) continue;
+      const retained = stripValue(rawHeaders[i + 1]);
+      if (retained === undefined) rawHeaders.splice(i, 2);
+      else rawHeaders[i + 1] = retained;
+    }
+  }
+  const url = request.raw.url;
+  if (url?.includes("?")) {
+    const queryStart = url.indexOf("?");
+    const segments = url.slice(queryStart + 1).split("&");
+    const retained = segments.filter(
+      (segment) => !new URLSearchParams(segment).getAll("key").includes(token),
+    );
+    if (retained.length !== segments.length) {
+      // Preserve the other parameters byte for byte, including literal question
+      // marks, escaping and order. Re-serializing can change signed provider URLs.
+      request.raw.url =
+        url.slice(0, queryStart) +
+        (retained.length ? `?${retained.join("&")}` : "");
+    }
   }
 }

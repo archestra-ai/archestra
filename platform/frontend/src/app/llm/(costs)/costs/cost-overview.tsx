@@ -2,7 +2,6 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { formatCompact, formatCost, formatInt } from "./cost-explorer.query";
 
@@ -96,8 +95,6 @@ export function KpiTile({
   series,
   pending,
   estimate,
-  active,
-  onClick,
   colorClass = "text-chart-1",
   extra,
 }: {
@@ -107,8 +104,6 @@ export function KpiTile({
   series?: number[];
   pending?: boolean;
   estimate?: boolean;
-  active?: boolean;
-  onClick?: () => void;
   colorClass?: string;
   extra?: ReactNode;
 }) {
@@ -146,17 +141,14 @@ export function KpiTile({
       </div>
     </>
   );
-  const cls = cn(
-    "relative flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3 text-left transition-colors sm:p-4",
-    estimate && "border-dashed bg-transparent",
-    onClick && "hover:bg-muted/40",
-    active && "ring-2 ring-inset ring-primary/60",
-  );
-  return onClick ? (
-    <UnstyledButton type="button" onClick={onClick} className={cls}>
+  return (
+    <div
+      className={cn(
+        "relative flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3 sm:p-4",
+        estimate && "border-dashed bg-transparent",
+      )}
+    >
       {body}
-    </UnstyledButton>
-  ) : (
-    <div className={cls}>{body}</div>
+    </div>
   );
 }

@@ -1,0 +1,186 @@
+name: Update Terraform Provider
+
+# Release Please starts this workflow after it publishes each release from
+# main. The daily run is a fallback; pushes run it when the updater changes.
+on:
+  schedule:
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/update-terraform-provider.yml
+      - platform/scripts/terraform-provider/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-terraform-provider
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Generate provider update without write credentials
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      ready: ${{ steps.generate.outputs.ready }}
+    steps:
+      - name: Checkout trusted platform main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout trusted provider tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: archestra-ai/terraform-provider-archestra
+          ref: main
+          path: provider-tools
+          persist-credentials: false
+      - name: Checkout provider candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: archestra-ai/terraform-provider-archestra
+          ref: main
+          path: provider-candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: provider-tools/go.mod
+          cache-dependency-path: |
+            provider-tools/go.sum
+            provider-tools/tools/go.sum
+      # Provider CI regenerates its client from the release in
+      # platform-version.txt and fails on any difference. So generate from that
+      # release's spec, not from the newer spec on main. The token is passed to
+      # this one git command only.
+      - name: Read the released platform spec
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["info"]["version"])' docs/openapi.json)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::docs/openapi.json does not name a platform release: $version"
+            exit 1
+          fi
+          # Release Please tags first and publishes the GitHub release after the
+          # images. Until then provider CI cannot pull the image, so skip and let
+          # a later run propose the release. A draft is not found with this token.
+          # Any other gh error fails the run, so a broken token stays visible.
+          if ! published="$(gh release view "platform-v${version}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft | not' 2>&1)"; then
+            case "$published" in
+              *"release not found"*) published=false ;;
+              *) echo "::error::Could not read release platform-v${version}: ${published}"; exit 1 ;;
+            esac
+          fi
+          if [ "$published" != "true" ]; then
+            reason="platform-v${version} is not a published release yet; a later run proposes it."
+            echo "::notice::$reason"
+            mkdir -p provider-update
+            python3 -c 'import json, sys; json.dump({"skipped": sys.argv[1]}, open(sys.argv[2], "w"))' "$reason" provider-update/result.json
+            exit 0
+          fi
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --no-tags --depth=1 origin "refs/tags/platform-v${version}"
+          spec="$RUNNER_TEMP/openapi-release.json"
+          git show FETCH_HEAD:docs/openapi.json > "$spec"
+          echo "spec=$spec" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse 'FETCH_HEAD^{commit}')" >> "$GITHUB_OUTPUT"
+          echo "Platform release: platform-v${version}" >> "$GITHUB_STEP_SUMMARY"
+      # The trusted helper detects single-client or legacy bridge layout from
+      # provider main. platform-version.txt must be added by the provider first.
+      - name: Generate and record test results
+        id: generate
+        if: steps.release.outputs.spec != ''
+        working-directory: platform
+        env:
+          RELEASE_SPEC: ${{ steps.release.outputs.spec }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          git -C ../provider-candidate config user.name "Archestra releaser automation"
+          git -C ../provider-candidate config user.email "releaser-bot@users.noreply.github.com"
+          python3 scripts/terraform-provider/update_provider.py prepare \
+            --provider ../provider-candidate --tools ../provider-tools \
+            --spec "$RELEASE_SPEC" --platform-commit "$RELEASE_COMMIT" \
+            --output ../provider-update
+      - name: Retain generated patch and test failures
+        if: always()
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: terraform-provider-update
+          path: provider-update/
+          retention-days: "14"
+          if-no-files-found: error
+
+  publish:
+    name: Propose generated provider update
+    needs: prepare
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && needs.prepare.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted platform publication script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download this run's generated patch
+        uses: ./.github/actions/github-download-artifact
+        with:
+          name: terraform-provider-update
+          path: provider-update
+      - name: Checkout provider history without executing provider code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: archestra-ai/terraform-provider-archestra
+          ref: main
+          path: provider-publish
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Generate provider-scoped releaser token
+        id: token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: terraform-provider-archestra
+          permission-contents: write
+          permission-pull-requests: write
+      # Publication derives its file allowlist from provider main without
+      # executing its Makefile or any repair-branch tooling.
+      - name: Push normally and create or reuse repair PR
+        working-directory: platform
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh auth setup-git --hostname github.com --force
+          git -C ../provider-publish config user.name "Archestra releaser automation"
+          git -C ../provider-publish config user.email "releaser-bot@users.noreply.github.com"
+          python3 scripts/terraform-provider/update_provider.py publish \
+            --provider ../provider-publish --output ../provider-update --run-url "$RUN_URL"
+      # Run after publication: semantic failures must remain visible without
+      # preventing creation/recovery of the PR where humans can fix them.
+      - name: Report provider validation outcome
+        if: always()
+        working-directory: platform
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          result = json.loads(Path('../provider-update/result.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Provider compile/unit test exit: {result['test_exit']}. Full log in terraform-provider-update artifact.\n")
+          if result['test_exit'] != 0:
+              raise SystemExit('Generated provider needs human semantic fixes; see repair PR and tests.log artifact.')
+          PY

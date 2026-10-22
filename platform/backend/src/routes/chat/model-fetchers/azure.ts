@@ -1,3 +1,4 @@
+import { getAzureModelKind } from "@archestra/shared";
 import {
   getAzureManagementBearerTokenProvider,
   getAzureOpenAiBearerTokenProvider,
@@ -105,6 +106,7 @@ export async function fetchAzureModels(
       id: dep.id,
       displayName: dep.id,
       provider: "azure" as const,
+      capabilities: azureMediaCapabilities(dep.model ?? dep.id),
       // Data-plane deployments carry the backing model name; use it for pricing.
       ...(dep.model ? { underlyingModelName: dep.model } : {}),
     }));
@@ -163,6 +165,7 @@ async function fetchAzureDeploymentList(params: {
       id: deployment.id,
       displayName: deployment.id,
       provider: "azure" as const,
+      capabilities: azureMediaCapabilities(deployment.model ?? deployment.id),
       // Deployments carry the backing model name; use it for pricing.
       ...(deployment.model ? { underlyingModelName: deployment.model } : {}),
     }));
@@ -210,12 +213,14 @@ async function fetchAzureModelList(params: {
       .filter(
         (model) =>
           model.capabilities?.chat_completion !== false ||
-          isAzureEmbeddingModelId(model.id),
+          isAzureEmbeddingModelId(model.id) ||
+          getAzureModelKind(model.id) !== "text",
       )
       .map((model) => ({
         id: model.id,
         displayName: model.id,
         provider: "azure" as const,
+        capabilities: azureMediaCapabilities(model.id),
       }));
   } catch (error) {
     logger.error({ error }, "Error fetching Azure models");
@@ -433,6 +438,9 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
       id: deployment.name,
       displayName: deployment.name,
       provider: "azure" as const,
+      capabilities: azureMediaCapabilities(
+        deployment.properties?.model?.name ?? deployment.name,
+      ),
       // Management deployments expose the backing model name; use it for pricing.
       ...(deployment.properties?.model?.name
         ? { underlyingModelName: deployment.properties.model.name }
@@ -536,3 +544,34 @@ const AZURE_RESOURCE_HOST_SUFFIXES = [
   ".services.ai.azure.com",
   ".cognitiveservices.azure.com",
 ];
+
+function azureMediaCapabilities(modelName: string): ModelInfo["capabilities"] {
+  switch (getAzureModelKind(modelName)) {
+    case "image":
+      return {
+        inputModalities: ["text"],
+        outputModalities: ["image"],
+        supportsToolCalling: false,
+      };
+    case "audio":
+      return {
+        inputModalities: ["text", "audio"],
+        outputModalities: ["text", "audio"],
+        supportsToolCalling: false,
+      };
+    case "realtime":
+      return {
+        inputModalities: ["text", "audio"],
+        outputModalities: ["text", "audio"],
+        supportsToolCalling: false,
+      };
+    case "translation":
+      return {
+        inputModalities: ["audio"],
+        outputModalities: ["text", "audio"],
+        supportsToolCalling: false,
+      };
+    default:
+      return undefined;
+  }
+}

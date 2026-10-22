@@ -52,6 +52,32 @@ export const ChatOpsProviderInfoSchema = z.object({
   dmInfo: ChatOpsDmInfoSchema,
 });
 
+/**
+ * Stored chatops config as the config routes read it back: only what is not a
+ * secret.
+ */
+const ChatOpsStoredConfigBaseSchema = z.object({
+  /** Whether the provider would start from this config: enabled, with the credentials its mode needs. */
+  configured: z.boolean(),
+  /** When the stored config last changed; null when none is stored. */
+  updatedAt: z.date().nullable(),
+  enabled: z.boolean(),
+});
+
+export const SlackChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    connectionMode: ChatOpsConnectionModeSchema,
+  });
+
+export const MsTeamsChatOpsConfigViewSchema =
+  ChatOpsStoredConfigBaseSchema.extend({
+    appId: z.string().nullable(),
+    tenantId: z.string().nullable(),
+  });
+
+export const TelegramChatOpsConfigViewSchema = ChatOpsStoredConfigBaseSchema;
+
 /** Full chatops status response schema */
 export const ChatOpsStatusResponseSchema = z.object({
   providers: z.array(ChatOpsProviderInfoSchema),
@@ -133,6 +159,8 @@ export interface IncomingChatMessage {
  * Options for sending a chat reply
  */
 export interface ChatReplyOptions {
+  /** Use bounded delivery without retries for optional Slack acknowledgments. */
+  bestEffort?: boolean;
   /** The original message to reply to */
   originalMessage: IncomingChatMessage;
   /** The reply text */
@@ -662,6 +690,16 @@ export interface ChatOpsProvider {
    * skip record explaining why it was not delivered
    */
   downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
+
+  /**
+   * Download files of the incoming message that the platform does not put on
+   * the message itself (MS Teams channels and group chats keep them in
+   * SharePoint). Called only for a message the bot is answering.
+   * @returns One outcome per file found on the message
+   */
+  downloadMessageFiles?(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]>;
 
   /**
    * Discover all channels in a workspace/team.

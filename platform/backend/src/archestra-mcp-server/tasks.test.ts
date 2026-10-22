@@ -1,8 +1,21 @@
+import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_POST_RUN_MESSAGE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
@@ -10,6 +23,8 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import config from "@/config";
+import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -21,9 +36,14 @@ import {
   ChatOpsChannelBindingModel,
   MemberModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { RouteCategory } from "@/observability/tracing";
-import { beforeEach, describe, expect, test } from "@/test";
-import type { Agent } from "@/types";
+import { openappaActor } from "@/openappa/actor";
+import { superyellSession } from "@/openappa/unenforced";
+import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
+import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { type Agent, ApiError } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("run tools", () => {
@@ -295,6 +315,28 @@ describe("run tools", () => {
             threadId: params.threadId ?? "1788208728.803109",
           }
         : null,
+    });
+    return task;
+  }
+
+  async function seedRuntimeTask() {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    await AgentWorkspaceModel.create({
+      id: task.id,
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: `test-${task.id.slice(0, 8)}`,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
     });
     return task;
   }
@@ -939,6 +981,32 @@ describe("run tools", () => {
     upload.mockRestore();
   });
 
+  test("post_run_message refuses another actor's run and a finished turn", async ({
+    makeUser,
+  }) => {
+    const other = await makeUser();
+    const foreign = await seedChatopsTask({
+      actorUserId: other.id,
+      withTarget: true,
+    });
+    const own = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    await A2ATaskModel.updateState(own.id, "TASK_STATE_COMPLETED");
+    for (const task of [foreign, own]) {
+      const result = await executeArchestraTool(
+        TOOL_POST_RUN_MESSAGE_FULL_NAME,
+        { task_id: task.id, message: "Working on it." },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        task === foreign ? "Run not found" : "not active",
+      );
+    }
+  });
+
   test("post_run_file refuses a run with no messaging-channel thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
@@ -994,4 +1062,457 @@ describe("run tools", () => {
     expect(upload).not.toHaveBeenCalled();
     upload.mockRestore();
   });
+
+  describe("post_run_file with a workspace path", () => {
+    let root: string;
+    let upload: ReturnType<typeof vi.spyOn>;
+    let stopServingWorkspace: () => void;
+
+    beforeEach(async () => {
+      root = await mkdtemp(path.join(tmpdir(), "run-file-"));
+      stopServingWorkspace = serveWorkspaceFrom(path.join(root, "workspace"));
+      await mkdir(path.join(root, "workspace"));
+      upload = vi
+        .spyOn(chatOpsManager, "uploadFileToBindingThread")
+        .mockResolvedValue();
+    });
+
+    afterEach(async () => {
+      // This file shares its worker with other files: nothing may outlive it.
+      upload.mockRestore();
+      stopServingWorkspace();
+      await rm(root, { recursive: true, force: true });
+    });
+
+    test("uploads the exact bytes of the file, named after its path", async () => {
+      const task = await seedRuntimeTask();
+      const bytes = Buffer.from([0, 255, 13, 10, 128, 65, 0x66, 0x74, 0x79]);
+      await mkdir(path.join(root, "workspace", "demo"));
+      await writeFile(path.join(root, "workspace", "demo", "demo.mp4"), bytes);
+
+      const result = await postRunFile({
+        task_id: task.id,
+        path: "demo/demo.mp4",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(upload).toHaveBeenCalledOnce();
+      expect(upload.mock.calls[0][0]).toMatchObject({
+        filename: "demo.mp4",
+        data: bytes,
+      });
+      // The pinned copy is released once the bytes are read.
+      expect(
+        await readdir(path.join(root, "workspace", ".archestra-transfers")),
+      ).toEqual([]);
+    });
+
+    test("refuses paths that leave the workspace, directories and oversized files", async () => {
+      const task = await seedRuntimeTask();
+      const workspace = path.join(root, "workspace");
+      await writeFile(path.join(root, "outside.mp4"), "outside bytes");
+      await symlink(root, path.join(workspace, "escape"));
+      await symlink(
+        path.join(root, "outside.mp4"),
+        path.join(workspace, "linked.mp4"),
+      );
+      await mkdir(path.join(workspace, "folder"));
+      // Sparse: one byte over the cap without writing 40 MB.
+      await truncate(
+        await writeFile(path.join(workspace, "big.mp4"), "").then(() =>
+          path.join(workspace, "big.mp4"),
+        ),
+        40 * 1024 * 1024 + 1,
+      );
+
+      for (const [unsafe, reason] of [
+        ["../outside.mp4", "without traversal"],
+        ["escape/outside.mp4", "Could not read"],
+        ["linked.mp4", "Only regular files"],
+        ["folder", "Only regular files"],
+        ["big.mp4", "keep run files under 40MB"],
+        ["/home/node/workspace/", "Pass the path of a file"],
+        ["/home/node/workspace", "Pass the path of a file"],
+        ["././", "Pass the path of a file"],
+        ["/etc/passwd", "without traversal"],
+      ] as const) {
+        const result = await postRunFile({
+          task_id: task.id,
+          path: unsafe,
+          filename: "demo.mp4",
+        });
+        expect(result.isError, unsafe).toBe(true);
+        expect(JSON.stringify(result.content), unsafe).toContain(reason);
+      }
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    test("needs exactly one of path and content_base64", async () => {
+      const task = await seedRuntimeTask();
+      await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+      for (const args of [
+        {
+          path: "demo.mp4",
+          content_base64: Buffer.from("x").toString("base64"),
+        },
+        { filename: "demo.mp4" },
+      ]) {
+        const result = await postRunFile({ task_id: task.id, ...args });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "Pass exactly one of path or content_base64",
+        );
+      }
+      const unnamed = await postRunFile({
+        task_id: task.id,
+        content_base64: Buffer.from("x").toString("base64"),
+      });
+      expect(JSON.stringify(unnamed.content)).toContain(
+        "Pass filename with content_base64",
+      );
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    test("reads an absolute path under the workspace root and a ./ path", async () => {
+      const task = await seedRuntimeTask();
+      await mkdir(path.join(root, "workspace", "demo"));
+      await writeFile(
+        path.join(root, "workspace", "demo", "demo.mp4"),
+        "video",
+      );
+
+      for (const given of [
+        "/home/node/workspace/demo/demo.mp4",
+        "./demo/demo.mp4",
+      ]) {
+        const result = await postRunFile({ task_id: task.id, path: given });
+        expect(result.isError, given).toBeFalsy();
+      }
+      expect(upload).toHaveBeenCalledTimes(2);
+      for (const [call] of upload.mock.calls) {
+        expect(call).toMatchObject({
+          filename: "demo.mp4",
+          data: Buffer.from("video"),
+        });
+      }
+    });
+
+    describe("with Guardrails on", () => {
+      const PARENT = "user:parent|conversation";
+      const originalOpenappa = config.openappa.enabled;
+
+      beforeEach(async () => {
+        config.openappa.enabled = true;
+        await GuardrailsDeploymentModel.setEnabled(true);
+      });
+
+      afterEach(() => {
+        config.openappa.enabled = originalOpenappa;
+      });
+
+      test("a bound run's own proofless call is refused until its session is superyelled", async () => {
+        const task = await seedRuntimeTask();
+        const child = await bindToParent(task.id);
+        await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+        const governed = await postRunFile({
+          task_id: task.id,
+          path: "demo.mp4",
+        });
+        expect(governed.isError).toBe(true);
+        expect(JSON.stringify(governed.content)).toContain(
+          "carried no proof of its source",
+        );
+        expect(upload).not.toHaveBeenCalled();
+
+        await superyellSession(child);
+        const superyelled = await postRunFile({
+          task_id: task.id,
+          path: "demo.mp4",
+        });
+        expect(superyelled.isError).toBeFalsy();
+        expect(upload.mock.calls[0][0]).toMatchObject({
+          filename: "demo.mp4",
+          data: Buffer.from("video"),
+        });
+      });
+
+      test("the parent session still cannot post its child's file", async () => {
+        const task = await seedRuntimeTask();
+        await bindToParent(task.id);
+        await writeFile(path.join(root, "workspace", "demo.mp4"), "video");
+
+        const result = await postRunFile(
+          { task_id: task.id, path: "demo.mp4" },
+          {
+            openappaRuntimeCall: {
+              session: {
+                organization_id: organizationId,
+                caller_id: "user:parent",
+                session_id: PARENT,
+              },
+              toolCallId: "call-1",
+              spawn: false,
+            },
+          },
+        );
+
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "cannot be posted from another session",
+        );
+        expect(upload).not.toHaveBeenCalled();
+      });
+
+      /** Records the run's session the way a protected spawn leaves it. */
+      async function bindToParent(taskId: string) {
+        const workspace = await AgentWorkspaceModel.findById(taskId);
+        if (!workspace) throw new Error("workspace not seeded");
+        const child = runtimeOpenAppaSession({
+          organizationId,
+          workspaceId: workspace.id,
+          workloadName: workspace.workloadName,
+          actorKind: "user",
+          actorId,
+        });
+        await db.insert(schema.openappaSessionsTable).values({
+          actor: openappaActor(child.session_id),
+          root: openappaActor(PARENT),
+          organizationId,
+          callerId: child.caller_id,
+          sessionId: child.session_id,
+          parentId: PARENT,
+          startDecision: { decision: "ack" },
+        });
+        return { ...child, parent_id: PARENT };
+      }
+    });
+
+    /** A chatops run with a live workspace, as a delegated run has. */
+    function postRunFile(
+      args: Record<string, unknown>,
+      extra: Partial<ArchestraContext> = {},
+    ) {
+      return executeArchestraTool(TOOL_POST_RUN_FILE_FULL_NAME, args, {
+        ...context,
+        ...extra,
+      });
+    }
+  });
+
+  describe("workspace file tools with a workspace path", () => {
+    let root: string;
+    let workspace: string;
+    let stopServingWorkspace: () => void;
+
+    beforeEach(async () => {
+      root = await mkdtemp(path.join(tmpdir(), "workspace-file-"));
+      workspace = path.join(root, "workspace");
+      await mkdir(workspace);
+      stopServingWorkspace = serveWorkspaceFrom(workspace);
+    });
+
+    afterEach(async () => {
+      // This file shares its worker with other files: nothing may outlive it.
+      stopServingWorkspace();
+      await rm(root, { recursive: true, force: true });
+    });
+
+    test("say why a missing file could not be read, written or downloaded", async () => {
+      const task = await seedRuntimeTask();
+      // The reason is the helper's OSError text for the folder that is missing.
+      const missing = "No such file or directory.*'reports'";
+
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "reports/notes.md" },
+        context,
+      );
+      const written = await executeArchestraTool(
+        "archestra__write_workspace_file",
+        { task_id: task.id, path: "reports/notes.md", content: "hello" },
+        context,
+      );
+      const download = await executeArchestraTool(
+        "archestra__transfer_workspace_file",
+        {
+          task_id: task.id,
+          direction: "download",
+          path: "reports/notes.md",
+          local_path: "/tmp/notes.md",
+        },
+        context,
+      );
+
+      expect(read).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not read reports/notes\\.md from the run's workspace: .*${missing}`,
+              ),
+            ),
+          },
+        ],
+      });
+      expect(written).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not write reports/notes\\.md to the run's workspace: .*${missing}`,
+              ),
+            ),
+          },
+        ],
+      });
+      expect(download).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not authorize the download of reports/notes\\.md: .*${missing}`,
+              ),
+            ),
+          },
+        ],
+      });
+    });
+
+    test("a binary file read as text asks for base64", async () => {
+      const task = await seedRuntimeTask();
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00]);
+      await writeFile(path.join(workspace, "image.png"), bytes);
+
+      const asText = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "image.png" },
+        context,
+      );
+      const asBase64 = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "image.png", encoding: "base64" },
+        context,
+      );
+
+      expect(asText).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: Could not read image.png from the run's workspace: This file is not UTF-8 text. Read it with encoding base64.",
+          },
+        ],
+      });
+      expect(asBase64.isError).toBeFalsy();
+      expect(asBase64.structuredContent).toMatchObject({
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      });
+    });
+
+    test("an unexpected failure stays generic", async () => {
+      const task = await seedRuntimeTask();
+      vi.mocked(backend.accessWorkspaceFile).mockRejectedValueOnce(
+        new Error("exec into pod agent-run-1234 failed"),
+      );
+
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.md" },
+        context,
+      );
+
+      expect(read).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: An internal error occurred while reading workspace file",
+          },
+        ],
+      });
+    });
+  });
 });
+
+/**
+ * Runs the real in-Pod file helper on this machine against `workspace`, in
+ * place of the exec into the Pod. Its path rules are what the tests exercise.
+ * Returns the function that puts the real exec back.
+ */
+function serveWorkspaceFrom(workspace: string): () => void {
+  const helper = path.resolve(
+    import.meta.dirname,
+    "../static/workspace-files.py",
+  );
+  const env = {
+    ...process.env,
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT: workspace,
+  };
+  const command = vi
+    .spyOn(backend, "runWorkspaceTransferCommand")
+    .mockImplementation(async ({ args }) => {
+      const run = spawnSync("python3", [helper, ...args], {
+        env,
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      const reply = helperReply(run);
+      if (reply.ok !== true) throw new ApiError(400, reply.error);
+      return reply;
+    });
+  const file = vi
+    .spyOn(backend, "accessWorkspaceFile")
+    .mockImplementation(async ({ request }) => {
+      const run = spawnSync("python3", [helper], {
+        env,
+        input: JSON.stringify(request),
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      const { ok, error, ...result } = helperReply(run);
+      if (ok !== true) throw new ApiError(400, error);
+      return result;
+    });
+  const range = vi
+    .spyOn(backend, "readWorkspaceTransferRange")
+    .mockImplementation(async ({ transferId, offset, length }) => {
+      const child = spawn(
+        "python3",
+        [helper, "read-range", transferId, String(offset), String(length)],
+        { env },
+      );
+      return {
+        stdout: child.stdout,
+        completed: new Promise<void>((resolve, reject) =>
+          child.on("close", (code) =>
+            code === 0 ? resolve() : reject(new Error("read-range failed")),
+          ),
+        ),
+      };
+    });
+  return () => {
+    command.mockRestore();
+    file.mockRestore();
+    range.mockRestore();
+  };
+}
+
+/** The helper's JSON reply. Without one, fail with what the helper printed. */
+function helperReply(run: SpawnSyncReturns<string>) {
+  try {
+    return JSON.parse(run.stdout);
+  } catch {
+    throw new Error(
+      `workspace-files.py gave no JSON reply: ${run.error?.message ?? run.stderr}`,
+    );
+  }
+}

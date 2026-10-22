@@ -6,6 +6,7 @@ import type {
 } from "@archestra/shared";
 import { ApiError } from "@/types/api";
 import type { ModelDefaultParameters } from "@/types/model";
+import type { ProviderModelPricing } from "@/types/provider-model-pricing";
 
 export const PLACEHOLDER_API_KEY = "EMPTY";
 export const PLACEHOLDER_BEARER_TOKEN = `Bearer ${PLACEHOLDER_API_KEY}`;
@@ -86,6 +87,8 @@ export interface FetchedModelCapabilities {
 }
 
 export interface ModelInfo {
+  /** Instance-local prices; never written to the shared model catalog. */
+  providerPricing?: ProviderModelPricing;
   id: string;
   displayName: string;
   provider: SupportedProvider;

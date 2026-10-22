@@ -33,15 +33,24 @@ export function CredentialCell({ row }: { row: McpToolCallRow }) {
   if (!credential && !auth) {
     return <div className="text-xs text-muted-foreground">—</div>;
   }
-  // With no upstream credential recorded, the gateway auth is the only fact,
-  // so it moves up to the primary line instead of a "none" placeholder.
-  const Icon = credential?.icon ?? KeyRound;
-  const primary = credential?.label ?? auth ?? "Unknown auth";
-  const secondary = credential
-    ? auth
-      ? `via ${auth}`
-      : null
-    : "No upstream credential";
+  // Every row reads the same way: whose credential reached the MCP server,
+  // then how the caller signed in to the gateway. A protocol call the
+  // gateway answers itself (initialize, tools/list) uses no server credential.
+  const answeredByGateway =
+    !credential && (row.method ?? "tools/call") !== "tools/call";
+  const shown: CredentialDisplay = credential ?? {
+    icon: KeyRound,
+    // Not "Gateway": the row already names its gateway twice, and here the
+    // point is that no server credential was involved at all.
+    label: answeredByGateway ? "Not needed" : "No credential",
+    explanation: answeredByGateway
+      ? "The gateway answers this itself; no MCP server credential is used."
+      : "No MCP server credential was recorded for this call.",
+    quiet: true,
+  };
+  const Icon = shown.icon;
+  const primary = shown.label;
+  const secondary = auth ? `via ${auth}` : null;
 
   return (
     <Tooltip>
@@ -50,7 +59,7 @@ export function CredentialCell({ row }: { row: McpToolCallRow }) {
           <span
             className={cn(
               "flex h-5 min-w-0 items-center gap-1.5 text-sm leading-5 font-medium",
-              credential?.quiet && "font-normal text-foreground/80",
+              shown.quiet && "font-normal text-foreground/80",
             )}
           >
             <Icon
@@ -68,16 +77,14 @@ export function CredentialCell({ row }: { row: McpToolCallRow }) {
       </TooltipTrigger>
       <TooltipContent className="max-w-72 px-2 py-1.5">
         <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5">
-          <dt className="text-muted-foreground">Gateway auth</dt>
-          <dd className="text-right">{auth ?? "—"}</dd>
-          <dt className="text-muted-foreground">Upstream</dt>
+          <dt className="text-muted-foreground">MCP server credential</dt>
           <dd className="text-right">{credential?.label ?? "None"}</dd>
+          <dt className="text-muted-foreground">Caller signed in with</dt>
+          <dd className="text-right">{auth ?? "—"}</dd>
         </dl>
-        {credential ? (
-          <p className="mt-1.5 leading-snug text-muted-foreground">
-            {credential.explanation}
-          </p>
-        ) : null}
+        <p className="mt-1.5 leading-snug text-muted-foreground">
+          {shown.explanation}
+        </p>
       </TooltipContent>
     </Tooltip>
   );

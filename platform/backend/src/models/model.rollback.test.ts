@@ -1107,6 +1107,42 @@ describe("ModelModel", () => {
     });
   });
 
+  describe.each([
+    {
+      modelId: "gpt-image-1",
+      input: ["text"] as const,
+      output: ["image"] as const,
+    },
+    {
+      modelId: "gpt-realtime-translate",
+      input: ["audio"] as const,
+      output: ["text", "audio"] as const,
+    },
+    {
+      modelId: "gpt-audio",
+      input: ["text", "audio"] as const,
+      output: ["text", "audio"] as const,
+    },
+  ])("Azure media Chat capabilities: $modelId", ({
+    modelId,
+    input,
+    output,
+  }) => {
+    test("offers the media model in Chat without advertising agent tools", async () => {
+      const model = await ModelModel.create({
+        externalId: `azure/${modelId}`,
+        provider: "azure",
+        modelId,
+        inputModalities: [...input],
+        outputModalities: [...output],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      expect(ModelModel.supportsTextChat(model)).toBe(true);
+      expect(ModelModel.toCapabilities(model).supportsToolCalling).toBe(false);
+    });
+  });
+
   describe("supportsTextChat", () => {
     test("returns false when a model is marked as ignored", async () => {
       const model = await ModelModel.create({

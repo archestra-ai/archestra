@@ -41,10 +41,9 @@ export function ConsultsTable() {
     endDateFromUrl: searchParams.get("endDate"),
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
         updateUrlParams({ startDate, endDate });
       },
-      [cursorPagination.goNewest, updateUrlParams],
+      [updateUrlParams],
     ),
   });
   // Every log page keeps its time range in the header's top-right corner.
@@ -101,7 +100,6 @@ export function ConsultsTable() {
   );
 
   const clearFilters = useCallback(() => {
-    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       search: null,
@@ -109,7 +107,7 @@ export function ConsultsTable() {
       startDate: null,
       endDate: null,
     });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateUrlParams]);
 
   if (isLoadingError) {
     return (
@@ -131,7 +129,6 @@ export function ConsultsTable() {
               paramName="search"
               placeholder="Service or session ID"
               paginationMode="cursor"
-              onSearchChange={cursorPagination.goNewest}
               isLoading={isFetching}
             />
           }
@@ -155,7 +152,6 @@ export function ConsultsTable() {
           <FilterSelect
             value={filters.outcome ?? ALL_VALUE}
             onValueChange={(value) => {
-              cursorPagination.goNewest();
               updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
             }}
             placeholder="Filter by outcome"
@@ -167,24 +163,11 @@ export function ConsultsTable() {
 
       <DataTable<ConsultView, unknown>
         columns={columns}
-        fixedWidthColumnIds={["signal", "latency", "time"]}
+        fixedWidthColumnIds={["status", "latency", "time"]}
         flexibleColumnIds={["service", "tool"]}
         data={rows}
         hideSelectedCount
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}

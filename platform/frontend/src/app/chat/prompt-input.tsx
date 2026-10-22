@@ -7,6 +7,7 @@ import {
   chatUploadRejectionReason,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   E2eTestId,
+  getAzureModelKind,
   getMediaType,
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
@@ -66,6 +67,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -321,6 +323,9 @@ const PromptInputContent = ({
   const { data: canReadProviderKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
+  const { data: canReadLlmModels } = useHasPermissions({
+    llmModel: ["read"],
+  });
   const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
     enabled: canReadProviderKeys === true,
     toastOnError: false,
@@ -392,13 +397,38 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
+  // Model selection stores a database id; resolve its native id before
+  // choosing modality instructions, including an auto-selected model.
+  const { data: composerModels } = useLlmModels({
+    apiKeyId: selectedCredentialId ?? undefined,
+    enabled: canReadLlmModels === true,
+  });
+  const composerModel = composerModels?.find(
+    (model) => model.dbId === selectedModel,
+  );
+  const mediaKind =
+    (composerModel?.provider ?? currentProvider) === "azure"
+      ? getAzureModelKind(composerModel?.id ?? "")
+      : "text";
+  const mediaPlaceholder =
+    mediaKind === "image"
+      ? "Describe an image to generate..."
+      : mediaKind === "translation"
+        ? "Attach WAV audio and enter a target language code, e.g. es"
+        : mediaKind === "realtime"
+          ? "Type a message or attach a WAV audio clip..."
+          : mediaKind === "audio"
+            ? "Type what to say, or attach audio..."
+            : undefined;
   const defaultPlaceholder = runtimeMode
     ? "Describe the task to run..."
     : answersQuestion
       ? "Type your answer..."
-      : conversationId
-        ? "Ask a follow-up..."
-        : (chatPlaceholder ?? "What would you like to get done?");
+      : mediaPlaceholder
+        ? mediaPlaceholder
+        : conversationId
+          ? "Ask a follow-up..."
+          : (chatPlaceholder ?? "What would you like to get done?");
   const isPreviewingSuggestion =
     !!placeholderPreview && controller.textInput.value.length === 0;
   const placeholder = isPreviewingSuggestion
@@ -1030,7 +1060,7 @@ const PromptInputContent = ({
         becomes its live terminal when ready.
       </span>
     </div>
-  ) : encryptedChatActive && !conversationId ? (
+  ) : encryptedChatActive ? (
     <div
       data-testid={E2eTestId.EncryptedChatNotice}
       className={cn(
@@ -1315,14 +1345,14 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {conversationId && !runtimeMode ? (
+      {!runtimeMode ? (
         <ChatComposerSecurity
-          key={conversationId}
+          key={conversationId ?? "new"}
           conversationId={conversationId}
-          encrypted={encryptedChatActive}
-          privacyDetails={privacyDetails}
         >
+          {!drawerBelow && drawer}
           {composer}
+          {drawerBelow && drawer}
         </ChatComposerSecurity>
       ) : (
         <>

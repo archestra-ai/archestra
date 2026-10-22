@@ -169,6 +169,36 @@ export async function dropHiddenAgents<
   return rows.filter((_, index) => visible[index]);
 }
 
+/**
+ * Drops tools of gated catalogs the caller may not use, and delegations to
+ * gated agents they may not see; free unless one is present.
+ */
+export async function dropHiddenTools<
+  T extends { catalogId: string | null; delegateToAgentId: string | null },
+>(
+  tools: T[],
+  caller: { userId: string; organizationId: string },
+): Promise<T[]> {
+  const { denied } = await splitGatedCatalogs(
+    tools.map(({ catalogId }) => catalogId),
+    caller,
+  );
+  const deniedCatalogs = new Set(denied);
+  const hiddenAgents = new Set(
+    tools.some(
+      ({ delegateToAgentId }) =>
+        delegateToAgentId && isPermissionGatedAgent(delegateToAgentId),
+    )
+      ? await hiddenAgentIds(caller)
+      : [],
+  );
+  return tools.filter(
+    ({ catalogId, delegateToAgentId }) =>
+      !(catalogId && deniedCatalogs.has(catalogId)) &&
+      !(delegateToAgentId && hiddenAgents.has(delegateToAgentId)),
+  );
+}
+
 /** Drops the gated catalog ids the caller may not use; free unless one is present. */
 export async function dropHiddenCatalogIds(
   catalogIds: string[],

@@ -970,7 +970,7 @@ export async function getAgentToolsForUser(params: {
 }) {
   const { agentId, catalogId, userId, organizationId } = params;
   // Only the access columns: the tools are read on their own below.
-  const agent = await AgentModel.findByIdForAccess(agentId);
+  const agent = await AgentModel.findByIdForAccess(agentId, userId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, `Agent with ID ${agentId} not found`);
   }
@@ -1030,7 +1030,7 @@ export async function getAgentDelegationsForUser(params: {
 }) {
   const { agentId, userId, organizationId } = params;
   // Only the access columns, to learn the type; the targets are read below.
-  const agent = await AgentModel.findByIdForAccess(agentId);
+  const agent = await AgentModel.findByIdForAccess(agentId, userId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
   }

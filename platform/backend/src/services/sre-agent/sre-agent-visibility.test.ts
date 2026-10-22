@@ -219,6 +219,7 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     await app.register(mcpServerRoutes);
     await app.register(toolRoutes);
     await app.register(mcpOauthClientsRoutes);
+    await app.register(agentRoutes);
     const send = (method: "GET" | "POST", url: string, payload?: object) =>
       app.inject({ method, url, payload });
     const lists = async (url: string, id: string) => {
@@ -252,6 +253,29 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
       }
       expect(listedTools.includes(tools[0].id)).toBe(canUse);
       if (caller === "member") return;
+      expect(
+        await lists(
+          "/api/tools/with-assignments?search=kubernetes&limit=100&offset=0",
+          tools[0].id,
+        ),
+      ).toBe(canUse);
+      await AgentToolModel.syncDelegations(envAgent.id, [SRE_AGENT_ID]);
+      const assigned = (await send("GET", `/api/agents/${envAgent.id}`)).json()
+        .tools as { id: string; delegateToAgentId: string | null }[];
+      expect(assigned.some(({ id }) => id === tools[0].id)).toBe(canUse);
+      expect(
+        assigned.some(
+          ({ delegateToAgentId }) => delegateToAgentId === SRE_AGENT_ID,
+        ),
+      ).toBe(canUse);
+      for (const url of [
+        `/api/agents/${SRE_AGENT_ID}/default-suggested-prompts`,
+        `/api/agents/${SRE_AGENT_ID}/mcp-tool-preview`,
+        `/api/agents/${SRE_AGENT_ID}/tools`,
+        `/api/agents/${SRE_AGENT_ID}/delegations`,
+      ]) {
+        expect((await send("GET", url)).statusCode === 404, url).toBe(!canUse);
+      }
       expect(await lists("/api/agent-delegations", SRE_AGENT_ID)).toBe(canUse);
       expect(
         (

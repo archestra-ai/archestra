@@ -3628,6 +3628,7 @@ class ToolModel {
     };
     filters?: ToolFilters;
     userId?: string;
+    organizationId?: string;
     isAgentAdmin?: boolean;
   }): Promise<PaginatedResult<ToolWithAssignments>> {
     const {
@@ -3640,6 +3641,13 @@ class ToolModel {
 
     // Build WHERE conditions for tools
     const toolWhereConditions: ReturnType<typeof sql>[] = [];
+    const gatedFence = userId
+      ? await gatedCatalogToolsFence({
+          userId,
+          organizationId: params.organizationId,
+        })
+      : undefined;
+    if (gatedFence) toolWhereConditions.push(gatedFence);
 
     // A soft-deleted catalog's tools are ghosts — keep them out of the listing.
     toolWhereConditions.push(notDeleted(schema.toolsTable));

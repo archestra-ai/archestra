@@ -48,6 +48,7 @@ import { z } from "zod";
 import {
   canSeeAgent,
   dropHiddenAgents,
+  dropHiddenTools,
   gatedAgentsFence,
   hiddenAgentIds,
   isPermissionGatedAgent,
@@ -3369,8 +3370,10 @@ class AgentModel {
    * hydration {@link findById} does. For routes that only authorize the agent
    * before reading something else about it.
    */
+  /** The access columns of an agent the viewer may see. */
   static async findByIdForAccess(
     id: string,
+    viewerId: string,
   ): Promise<
     | (AgentAccessContext &
         Pick<Agent, "agentType" | "name" | "createdByServiceAccountId">)
@@ -3390,7 +3393,14 @@ class AgentModel {
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
       .limit(1);
 
-    return agent ?? null;
+    return agent &&
+      (await canSeeAgent({
+        agentId: agent.id,
+        userId: viewerId,
+        organizationId: agent.organizationId,
+      }))
+      ? agent
+      : null;
   }
 
   /**
@@ -3564,9 +3574,15 @@ class AgentModel {
     }
 
     const agent = rows[0].agents;
-    const tools = rows
+    const assignedTools = rows
       .map((row) => row.tools)
       .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+    const tools = userId
+      ? await dropHiddenTools(assignedTools, {
+          userId,
+          organizationId: agent.organizationId,
+        })
+      : assignedTools;
 
     const [teams, labels, knowledgeBaseIds, connectorIds] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgent(id),

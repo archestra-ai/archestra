@@ -98,6 +98,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           includeKnowledgeSourcesTool,
         },
         userId: user.id,
+        organizationId,
         isAgentAdmin,
       });
 

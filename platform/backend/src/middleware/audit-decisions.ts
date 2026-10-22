@@ -783,6 +783,10 @@ export const AUDIT_DECISIONS = {
     reason:
       "user's own PFS files; download_file/save_file outputs, no admin signal",
   },
+  proxyProviderFilesTable: {
+    audited: false,
+    reason: "principal-owned SDK provider file metadata ledger; no admin CRUD",
+  },
   skillSandboxReplayEventsTable: {
     audited: false,
     reason: "child of sandbox; append-only ordered replay log",
@@ -888,6 +892,11 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // ChatOps runtime
   // =========================================================================
+  chatopsMsTeamsUserConnectionsTable: {
+    audited: false,
+    reason:
+      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+  },
   chatopsUserAdmissionsTable: {
     audited: false,
     reason: "pending ChatOps execution admission; runtime state",

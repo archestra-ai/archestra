@@ -1,5 +1,61 @@
 # Changelog
 
+## [1.5.0-rc.5](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.4...platform-v1.5.0-rc.5) (2026-10-22)
+
+
+### Features
+
+* **agent-runtime:** run and ship a project from the public agent image ([#9438](https://github.com/archestra-ai/archestra/issues/9438)) ([971714f](https://github.com/archestra-ai/archestra/commit/971714fea07450fa21a2369c1540fad0714f76e1))
+* **agents:** run forked subagents on fast/normal/smart model trios ([#8721](https://github.com/archestra-ai/archestra/issues/8721)) ([6fc7c7c](https://github.com/archestra-ai/archestra/commit/6fc7c7c4dddd25cf595175757a1df524659cf6c1))
+* **guardrails:** add OpenCode and Kilo review dialogs ([#9471](https://github.com/archestra-ai/archestra/issues/9471)) ([4f7cc8b](https://github.com/archestra-ai/archestra/commit/4f7cc8bb8cc3f67be95ef628ee954e1c4037d1d4))
+* **llm:** preserve request labels for cost attribution ([#9460](https://github.com/archestra-ai/archestra/issues/9460)) ([8521799](https://github.com/archestra-ai/archestra/commit/85217996079090b7d669a1e1644fbd22378d22f9))
+* **mcp:** redesign agent run tools and cover them in OpenAPPA ([#9402](https://github.com/archestra-ai/archestra/issues/9402)) ([6322e58](https://github.com/archestra-ai/archestra/commit/6322e58f6cc703fac8f57b5d5b55aee61941a69b))
+
+
+### Bug Fixes
+
+* **guardrails:** send the managed key for Kilo subagents and close failed spawns ([#9476](https://github.com/archestra-ai/archestra/issues/9476)) ([569caf0](https://github.com/archestra-ai/archestra/commit/569caf0171600390a20be358fd3966994fd1a6f9))
+
+
+### Performance Improvements
+
+* **proxy:** share caller lookups and skip decrypting the interaction just written ([#9422](https://github.com/archestra-ai/archestra/issues/9422)) ([be2333e](https://github.com/archestra-ai/archestra/commit/be2333eff933bbaf933dd9963c50fff4e4ad6f99))
+
+
+### Documentation
+
+* modernize admin and integration guides ([#9483](https://github.com/archestra-ai/archestra/issues/9483)) ([0544884](https://github.com/archestra-ai/archestra/commit/054488432bcba2764d0a0a30378fea7aee9c5f2c))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#9477](https://github.com/archestra-ai/archestra/issues/9477)) ([93d77bf](https://github.com/archestra-ai/archestra/commit/93d77bf6a5a439c410de5937c3de7bd01fce9b14))
+
+## [1.5.0-rc.4](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.3...platform-v1.5.0-rc.4) (2026-10-22)
+
+
+### Features
+
+* **dev-feedback:** pin UI comments to page elements and post them to Slack ([#9329](https://github.com/archestra-ai/archestra/issues/9329)) ([ecd1b5b](https://github.com/archestra-ai/archestra/commit/ecd1b5bd6a6319d828999216e1dbd389b7616fa3))
+* **llm:** support Azure media and Gemini image models ([#9364](https://github.com/archestra-ai/archestra/issues/9364)) ([e925abe](https://github.com/archestra-ai/archestra/commit/e925abefcfcc3f36a7ab90dfd0b612ee87c95a29))
+* **ms-teams:** read group-chat files after the sender signs in ([#9459](https://github.com/archestra-ai/archestra/issues/9459)) ([d2baeb1](https://github.com/archestra-ai/archestra/commit/d2baeb10c7916dc2912ed6adbd9fca052829f24d))
+
+
+### Bug Fixes
+
+* **agent-runtime:** say why a workspace file read, write or transfer failed ([#9443](https://github.com/archestra-ai/archestra/issues/9443)) ([dc73078](https://github.com/archestra-ai/archestra/commit/dc7307849562d9817508c6e8d84da7e54e786207))
+* **guardrails:** allow complete approval reviews through ask_user validation ([#9468](https://github.com/archestra-ai/archestra/issues/9468)) ([a4e4fb5](https://github.com/archestra-ai/archestra/commit/a4e4fb5f37dd521f9a2009c13032152d6737d47a))
+* **mcp-registry:** treat a NULL credential flag as unusable ([#9467](https://github.com/archestra-ai/archestra/issues/9467)) ([88988ea](https://github.com/archestra-ai/archestra/commit/88988ea8717b5084dabad1cec347dde5fe058e39))
+* **openappa:** use single-line Appa crown in session and subagent markers ([#9444](https://github.com/archestra-ai/archestra/issues/9444)) ([349eda5](https://github.com/archestra-ai/archestra/commit/349eda57c902cf1457161b9d7c8b05298ed29afe))
+* **provider-keys:** delete the stored secret when a key write fails ([#9454](https://github.com/archestra-ai/archestra/issues/9454)) ([a3154ad](https://github.com/archestra-ai/archestra/commit/a3154adc3ba5637984dd78f16e5f826e620e2f14))
+* **provider-keys:** return 400 when a service account creates a key of its own ([#9446](https://github.com/archestra-ai/archestra/issues/9446)) ([5fe485d](https://github.com/archestra-ai/archestra/commit/5fe485ddd4ac32429c473e376eb76d861a193baa))
+* **server:** keep failed-query SQL and parameters out of error responses ([#9455](https://github.com/archestra-ai/archestra/issues/9455)) ([cdfe7fd](https://github.com/archestra-ai/archestra/commit/cdfe7fdb45f9e4c23fe19b2e50f57f72c51f9979))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#9458](https://github.com/archestra-ai/archestra/issues/9458)) ([981f647](https://github.com/archestra-ai/archestra/commit/981f647203b9302b8f11e4b016f31d7dad697606))
+
 ## [1.5.0-rc.3](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.2...platform-v1.5.0-rc.3) (2026-10-21)
 
 

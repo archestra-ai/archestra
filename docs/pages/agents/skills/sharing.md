@@ -97,4 +97,4 @@ What to know:
 
 ## Server Configuration
 
-The marketplace needs `git` on the Archestra server. To change where Archestra finds `git` or stores the marketplace cache, see [`ARCHESTRA_GIT_BINARY_PATH`](/docs/reference/configuration#ARCHESTRA_GIT_BINARY_PATH) and [`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`](/docs/reference/configuration#ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR).
+The marketplace needs `git` on the Archestra server. To change where Archestra finds `git` or stores the marketplace cache, see [`ARCHESTRA_GIT_BINARY_PATH`](/docs/admin/deployment/configuration#ARCHESTRA_GIT_BINARY_PATH) and [`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`](/docs/admin/deployment/configuration#ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR).

@@ -10,6 +10,8 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AgentTypeSchema } from "./agent";
+import { AttributionLabelsSchema } from "./attribution-label";
+import { AudioAuditRequestSchema, AudioAuditResponseSchema } from "./audio";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -178,6 +180,7 @@ export const InteractionErrorResponseSchema = z.object({ error: z.string() });
  * These are used for the database schema definition
  */
 export const InteractionRequestSchema = z.union([
+  AudioAuditRequestSchema,
   OpenAi.API.ChatCompletionRequestSchema,
   OpenAi.API.EmbeddingRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
@@ -230,6 +233,7 @@ const EmbeddingInteractionResponseSchema =
   });
 
 export const InteractionResponseSchema = z.union([
+  AudioAuditResponseSchema,
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
@@ -293,6 +297,7 @@ const BaseSelectInteractionSchema = createSelectSchema(
     // Required on read: the column is NOT NULL, so every row carries a concrete
     // BillingMode. (The default override belongs on the insert schema only.)
     billingMode: BillingModeSchema,
+    attributionLabels: AttributionLabelsSchema.nullable(),
   },
 );
 
@@ -380,6 +385,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   durationMs: true,
   createdAt: true,
 }).extend({
+  attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
   requestType: RequestTypeSchema,
@@ -750,6 +756,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:audio"]),
+    request: withReadFallback(AudioAuditRequestSchema),
+    processedRequest: withReadFallback(AudioAuditRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(AudioAuditResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:audio"]),
+    request: withReadFallback(AudioAuditRequestSchema),
+    processedRequest: withReadFallback(AudioAuditRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(AudioAuditResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:images"]),
     request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
     processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
@@ -848,6 +874,7 @@ export const InsertInteractionSchema = createInsertSchema(
     // Optional on write: the column has a DB default ("metered"), so callers may
     // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
     billingMode: BillingModeSchema.optional(),
+    attributionLabels: AttributionLabelsSchema.nullish(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
@@ -899,6 +926,9 @@ export const SessionLineageSchema = z.object({
 });
 
 export const SessionSummarySchema = z.object({
+  attributionLabels: AttributionLabelsSchema.nullish().describe(
+    "Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.",
+  ),
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
   source: InteractionSourceSchema.nullable(),

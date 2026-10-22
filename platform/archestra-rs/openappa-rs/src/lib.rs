@@ -477,6 +477,44 @@ fn storage(message: impl ToString) -> napi::Error {
     failure(Failure::Binding(BindingFailure::Storage), message)
 }
 
+/// A stored log the binding read directly could not be read, under the class a
+/// dispatch that read it would be refused with, so the host classifies the cause
+/// rather than reporting every read as storage.
+fn read_failure(read: appa_eventlog::ReadError) -> napi::Error {
+    use appa_eventlog::ReadError;
+    let class = match &read {
+        ReadError::Undecodable { .. } | ReadError::UndecodableKey { .. } => {
+            RefusalClass::UntrustedLog
+        }
+        ReadError::PolicyFileMissing { .. }
+        | ReadError::PolicyFileMismatch { .. }
+        | ReadError::UnknownRevision { .. } => RefusalClass::PolicyUnavailable,
+        ReadError::LegacyFamily { .. } => RefusalClass::LegacyFamily,
+        // The session names a root whose log is gone: as `read_refused`
+        // classes it, a trajectory that cannot continue.
+        ReadError::UnknownRoot { .. } => RefusalClass::Trajectory,
+        _ => return storage(read),
+    };
+    failure(Failure::Refused(class), read)
+}
+
+/// A session's label could not be read, under the class of its cause: the log's
+/// own read failure, an opening policy that no longer resolves, or a log that no
+/// longer replays.
+fn status_read_failure(read: appa_runtime::api::StatusReadError) -> napi::Error {
+    use appa_runtime::api::StatusReadError;
+    match read {
+        StatusReadError::Read(read) => read_failure(read),
+        StatusReadError::Policy(_) => {
+            failure(Failure::Refused(RefusalClass::PolicyUnavailable), read)
+        }
+        StatusReadError::Replay(_) => failure(Failure::Refused(RefusalClass::UntrustedLog), read),
+        StatusReadError::UnknownRoot { .. } => {
+            failure(Failure::Refused(RefusalClass::Trajectory), read)
+        }
+    }
+}
+
 fn panicked(message: impl ToString) -> napi::Error {
     failure(Failure::Binding(BindingFailure::Panicked), message)
 }
@@ -1374,7 +1412,7 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
                 Err(read) if read.to_string().contains("requires its conversation key") => {
                     Ok(Some("encrypted".to_owned()))
                 }
-                Err(read) => Err(storage(read)),
+                Err(read) => Err(read_failure(read)),
             })
             .collect()
     })
@@ -1470,7 +1508,7 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
             Err(appa_runtime::api::StatusReadError::Read(
                 appa_eventlog::ReadError::LegacyFamily { .. },
             )) => return Ok(None),
-            Err(read) => return Err(storage(read)),
+            Err(read) => return Err(status_read_failure(read)),
         };
         Ok(Some(OpenappaStatus {
             trust: status.trust,
@@ -5436,7 +5474,7 @@ mod stored_approved_output_tests {
 mod failure_tests {
     use super::{
         BindingFailure, Failure, RefusalClass, SqlError, failure, is_policy_moved, lease_lost,
-        policy_moved,
+        policy_moved, read_failure, status_read_failure,
     };
     use appa_eventlog::postgres::PostgresError;
     use serde_json::{Value, json};
@@ -5497,6 +5535,66 @@ mod failure_tests {
                 serde_json::to_value(Failure::Binding(binding)).unwrap(),
                 serde_json::to_value(Failure::Refused(runtime)).unwrap(),
             );
+        }
+    }
+
+    /// A log the binding reads directly reports the class a dispatch reading it
+    /// would be refused with; only a failed read is storage.
+    #[test]
+    fn a_direct_log_read_reports_its_class() {
+        use appa_eventlog::ReadError;
+        for (read, expected) in [
+            (
+                ReadError::Undecodable {
+                    seq: 7,
+                    detail: "expected value".into(),
+                },
+                "untrusted_log",
+            ),
+            (
+                ReadError::PolicyFileMissing { key: "0a1b".into() },
+                "policy_unavailable",
+            ),
+            (
+                ReadError::LegacyFamily {
+                    root: "root".into(),
+                },
+                "legacy_family",
+            ),
+            (
+                ReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                ReadError::Postgres(PostgresError("PostgreSQL ERROR (SQLSTATE 08006)".into())),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&read_failure(read)), json!(expected));
+        }
+        use appa_runtime::api::StatusReadError;
+        for (read, expected) in [
+            (
+                StatusReadError::Policy("missing".into()),
+                "policy_unavailable",
+            ),
+            (StatusReadError::Replay("diverged".into()), "untrusted_log"),
+            (
+                StatusReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                StatusReadError::Read(ReadError::Postgres(PostgresError(
+                    "PostgreSQL ERROR (SQLSTATE 57P01)".into(),
+                ))),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&status_read_failure(read)), json!(expected));
         }
     }
 

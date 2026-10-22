@@ -3260,7 +3260,9 @@ class AgentModel {
     lookups?: PrincipalSource;
     includeDetails?: boolean;
   }): Promise<
-    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+    (Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig"> & {
+      hasRuntime: boolean;
+    })[]
   > {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
       params;
@@ -3290,6 +3292,7 @@ class AgentModel {
             params.includeDetails === false
               ? sql<Agent["builtInAgentConfig"]>`NULL`
               : schema.agentsTable.builtInAgentConfig,
+          hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3314,6 +3317,7 @@ class AgentModel {
           params.includeDetails === false
             ? sql<Agent["builtInAgentConfig"]>`NULL`
             : schema.agentsTable.builtInAgentConfig,
+        hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
       })
       .from(schema.agentsTable)
       .where(
@@ -3338,12 +3342,25 @@ class AgentModel {
   static async findDelegationTarget(
     id: string,
     tx?: Transaction,
-  ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
+  ): Promise<Pick<
+    Agent,
+    | "id"
+    | "name"
+    | "agentType"
+    | "llmApiKeyId"
+    | "modelId"
+    | "fastModelId"
+    | "smartModelId"
+  > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        llmApiKeyId: schema.agentsTable.llmApiKeyId,
+        modelId: schema.agentsTable.modelId,
+        fastModelId: schema.agentsTable.fastModelId,
+        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -3354,16 +3371,14 @@ class AgentModel {
 
   static async findAccessContextById(
     id: string,
-  ): Promise<Pick<
-    Agent,
-    "id" | "organizationId" | "scope" | "authorId"
-  > | null> {
+  ): Promise<AgentAccessContext | null> {
     const [agent] = await db
       .select({
         id: schema.agentsTable.id,
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        agentType: schema.agentsTable.agentType,
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)

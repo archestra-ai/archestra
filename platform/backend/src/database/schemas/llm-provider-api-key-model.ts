@@ -1,3 +1,4 @@
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
   boolean,
   index,
@@ -35,6 +36,12 @@ const llmProviderApiKeyModelsTable = pgTable(
     /** Whether this model is marked as the best (highest quality) for this API key */
     /** USD/token rates published by this endpoint, isolated from other instances. */
     providerPricing: jsonb("provider_pricing").$type<ProviderModelPricing>(),
+    /** Resource-local transport evidence. Null means discovery could not classify it. */
+    azureCapabilities: jsonb("azure_capabilities").$type<
+      AzureModelEvidence & {
+        configurationHash: string;
+      }
+    >(),
     isBest: boolean("is_best").notNull().default(false),
     /**
      * Whether this model is worth pointing an agent at, as judged from what

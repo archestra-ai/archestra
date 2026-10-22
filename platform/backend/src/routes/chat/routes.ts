@@ -8,7 +8,6 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   collapseWhitespace,
-  getAzureModelKind,
   getModelReadableMimeTypes,
   hasPersistableAssistantContent,
   isModelSelectionComplete,
@@ -71,6 +70,7 @@ import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { withDbTransaction } from "@/database";
@@ -124,6 +124,7 @@ import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -969,6 +970,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 organizationId,
                 modelAcceptsImageToolResults:
                   selected.inputModalities?.includes("image") === true,
+                // A per-user provider model has no stored key; the fork then
+                // re-resolves the acting user's own credential for it.
+                parentLlm: conversation.modelId
+                  ? {
+                      modelId: conversation.modelId,
+                      apiKeyId: conversation.chatApiKeyId,
+                    }
+                  : undefined,
                 hookSessionContext,
                 projectInstructions,
                 openedApp,
@@ -1380,19 +1389,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       toolExecutionErrors.add(event.error);
                     }
                   },
-                  ...(usesStepPromptCache({
-                    provider,
-                    anthropicNativeEndpoint,
-                  }) && {
-                    prepareStep: ({ messages }) => ({
-                      messages: applyStepPromptCacheBreakpoint({
+                  prepareStep: ({ messages }) => {
+                    const ordered = orderToolResultsByCall(messages);
+                    return {
+                      messages: usesStepPromptCache({
                         provider,
-                        model: selectedModel,
                         anthropicNativeEndpoint,
-                        messages,
-                      }),
-                    }),
-                  }),
+                      })
+                        ? applyStepPromptCacheBreakpoint({
+                            provider,
+                            model: selectedModel,
+                            anthropicNativeEndpoint,
+                            messages: ordered,
+                          })
+                        : ordered,
+                    };
+                  },
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker, maxSteps),
                   abortSignal: chatAbortController.signal,
@@ -3584,9 +3596,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : null;
       // Media generation is an explicit user action. Never generate a second
       // image or speech clip merely to name the conversation.
+      const azureTitleCapabilities =
+        conversationModel?.provider === "azure"
+          ? await resolveAzureModelCapabilities({
+              providerApiKeyId: conversation.agent?.llmApiKeyId ?? undefined,
+              modelId: conversationModel.modelId,
+            })
+          : undefined;
       if (
-        conversationModel?.provider === "azure" &&
-        getAzureModelKind(conversationModel.modelId) !== "text"
+        azureTitleCapabilities &&
+        (azureTitleCapabilities.status !== "known" ||
+          azureTitleCapabilities.kind !== "text")
       ) {
         return reply.send(conversation);
       }

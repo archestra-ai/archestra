@@ -130,7 +130,7 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -843,6 +843,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
+      await assertModelTrioTiers({
+        apiKeyId: body.llmApiKeyId ?? null,
+        fastModelId: body.fastModelId ?? null,
+        smartModelId: body.smartModelId ?? null,
+      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -2244,6 +2249,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.fastModelId !== undefined && {
+            fastModelId: body.fastModelId,
+          }),
+          ...(body.smartModelId !== undefined && {
+            smartModelId: body.smartModelId,
+          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -2275,6 +2286,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "An agent's model and API key must be set together",
           );
         }
+      }
+
+      if (
+        body.llmApiKeyId !== undefined ||
+        body.fastModelId !== undefined ||
+        body.smartModelId !== undefined
+      ) {
+        await assertModelTrioTiers({
+          apiKeyId:
+            body.llmApiKeyId !== undefined
+              ? body.llmApiKeyId
+              : existingAgent.llmApiKeyId,
+          fastModelId:
+            body.fastModelId !== undefined
+              ? body.fastModelId
+              : existingAgent.fastModelId,
+          smartModelId:
+            body.smartModelId !== undefined
+              ? body.smartModelId
+              : existingAgent.smartModelId,
+        });
       }
 
       if (
@@ -2716,104 +2748,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.defaultAgentId,
       );
       return reply.send({ defaultAgentId: body.defaultAgentId });
-    },
-  );
-
-  fastify.get(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.GetMemberDefaultModel,
-        description: "Get the current user's default model and API key",
-        tags: ["Members"],
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ user, organizationId }, reply) => {
-      const selection = await MemberModel.getDefaultModelSelection(
-        user.id,
-        organizationId,
-      );
-      return reply.send(selection);
-    },
-  );
-
-  fastify.put(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.UpdateMemberDefaultModel,
-        description: "Set the current user's default model and API key",
-        tags: ["Members"],
-        body: z.object({
-          modelId: z.string().uuid().nullable(),
-          chatApiKeyId: z.string().uuid().nullable(),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ body, user, organizationId }, reply) => {
-      // The default model and its API key are a pair: persist both or neither.
-      if (
-        !isModelSelectionComplete({
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        })
-      ) {
-        throw new ApiError(
-          400,
-          "The default model and API key must be set together",
-        );
-      }
-
-      // A default runs new chats on any agent, so it needs a key the member
-      // may use; an agent's own key is usable only through that agent.
-      if (body.chatApiKeyId) {
-        const apiKey = await LlmProviderApiKeyModel.findById(body.chatApiKeyId);
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(
-            400,
-            "The selected model or API key no longer exists",
-          );
-        }
-        if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, user.id, []))) {
-          throw new ApiError(403, "You do not have access to this API key");
-        }
-      }
-
-      try {
-        await MemberModel.setDefaultModelSelection({
-          userId: user.id,
-          organizationId,
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        });
-      } catch (error) {
-        // The referenced model or API key can be deleted between the client
-        // loading its options and saving the selection.
-        if (isForeignKeyConstraintError(error)) {
-          throw new ApiError(
-            400,
-            "The selected model or API key no longer exists",
-          );
-        }
-        throw error;
-      }
-
-      return reply.send({
-        modelId: body.modelId,
-        chatApiKeyId: body.chatApiKeyId,
-      });
     },
   );
 };

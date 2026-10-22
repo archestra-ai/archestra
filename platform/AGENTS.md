@@ -128,7 +128,7 @@ A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; t
 
 1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
 2. **Add to `platform/.env.example`** - Every new env var MUST be listed here with a short comment, so local setups and deployments discover it
-3. **Document in `../docs/pages/reference/configuration.md`** - All new env vars MUST be documented there, under the matching section. Use best judgement on whether it warrants a new section
+3. **Document in `../docs/pages/admin/deployment/configuration.md`** - All new env vars MUST be documented there, under the matching section. Use best judgement on whether it warrants a new section
 4. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via the `useFeature()` hook
 
 ## Architecture

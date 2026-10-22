@@ -28,8 +28,8 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
   YELL_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -449,7 +449,7 @@ export async function buildAgentMcpToolList(params: {
     mcpTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
+        TOOL_START_AGENT_RUN_SHORT_NAME,
     );
   // A session can arrive from another client even if this gateway cannot
   // start work. Advertise lifecycle controls for runtime handoffs and dynamic
@@ -2389,6 +2389,7 @@ async function authenticateExternalIdpToken(
       !(await AgentTeamModel.userHasAgentAccess({
         userId: user.id,
         agentId: profileId,
+        agentAccessContext: agent,
         isAgentAdmin: isAdmin,
         action: "use",
       }))
@@ -2880,9 +2881,10 @@ async function buildSearchToolsDescription(params: {
   });
   const runtimeInstruction = params.availableBuiltInToolNames.some(
     (name) =>
-      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_STEER_AGENT_RUN_SHORT_NAME,
   )
-    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_agent_run only when this work has no run yet. Otherwise steer_agent_run continues the existing run by its run_id. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
@@ -3038,7 +3040,7 @@ function summarizeDeferredBuiltIns(params: {
     ["read_file", "read file"],
     ["load_skill", "load skill"],
     ["run_command", "run command"],
-    ["list_runs", "list runs"],
+    ["list_agent_runs", "list agent runs"],
     ["get_guardrails_policy", "get guardrails policy"],
   ].flatMap(([shortName, query]) =>
     deferredShortNames.has(shortName) ? [`'${query}'`] : [],

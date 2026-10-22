@@ -5,6 +5,7 @@ import {
   AgentConnectorAssignmentModel,
   AgentToolModel,
   HookFileModel,
+  ModelModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import AgentVersionModel from "@/models/agent-version";
@@ -80,6 +81,8 @@ describe("AgentVersionModel", () => {
     delete legacySnapshot.missingCredentialBehavior;
     delete legacySnapshot.activationSkillMode;
     delete legacySnapshot.activationSkillRules;
+    delete legacySnapshot.fastModel;
+    delete legacySnapshot.smartModel;
     await db
       .update(schema.agentVersionsTable)
       .set({ snapshot: legacySnapshot as AgentConfigSnapshot })
@@ -91,6 +94,47 @@ describe("AgentVersionModel", () => {
     expect(normalized.snapshot.missingCredentialBehavior).toBe("allow");
     expect(normalized.snapshot.activationSkillMode).toBe("all");
     expect(normalized.snapshot.activationSkillRules).toEqual([]);
+  });
+
+  test("a tier-only change forks a new head", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const key = await makeLlmProviderApiKey(agent.organizationId, null);
+    const [normal, fast, smart] = await Promise.all(
+      ["gpt-normal", "gpt-fast", "gpt-smart"].map((modelId) =>
+        ModelModel.create({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    await AgentModel.update(agent.id, {
+      modelId: normal.id,
+      llmApiKeyId: key.id,
+    });
+
+    const updated = await AgentModel.update(agent.id, {
+      fastModelId: fast.id,
+      smartModelId: smart.id,
+    });
+
+    expect(updated?.latestVersion).toBe(3);
+    const head = await getVersion(agent, 3);
+    expect(head?.snapshot.fastModel).toEqual({
+      id: fast.id,
+      externalId: "openai/gpt-fast",
+    });
+    expect(head?.snapshot.smartModel).toEqual({
+      id: smart.id,
+      externalId: "openai/gpt-smart",
+    });
+    expect((await getVersion(agent, 2))?.snapshot.fastModel).toBeNull();
   });
 
   test("scalar config change forks a new head", async ({ makeAgent }) => {

@@ -87,7 +87,6 @@ export async function createAndLinkRunConversation(params: {
     userId: ownerUserId,
     // A scheduled run is not the owner driving the /chat model selector, so it
     // seeds from the agent's own configuration, not the owner's chat default.
-    includeMemberChatDefault: false,
   });
 
   const created = await ConversationModel.create({

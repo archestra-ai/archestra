@@ -9,7 +9,7 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** an organization [credential](/docs/admin/security/credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
+**Authentication:** an organization [credential](/docs/admin/credentials), or a token entered for this connector. A saved custom secret supplies a token. A saved GitHub App supplies installation credentials.
 
 ## Connecting GitHub
 

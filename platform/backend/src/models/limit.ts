@@ -1,3 +1,4 @@
+import { ApiError } from "@archestra/shared/types";
 import {
   and,
   eq,
@@ -1247,6 +1248,8 @@ export class LimitValidationService {
    * Returns null if allowed, or a refusal tuple if blocked.
    */
   static async checkLimitsBeforeRequest(params: {
+    /** Refuse applicable budgets when this media model cannot be priced. */
+    unpricedMediaModel?: string;
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
@@ -1384,6 +1387,32 @@ export class LimitValidationService {
       }
       const prefetch =
         await LimitValidationService.prefetchEntityLimits(entitiesToCheck);
+
+      if (params.unpricedMediaModel) {
+        const applies = (models?: string[] | null) =>
+          !models?.length || models.includes(params.unpricedMediaModel ?? "");
+        const limits = [...prefetch.limitsByEntity.values()].flat();
+        let budgeted = limits.some((limit) => applies(limit.model));
+        const customUserLimits = userId
+          ? prefetch.limitsByEntity.get(`user:${userId}`)
+          : undefined;
+        if (userId && organizationId && !customUserLimits?.length) {
+          const environmentDefault = environmentId
+            ? await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
+                environmentId,
+              )
+            : null;
+          const defaultLimit =
+            environmentDefault ??
+            (await EnvironmentDefaultUserLimitModel.findGlobal(organizationId));
+          budgeted ||= !!defaultLimit && applies(defaultLimit.model);
+        }
+        if (budgeted)
+          throw new ApiError(
+            422,
+            "This media operation cannot satisfy the configured budget because authoritative cost is unavailable",
+          );
+      }
 
       // The passthrough key is the user-bound cost-bearing identity, so its
       // per-key limit is checked first and takes precedence over the standard
@@ -1569,7 +1598,11 @@ export class LimitValidationService {
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
-      if (config.llmProxy.usageAccountingMode === "enforce") throw error;
+      if (
+        config.llmProxy.usageAccountingMode === "enforce" ||
+        params.unpricedMediaModel
+      )
+        throw error;
       return null;
     }
   }
@@ -2043,6 +2076,7 @@ async function getDefaultUserLimitUsage(params: {
 
   const selection = {
     model: schema.interactionsTable.model,
+    costUnavailable: sql<boolean>`${schema.interactionsTable.response}->'__mediaUsage'->>'costAvailable' = 'false'`,
     cost: schema.interactionsTable.cost,
     inputTokens: schema.interactionsTable.inputTokens,
     outputTokens: schema.interactionsTable.outputTokens,
@@ -2083,7 +2117,9 @@ async function getDefaultUserLimitUsage(params: {
       interactions
         .filter(
           (interaction) =>
-            interaction.cost === null && interaction.model !== null,
+            interaction.cost === null &&
+            interaction.model !== null &&
+            !interaction.costUnavailable,
         )
         .map((interaction) => interaction.model as string),
     ),
@@ -2126,7 +2162,12 @@ async function getDefaultUserLimitUsage(params: {
   let cost = "0.0000000000";
   let tokensIn = 0;
   let tokensOut = 0;
+  let unavailableMediaCost = false;
   for (const interaction of interactions) {
+    if (interaction.costUnavailable) {
+      unavailableMediaCost = true;
+      continue;
+    }
     const inputTokens = interaction.inputTokens ?? 0;
     const outputTokens = interaction.outputTokens ?? 0;
     tokensIn += inputTokens;
@@ -2171,7 +2212,10 @@ async function getDefaultUserLimitUsage(params: {
   tokensOut += Number(settled?.tokensOut ?? 0);
   cost = sumMoney([cost, settled?.cost ?? "0"]);
   return {
-    cost: settled?.incomplete ? Number.POSITIVE_INFINITY : Number(cost),
+    cost:
+      settled?.incomplete || unavailableMediaCost
+        ? Number.POSITIVE_INFINITY
+        : Number(cost),
     tokensIn,
     tokensOut,
   };

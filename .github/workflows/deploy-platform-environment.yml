@@ -168,4 +168,31 @@ jobs:
           }
           trap show_profile EXIT
 
+          # Deploy jobs run with cancel-in-progress: false in a per-environment
+          # concurrency group, so no other Helm operation can be legitimately
+          # running when this step starts. If a previous runner lost heartbeat
+          # mid-upgrade, clear the orphaned pending-* state before upgrading.
+          release_status=$(
+            helm status "$release" --namespace "$namespace" --output json 2>/dev/null \
+              | jq -r '.info.status // empty' || true
+          )
+          case "$release_status" in
+            pending-upgrade|pending-rollback)
+              echo "Release $release in $namespace is stuck in $release_status; rolling back to clear lock..."
+              rollback_revision=$(
+                helm history "$release" --namespace "$namespace" --output json 2>/dev/null \
+                  | jq -r '[.[] | select(.status == "deployed" or .status == "superseded") | .revision] | last // empty' || true
+              )
+              if [[ -n "$rollback_revision" ]]; then
+                helm rollback "$release" "$rollback_revision" --namespace "$namespace" --cleanup-on-fail --timeout 5m
+              else
+                helm rollback "$release" --namespace "$namespace" --cleanup-on-fail --timeout 5m
+              fi
+              ;;
+            pending-install)
+              echo "Release $release in $namespace is stuck in pending-install; uninstalling to clear lock..."
+              helm uninstall "$release" --namespace "$namespace" --wait --timeout 5m
+              ;;
+          esac
+
           helm "${helm_args[@]}"

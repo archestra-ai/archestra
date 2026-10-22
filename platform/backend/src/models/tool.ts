@@ -3547,6 +3547,7 @@ class ToolModel {
         systemPrompt: string | null;
         environmentId: string | null;
         builtInAgentConfig: Agent["builtInAgentConfig"];
+        hasRuntime: boolean;
       };
     }>
   > {
@@ -3560,6 +3561,7 @@ class ToolModel {
           systemPrompt: schema.agentsTable.systemPrompt,
           environmentId: schema.agentsTable.environmentId,
           builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+          hasRuntime: sql<boolean>`${schema.agentsTable.runtime} IS NOT NULL`,
         },
       })
       .from(schema.agentToolsTable)

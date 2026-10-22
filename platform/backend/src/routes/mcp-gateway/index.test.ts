@@ -7,7 +7,7 @@ import {
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_ASK_USER_FULL_NAME,
-  TOOL_LIST_RUNS_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_READ_FILE_FULL_NAME,
@@ -1669,7 +1669,7 @@ describe("MCP Gateway (stateless mode)", () => {
       };
       const discovery = await call(TOOL_SEARCH_TOOLS_FULL_NAME, {
         query:
-          "^archestra__(list_skills|save_file|read_file|run_command|get_run|list_runs|steer_run|cancel_run)$",
+          "^archestra__(list_skills|save_file|read_file|run_command|get_agent_run|list_agent_runs|steer_agent_run|cancel_agent_run)$",
         limit: 20,
         mode: "regex",
       });
@@ -1683,20 +1683,23 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SAVE_FILE_FULL_NAME,
           TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
-          "archestra__get_run",
-          TOOL_LIST_RUNS_FULL_NAME,
-          "archestra__steer_run",
-          "archestra__cancel_run",
+          "archestra__get_agent_run",
+          TOOL_LIST_AGENT_RUNS_FULL_NAME,
+          "archestra__steer_agent_run",
+          "archestra__cancel_agent_run",
         ]),
       );
       await call(TOOL_RUN_TOOL_FULL_NAME, {
         tool_name: TOOL_LIST_SKILLS_FULL_NAME,
       });
       const runs = await call(TOOL_RUN_TOOL_FULL_NAME, {
-        tool_name: TOOL_LIST_RUNS_FULL_NAME,
-        tool_args: { agent_id: agent.id },
+        tool_name: TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        tool_args: { agent_ids: [agent.id], mine_only: true },
       });
-      expect(runs.structuredContent).toMatchObject({ runs: [], total: 0 });
+      expect(runs.structuredContent).toMatchObject({
+        runs: [],
+        summary: { total: 0 },
+      });
       const searchDescription = response
         .json()
         .result.tools.find(

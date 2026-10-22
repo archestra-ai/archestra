@@ -68,6 +68,7 @@ export function buildCurlExample(params: {
   keyValue: string;
   model: string;
   supportedEndpoints?: readonly string[] | null;
+  imageOperation?: "generate" | "edit";
 }): string | null {
   const {
     connectionBaseUrl,
@@ -76,9 +77,15 @@ export function buildCurlExample(params: {
     keyValue,
     model,
     supportedEndpoints,
+    imageOperation,
   } = params;
   const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
   const passthrough = keyType === "passthrough";
+  if (
+    imageOperation &&
+    (target.kind !== "provider" || target.provider !== "azure")
+  )
+    return null;
 
   if (target.kind === "model-router") {
     // The router calls providers with its own mapped keys; a passthrough key
@@ -104,6 +111,34 @@ export function buildCurlExample(params: {
   // Tokens always travel as a bearer; keys use the provider's own header.
   const authHeader = (header: string) =>
     keyType === "token" ? `Authorization: Bearer ${credential}` : header;
+
+  if (provider === "azure" && imageOperation) {
+    const headers = [
+      `Authorization: Bearer ${credential}`,
+      ...virtualKeyHeader,
+    ];
+    if (imageOperation === "generate") {
+      return curl(`${baseUrl}/images/generations`, [
+        ...headers,
+        "Content-Type: application/json",
+      ])(
+        json({
+          model,
+          prompt: "Draw a small friendly robot in a garden.",
+          n: 1,
+          size: "1024x1024",
+        }),
+      );
+    }
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    return [
+      `curl "${baseUrl}/images/edits"`,
+      ...headers.map((header) => `  -H "${header}"`),
+      `  --form-string ${quote(`model=${model}`)}`,
+      '  -F "image[]=@edit.png"',
+      "  --form-string 'prompt=Add a small friendly robot behind the subject.'",
+    ].join(" \\\n");
+  }
 
   if (provider === "jev") {
     return curl(`${baseUrl}/decisions`, [

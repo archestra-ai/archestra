@@ -102,6 +102,7 @@ export {
   chatActiveRunsTable,
 } from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsMsTeamsUserConnectionsTable } from "./chatops-ms-teams-user-connection";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export { default as chatopsUserAdmissionsTable } from "./chatops-user-admission";
@@ -236,6 +237,7 @@ export {
 export { default as projectAppsTable } from "./project-app";
 export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
+export { default as proxyProviderFilesTable } from "./proxy-provider-file";
 export { default as resourcePermissionPoliciesTable } from "./resource-permission-policy";
 export { default as runtimeCredentialConnectionsTable } from "./runtime-credential-connection";
 export { default as runtimeCredentialDefinitionsTable } from "./runtime-credential-definition";

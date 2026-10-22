@@ -2,16 +2,16 @@
 title: Web UIs and Automation
 description: Connect n8n workflows and Open WebUI to Archestra LLM Proxy and MCP Gateway
 order: 4
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-You can connect visual chat interfaces and workflow automation platforms to Archestra. Routing model requests through the LLM Proxy provides unified logs, spending limits, and guardrails, while the MCP Gateway supplies tools to your workflows.
+Run an n8n workflow or an Open WebUI chat with Archestra models and tools. Configure model routing and tool access separately, then test each connection.
 
 ## Requirements
 
-You need a running [Archestra deployment](/docs/admin/deployment).
+Use the credential matching the connection you are configuring.
 
 - **For model routing:** Configure an OpenAI provider key in Archestra and create a standard [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) mapped to that provider. Choose a model available under that provider, such as `gpt-4o`.
 - **For tool access:** Create an [MCP Gateway](/docs/mcp/gateway) and generate a gateway token.
@@ -34,8 +34,6 @@ Use an OpenAI credential to keep the virtual key out of workflow expressions.
 4. Select a model supported by your provider and save the workflow.
 5. If Guardrails are active, add the [session header](#configure-guardrails).
 
-Store virtual keys in n8n's credential manager rather than inline workflow expressions.
-
 ### Configure Guardrails
 
 <span id="configure-guardrails"></span>
@@ -50,7 +48,7 @@ Use n8n's [execution ID](https://docs.n8n.io/code/cookbook/builtin/execution/#ex
 
 If you call the proxy with an **HTTP Request** node instead, turn on **Send Headers** and add `X-Appa-Session-ID` with `{{ $execution.id }}`. Keep the virtual key in the credential.
 
-For a child workflow, pass the parent workflow's `$execution.id` in its input data as `parentExecutionId`. In the child's **HTTP Request** node, send both headers: `X-Appa-Session-ID` set to `{{ $execution.id }}` and `X-Appa-Parent-ID` set to `{{ $json.parentExecutionId }}`. The OpenAI credential only supports one custom header, so child workflows that need a parent session cannot use it.
+For a child workflow, pass the parent workflow's `$execution.id` in its input data as `parentExecutionId`. In the child's **HTTP Request** node, send both headers: `X-Appa-Session-ID` set to `{{ $execution.id }}` and `X-Appa-Parent-ID` set to `{{ $json.parentExecutionId }}`. Use an HTTP Request node when the OpenAI credential cannot supply both headers.
 
 Run the workflow twice and check **Logs → LLM Proxy** in Archestra. Calls within each run share a session ID, and the two runs get different IDs. Never hardcode a static session ID in the credential. For chats that span multiple workflow runs, see [Session Headers](/docs/agents/guardrails/clients#session-headers).
 
@@ -66,7 +64,7 @@ Attach a gateway to give the agent the tools assigned in Archestra.
 4. Choose **Bearer Auth** and supply your Archestra gateway token.
 5. Select the tools to expose to the agent.
 
-Archestra supports both legacy SSE and modern Streamable HTTP transports.
+Choose Streamable HTTP when offered. Archestra also accepts legacy SSE on the same gateway URL.
 
 ## Open WebUI
 

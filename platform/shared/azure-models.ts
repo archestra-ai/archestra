@@ -22,6 +22,10 @@ export type AzureModelEvidence = {
   underlyingModelName: string | null;
   operations: AzureModelOperation[];
   source: "deployment" | "catalog";
+  /** Resolved during this resource's sync, before globally shared model rows merge. */
+  inputModalities?: ModelInputModality[] | null;
+  outputModalities?: ModelOutputModality[] | null;
+  supportsToolCalling?: boolean | null;
 };
 
 /** Only canonical provider-reported backing names may be passed here. */
@@ -104,3 +108,5 @@ export function azureModelEvidence(params: {
     source: params.source,
   };
 }
+
+import type { ModelInputModality, ModelOutputModality } from "./chat";

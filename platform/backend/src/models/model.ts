@@ -1249,8 +1249,12 @@ class ModelModel {
 
     return {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
-      inputModalities: model.inputModalities,
-      outputModalities: model.outputModalities,
+      inputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.inputModalities ?? null)
+        : model.inputModalities,
+      outputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.outputModalities ?? null)
+        : model.outputModalities,
       // Chat's Azure media bridge produces files without running agent tools,
       // even when the upstream model registry advertises native tool support.
       supportsToolCalling:
@@ -1259,7 +1263,9 @@ class ModelModel {
           model.azureCapabilities?.kind ?? "text",
         )
           ? false
-          : model.supportsToolCalling,
+          : model.azureCapabilities
+            ? (model.azureCapabilities.supportsToolCalling ?? null)
+            : model.supportsToolCalling,
       supportsReasoningEffort: model.supportsReasoningEffort,
       supportedEndpoints: model.supportedEndpoints,
       recommendedForAgents,

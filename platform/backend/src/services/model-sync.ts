@@ -184,6 +184,9 @@ class ModelSyncService {
       const azureByModelId = new Map(
         providerModels.map((m) => [m.id, m.azureCapabilities]),
       );
+      const capabilitiesByModelId = new Map(
+        modelsToUpsert.map((m) => [m.modelId, m]),
+      );
       const configurationHash = credentialRow
         ? azureCapabilityConfigurationHash({
             ...credentialRow,
@@ -193,10 +196,18 @@ class ModelSyncService {
         : null;
       const modelsWithIds = upsertedModels.map((m) => {
         const azureEvidence = azureByModelId.get(m.modelId);
+        const capabilities = capabilitiesByModelId.get(m.modelId);
         return {
           azureCapabilities:
             provider === "azure" && configurationHash && azureEvidence
-              ? { ...azureEvidence, configurationHash }
+              ? {
+                  ...azureEvidence,
+                  configurationHash,
+                  inputModalities: capabilities?.inputModalities ?? null,
+                  outputModalities: capabilities?.outputModalities ?? null,
+                  supportsToolCalling:
+                    capabilities?.supportsToolCalling ?? null,
+                }
               : null,
           providerPricing: pricingByModelId.get(m.modelId) ?? null,
           id: m.id,
@@ -394,7 +405,8 @@ export function buildModelsToUpsert(params: {
     const isReseller = provider === "bedrock" || provider === "azure";
     const crossProviderArgs = {
       provider,
-      modelId: model.id,
+      modelId:
+        provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
       underlyingModelName: model.underlyingModelName,
       modelsDevData,
     };
@@ -449,7 +461,14 @@ export function buildModelsToUpsert(params: {
       // Foundry) has no registry entry of its own; its backing model does.
       // Resellers already resolve that through the cross-provider tier.
       capabilities:
-        lookupModelsDevCapabilities(capabilitiesMap, model.id) ??
+        (provider === "azure"
+          ? model.underlyingModelName
+            ? lookupModelsDevCapabilities(
+                capabilitiesMap,
+                model.underlyingModelName,
+              )
+            : undefined
+          : lookupModelsDevCapabilities(capabilitiesMap, model.id)) ??
         (!isReseller && model.underlyingModelName
           ? lookupModelsDevCapabilities(
               capabilitiesMap,
@@ -482,7 +501,8 @@ export function buildModelsToUpsert(params: {
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
       cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
       embeddingDimensions: resolveEmbeddingDimensions({
-        modelId: model.id,
+        modelId:
+          provider === "azure" ? (model.underlyingModelName ?? "") : model.id,
         provider,
         fetched: model.capabilities,
       }),
@@ -1068,7 +1088,7 @@ function inferModelCapabilities(params: {
   const { provider, modelId, fetched, underlyingModelName } = params;
 
   if (provider === "azure") {
-    return inferAzureCapabilities(modelId, underlyingModelName);
+    return inferAzureCapabilities(underlyingModelName);
   }
 
   if (provider === "gemini") {
@@ -1182,12 +1202,9 @@ function inferOllamaCapabilities(
  * generative.
  */
 function inferAzureCapabilities(
-  modelId: string,
   underlyingModelName?: string | null,
 ): ProviderModelCapabilities {
-  const isEmbedding = [modelId, underlyingModelName].some((name) =>
-    name?.toLowerCase().includes("embedding"),
-  );
+  const isEmbedding = underlyingModelName?.toLowerCase().includes("embedding");
   if (!isEmbedding) {
     return emptyCapabilities();
   }
@@ -1294,9 +1311,9 @@ function normalizeKnownModelCapabilities(params: {
   // "text" output — the registry records embeddings that way. Mirrors
   // inferAzureCapabilities, which the registry tier would otherwise outrank.
   if (provider === "azure") {
-    const isEmbedding = [modelId, underlyingModelName].some((name) =>
-      name?.toLowerCase().includes("embedding"),
-    );
+    const isEmbedding = underlyingModelName
+      ?.toLowerCase()
+      .includes("embedding");
     if (isEmbedding) {
       return {
         ...capabilities,

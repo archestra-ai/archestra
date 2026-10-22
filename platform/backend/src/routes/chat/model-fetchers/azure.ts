@@ -100,15 +100,20 @@ export async function fetchAzureModels(
     }
 
     const data = (await response.json()) as {
-      data?: { id: string; model?: string }[];
+      data?: {
+        id: string;
+        model?: string;
+        capabilities?: Record<string, unknown>;
+      }[];
     };
     const models = (data.data ?? []).map((dep) => ({
       id: dep.id,
       displayName: dep.id,
       provider: "azure" as const,
-      capabilities: azureMediaCapabilities(dep.model),
+      capabilities: azureMediaCapabilities(dep.model, dep.capabilities),
       azureCapabilities: azureModelEvidence({
         underlyingModelName: dep.model,
+        capabilities: dep.capabilities,
         source: "deployment",
       }),
       // Data-plane deployments carry the backing model name; use it for pricing.
@@ -162,16 +167,24 @@ async function fetchAzureDeploymentList(params: {
     }
 
     const data = (await response.json()) as {
-      data?: { id: string; model?: string }[];
+      data?: {
+        id: string;
+        model?: string;
+        capabilities?: Record<string, unknown>;
+      }[];
     };
 
     return (data.data ?? []).map((deployment) => ({
       id: deployment.id,
       displayName: deployment.id,
       provider: "azure" as const,
-      capabilities: azureMediaCapabilities(deployment.model),
+      capabilities: azureMediaCapabilities(
+        deployment.model,
+        deployment.capabilities,
+      ),
       azureCapabilities: azureModelEvidence({
         underlyingModelName: deployment.model,
+        capabilities: deployment.capabilities,
         source: "deployment",
       }),
       // Deployments carry the backing model name; use it for pricing.
@@ -560,9 +573,16 @@ const AZURE_RESOURCE_HOST_SUFFIXES = [
   ".cognitiveservices.azure.com",
 ];
 
-function azureMediaCapabilities(modelName?: string): ModelInfo["capabilities"] {
-  if (!modelName) return undefined;
-  switch (getAzureModelKind(modelName)) {
+function azureMediaCapabilities(
+  modelName?: string,
+  capabilities?: Record<string, unknown>,
+): ModelInfo["capabilities"] {
+  const evidence = azureModelEvidence({
+    underlyingModelName: modelName,
+    capabilities,
+    source: "deployment",
+  });
+  switch (evidence?.kind) {
     case "image":
       return {
         inputModalities: ["text"],

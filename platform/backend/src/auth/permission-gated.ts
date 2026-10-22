@@ -1,7 +1,6 @@
 import type { Action, Resource } from "@archestra/shared";
 import {
   and,
-  eq,
   inArray,
   isNull,
   ne,
@@ -10,7 +9,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import db, { schema } from "@/database";
+import { schema } from "@/database";
 import { SRE_AGENT_ID, SRE_CATALOG_ID } from "@/services/sre-agent/definition";
 import { ApiError } from "@/types";
 
@@ -107,28 +106,6 @@ export async function hiddenAgentsAmong(
   return new Set(gated.filter((_, index) => !visible[index]));
 }
 
-/** The gated agents of an organization the caller may not see. */
-export async function hiddenAgentIds(caller: {
-  userId: string;
-  organizationId: string;
-}): Promise<string[]> {
-  const ids = [...PERMISSION_GATED_AGENTS.keys()];
-  const visible = await Promise.all(ids.map((id) => canUseAgent(id, caller)));
-  return ids.filter((_, index) => !visible[index]);
-}
-
-/**
- * Whether a caller may see a gated agent of an organization. Lookups without
- * any caller are internal and never reach this.
- */
-export function canSeeAgent(params: {
-  agentId: string;
-  userId: string;
-  organizationId: string;
-}): Promise<boolean> {
-  return canUseAgent(params.agentId, params);
-}
-
 /** Whether a caller may reach a gated catalog item's tools. */
 function canUseCatalog(catalogId: string, caller: Caller): Promise<boolean> {
   return callerHolds(PERMISSION_GATED_CATALOGS.get(catalogId), caller);
@@ -149,7 +126,7 @@ export async function gatedAgentsFence(caller: {
       const visibleIn: string[] = [];
       for (const organizationId of organizationIds) {
         if (
-          await canSeeAgent({ agentId, userId: caller.userId, organizationId })
+          await canUseAgent(agentId, { userId: caller.userId, organizationId })
         )
           visibleIn.push(organizationId);
       }
@@ -167,18 +144,12 @@ export async function gatedAgentsFence(caller: {
  * among the rows, so other reads pay nothing.
  */
 export async function dropHiddenAgents<
-  T extends { id: string; organizationId?: string },
+  T extends { id: string; organizationId: string },
 >(rows: T[], userId: string): Promise<T[]> {
   const visible = await Promise.all(
-    rows.map(async (row) => {
-      if (!isPermissionGatedAgent(row.id)) return true;
-      const organizationId =
-        row.organizationId ?? (await agentOrganizationId(row.id));
-      return (
-        !!organizationId &&
-        canSeeAgent({ agentId: row.id, userId, organizationId })
-      );
-    }),
+    rows.map(({ id, organizationId }) =>
+      canUseAgent(id, { userId, organizationId }),
+    ),
   );
   return rows.filter((_, index) => visible[index]);
 }
@@ -198,13 +169,9 @@ export async function dropHiddenTools<
     caller,
   );
   const deniedCatalogs = new Set(denied);
-  const hiddenAgents = new Set(
-    tools.some(
-      ({ delegateToAgentId }) =>
-        delegateToAgentId && isPermissionGatedAgent(delegateToAgentId),
-    )
-      ? await hiddenAgentIds(caller)
-      : [],
+  const hiddenAgents = await hiddenAgentsAmong(
+    tools.map(({ delegateToAgentId }) => delegateToAgentId),
+    { kind: "caller", ...caller },
   );
   return tools.filter(
     ({ catalogId, delegateToAgentId }) =>
@@ -234,11 +201,29 @@ export async function splitGatedCatalogs(
   const gated = [...new Set(catalogIds)].filter(
     (id): id is string => id !== null && PERMISSION_GATED_CATALOGS.has(id),
   );
-  const usable = new Set(await dropHiddenCatalogIds(gated, caller));
+  const usable = await Promise.all(
+    gated.map((id) => canUseCatalog(id, caller)),
+  );
   return {
-    usable: [...usable],
-    denied: gated.filter((id) => !usable.has(id)),
+    usable: gated.filter((_, index) => usable[index]),
+    denied: gated.filter((_, index) => !usable[index]),
   };
+}
+
+/** Drops delegations to gated agents the caller may not see, on a `tools` query. */
+export async function gatedDelegationToolsFence(
+  caller: Caller,
+): Promise<SQL | undefined> {
+  const hidden = await hiddenAgentsAmong(PERMISSION_GATED_AGENTS.keys(), {
+    kind: "caller",
+    ...caller,
+  });
+  return hidden.size > 0
+    ? or(
+        isNull(schema.toolsTable.delegateToAgentId),
+        notInArray(schema.toolsTable.delegateToAgentId, [...hidden]),
+      )
+    : undefined;
 }
 
 /** Drops tools of gated catalogs the caller may not use, on a `tools` query. */
@@ -272,13 +257,4 @@ async function callerHolds(
   // Dynamic: @/auth/utils reaches the agent model through better-auth.
   const { userHasPermission } = await import("@/auth/utils");
   return userHasPermission(userId, organizationId, ...required);
-}
-
-async function agentOrganizationId(agentId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ organizationId: schema.agentsTable.organizationId })
-    .from(schema.agentsTable)
-    .where(eq(schema.agentsTable.id, agentId))
-    .limit(1);
-  return row?.organizationId ?? null;
 }

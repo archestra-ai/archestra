@@ -26,7 +26,8 @@ import {
   dropHiddenAgents,
   gatedAgentsFence,
   gatedCatalogToolsFence,
-  hiddenAgentIds,
+  gatedDelegationToolsFence,
+  hiddenAgentsAmong,
 } from "@/auth/permission-gated";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -185,6 +186,7 @@ class AgentToolModel {
     const results = await db
       .select({
         id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
@@ -317,9 +319,12 @@ class AgentToolModel {
     }
 
     const results = await query;
-    const hidden = new Set(
-      userId ? await hiddenAgentIds({ userId, organizationId }) : [],
-    );
+    const hidden = userId
+      ? await hiddenAgentsAmong(
+          results.flatMap((r) => [r.sourceAgentId, r.targetAgentId]),
+          { kind: "caller", userId, organizationId },
+        )
+      : new Set();
 
     // Filter out null targetAgentIds (shouldn't happen but TypeScript needs this)
     return results.filter(
@@ -1267,6 +1272,7 @@ class AgentToolModel {
           organizationIds: organizationId ? [organizationId] : [],
         }),
         gatedCatalogToolsFence({ userId, organizationId }),
+        gatedDelegationToolsFence({ userId, organizationId }),
       ]))
         if (fence) whereConditions.push(fence);
     }

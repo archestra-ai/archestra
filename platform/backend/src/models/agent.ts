@@ -46,11 +46,10 @@ import {
 import { type AnyPgColumn, alias, unionAll } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import {
-  canSeeAgent,
+  canUseAgent,
   dropHiddenAgents,
   dropHiddenTools,
   gatedAgentsFence,
-  hiddenAgentIds,
   isPermissionGatedAgent,
 } from "@/auth/permission-gated";
 import { LRUCacheManager } from "@/cache-manager";
@@ -1256,7 +1255,10 @@ class AgentModel {
     userId: string,
   ) {
     const table = schema.agentsTable;
-    const hidden = await hiddenAgentIds({ userId, organizationId });
+    const fence = await gatedAgentsFence({
+      userId,
+      organizationIds: [organizationId],
+    });
     return db
       .select({ id: table.id, name: table.name, agentType: table.agentType })
       .from(table)
@@ -1265,7 +1267,7 @@ class AgentModel {
           eq(table.organizationId, organizationId),
           eq(table.agentType, "agent"),
           notDeleted(table),
-          hidden.length > 0 ? notInArray(table.id, hidden) : undefined,
+          fence,
         ),
       )
       .orderBy(desc(table.createdAt), desc(table.id));
@@ -3218,12 +3220,20 @@ class AgentModel {
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
-    const rows = await accessibleAgentIdsQuery({
-      userId,
-      isAgentAdmin,
-      principals: readers,
-      among: options?.among,
-    });
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        accessibleAgentsCondition({
+          userId,
+          isAgentAdmin,
+          principals: readers,
+          among: options?.among,
+        }),
+      );
 
     return (await dropHiddenAgents(rows, userId)).map((row) => row.id);
   }
@@ -3366,11 +3376,10 @@ class AgentModel {
   /**
    * The one row a read authorization needs — type (for the type-specific RBAC
    * check), name, and the access-context columns
-   * {@link AgentTeamModel.userHasAgentAccess} takes — without the tool join and
-   * hydration {@link findById} does. For routes that only authorize the agent
-   * before reading something else about it.
+   * {@link AgentTeamModel.userHasAgentAccess} takes — of an agent the viewer may
+   * see, without the tool join and hydration {@link findById} does. For routes
+   * that only authorize the agent before reading something else about it.
    */
-  /** The access columns of an agent the viewer may see. */
   static async findByIdForAccess(
     id: string,
     viewerId: string,
@@ -3394,8 +3403,7 @@ class AgentModel {
       .limit(1);
 
     return agent &&
-      (await canSeeAgent({
-        agentId: agent.id,
+      (await canUseAgent(agent.id, {
         userId: viewerId,
         organizationId: agent.organizationId,
       }))
@@ -3541,7 +3549,7 @@ class AgentModel {
     const agent = await AgentModel.findAccessContextById(id);
     return (
       !!agent &&
-      canSeeAgent({ agentId: id, userId, organizationId: agent.organizationId })
+      canUseAgent(id, { userId, organizationId: agent.organizationId })
     );
   }
 
@@ -6522,26 +6530,30 @@ function agentListFence(principals: GrantPrincipal[]): SQL {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-function accessibleAgentIdsQuery(params: {
+function accessibleAgentIdsQuery(params: AccessibleAgentsParams) {
+  return db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(accessibleAgentsCondition(params));
+}
+
+function accessibleAgentsCondition(params: AccessibleAgentsParams) {
+  return and(
+    notDeleted(schema.agentsTable),
+    params.among ? inArray(schema.agentsTable.id, params.among) : undefined,
+    or(
+      explicitAgentReadCondition(params.principals),
+      params.isAgentAdmin ? sql`true` : undefined,
+      organizationLlmProxyCondition(params.userId),
+    ),
+  );
+}
+
+interface AccessibleAgentsParams {
   userId: string;
   isAgentAdmin: boolean;
   principals: GrantPrincipal[];
   among?: string[];
-}) {
-  return db
-    .select({ id: schema.agentsTable.id })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        notDeleted(schema.agentsTable),
-        params.among ? inArray(schema.agentsTable.id, params.among) : undefined,
-        or(
-          explicitAgentReadCondition(params.principals),
-          params.isAgentAdmin ? sql`true` : undefined,
-          organizationLlmProxyCondition(params.userId),
-        ),
-      ),
-    );
 }
 // SPDX-SnippetEnd
 

@@ -26,7 +26,7 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
-import { canSeeAgent } from "@/auth/permission-gated";
+import { canUseAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
@@ -717,7 +717,7 @@ export class ResourcePermissions {
     if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
     if (
       context.resource === "agent" &&
-      !(await canSeeAgent({ ...context, agentId: context.scope }))
+      !(await canUseAgent(context.scope, context))
     )
       return [];
     const params = await ResourcePermissions.grantContext(context);

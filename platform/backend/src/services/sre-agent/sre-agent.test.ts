@@ -35,6 +35,14 @@ import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-acce
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { renderSystemPrompt } from "@/templating";
 import { describe, expect, test } from "@/test";
+import {
+  discoverTools,
+  enableSre,
+  SRE_SERVICE_ACCOUNT,
+  seedAdmin,
+  seedSreAgent,
+  seedSreInstall,
+} from "@/test/sre-agent";
 import { agentOwner } from "@/types";
 import {
   SRE_AGENT_ID,
@@ -45,28 +53,19 @@ import {
 } from "./definition";
 import { sreAgentService } from "./index";
 
-const SERVICE_ACCOUNT = "archestra-mcp-k8s-operator";
-
 describe("sreAgentService", () => {
-  beforeEach(() => {
-    config.sreAgent.enabled = true;
-    config.sreAgent.k8sServiceAccount = SERVICE_ACCOUNT;
-    config.sreAgent.apiServerCidrs = ["10.0.0.1/32"];
-    config.skillsSandbox.enabled = false;
-  });
+  beforeEach(() => enableSre(["10.0.0.1/32"]));
 
   test("seeds one environment, catalog item, and org-wide install, idempotently", async ({
     makeOrganization,
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId, admin } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
-
-    await sreAgentService.seed();
     await sreAgentService.seed();
 
     const environment = await EnvironmentModel.findById(SRE_ENVIRONMENT_ID);
@@ -85,13 +84,13 @@ describe("sreAgentService", () => {
       serverType: "local",
       environmentId: SRE_ENVIRONMENT_ID,
       localConfig: {
-        serviceAccount: SERVICE_ACCOUNT,
+        serviceAccount: SRE_SERVICE_ACCOUNT,
         transportType: "streamable-http",
       },
     });
     const servers = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     expect(servers).toHaveLength(1);
-    expect(servers[0]).toMatchObject({ scope: "org", ownerId: adminId });
+    expect(servers[0]).toMatchObject({ scope: "org", ownerId: admin.id });
   });
 
   test("the environment gets the built-in public-internet floor plus only the API server", async ({
@@ -99,8 +98,7 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedAdmin({ makeOrganization, makeUser, makeMember });
-    await sreAgentService.seed();
+    await seedSreInstall({ makeOrganization, makeUser, makeMember });
     const environment = await EnvironmentModel.findById(SRE_ENVIRONMENT_ID);
 
     const [policy] = buildDaggerEgressPolicies({
@@ -158,8 +156,7 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedAdmin({ makeOrganization, makeUser, makeMember });
-    await sreAgentService.seed();
+    await seedSreInstall({ makeOrganization, makeUser, makeMember });
 
     config.sreAgent.apiServerCidrs = [];
     config.sreAgent.k8sServiceAccount = "other-account";
@@ -179,9 +176,11 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedAdmin({ makeOrganization, makeUser, makeMember });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    const { server } = await seedSreInstall({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
     await McpServerModel.delete(server.id);
 
     await sreAgentService.seed();
@@ -200,19 +199,11 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId, ensureAgent: ensure } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    const ensure = () =>
-      sreAgentService.ensureAgent({
-        organizationId,
-        authorId: adminId,
-        mcpServerId: server.id,
-      });
 
     await discoverTools(SRE_AGENT_TOOL_NAMES.slice(1));
     await ensure();
@@ -248,7 +239,7 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
@@ -257,14 +248,6 @@ describe("sreAgentService", () => {
     await makeMember(otherAdmin.id, organizationId, { role: ADMIN_ROLE_NAME });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
-    });
 
     const canUse = async (userId: string) => ({
       agent: await AgentTeamModel.userHasAgentAccess({
@@ -307,15 +290,13 @@ describe("sreAgentService", () => {
     makeMember,
     makeAgent,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId, admin, server } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     const [podsLog] = await discoverTools(["pods_log"]);
     // Outside the SRE environment, environment isolation already hides the
     // tool; inside it, the catalog item's admin-only grants still do.
@@ -344,7 +325,7 @@ describe("sreAgentService", () => {
       ).map(({ id }) => id);
     expect(await listedFor(ownAgent.id, member.id)).toEqual([]);
     expect(await listedFor(sreEnvAgent.id, member.id)).toEqual([]);
-    expect(await listedFor(sreEnvAgent.id, adminId)).toEqual([podsLog.id]);
+    expect(await listedFor(sreEnvAgent.id, admin.id)).toEqual([podsLog.id]);
 
     for (const agent of [ownAgent, sreEnvAgent]) {
       const result = await mcpClient.executeToolCallForOwner(
@@ -381,17 +362,15 @@ describe("sreAgentService", () => {
     makeCustomRole,
     makeServiceAccount,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId, admin, server } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     const [podsLog] = await discoverTools(["pods_log"]);
     const agent = await makeAgent({
       organizationId,
-      authorId: adminId,
+      authorId: admin.id,
       environmentId: SRE_ENVIRONMENT_ID,
     });
     await AgentToolModel.create(agent.id, podsLog.id, {
@@ -410,7 +389,10 @@ describe("sreAgentService", () => {
       };
       switch (caller) {
         case "admin":
-          return { userId: adminId, tokenAuth: { ...base, userId: adminId } };
+          return {
+            userId: admin.id,
+            tokenAuth: { ...base, userId: admin.id },
+          };
         case "service account": {
           const account = await makeServiceAccount(organizationId);
           return {
@@ -464,19 +446,10 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
-    });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
     });
 
     const version = await AgentVersionModel.findByAgentAndVersion({
@@ -492,13 +465,15 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const {
+      organizationId,
+      admin,
+      ensureAgent: ensure,
+    } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     const tools = await discoverTools(SRE_AGENT_TOOL_NAMES);
     await AgentModel.create(
       {
@@ -507,15 +482,9 @@ describe("sreAgentService", () => {
         name: "SRE",
         agentType: "agent",
       },
-      adminId,
+      admin.id,
       { skipCreationDefaultTools: true, deferInitialVersionFork: true },
     );
-    const ensure = () =>
-      sreAgentService.ensureAgent({
-        organizationId,
-        authorId: adminId,
-        mcpServerId: server.id,
-      });
 
     await ensure();
     expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).toHaveLength(
@@ -534,21 +503,15 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { server, ensureAgent } = await seedSreInstall({
       makeOrganization,
       makeUser,
       makeMember,
     });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
     await discoverTools(SRE_AGENT_TOOL_NAMES);
     await McpServerModel.delete(server.id);
 
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
-    });
+    await ensureAgent();
 
     expect(await SreRuntimeModel.findAgent(SRE_AGENT_ID)).toBeNull();
   });
@@ -558,9 +521,11 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    await seedAdmin({ makeOrganization, makeUser, makeMember });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    const { server } = await seedSreInstall({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
     await McpServerModel.hardDelete(server.id);
 
     await sreAgentService.seed();
@@ -575,24 +540,14 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { ensureAgent } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
     });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-    const ensure = () =>
-      sreAgentService.ensureAgent({
-        organizationId,
-        authorId: adminId,
-        mcpServerId: server.id,
-      });
-    await ensure();
     await AgentModel.delete(SRE_AGENT_ID);
 
-    await ensure();
+    await ensureAgent();
 
     expect(await AgentModel.findById(SRE_AGENT_ID)).toBeNull();
     expect(
@@ -605,18 +560,10 @@ describe("sreAgentService", () => {
     makeUser,
     makeMember,
   }) => {
-    const { organizationId, adminId } = await seedAdmin({
+    const { server } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
-    });
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
     });
 
     config.sreAgent.enabled = false;
@@ -646,21 +593,12 @@ describe("sreAgentService", () => {
     makeMember,
   }) => {
     config.openappa.enabled = true;
-    const { organizationId, adminId } = await seedAdmin({
+    const { organizationId } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
     });
     expect(enterpriseTier.isOpenappaActive()).toBe(true);
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
-    });
 
     expect(await AgentModel.findById(SRE_AGENT_ID)).not.toBeNull();
     const bundled = (await openappaDeclarations.bundledBatteries()).some(
@@ -689,21 +627,8 @@ describe("sreAgentService", () => {
     makeMember,
   }) => {
     config.skillsSandbox.enabled = sandbox;
-    const { organizationId, adminId } = await seedAdmin({
-      makeOrganization,
-      makeUser,
-      makeMember,
-    });
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-    await sreAgentService.seed();
-    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-    await discoverTools(SRE_AGENT_TOOL_NAMES);
-
-    await sreAgentService.ensureAgent({
-      organizationId,
-      authorId: adminId,
-      mcpServerId: server.id,
-    });
+    await seedSreAgent({ makeOrganization, makeUser, makeMember });
 
     const assigned = (await ToolModel.getMcpToolsByAgent(SRE_AGENT_ID)).map(
       ({ name }) => name,
@@ -737,33 +662,3 @@ describe("sreAgentService", () => {
     expect(await EnvironmentModel.findById(SRE_ENVIRONMENT_ID)).toBeNull();
   });
 });
-
-async function seedAdmin(fixtures: {
-  makeOrganization: () => Promise<{ id: string }>;
-  makeUser: () => Promise<{ id: string }>;
-  makeMember: (
-    userId: string,
-    organizationId: string,
-    overrides: { role: string },
-  ) => Promise<unknown>;
-}): Promise<{ organizationId: string; adminId: string }> {
-  const organization = await fixtures.makeOrganization();
-  const admin = await fixtures.makeUser();
-  await fixtures.makeMember(admin.id, organization.id, {
-    role: ADMIN_ROLE_NAME,
-  });
-  return { organizationId: organization.id, adminId: admin.id };
-}
-
-/** The rows tool discovery writes for the server's advertised tools. */
-async function discoverTools(rawNames: readonly string[]) {
-  return ToolModel.bulkCreateToolsIfNotExists(
-    rawNames.map((rawName) => ({
-      name: ToolModel.slugifyName(SRE_SERVER_NAME, rawName),
-      rawToolName: rawName,
-      description: null,
-      parameters: { type: "object", properties: {} },
-      catalogId: SRE_CATALOG_ID,
-    })),
-  );
-}

@@ -38,7 +38,7 @@ import type {
   AgentTypeListPermissionChecker,
   AgentTypePermissionChecker,
 } from "@/auth/agent-type-permissions";
-import { canSeeAgent } from "@/auth/permission-gated";
+import { canUseAgent } from "@/auth/permission-gated";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -1414,7 +1414,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         !agent ||
         agent.organizationId !== organizationId ||
-        !(await canSeeAgent({ agentId: id, userId: user.id, organizationId }))
+        !(await canUseAgent(id, { userId: user.id, organizationId }))
       ) {
         throw new ApiError(404, "Agent not found");
       }
@@ -2946,7 +2946,7 @@ async function requireReadableAgent<
   if (
     !agent ||
     agent.organizationId !== params.organizationId ||
-    !(await canSeeAgent({ agentId: agent.id, ...params }))
+    !(await canUseAgent(agent.id, params))
   ) {
     throw new ApiError(404, "Agent not found");
   }

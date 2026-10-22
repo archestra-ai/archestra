@@ -312,7 +312,8 @@ class SreAgentService {
     const localConfig = sreLocalConfig(serviceAccount);
 
     if (catalog) {
-      const organizationId = catalog.organizationId ?? "";
+      const { organizationId } = catalog;
+      if (!organizationId) return;
       await EnvironmentModel.update({
         id: SRE_ENVIRONMENT_ID,
         organizationId,

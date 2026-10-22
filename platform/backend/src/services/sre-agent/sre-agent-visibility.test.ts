@@ -1,6 +1,5 @@
 import {
   A2A_OAUTH_SCOPE,
-  ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_CATALOG_ID,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   MEMBER_ROLE_NAME,
@@ -8,6 +7,7 @@ import {
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { beforeEach } from "vitest";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { executeArchestraTool } from "@/archestra-mcp-server";
@@ -18,7 +18,6 @@ import {
   AgentModel,
   AgentToolModel,
   McpOauthClientModel,
-  McpServerModel,
   OAuthAccessTokenModel,
   ToolModel,
 } from "@/models";
@@ -32,23 +31,14 @@ import mcpOauthClientsRoutes from "@/routes/mcp-oauth-clients";
 import mcpServerRoutes from "@/routes/mcp-server";
 import toolRoutes from "@/routes/tool";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { describe, expect, test } from "@/test";
+import { describe, expect, mustExist, test } from "@/test";
+import { enableSre, seedSreAgent } from "@/test/sre-agent";
 import type { User } from "@/types";
-import {
-  SRE_AGENT_ID,
-  SRE_AGENT_TOOL_NAMES,
-  SRE_CATALOG_ID,
-  SRE_ENVIRONMENT_ID,
-  SRE_SERVER_NAME,
-} from "./definition";
-import { sreAgentService } from "./index";
+import { SRE_AGENT_ID, SRE_ENVIRONMENT_ID } from "./definition";
 
 describe("the SRE agent and its tools are hidden without sre:read", () => {
   beforeEach(() => {
-    config.sreAgent.enabled = true;
-    config.sreAgent.k8sServiceAccount = "archestra-mcp-k8s-operator";
-    config.sreAgent.apiServerCidrs = [];
-    config.skillsSandbox.enabled = false;
+    enableSre([]);
     config.openappa.enabled = false;
   });
 
@@ -74,42 +64,18 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     });
     const [podsLog] = tools;
 
-    const user: User = await (async () => {
-      switch (caller) {
-        case "admin":
-          return admin;
-        case "platform admin":
-        case "member": {
-          const created = await makeUser();
-          await makeMember(created.id, organizationId, {
-            role:
-              caller === "member" ? MEMBER_ROLE_NAME : PLATFORM_ADMIN_ROLE_NAME,
-          });
-          return created;
-        }
-        case "custom role with sre:read": {
-          const created = await makeUser();
-          const { id, role } = await makeCustomRole(organizationId, {
-            permission: {
-              sre: ["read"],
-              agent: ["read"],
-              chat: ["read", "create"],
-            },
-          });
-          await makeMember(created.id, organizationId, { role });
-          await shareWithRole(organizationId, id);
-          return created;
-        }
-      }
-    })();
-
-    const app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
+    const user = await userAs(caller, {
+      organizationId,
+      admin,
+      makeUser,
+      makeMember,
+      makeCustomRole,
     });
-    await app.register(agentRoutes);
-    await app.register(agentToolRoutes);
-    await app.register(chatRoutes);
+    const app = await appAs(user, organizationId, [
+      agentRoutes,
+      agentToolRoutes,
+      chatRoutes,
+    ]);
     const body = async (url: string) => {
       const response = await app.inject({ method: "GET", url });
       expect(response.statusCode, response.body).toBe(200);
@@ -191,6 +157,7 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     makeUser,
     makeMember,
     makeAgent,
+    makeCustomRole,
     seedAndAssignArchestraTools,
   }) => {
     const { organizationId, admin, server, tools, envAgent } = await seedSre({
@@ -200,28 +167,20 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
       makeAgent,
       seedAndAssignArchestraTools,
     });
-    const user =
-      caller === "admin"
-        ? admin
-        : await (async () => {
-            const created = await makeUser();
-            await makeMember(created.id, organizationId, {
-              role:
-                caller === "member"
-                  ? MEMBER_ROLE_NAME
-                  : PLATFORM_ADMIN_ROLE_NAME,
-            });
-            return created;
-          })();
-    const app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
+    const user = await userAs(caller, {
+      organizationId,
+      admin,
+      makeUser,
+      makeMember,
+      makeCustomRole,
     });
-    await app.register(agentToolRoutes);
-    await app.register(mcpServerRoutes);
-    await app.register(toolRoutes);
-    await app.register(mcpOauthClientsRoutes);
-    await app.register(agentRoutes);
+    const app = await appAs(user, organizationId, [
+      agentToolRoutes,
+      mcpServerRoutes,
+      toolRoutes,
+      mcpOauthClientsRoutes,
+      agentRoutes,
+    ]);
     const send = (method: "GET" | "POST", url: string, payload?: object) =>
       app.inject({ method, url, payload });
     const lists = async (url: string, id: string) => {
@@ -262,6 +221,15 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
         ),
       ).toBe(canUse);
       await AgentToolModel.syncDelegations(envAgent.id, [SRE_AGENT_ID]);
+      const delegation = mustExist(
+        await ToolModel.findDelegationTool(SRE_AGENT_ID),
+      );
+      expect(
+        await lists(
+          `/api/agent-tools?agentId=${envAgent.id}&skipPagination=true`,
+          delegation.id,
+        ),
+      ).toBe(canUse);
       const assigned = (await send("GET", `/api/agents/${envAgent.id}`)).json()
         .tools as { id: string; delegateToAgentId: string | null }[];
       expect(assigned.some(({ id }) => id === tools[0].id)).toBe(canUse);
@@ -313,6 +281,7 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
     makeMember,
     makeAgent,
     makeConversation,
+    makeCustomRole,
     seedAndAssignArchestraTools,
   }) => {
     const { organizationId, admin } = await seedSre({
@@ -323,16 +292,13 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
       seedAndAssignArchestraTools,
     });
     await seedAndAssignArchestraTools(SRE_AGENT_ID);
-    const user =
-      caller === "admin"
-        ? admin
-        : await (async () => {
-            const created = await makeUser();
-            await makeMember(created.id, organizationId, {
-              role: PLATFORM_ADMIN_ROLE_NAME,
-            });
-            return created;
-          })();
+    const user = await userAs(caller, {
+      organizationId,
+      admin,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    });
     const [conversation, deleted] = await Promise.all(
       [1, 2].map(() =>
         makeConversation(SRE_AGENT_ID, { userId: user.id, organizationId }),
@@ -342,12 +308,10 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
       .update(schema.conversationsTable)
       .set({ deletedAt: new Date() })
       .where(eq(schema.conversationsTable.id, deleted.id));
-    const app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      Object.assign(request, { user, organizationId });
-    });
-    await app.register(chatRoutes);
-    await app.register(internalMcpCatalogRoutes);
+    const app = await appAs(user, organizationId, [
+      chatRoutes,
+      internalMcpCatalogRoutes,
+    ]);
 
     try {
       for (const url of [
@@ -431,6 +395,72 @@ async function shareWithRole(organizationId: string, roleId: string) {
   if (!replaced) throw new Error("the SRE agent policy changed meanwhile");
 }
 
+type Caller =
+  | "admin"
+  | "platform admin"
+  | "member"
+  | "custom role with sre:read";
+
+/** The admin who seeded the SRE agent, or a new member with the caller's role. */
+async function userAs(
+  caller: Caller,
+  context: {
+    organizationId: string;
+    admin: User;
+    makeUser: () => Promise<User>;
+    makeMember: (
+      userId: string,
+      organizationId: string,
+      overrides: { role: string },
+    ) => Promise<unknown>;
+    makeCustomRole: (
+      organizationId: string,
+      overrides: { permission: Record<string, string[]> },
+    ) => Promise<{ id: string; role: string }>;
+  },
+): Promise<User> {
+  const { organizationId, makeUser, makeMember, makeCustomRole } = context;
+  const withRole = async (role: string) => {
+    const created = await makeUser();
+    await makeMember(created.id, organizationId, { role });
+    return created;
+  };
+  switch (caller) {
+    case "admin":
+      return context.admin;
+    case "platform admin":
+      return withRole(PLATFORM_ADMIN_ROLE_NAME);
+    case "member":
+      return withRole(MEMBER_ROLE_NAME);
+    case "custom role with sre:read": {
+      const { id, role } = await makeCustomRole(organizationId, {
+        permission: {
+          sre: ["read"],
+          agent: ["read"],
+          chat: ["read", "create"],
+        },
+      });
+      const created = await withRole(role);
+      await shareWithRole(organizationId, id);
+      return created;
+    }
+  }
+}
+
+/** The given routes, with every request authenticated as `user`. */
+async function appAs(
+  user: User,
+  organizationId: string,
+  routes: FastifyPluginAsyncZod[],
+) {
+  const app = createFastifyInstance();
+  app.addHook("onRequest", async (request) => {
+    Object.assign(request, { user, organizationId });
+  });
+  for (const plugin of routes) await app.register(plugin);
+  return app;
+}
+
 /** The seeded SRE install and agent, and an agent in the SRE environment. */
 async function seedSre(fixtures: {
   makeOrganization: () => Promise<{ id: string }>;
@@ -449,32 +479,8 @@ async function seedSre(fixtures: {
   }) => Promise<{ id: string; name: string }>;
   seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
 }) {
-  const {
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-    seedAndAssignArchestraTools,
-  } = fixtures;
-  const organizationId = (await makeOrganization()).id;
-  const admin = await makeUser();
-  await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
-  await sreAgentService.seed();
-  const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
-  const tools = await ToolModel.bulkCreateToolsIfNotExists(
-    SRE_AGENT_TOOL_NAMES.map((rawName) => ({
-      name: ToolModel.slugifyName(SRE_SERVER_NAME, rawName),
-      rawToolName: rawName,
-      description: `Kubernetes ${rawName}`,
-      parameters: { type: "object", properties: {} },
-      catalogId: SRE_CATALOG_ID,
-    })),
-  );
-  await sreAgentService.ensureAgent({
-    organizationId,
-    authorId: admin.id,
-    mcpServerId: server.id,
-  });
+  const { makeAgent, seedAndAssignArchestraTools } = fixtures;
+  const { organizationId, admin, server, tools } = await seedSreAgent(fixtures);
   // An org-wide agent in the SRE environment an admin gave a Kubernetes tool.
   const envAgent = await makeAgent({
     organizationId,

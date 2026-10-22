@@ -741,15 +741,9 @@ class McpClient {
       owner.type === "agent" &&
       !isToolCatalogAccessible(
         tool,
-        await getCallerAccessibleCatalogIds(
-          {
-            userId: tokenAuth?.serviceAccountId
-              ? serviceAccountUserId(tokenAuth.serviceAccountId)
-              : tokenAuth?.userId,
-            organizationId: tokenAuth?.organizationId,
-          },
-          [tool.catalogId],
-        ),
+        await getCallerAccessibleCatalogIds(callerOf(tokenAuth), [
+          tool.catalogId,
+        ]),
       )
     ) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);

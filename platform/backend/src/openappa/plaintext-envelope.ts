@@ -8,7 +8,7 @@
  */
 
 /** The JSON value a `jsonb` column holds, read through a plaintext envelope. */
-export function openPlainJson<T>(value: T): T | unknown {
+export function openPlainJson(value: unknown): unknown {
   if (!isJsonEnvelope(value)) return value;
   const body = plainBody(value[JSON_KEY]);
   if (body === null) return value;
@@ -63,12 +63,21 @@ function isJsonEnvelope(value: unknown): value is { [JSON_KEY]: string } {
 
 /** Whether a string or object key anywhere in `value` holds a NUL character. */
 function holdsNul(value: unknown): boolean {
-  if (typeof value === "string") return value.includes("\u0000");
-  if (Array.isArray(value)) return value.some(holdsNul);
-  if (typeof value === "object" && value !== null)
-    return Object.entries(value).some(
-      ([key, field]) => key.includes("\u0000") || holdsNul(field),
-    );
+  // An explicit stack, so a deeply nested value cannot exhaust the call stack.
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current === "string") {
+      if (current.includes("\u0000")) return true;
+    } else if (Array.isArray(current)) {
+      pending.push(...current);
+    } else if (typeof current === "object" && current !== null) {
+      for (const [key, field] of Object.entries(current)) {
+        if (key.includes("\u0000")) return true;
+        pending.push(field);
+      }
+    }
+  }
   return false;
 }
 

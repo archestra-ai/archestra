@@ -254,7 +254,7 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
 PLUGIN
 chmod 0600 "${transcript_plugin}"
 
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
+printf '%s\n' "$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")" > "${instructions_file}"
 printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 jq -n \

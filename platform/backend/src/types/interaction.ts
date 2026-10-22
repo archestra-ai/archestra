@@ -10,6 +10,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AgentTypeSchema } from "./agent";
+import { AttributionLabelsSchema } from "./attribution-label";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -201,6 +202,8 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Azure.API.ImageGenerationRequestSchema,
+  Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
 ]);
 
@@ -254,6 +257,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
@@ -290,6 +294,7 @@ const BaseSelectInteractionSchema = createSelectSchema(
     // Required on read: the column is NOT NULL, so every row carries a concrete
     // BillingMode. (The default override belongs on the insert schema only.)
     billingMode: BillingModeSchema,
+    attributionLabels: AttributionLabelsSchema.nullable(),
   },
 );
 
@@ -377,6 +382,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   durationMs: true,
   createdAt: true,
 }).extend({
+  attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
   requestType: RequestTypeSchema,
@@ -737,6 +743,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:realtime"]),
+    request: withReadFallback(Azure.API.RealtimeTurnRequestSchema),
+    processedRequest: withReadFallback(Azure.API.RealtimeTurnRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:images"]),
+    request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
+    processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ImageGenerationResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:responses"]),
     request: withReadFallback(Azure.API.ResponsesRequestSchema),
     processedRequest: withReadFallback(Azure.API.ResponsesRequestSchema)
@@ -825,6 +851,7 @@ export const InsertInteractionSchema = createInsertSchema(
     // Optional on write: the column has a DB default ("metered"), so callers may
     // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
     billingMode: BillingModeSchema.optional(),
+    attributionLabels: AttributionLabelsSchema.nullish(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
@@ -876,6 +903,9 @@ export const SessionLineageSchema = z.object({
 });
 
 export const SessionSummarySchema = z.object({
+  attributionLabels: AttributionLabelsSchema.nullish().describe(
+    "Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.",
+  ),
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
   source: InteractionSourceSchema.nullable(),

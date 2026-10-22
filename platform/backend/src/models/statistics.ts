@@ -70,6 +70,10 @@ class StatisticsModel {
     const { timeframe, organizationId, limit, offset } = params;
     const i = schema.interactionsTable;
     const a = schema.agentsTable;
+    const receipt = schema.interactionBillingTable;
+    const labelValue = sql<
+      string | null
+    >`COALESCE(${receipt.attributionLabels}, ${i.attributionLabels})->>${params.labelKey ?? ""}`;
     // One identity per request: the credential for the recorded auth method.
     // A secondary passthrough key must not duplicate a standard-key request.
     const method = sql<InteractionAuthMethod>`COALESCE(${i.authMethod}, 'unknown')`;
@@ -87,6 +91,12 @@ class StatisticsModel {
       params.serviceAccountId
         ? eq(i.serviceAccountId, params.serviceAccountId)
         : undefined,
+      params.labelKey && params.labelValue !== undefined
+        ? eq(labelValue, params.labelValue)
+        : undefined,
+      params.labelKey && params.labelUnassigned
+        ? isNull(labelValue)
+        : undefined,
     );
     const aggregates = {
       requests: sql<number>`COUNT(*)::double precision`,
@@ -100,53 +110,84 @@ class StatisticsModel {
     const bucketSeconds = sql.raw(String(bucketMinutes * 60));
     const bucket = sql<string>`to_timestamp(floor(extract(epoch from ${i.createdAt}) / ${bucketSeconds}) * ${bucketSeconds})`;
     // Aggregate in SQL before paging; no team joins or per-credential queries.
-    const [methods, timeSeries, credentials] = await Promise.all([
-      db
-        .select({ authMethod: method, ...aggregates })
-        .from(i)
-        .innerJoin(a, eq(a.id, i.profileId))
-        .where(conditions)
-        .groupBy(method)
-        .orderBy(desc(aggregates.billedCost), method),
-      db
-        .select({ timestamp: bucket, ...aggregates })
-        .from(i)
-        .innerJoin(a, eq(a.id, i.profileId))
-        .where(conditions)
-        .groupBy(bucket)
-        .orderBy(bucket),
-      db
-        .select({
-          authMethod: method,
-          credentialId: credential,
-          credentialName: sql<string | null>`CASE
+    const [methods, timeSeries, credentials, labelGroups, labelKeys] =
+      await Promise.all([
+        db
+          .select({ authMethod: method, ...aggregates })
+          .from(i)
+          .innerJoin(a, eq(a.id, i.profileId))
+          .leftJoin(receipt, eq(receipt.interactionId, i.id))
+          .where(conditions)
+          .groupBy(method)
+          .orderBy(desc(aggregates.billedCost), method),
+        db
+          .select({ timestamp: bucket, ...aggregates })
+          .from(i)
+          .innerJoin(a, eq(a.id, i.profileId))
+          .leftJoin(receipt, eq(receipt.interactionId, i.id))
+          .where(conditions)
+          .groupBy(bucket)
+          .orderBy(bucket),
+        db
+          .select({
+            authMethod: method,
+            credentialId: credential,
+            credentialName: sql<string | null>`CASE
           WHEN ${method} IN ('virtual_key', 'passthrough_virtual_key') THEN MAX(${schema.virtualApiKeysTable.name})
           WHEN ${method} = 'oauth_client_credentials' THEN MAX(${i.authenticatedAppName})
           ELSE NULL END`,
-          ...aggregates,
-          total: sql<number>`COUNT(*) OVER ()::double precision`,
-        })
-        .from(i)
-        .innerJoin(a, eq(a.id, i.profileId))
-        .leftJoin(
-          schema.virtualApiKeysTable,
-          and(
-            eq(sql`${schema.virtualApiKeysTable.id}::text`, credential),
-            eq(schema.virtualApiKeysTable.organizationId, organizationId),
-            inArray(method, ["virtual_key", "passthrough_virtual_key"]),
-          ),
-        )
-        .where(conditions)
-        .groupBy(method, credential)
-        .orderBy(
-          desc(aggregates.billedCost),
-          desc(aggregates.requests),
-          method,
-          credential,
-        )
-        .limit(limit)
-        .offset(offset),
-    ]);
+            ...aggregates,
+            total: sql<number>`COUNT(*) OVER ()::double precision`,
+          })
+          .from(i)
+          .innerJoin(a, eq(a.id, i.profileId))
+          .leftJoin(receipt, eq(receipt.interactionId, i.id))
+          .leftJoin(
+            schema.virtualApiKeysTable,
+            and(
+              eq(sql`${schema.virtualApiKeysTable.id}::text`, credential),
+              eq(schema.virtualApiKeysTable.organizationId, organizationId),
+              inArray(method, ["virtual_key", "passthrough_virtual_key"]),
+            ),
+          )
+          .where(conditions)
+          .groupBy(method, credential)
+          .orderBy(
+            desc(aggregates.billedCost),
+            desc(aggregates.requests),
+            method,
+            credential,
+          )
+          .limit(limit)
+          .offset(offset),
+        params.labelKey
+          ? db
+              .select({
+                value: labelValue,
+                ...aggregates,
+                total: sql<number>`COUNT(*) OVER ()::double precision`,
+              })
+              .from(i)
+              .innerJoin(a, eq(a.id, i.profileId))
+              .leftJoin(receipt, eq(receipt.interactionId, i.id))
+              .where(conditions)
+              .groupBy(sql`1`)
+              .orderBy(sql`1`)
+              .limit(limit)
+              .offset(offset)
+          : Promise.resolve([]),
+        params.includeLabelKeys
+          ? db
+              .selectDistinct({
+                key: sql<string>`jsonb_object_keys(COALESCE(${receipt.attributionLabels}, ${i.attributionLabels}, '{}'::jsonb))`,
+              })
+              .from(i)
+              .innerJoin(a, eq(a.id, i.profileId))
+              .leftJoin(receipt, eq(receipt.interactionId, i.id))
+              .where(conditions)
+              .orderBy(sql`1`)
+          : Promise.resolve([]),
+      ]);
     const totals = {
       requests: 0,
       inputTokens: 0,
@@ -168,6 +209,7 @@ class StatisticsModel {
         .select({ credential })
         .from(i)
         .innerJoin(a, eq(a.id, i.profileId))
+        .leftJoin(receipt, eq(receipt.interactionId, i.id))
         .where(conditions)
         .groupBy(method, credential)
         .as("credential_groups");
@@ -175,6 +217,21 @@ class StatisticsModel {
         .select({ total: sql<number>`COUNT(*)::double precision` })
         .from(groups);
       total = Number(count.total);
+    }
+    let labelTotal = Number(labelGroups[0]?.total ?? 0);
+    if (params.labelKey && !labelGroups.length && offset > 0) {
+      const groups = db
+        .select({ value: labelValue })
+        .from(i)
+        .innerJoin(a, eq(a.id, i.profileId))
+        .leftJoin(receipt, eq(receipt.interactionId, i.id))
+        .where(conditions)
+        .groupBy(sql`1`)
+        .as("label_groups");
+      const [count] = await db
+        .select({ total: sql<number>`COUNT(*)::double precision` })
+        .from(groups);
+      labelTotal = Number(count.total);
     }
     return {
       totals,
@@ -185,6 +242,16 @@ class StatisticsModel {
       })),
       credentials: credentials.map(({ total: _total, ...row }) => row),
       pagination: { limit, offset, total },
+      labelKeys: params.includeLabelKeys
+        ? labelKeys.map(({ key }) => key)
+        : undefined,
+      labels: params.labelKey
+        ? {
+            key: params.labelKey,
+            groups: labelGroups.map(({ total: _total, ...row }) => row),
+            pagination: { limit, offset, total: labelTotal },
+          }
+        : undefined,
     };
   }
 

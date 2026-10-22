@@ -12,6 +12,13 @@ export const METRICS_PATH = "/metrics";
 export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 /** Public OAuth redirect target; callback state is the authentication proof. */
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
+/**
+ * Where a Teams user starts and finishes signing in to the bot so it can read
+ * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the proof, and the ChatOps webhook prefix is already allowlisted.
+ */
+export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
+export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback`;
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";
@@ -52,6 +59,9 @@ export const SKILL_MARKETPLACE_STATIC_PATH = "/skills/marketplace.git";
 export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
 /** Executable managed artifacts; authenticates a purpose-scoped installation bearer. */
 export const CONNECTION_RUNTIME_PATH = "/api/connection-setups/runtime";
+/** Public, credential-free startup-check renderer; never replays connection setup. */
+export const CONNECTION_STARTUP_GUARD_PATH =
+  "/api/connection-setups/startup-guard";
 
 /**
  * VAF Add On install bootstrap — the parameterless script the connector

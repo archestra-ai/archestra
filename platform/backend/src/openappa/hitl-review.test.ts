@@ -728,7 +728,7 @@ test("pretty-printed long arguments round-trip without loss when summarization i
     session: active,
     review: {
       offerId: "pretty",
-      tool: "start_run",
+      tool: "start_agent_run",
       text: runtimeReview(
         "  - attention: human-approval\n  - trust must reach trusted",
       ),

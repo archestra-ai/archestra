@@ -460,6 +460,10 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  [RouteId.AzureRealtimeTurnWithDefaultAgent]: {},
+  [RouteId.AzureRealtimeTurnWithAgent]: {},
+  [RouteId.AzureImagesWithDefaultAgent]: {},
+  [RouteId.AzureImagesWithAgent]: {},
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },
@@ -577,6 +581,7 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  [RouteId.RenderStartupGuard]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
   [RouteId.GetConnectionRuntime]: {},
@@ -1356,7 +1361,6 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   }, // First-login survey - admins only (same gate as appearance settings)
   [RouteId.SubmitOnboardingSurvey]: { organizationSettings: ["update"] }, // First-login survey - admins only
-  [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.BulkDeleteMembers]: { member: ["delete"] },
@@ -1377,8 +1381,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
   [RouteId.UpdateMemberDefaultAgent]: {},
-  [RouteId.GetMemberDefaultModel]: {},
-  [RouteId.UpdateMemberDefaultModel]: {},
 
   // User token routes - available to all authenticated users (manages their own personal token)
   [RouteId.GetUserToken]: {},
@@ -1499,6 +1501,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  // Config reads return no secret, only what GetChatOpsStatus shows at read.
+  [RouteId.GetSlackChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.GetMsTeamsChatOpsConfig]: {
+    organizationSettings: ["read"],
+  },
   [RouteId.ListSlackAgentBots]: {
     organizationSettings: ["read"],
   },
@@ -1537,6 +1546,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.GetTelegramChatOpsConfig]: {
+    organizationSettings: ["read"],
   },
   // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
@@ -1705,6 +1717,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryInstall]: { guardrailsPolicy: ["read"] },
   [RouteId.CreateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.UpdateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
@@ -1716,6 +1729,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetOpenappaCredentialBinding]: {
     guardrailsPolicy: ["update"],
   },
+  // The variable -> key pairs are readable through GetOpenappaPolicyDeclarations too.
+  [RouteId.GetOpenappaCredentialBindings]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaCredentialBinding]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { guardrailsPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
@@ -1899,6 +1915,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: {},
+  // Internal UI feedback overlay: any signed-in user, and only on deployments
+  // that turn it on (the handlers 404 otherwise). Picking its Slack bot and
+  // channel is the same permission as configuring chatops Slack itself.
+  [RouteId.GetDevFeedbackSetup]: {},
+  [RouteId.ListDevFeedbackBots]: { organizationSettings: ["update"] },
+  [RouteId.ListDevFeedbackChannels]: { organizationSettings: ["update"] },
+  [RouteId.SaveDevFeedbackSetup]: { organizationSettings: ["update"] },
+  [RouteId.GetDevFeedbackComments]: {},
+  [RouteId.CreateDevFeedbackComment]: {},
+  [RouteId.GetDevFeedbackReplies]: {},
+  [RouteId.CreateDevFeedbackReply]: {},
+  [RouteId.ResolveDevFeedbackComment]: {},
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
   // Bundles the signed-in user's own startup reads; each part is self-scoped.
@@ -2088,6 +2116,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/credentials": { credential: ["read"] },
   "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/appearance/[section]": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },
 };

@@ -15,7 +15,11 @@ import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instru
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
-import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
+import {
+  type StartupGuardClient,
+  type StartupGuardContext,
+  startupGuardRefreshInstall,
+} from "./startup-guard";
 
 /**
  * PowerShell counterpart of the client-agnostic POSIX startup guard renderer in
@@ -86,6 +90,7 @@ export function renderStartupGuardPowerShell(
 # pre-loader, then remove the guard. An env var rather than a flag, because the
 # profile wrapper forwards every ${client.binary} argument to this script.
 $ArchDisconnectAll = $env:ARCHESTRA_GUARD_ACTION -eq 'disconnect'
+$ArchLaunchArgs = @($args)
 if (-not $ArchDisconnectAll) { if ($env:${client.disableEnvVar} -eq '0') { return } }
 if ($args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')) { return }
 $ErrorActionPreference = 'Continue'
@@ -100,7 +105,7 @@ $AppName = ${psq(ctx.appName)}
 # reads as ok — version skew and rate limiting can never look like an outage.
 $HealthUrl = ${psq(ctx.healthUrl ?? "")}
 # The monotonic format version this guard was stamped with. The health response
-# reports the running instance's current value; the guard nudges a re-connect
+# reports the running instance's current value; the guard refreshes
 # only when the instance reports a STRICTLY GREATER number, so an older instance
 # or a rollback stays silent.
 $GuardFormatVersion = ${STARTUP_GUARD_FORMAT_VERSION}
@@ -160,6 +165,7 @@ function Remove-ArchGuard {
   }
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions-source.json'), ($GuardPath + '.instructions-refresh.ps1')
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.update.cjs'), ($GuardPath + '.update.json'), ($GuardPath + '.previous')
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')${client.inlineConfigEnv ? ", ($GuardPath + '.handoff.mjs')" : ""}
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
@@ -300,21 +306,64 @@ function Test-ArchResourceDown($r) {
 # older instances stay silent — matching how a missing down marker reads as ok.
 function Test-ArchVersionStale {
   if ($Script:HealthBody -notmatch '"guardVersion":([0-9]+)') { return $false }
-  return ([int]$Matches[1] -gt $GuardFormatVersion)
+  $Script:ArchUpdateVersion = [int]$Matches[1]
+  return ($Script:ArchUpdateVersion -gt $GuardFormatVersion)
+}
+
+function Invoke-ArchVersionRefresh {
+  $Script:GuardUpdated = $false
+  if ($env:ARCHESTRA_GUARD_REFRESHED -eq '1') { return }
+  if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path ($GuardPath + '.update.cjs'))) {
+    $Script:GuardUpdateNotice = (& node ($GuardPath + '.update.cjs') $GuardPath $Script:ArchUpdateVersion --handoff 2>&1 | Out-String).Trim()
+    $Script:GuardUpdated = $LASTEXITCODE -eq 10
+    if ($Script:GuardUpdated) {
+      $Script:GuardRefreshReceipt = $Script:GuardUpdateNotice
+      $Script:GuardUpdateNotice = ''
+    }
+  } else {
+    $Script:GuardUpdateNotice = 'Could not update launch check automatically; kept the installed config. Node.js and the installed updater are required.'
+  }
+}
+
+function Start-ArchRefreshedGuard {
+  $Script:GuardHandedOff = $false
+  if (-not (Test-ArchVersionStale)) { return }
+  Invoke-ArchVersionRefresh
+  if (-not $Script:GuardUpdated) { return }
+  if ($Interactive) { Exit-ArchGuard }
+  $previousMarker = $env:ARCHESTRA_GUARD_REFRESHED
+  try {
+    # Same PowerShell edition, fresh scope, original arguments, no profiles.
+    # The child may check health again, but may never perform another handoff.
+    $env:ARCHESTRA_GUARD_REFRESHED = '1'
+    & (Get-Process -Id $PID).Path -NoLogo -NoProfile -File $GuardPath @ArchLaunchArgs
+    $Script:GuardHandedOff = $LASTEXITCODE -eq 0
+  } catch {
+    $Script:GuardHandedOff = $false
+  } finally {
+    $env:ARCHESTRA_GUARD_REFRESHED = $previousMarker
+  }
+  if ($Script:GuardHandedOff) { return }
+  & node ($GuardPath + '.update.cjs') $GuardPath $Script:ArchUpdateVersion --rollback $Script:GuardRefreshReceipt 2>$null | Out-Null
+  $Script:GuardUpdateNotice = 'Updated launch check could not run; using the cached check this launch.'
+  if ($Interactive) { Show-ArchGuardScreen }
 }
 
 if (-not $Interactive -and -not $ArchDisconnectAll) {
   if ($HealthUrl) {
     if (-not (Invoke-ArchHealthFetch)) { $Script:HealthState = 'down' }
   }
+  Start-ArchRefreshedGuard
+  if ($Script:GuardHandedOff) { return }
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
       [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')))
     }
   }
-  if (Test-ArchVersionStale) {
-    [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')))
+  if ($env:ARCHESTRA_GUARD_REFRESHED -eq '1') {
+    [Console]::Error.WriteLine('A startup check update was available and has been applied.')
   }
+  if ($Script:GuardUpdateNotice) { [Console]::Error.WriteLine($Script:GuardUpdateNotice) }
   return
 }
 
@@ -679,29 +728,16 @@ function Show-ArchReconfigureOffer {
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
-# The health request checks for updates on every launch. Show the reason and
-# concrete steps automatically, then let the client start after six seconds.
+# Announce from the updated guard, after its checks actually ran.
 function Show-ArchVersionUpdate {
   if ($Script:GuardUninstalled) { return }
-  if (-not (Test-ArchVersionStale)) { return }
-  # Flush type-ahead before drawing, including keys beyond PendingKey.
-  $Script:PendingKey = $null
-  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
-  Clear-ArchLine
-  Write-Host ''
-  Write-Arch 'Update available' Yellow -NoNewline
-  Write-Host (' — a newer ' + $AppName + ' setup is available.')
-  Write-Host 'Your installed startup check is older than this deployment.'
-  Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
-  Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
-  Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
-  Write-Host '     It reinstalls this startup check at the current version.'
-  Write-Arch 'Continuing in 6 seconds — press any key to continue now.' DarkGray
-  $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
-  while ([DateTime]::UtcNow -lt $deadline) {
-    if (Read-ArchKey) { break }
-    Start-Sleep -Milliseconds 40
+  if ($Script:GuardUpdateNotice) {
+    [Console]::Error.WriteLine($Script:GuardUpdateNotice)
+    $Script:Dwell = $true
   }
+  if ($env:ARCHESTRA_GUARD_REFRESHED -ne '1') { return }
+  [Console]::Error.WriteLine('A startup check update was available and has been applied.')
+  $Script:Dwell = $true
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -878,6 +914,7 @@ function Exit-ArchGuard {
   if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
   if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049l") }
 }
+function Show-ArchGuardScreen {
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
 else { try { Clear-Host } catch { } }
 ${guardHeader(ctx)}
@@ -890,6 +927,8 @@ if ($UseVt) {
   Show-ArchReconfigureHint
   Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'A')
 }
+}
+Show-ArchGuardScreen
 if ($HealthUrl) {
   Show-ArchSpinStart $ActiveRemotes[0].Label ''
   Wait-ArchHealth
@@ -921,6 +960,11 @@ if ($Script:SkipAll) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc" + '[J') }
   Exit-ArchGuard
   return
+}
+# Health-probe menu/skip/disconnect choices take precedence over a handoff.
+if (-not $ArchDisconnectAll) {
+  Start-ArchRefreshedGuard
+  if ($Script:GuardHandedOff) { return }
 }
 $DownRemotes = @()
 foreach ($r in $ActiveRemotes) {
@@ -1070,6 +1114,7 @@ if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pa
 $archGuardBody = @'
 ${inSingleQuotedHereString(renderStartupGuardPowerShell(ctx, client))}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
+${startupGuardRefreshInstall({ ctx, client, platform: "windows" })}
 Write-Host ('Updated ' + $archGuardPath)
 if ($archGuardPreFeature) {
   Ok ${psq(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}

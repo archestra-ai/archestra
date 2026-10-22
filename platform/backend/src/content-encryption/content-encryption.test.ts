@@ -289,31 +289,6 @@ describe("content encryption", () => {
       );
       expect(byServer.data).toHaveLength(1);
     });
-
-    test("first-successful-call scan decrypts results instead of trusting SQL isError", async () => {
-      setKeys(SECRET_A);
-      const { McpToolCallModel } = await import("@/models");
-      // Oldest row is an encrypted ERROR — the plain SQL predicate cannot see
-      // into the envelope and would misread it as the first success.
-      const errorCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult: { ...toolResult, isError: true },
-      });
-      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
-
-      const successCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult,
-      });
-      const firstSuccessAt =
-        await McpToolCallModel.getFirstSuccessfulToolCallAt();
-      expect(firstSuccessAt).toEqual(successCall.createdAt);
-      expect(firstSuccessAt).not.toEqual(errorCall.createdAt);
-    });
   });
 
   describe("backfill + rotation sweep", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.4.0-rc.55",
+  "version": "1.5.0-rc.4",
   "description": "",
   "author": "",
   "private": true,
@@ -36,7 +36,9 @@
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-test-fixture-imports.ts",
     "update:codex-models-client-version": "node scripts/update-codex-models-client-version.mjs",
+    "update:copilot-chat-client-version": "node scripts/update-copilot-chat-client-version.mjs",
     "update:grok-client-version": "node scripts/update-grok-client-version.mjs",
+    "update:vscode-client-version": "node scripts/update-vscode-client-version.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node ./scripts/migrate-with-lock.mjs",
     "db:create-statistics-index": "node ./scripts/create-statistics-index.mjs",

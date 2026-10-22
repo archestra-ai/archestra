@@ -82,6 +82,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -306,24 +307,41 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       // The default model and its API key are a pair: persist both or neither.
+      const currentOrg =
+        body.defaultModelId !== undefined ||
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+          ? await OrganizationModel.getById(organizationId)
+          : null;
+      const merged = {
+        modelId:
+          body.defaultModelId !== undefined
+            ? body.defaultModelId
+            : (currentOrg?.defaultModelId ?? null),
+        apiKeyId:
+          body.defaultLlmApiKeyId !== undefined
+            ? body.defaultLlmApiKeyId
+            : (currentOrg?.defaultLlmApiKeyId ?? null),
+        fastModelId:
+          body.defaultFastModelId !== undefined
+            ? body.defaultFastModelId
+            : (currentOrg?.defaultFastModelId ?? null),
+        smartModelId:
+          body.defaultSmartModelId !== undefined
+            ? body.defaultSmartModelId
+            : (currentOrg?.defaultSmartModelId ?? null),
+      };
+
       // Validate the merged result only when this update touches either field.
       if (
         body.defaultModelId !== undefined ||
         body.defaultLlmApiKeyId !== undefined
       ) {
-        const currentOrg = await OrganizationModel.getById(organizationId);
-        const mergedModelId =
-          body.defaultModelId !== undefined
-            ? body.defaultModelId
-            : (currentOrg?.defaultModelId ?? null);
-        const mergedApiKeyId =
-          body.defaultLlmApiKeyId !== undefined
-            ? body.defaultLlmApiKeyId
-            : (currentOrg?.defaultLlmApiKeyId ?? null);
         if (
           !isModelSelectionComplete({
-            modelId: mergedModelId,
-            apiKeyId: mergedApiKeyId,
+            modelId: merged.modelId,
+            apiKeyId: merged.apiKeyId,
           })
         ) {
           throw new ApiError(
@@ -333,13 +351,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         await assertOrganizationDefaultModelSelection({
           organizationId,
-          modelId: mergedModelId,
-          apiKeyId: mergedApiKeyId,
+          modelId: merged.modelId,
+          apiKeyId: merged.apiKeyId,
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
-          modelId: mergedModelId,
+          modelId: merged.modelId,
         });
+      }
+
+      if (
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+      ) {
+        await assertModelTrioTiers(merged);
       }
 
       if (body.defaultAgentId) {

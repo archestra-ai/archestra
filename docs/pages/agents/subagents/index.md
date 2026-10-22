@@ -26,15 +26,24 @@ What to know:
 - External agents are added after the parent agent is created. See [External Agents](/docs/agents/subagents/external).
 - Subagents must share the parent agent's [environment](/docs/admin/environments).
 - Automated runs, with no signed-in person, use only the agents you selected.
-- For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/managed-agents).
+- For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/runtime).
 
 ## Fork the Agent
 
 Keep long searches and noisy tool output out of the conversation. Every agent can hand a task to a fresh copy of itself, and only the copy's answer comes back. You don't need to set this up.
 
+The agent picks the model the copy runs on for each task:
+
+- **Normal**: the agent's own model. This is the default.
+- **Smart**: a stronger model, for hard reasoning or checking a conclusion.
+- **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
+
+To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the agent's model in the agent form, or next to the default model in **Settings → Agents**. The agent's choice comes first, then the organization's. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
+
 What to know:
 
 - The copy has the same tools and instructions, but none of the conversation. The agent writes everything the copy needs into the task.
+- Smart and Fast stay on the agent's provider key. If that key has no matching model, the copy runs on the agent's own model.
 - A copy cannot fork again.
 
 ## Get Trusted Answers From Untrusted Data

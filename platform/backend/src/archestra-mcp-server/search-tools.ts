@@ -6,6 +6,7 @@ import {
   isRequiredOpenAppaToolShortName,
   isRunControlArchestraToolShortName,
   isYellToolShortName,
+  type ModelSelection,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
@@ -14,7 +15,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -238,6 +239,7 @@ const registry = defineArchestraTools([
         userId: context.userId,
         conversationId: context.conversationId,
         delegationChain: context.delegationChain,
+        parentLlm: context.parentLlm,
         tokenAuth: context.tokenAuth,
       });
 
@@ -413,6 +415,7 @@ async function getSearchableTools(params: {
   userId?: string;
   conversationId?: string;
   delegationChain?: string;
+  parentLlm?: ModelSelection;
   tokenAuth?: TargetInstallCaller;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
@@ -468,6 +471,8 @@ async function getSearchableTools(params: {
           organizationId,
           userId,
           skipAccessCheck: userId === "system",
+          parentLlm: params.parentLlm,
+          delegationChain: params.delegationChain,
         })
       : [];
   const hasTaskStarter =
@@ -475,7 +480,7 @@ async function getSearchableTools(params: {
     assignedTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
+        TOOL_START_AGENT_RUN_SHORT_NAME,
     );
   // Match tools/list's implicit run-handle controls, including gateways with
   // no assigned tools. They are assignment-exempt at dispatch, but still pass

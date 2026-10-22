@@ -1,21 +1,21 @@
 ---
-title: Hand Off Work
-description: Hand a task from your local agent to a managed agent, then bring the result back
+title: Remote Agents
+description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
-beta: "Managed Agents are in Beta and require the [Agent Sandbox controller](/docs/agents/managed-agents/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-21
+beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Start a task on your laptop, and let Archestra finish it. Your local agent hands the task to an agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your local agent brings the result back as a patch.
+Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to a Remote Agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
 
-With a [dedicated runtime](/docs/agents/managed-agents), the task runs in its own container, with a live terminal you can watch.
+With a [dedicated runtime](/docs/agents/runtime), the task runs in its own container, with a live terminal you can watch.
 
 ## Hand Off a Task
 
-1. Install the **Managed Agent Handoff** skill from [Connect](/docs/get-started/connect).
-2. Ask your local agent to "hand this over to Archestra".
+1. Install the **Remote Agents Handoff** skill from [Connect](/docs/get-started/connect).
+2. Ask your coding agent to "hand this over to Archestra".
 3. To continue locally, ask it to "bring it back and continue here".
 4. Review the repository patch it returns before you apply it.
 
@@ -24,16 +24,16 @@ With a [dedicated runtime](/docs/agents/managed-agents), the task runs in its ow
 The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can also call them yourself.
 
 - **Find an agent:** [`list_agents`](/docs/reference/archestra-mcp-server#list_agents).
-- **Start a run:** [`start_run`](/docs/reference/archestra-mcp-server#start_run).
-- **Check progress:** [`get_run`](/docs/reference/archestra-mcp-server#get_run) or [`list_runs`](/docs/reference/archestra-mcp-server#list_runs).
-- **Change course:** [`steer_run`](/docs/reference/archestra-mcp-server#steer_run) or [`cancel_run`](/docs/reference/archestra-mcp-server#cancel_run). Steering a finished run starts a new turn with the same files.
+- **Start a run:** [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run). It returns a `run_id` and a link to the run page. The other tools take that `run_id`.
+- **Check progress:** [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run), or [`list_agent_runs`](/docs/reference/archestra-mcp-server#list_agent_runs) with `mine_only` for your own runs.
+- **Change course:** [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run) or [`cancel_agent_run`](/docs/reference/archestra-mcp-server#cancel_agent_run). Steering a finished run starts a new turn with the same files.
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.
 
 ## Hand Off With Guardrails On
 
-With [Guardrails](/docs/agents/guardrails) on, a run keeps the restrictions of the session that started it, when Guardrails check that session. They check it when your local agent is connected as a [Guardrails client](/docs/agents/guardrails/clients): its model requests go through the LLM Proxy.
+With [Guardrails](/docs/agents/guardrails) on, a run keeps the restrictions of the session that started it, when Guardrails check that session. They check it when your coding agent is connected as a [Guardrails client](/docs/agents/guardrails/clients): its model requests go through the LLM Proxy.
 
 - **A client Guardrails check:** the run starts under your session's restrictions. Its answer passes the guardrail check before your agent reads it. Another session cannot steer the run or read its files.
 - **Any other client:** the [Unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients) setting decides. When it is **Allowed**, the run starts without your session's restrictions, and Guardrails still check each tool call inside it. When it is **Blocked**, the run does not start.

@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,25 @@ Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read
 <span id="proxy-cost-attribution"></span><span id="per-user-usage"></span><span id="per-app-cost"></span><span id="per-skill-cost"></span><span id="attributing-external-proxy-traffic"></span>
 
 To tie proxy traffic to a person, use a credential that names one. See [Authentication](/docs/llm-proxy/authentication#attribution-in-logs).
+
+### Group Proxy Costs by Label
+
+Group proxy spend by labels such as `cost_center=engineering` without changing historical reports when labels change.
+
+1. Add labels to a virtual key or OAuth client under **Advanced → Labels**, or to its billing team.
+2. In **Costs & Limits → Costs**, choose **by → Label** and choose a label key.
+3. Use the existing chart, **Summary**, **Pivot**, and **Copy as CSV** controls.
+
+#### Where Labels Come From
+
+For each label key, Archestra uses the first matching value in this order:
+
+1. The authenticated virtual key or OAuth client.
+2. Its billing team.
+
+Labels are captured when the request starts. Later edits do not rewrite historical spend, and caller-supplied request metadata cannot override attribution labels. Requests without a value, including older requests, appear as **Unassigned (label missing)**.
+
+In **Logs → LLM Proxy**, hover the label icon to see the captured labels for the request shown. Open a request to see its **Attribution labels**. Other requests in the same session can have different labels.
 
 <span id="my-usage"></span>
 

@@ -1,8 +1,8 @@
 import {
-  DEFAULT_MODELS,
   ManagedResourceSchema,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
+  PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   ResourcePermissionActionSchema,
@@ -334,7 +334,7 @@ export function firstConnectionSetupInputs(params: {
     supportsModelChoice && provider
       ? client.id === "claude-desktop"
         ? "claude-haiku-4-5-20251001"
-        : DEFAULT_MODELS[provider]
+        : PROVIDER_MODEL_TIERS[provider].normal
       : null;
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"

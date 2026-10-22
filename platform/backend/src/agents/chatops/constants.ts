@@ -127,6 +127,7 @@ export const CHATOPS_COMMANDS = {
   SELECT_AGENT: "/select-agent",
   STATUS: "/status",
   HELP: "/help",
+  SIGN_OUT: "/sign-out",
 } as const;
 
 /**

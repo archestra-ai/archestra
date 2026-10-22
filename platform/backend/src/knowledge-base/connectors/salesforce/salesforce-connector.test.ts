@@ -4,7 +4,7 @@ import { SalesforceConnector } from "./salesforce-connector";
 
 // ===== jsforce mock (class-based, matching Linear connector test pattern) =====
 
-const mockLogin = vi.fn();
+const mockAuthorize = vi.fn().mockResolvedValue({});
 const mockQuery = vi.fn();
 const mockQueryMore = vi.fn();
 const mockMetadataRead = vi.fn();
@@ -13,7 +13,8 @@ const mockDeleted = vi.fn();
 vi.mock("jsforce", () => {
   class MockConnection {
     instanceUrl = "https://acme.my.salesforce.com";
-    login = mockLogin;
+    accessToken = "test-access-token";
+    authorize = mockAuthorize;
     query = mockQuery;
     queryMore = mockQueryMore;
     metadata = { read: mockMetadataRead };
@@ -23,14 +24,19 @@ vi.mock("jsforce", () => {
 });
 
 afterEach(() => {
-  mockLogin.mockReset();
+  mockAuthorize.mockReset().mockResolvedValue({});
   mockQuery.mockReset();
   mockQueryMore.mockReset();
   mockMetadataRead.mockReset();
   mockDeleted.mockReset();
 });
 
-const CREDS = { email: "test@example.com", apiToken: "pass+token" };
+const CREDS = { apiToken: "consumer-secret" };
+const AUTH_CONFIG = {
+  authMethod: "oauth_client_credentials" as const,
+  clientId: "consumer-key",
+  loginUrl: "https://example.my.salesforce.com",
+};
 
 // ===== Helpers =====
 
@@ -50,13 +56,14 @@ describe("SalesforceConnector", () => {
   describe("validateConfig", () => {
     test("accepts minimal valid config", async () => {
       const c = new SalesforceConnector();
-      const r = await c.validateConfig({});
+      const r = await c.validateConfig({ ...AUTH_CONFIG });
       expect(r).toEqual({ valid: true });
     });
 
     test("rejects array JSON in advancedObjectConfigJson", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: "[1,2,3]",
       });
       expect(r.valid).toBe(false);
@@ -66,6 +73,7 @@ describe("SalesforceConnector", () => {
     test("rejects unparseable JSON", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: "not json",
       });
       expect(r.valid).toBe(false);
@@ -75,6 +83,7 @@ describe("SalesforceConnector", () => {
     test("accepts valid advanced object config", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: JSON.stringify({
           Lead: { fields: ["FirstName"] },
         }),
@@ -85,6 +94,7 @@ describe("SalesforceConnector", () => {
     test("rejects loginUrl with non-HTTP protocol", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         loginUrl: "ftp://login.salesforce.com",
       });
       expect(r.valid).toBe(false);
@@ -93,7 +103,10 @@ describe("SalesforceConnector", () => {
 
     test("rejects unsafe characters in object names", async () => {
       const c = new SalesforceConnector();
-      const r = await c.validateConfig({ objects: ["Account; DROP TABLE"] });
+      const r = await c.validateConfig({
+        ...AUTH_CONFIG,
+        objects: ["Account; DROP TABLE"],
+      });
       expect(r.valid).toBe(false);
       expect(r.error).toContain("Invalid object name");
     });
@@ -101,6 +114,7 @@ describe("SalesforceConnector", () => {
     test("rejects unsafe field names in advanced config", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: JSON.stringify({
           Account: { fields: ["Name; --"] },
         }),
@@ -112,6 +126,7 @@ describe("SalesforceConnector", () => {
     test("accepts custom fields and relationship paths in identifiers", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: JSON.stringify({
           Account: { fields: ["Name", "Owner.Name", "Region__c", "A.B__c.C"] },
         }),
@@ -123,6 +138,7 @@ describe("SalesforceConnector", () => {
       const c = new SalesforceConnector();
       const started = performance.now();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         objects: [`a${"_".repeat(50_000)}!`],
       });
       expect(performance.now() - started).toBeLessThan(1000);
@@ -133,6 +149,7 @@ describe("SalesforceConnector", () => {
     test("accepts valid custom object __c names and relationship fields", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: JSON.stringify({
           Custom__c: {
             fields: ["Custom_Field__c"],
@@ -146,10 +163,14 @@ describe("SalesforceConnector", () => {
     test("accepts valid Salesforce API name suffixes beyond __c/__r (e.g. __kav, __mdt, __b)", async () => {
       const c = new SalesforceConnector();
 
-      const r1 = await c.validateConfig({ objects: ["Knowledge__kav"] });
+      const r1 = await c.validateConfig({
+        ...AUTH_CONFIG,
+        objects: ["Knowledge__kav"],
+      });
       expect(r1).toEqual({ valid: true });
 
       const r2 = await c.validateConfig({
+        ...AUTH_CONFIG,
         advancedObjectConfigJson: JSON.stringify({
           CustomMetadata__mdt: { fields: ["DeveloperName"] },
           BigObject__b: { fields: ["Id"] },
@@ -162,12 +183,13 @@ describe("SalesforceConnector", () => {
       const c = new SalesforceConnector();
       // Should not reject and should succeed even with whitespace and empties.
       const r = await c.validateConfig({
+        ...AUTH_CONFIG,
         objects: ["  Account  ", " ", "Contact"],
       });
       expect(r).toEqual({ valid: true });
 
       // Empty list should not fail validation.
-      const r2 = await c.validateConfig({ objects: [] });
+      const r2 = await c.validateConfig({ ...AUTH_CONFIG, objects: [] });
       expect(r2).toEqual({ valid: true });
     });
   });
@@ -177,41 +199,49 @@ describe("SalesforceConnector", () => {
   describe("testConnection", () => {
     test("returns success for valid credentials", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
         records: [{ Id: "005123" }],
       });
 
-      const r = await c.testConnection({ config: {}, credentials: CREDS });
+      const r = await c.testConnection({
+        config: { ...AUTH_CONFIG },
+        credentials: CREDS,
+      });
 
       expect(r.success).toBe(true);
-      expect(mockLogin).toHaveBeenCalledWith("test@example.com", "pass+token");
+      expect(mockAuthorize).toHaveBeenCalledWith({
+        grant_type: "client_credentials",
+      });
       expect(mockQuery).toHaveBeenCalledWith("SELECT Id FROM User LIMIT 1");
     });
 
     test("returns failure for login error", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockRejectedValueOnce(
+      mockAuthorize.mockRejectedValueOnce(
         new Error("INVALID_LOGIN: Invalid username or password"),
       );
 
-      const r = await c.testConnection({ config: {}, credentials: CREDS });
+      const r = await c.testConnection({
+        config: { ...AUTH_CONFIG },
+        credentials: CREDS,
+      });
 
       expect(r.success).toBe(false);
-      expect(r.error).toContain("INVALID_LOGIN");
+      expect(r.error).toContain("Salesforce OAuth authentication failed");
     });
 
     test("returns failure for missing credentials", async () => {
       const c = new SalesforceConnector();
       const r = await c.testConnection({
-        config: {},
+        config: { ...AUTH_CONFIG },
         credentials: { apiToken: "" },
       });
 
       expect(r.success).toBe(false);
-      expect(r.error).toContain("Missing Salesforce username");
+      expect(r.error).toContain("Missing Salesforce OAuth consumer secret");
     });
   });
 
@@ -220,7 +250,7 @@ describe("SalesforceConnector", () => {
   describe("estimateTotalItems", () => {
     test("returns total count across objects", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery
         .mockResolvedValueOnce({ totalSize: 50 })
         .mockResolvedValueOnce({ totalSize: 30 })
@@ -228,7 +258,7 @@ describe("SalesforceConnector", () => {
         .mockResolvedValueOnce({ totalSize: 5 });
 
       const total = await c.estimateTotalItems({
-        config: {},
+        config: { ...AUTH_CONFIG },
         credentials: CREDS,
         checkpoint: null,
       });
@@ -238,10 +268,10 @@ describe("SalesforceConnector", () => {
 
     test("returns null when login fails", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockRejectedValueOnce(new Error("auth failed"));
+      mockAuthorize.mockRejectedValueOnce(new Error("auth failed"));
 
       const total = await c.estimateTotalItems({
-        config: {},
+        config: { ...AUTH_CONFIG },
         credentials: CREDS,
         checkpoint: null,
       });
@@ -255,7 +285,7 @@ describe("SalesforceConnector", () => {
   describe("sync", () => {
     test("syncs all four default objects in simple mode", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery
         // Account
         .mockResolvedValueOnce({
@@ -299,7 +329,11 @@ describe("SalesforceConnector", () => {
         });
 
       const batches = await collectBatches(
-        c.sync({ config: {}, credentials: CREDS, checkpoint: null }),
+        c.sync({
+          config: { ...AUTH_CONFIG },
+          credentials: CREDS,
+          checkpoint: null,
+        }),
       );
 
       // One batch per default object
@@ -334,7 +368,7 @@ describe("SalesforceConnector", () => {
 
     test("syncs Case with CaseComments as threaded content", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
@@ -366,7 +400,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Case"] },
+          config: { ...AUTH_CONFIG, objects: ["Case"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -385,7 +419,7 @@ describe("SalesforceConnector", () => {
 
     test("marks records that exceed the connector indexing limit", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
@@ -402,7 +436,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Account"] },
+          config: { ...AUTH_CONFIG, objects: ["Account"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -419,7 +453,7 @@ describe("SalesforceConnector", () => {
 
     test("uses advanced object config fields and associations", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
@@ -438,6 +472,7 @@ describe("SalesforceConnector", () => {
       const batches = await collectBatches(
         c.sync({
           config: {
+            ...AUTH_CONFIG,
             advancedObjectConfigJson: JSON.stringify({
               Lead: {
                 fields: ["FirstName", "LastName"],
@@ -462,7 +497,7 @@ describe("SalesforceConnector", () => {
 
     test("does not implicitly append Name for advanced object configs", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
@@ -480,6 +515,7 @@ describe("SalesforceConnector", () => {
       await collectBatches(
         c.sync({
           config: {
+            ...AUTH_CONFIG,
             advancedObjectConfigJson: JSON.stringify({
               Lead: {
                 fields: ["FirstName", "LastName"],
@@ -503,7 +539,7 @@ describe("SalesforceConnector", () => {
 
     test("handles pagination via queryMore", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: false,
         totalSize: 2,
@@ -532,7 +568,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Account"] },
+          config: { ...AUTH_CONFIG, objects: ["Account"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -548,7 +584,7 @@ describe("SalesforceConnector", () => {
 
     test("applies incremental LastModifiedDate lower bound from checkpoint", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 0,
@@ -557,7 +593,7 @@ describe("SalesforceConnector", () => {
 
       await collectBatches(
         c.sync({
-          config: { objects: ["Contact"] },
+          config: { ...AUTH_CONFIG, objects: ["Contact"] },
           credentials: CREDS,
           checkpoint: {
             type: "salesforce",
@@ -574,7 +610,7 @@ describe("SalesforceConnector", () => {
 
     test("advances checkpoint monotonically with per-object cursors", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 1,
@@ -590,7 +626,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Account"] },
+          config: { ...AUTH_CONFIG, objects: ["Account"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -607,7 +643,7 @@ describe("SalesforceConnector", () => {
 
     test("continues to next object when one object query fails (per-object resilience)", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery
         // Account — fails
         .mockRejectedValueOnce(
@@ -629,7 +665,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Account", "Contact"] },
+          config: { ...AUTH_CONFIG, objects: ["Account", "Contact"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -653,7 +689,7 @@ describe("SalesforceConnector", () => {
 
     test("isolates per-item failures without aborting sync", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 2,
@@ -670,7 +706,7 @@ describe("SalesforceConnector", () => {
 
       const batches = await collectBatches(
         c.sync({
-          config: { objects: ["Account"] },
+          config: { ...AUTH_CONFIG, objects: ["Account"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -687,7 +723,7 @@ describe("SalesforceConnector", () => {
 
     test("uses per-object default fields rather than bare Id/Name/LastModifiedDate", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 0,
@@ -696,7 +732,7 @@ describe("SalesforceConnector", () => {
 
       await collectBatches(
         c.sync({
-          config: { objects: ["Account"] },
+          config: { ...AUTH_CONFIG, objects: ["Account"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -710,7 +746,7 @@ describe("SalesforceConnector", () => {
 
     test("falls back to base fields for unknown custom objects", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 0,
@@ -719,7 +755,7 @@ describe("SalesforceConnector", () => {
 
       await collectBatches(
         c.sync({
-          config: { objects: ["CustomObj__c"] },
+          config: { ...AUTH_CONFIG, objects: ["CustomObj__c"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -735,7 +771,7 @@ describe("SalesforceConnector", () => {
 
     test("uses Knowledge__kav default fields when specified as object", async () => {
       const c = new SalesforceConnector();
-      mockLogin.mockResolvedValueOnce({});
+      mockAuthorize.mockResolvedValueOnce({});
       mockQuery.mockResolvedValueOnce({
         done: true,
         totalSize: 0,
@@ -744,7 +780,7 @@ describe("SalesforceConnector", () => {
 
       await collectBatches(
         c.sync({
-          config: { objects: ["Knowledge__kav"] },
+          config: { ...AUTH_CONFIG, objects: ["Knowledge__kav"] },
           credentials: CREDS,
           checkpoint: null,
         }),
@@ -767,7 +803,11 @@ describe("SalesforceConnector", () => {
     >;
     type DocumentYield = Extract<PermissionSnapshotYield, { kind: "document" }>;
 
-    const permConfig = { type: "salesforce", objects: ["Account"] };
+    const permConfig = {
+      ...AUTH_CONFIG,
+      type: "salesforce",
+      objects: ["Account"],
+    };
 
     function collectSnapshot(
       gen: AsyncGenerator<PermissionSnapshotYield> | undefined,
@@ -1019,7 +1059,11 @@ describe("SalesforceConnector", () => {
       const { containers } = await collectSnapshot(
         c.syncPermissionSnapshot(
           syncParams({
-            config: { type: "salesforce", objects: ["Contact"] },
+            config: {
+              ...AUTH_CONFIG,
+              type: "salesforce",
+              objects: ["Contact"],
+            },
             sourceIds: ["003A", "003B"],
             objectName: "Contact",
           }),
@@ -1175,7 +1219,11 @@ describe("SalesforceConnector", () => {
       const c = new SalesforceConnector();
 
       const first = await c.probePermissionChanges({
-        config: { type: "salesforce", objects: ["Account", "Contact"] },
+        config: {
+          ...AUTH_CONFIG,
+          type: "salesforce",
+          objects: ["Account", "Contact"],
+        },
         credentials: CREDS,
         state: null,
       });
@@ -1192,7 +1240,11 @@ describe("SalesforceConnector", () => {
       );
 
       const second = await c.probePermissionChanges({
-        config: { type: "salesforce", objects: ["Account", "Contact"] },
+        config: {
+          ...AUTH_CONFIG,
+          type: "salesforce",
+          objects: ["Account", "Contact"],
+        },
         credentials: CREDS,
         state: { soqlCursor: new Date().toISOString() },
       });
@@ -1209,7 +1261,7 @@ describe("SalesforceConnector", () => {
       mockDeleted.mockRejectedValue(new Error("UNSUPPORTED"));
 
       const result = await c.probePermissionChanges({
-        config: { type: "salesforce", objects: ["Account"] },
+        config: { ...AUTH_CONFIG, type: "salesforce", objects: ["Account"] },
         credentials: CREDS,
         state: { soqlCursor: new Date().toISOString() },
       });

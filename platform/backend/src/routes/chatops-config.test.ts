@@ -88,6 +88,7 @@ describe("PUT /api/chatops/config/ms-teams", () => {
       graphTenantId: "dev-tenant-id",
       graphClientId: "dev-app-id",
       graphClientSecret: "dev-app-secret",
+      groupChatFileSignIn: false,
     });
 
     expect(reinitializeMock).toHaveBeenCalledTimes(1);
@@ -188,6 +189,77 @@ describe("PUT /api/chatops/config/ms-teams", () => {
     expect(dbConfig?.enabled).toBe(true);
 
     await app.close();
+  });
+});
+
+describe("Teams group-chat file sign-in setting", () => {
+  useMswServer(tokenHandler);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("turning it on keeps the credentials, is audited, and reads back with the redirect URI to register", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "teams-app",
+      appSecret: "teams-secret",
+      tenantId: "teams-tenant",
+      graphTenantId: "teams-tenant",
+      graphClientId: "teams-app",
+      graphClientSecret: "teams-secret",
+    });
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      request.organizationId = org.id;
+      request.user = user;
+    });
+    registerAuditLogHook(app);
+    await app.register(chatopsRoutes);
+    try {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/chatops/config/ms-teams",
+        payload: { groupChatFileSignIn: true },
+      });
+      expect(response.statusCode).toBe(200);
+
+      expect(await ChatOpsConfigModel.getMsTeamsConfig()).toMatchObject({
+        appId: "teams-app",
+        appSecret: "teams-secret",
+        groupChatFileSignIn: true,
+      });
+      const view = await app.inject({
+        method: "GET",
+        url: "/api/chatops/config/ms-teams",
+      });
+      expect(view.json()).toMatchObject({
+        groupChatFileSignIn: true,
+        signInRedirectUri: `${config.frontendBaseUrl.replace(/\/+$/, "")}/api/webhooks/chatops/ms-teams/sign-in/callback`,
+      });
+
+      await drainBackgroundWork();
+      const { data: audits } = await AuditLogModel.findPaginated({
+        organizationId: org.id,
+        resourceType: "chatOpsConfig",
+        limit: 10,
+        offset: 0,
+      });
+      expect(audits).toHaveLength(1);
+      expect(audits[0].before).toMatchObject({
+        msTeams: { groupChatFileSignIn: false },
+      });
+      expect(audits[0].after).toMatchObject({
+        msTeams: { groupChatFileSignIn: true },
+      });
+      expect(JSON.stringify(audits[0])).not.toContain("teams-secret");
+    } finally {
+      await app.close();
+    }
   });
 });
 

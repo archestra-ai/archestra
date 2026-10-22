@@ -30,7 +30,10 @@ import {
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
-import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import {
+  ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
@@ -110,6 +113,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -122,8 +126,10 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
+  type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
@@ -170,6 +176,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
@@ -191,7 +198,9 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  attributionLabels?: AttributionLabels;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -494,6 +503,7 @@ export async function handleLLMProxy<
   // The first credential that names a billing team pays; the passthrough key
   // resolves first, matching its precedence for per-key limits.
   let billingTeamId = authOverride?.billingTeamId;
+  let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -1541,7 +1551,9 @@ export async function handleLLMProxy<
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
-      providerName === "microsoft-365-copilot" || proof.guardrail
+      providerName === "microsoft-365-copilot" ||
+      provider.interactionType === "azure:realtime" ||
+      proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
@@ -1605,12 +1617,19 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
+    const providerRequest =
+      providerName === "anthropic" &&
+      externalAgentId === CLAUDE_DESKTOP_CLIENT_ID &&
+      provider.isSubscriptionCredential?.(apiKey) === true
+        ? withClaudeDesktopSubscriptionPreamble(repairedRequest)
+        : repairedRequest;
+
     // A connection probe is not an agent task. This is request-local and does
     // not alter the client's model, sandbox, approval policy or configuration.
     const finalRequest = (
       connectionVerification
-        ? { ...asRecord(repairedRequest), tool_choice: "none" }
-        : repairedRequest
+        ? { ...asRecord(providerRequest), tool_choice: "none" }
+        : providerRequest
     ) as TRequest;
 
     // The tool names the request declares, in the canonical form tool-call
@@ -1651,8 +1670,18 @@ export async function handleLLMProxy<
         entity,
       ]),
     );
+    attributionLabels = await resolveRequestAttributionLabels({
+      organizationId: resolvedAgent.organizationId,
+      authMethod,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      oauthClientId: authenticatedApp?.id,
+      billingTeamId,
+    });
     const ctx: LLMProxyContext<TRequest> = {
+      attributionLabels,
       usageAccountingMode: config.llmProxy.usageAccountingMode,
+      providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -1793,7 +1822,12 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1888,6 +1922,7 @@ async function handleStreaming<
   ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -1936,6 +1971,11 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
+  // Set once a terminal reaches the client, whichever path released it: the
+  // stream loop, the policy release, or a failed generation. An error frame
+  // after it must not end the response a second time.
+  const carriesStreamTerminal = provider.carriesStreamTerminal;
+  let terminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1985,6 +2025,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+    if (carriesStreamTerminal && !terminalSent)
+      terminalSent = carriesStreamTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -2032,7 +2074,12 @@ async function handleStreaming<
         outputTokens: 0,
         toolCallBlock,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2124,6 +2171,7 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -2192,7 +2240,12 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
+        await persistProxyInteraction({
+          record,
+          encryptedChat,
+          streamTiming,
+          attributionLabels,
+        });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2389,6 +2442,7 @@ async function handleStreaming<
           }
           const cost = await calculateUsageCost({
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
             model: actualModel,
             usage: state.usage,
             provider: providerName,
@@ -2829,21 +2883,37 @@ async function handleStreaming<
       streamError = settlementError;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    // Read once, here: nothing else writes to the client before the error
+    // frame, so `terminalSent` cannot change after this point.
+    const frameContext: StreamErrorFrameContext = {
+      responseId:
+        streamAdapter.clientResponse?.id ??
+        (streamAdapter.state.responseId || undefined),
+      model:
+        streamAdapter.clientResponse?.model ??
+        (streamAdapter.state.model || actualModel),
+      terminalSent,
+    };
     return handleError(
       streamError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      eofError && formatStreamErrorFrame
+      formatStreamErrorFrame
         ? (event: unknown) => {
             const source = asRecord(event);
-            return formatStreamErrorFrame({
-              ...source,
-              error: { ...asRecord(source?.error), code: eofError.code },
-            });
+            return formatStreamErrorFrame(
+              eofError
+                ? {
+                    ...source,
+                    error: { ...asRecord(source?.error), code: eofError.code },
+                  }
+                : event,
+              frameContext,
+            );
           }
-        : formatStreamErrorFrame,
+        : undefined,
       provider.translatesWireFormat,
     );
   } finally {
@@ -2870,6 +2940,7 @@ async function handleNonStreaming<
   ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -2972,6 +3043,7 @@ async function handleNonStreaming<
             usage: error.usage,
             providerName,
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
             agent,
@@ -3002,6 +3074,7 @@ async function handleNonStreaming<
             record,
             encryptedChat,
             streamTiming,
+            attributionLabels,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3108,6 +3181,7 @@ async function handleNonStreaming<
       }
       const cost = await calculateUsageCost({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         model: actualModel,
         usage,
         provider: providerName,
@@ -3294,6 +3368,7 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -3375,6 +3450,7 @@ async function handleNonStreaming<
         record: refusalRecord,
         encryptedChat,
         streamTiming,
+        attributionLabels,
       });
 
       if (pluginRegistry && pluginContext) {
@@ -3460,6 +3536,7 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     usageAccountingMode: ctx.usageAccountingMode,
+    providerApiKeyId: ctx.providerApiKeyId,
     actualModel,
     usage,
     providerName,
@@ -3548,7 +3625,12 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction({ record, encryptedChat, streamTiming });
+    await persistProxyInteraction({
+      record,
+      encryptedChat,
+      streamTiming,
+      attributionLabels,
+    });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3929,15 +4011,18 @@ async function persistProxyInteraction({
   record,
   encryptedChat,
   streamTiming,
+  attributionLabels,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
+  attributionLabels?: AttributionLabels;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
   await InteractionModel.create(

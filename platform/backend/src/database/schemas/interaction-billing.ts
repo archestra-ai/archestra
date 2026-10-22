@@ -7,6 +7,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { AttributionLabels } from "@/types/attribution-label";
 import type { PricedBillingUsage } from "@/utils/billable-usage";
 
 /**
@@ -24,6 +25,7 @@ export default pgTable(
     environmentId: uuid("environment_id"),
     billingMode: text("billing_mode").notNull(),
     billingTeamId: text("billing_team_id"),
+    attributionLabels: jsonb("attribution_labels").$type<AttributionLabels>(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => [

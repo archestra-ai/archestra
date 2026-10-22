@@ -18,15 +18,17 @@ import { isPolicyMoved } from "./policy-moved";
  * A refused policy fails the same way on every request, so clients are told
  * not to retry it (`x-should-retry: false` on a 500). So do a missing
  * deployment setting and a request the binding cannot read, and a
- * conversation the runtime cannot continue, such as one opened under an
- * earlier policy model (a 409). An unavailable runtime may recover, so it
- * stays a retryable 503, as does a failure that carries no code (the addon
- * did not load, or the host failed).
+ * conversation the runtime cannot continue (a 409), such as one opened under
+ * an earlier policy model or one that holds content the database refuses to
+ * store. An unavailable runtime may recover, so it stays a retryable 503, as
+ * does a failure that carries no code (the addon did not load, or the host
+ * failed). A storage failure logs its cause whatever the client is told.
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof OpenappaFailure) return error;
   const failure = classify(error);
-  if (failure.statusCode >= 500) logCause(error);
+  if (failure.statusCode >= 500 || runtimeFailureCode(error) === "storage")
+    logCause(error);
   const reference = trace.getActiveSpan()?.spanContext().traceId;
   const message = `${FAILURE_PREFIX}: ${failure.detail}${
     reference ? ` (ref: ${reference})` : ""
@@ -272,7 +274,12 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
         detail:
           "another request of this session is still working on this operation. Retry the request.",
       };
-    case "storage":
+    // The database refuses the content itself, so the same request fails the
+    // same way on every retry. Any other storage failure can pass.
+    case "storage": {
+      const state = DATA_EXCEPTION.exec(message)?.[1];
+      return state ? refusedContent(state) : unavailable(code);
+    }
     case "panicked":
     case "replay_busy":
     case "replay_timed_out":
@@ -303,6 +310,19 @@ const POLICY_MOVED: Failure = {
   detail:
     "the organization's guardrails policy changed while this request was checked. Retry the request.",
 };
+
+/**
+ * A PostgreSQL data exception (SQLSTATE class 22), such as a character the
+ * database cannot store: the stored content, not the database, is the cause.
+ */
+const DATA_EXCEPTION = /\bSQLSTATE (22[0-9A-Z]{3})\b/;
+
+function refusedContent(state: string): Failure {
+  return {
+    statusCode: 409,
+    detail: `the database refused content in this conversation (code: storage, SQLSTATE ${state}). The same request fails again. Remove that content or start a new conversation.`,
+  };
+}
 
 /**
  * The generic runtime failure, naming its code: a fixed name, never the

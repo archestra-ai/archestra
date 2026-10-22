@@ -70,6 +70,37 @@ describe("openappaFailure", () => {
     }
   });
 
+  test("tells clients not to retry content the database refuses", () => {
+    vi.mocked(logger.error).mockClear();
+    for (const state of ["22P05", "22021"]) {
+      const failure = openappaFailure(
+        runtimeFailure(
+          "storage",
+          `receipt storage failed: PostgreSQL ERROR (SQLSTATE ${state})`,
+        ),
+      );
+
+      expect(failure.statusCode).toBe(409);
+      expect(failure.shouldRetry).toBe(false);
+      expect(failure.retryAfterSeconds).toBeUndefined();
+      expect(failure.message).toBe(
+        `OpenAPPA could not safely complete this operation: the database refused content in this conversation (code: storage, SQLSTATE ${state}). The same request fails again. Remove that content or start a new conversation.`,
+      );
+    }
+    // The database write failed on this server, so its cause is logged.
+    expect(logger.error).toHaveBeenCalledTimes(2);
+
+    for (const message of [
+      "receipt storage failed: PostgreSQL ERROR (SQLSTATE 40001)",
+      "PostgreSQL storage failure: error performing TLS handshake",
+    ]) {
+      const failure = openappaFailure(runtimeFailure("storage", message));
+
+      expect(failure.statusCode).toBe(503);
+      expect(failure.shouldRetry).toBe(true);
+    }
+  });
+
   test("logs the cause and its code without URL credentials", () => {
     vi.mocked(logger.error).mockClear();
 

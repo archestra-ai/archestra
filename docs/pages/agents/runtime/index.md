@@ -140,6 +140,10 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
-- **A model call fails with a Guardrails error:** the message says what to do, and the status says who. `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output; rewind past it or start a new conversation. `409`: the conversation cannot continue; start a new one. `500` with `x-should-retry: false`: an administrator must fix the policy or the deployment setting the message names, or report the reference it carries. `503`: a short outage; the client retries on its own.
+- **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
+  - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.
+  - `409`: the conversation cannot continue. Start a new one.
+  - `500` with `x-should-retry: false`: an administrator must fix the policy or the deployment setting the message names, or report the reference it carries.
+  - `503`: a short outage. The client retries on its own.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

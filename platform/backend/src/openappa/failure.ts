@@ -416,7 +416,8 @@ function classifyMasked(
 ): Failure {
   const inner = message.replace(MASK_PREFIX, "");
   const masked = MASKED_CLASSES.find(([text]) => text.test(inner));
-  // A trajectory text inside a trajectory failure names no other class.
+  // A trajectory text inside a trajectory failure names no other class, and
+  // no entry maps to `remedy`, so this recursion is one level deep.
   if (masked && masked[1] !== code) return classifyCode(masked[1], inner);
   if (code === "trajectory") return CONVERSATION_ENDED;
   if (MODEL_REMEDY_TEXTS.some((text) => text.test(inner)))

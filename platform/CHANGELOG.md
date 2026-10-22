@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0-rc.6](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.5...platform-v1.5.0-rc.6) (2026-10-22)
+
+
+### Features
+
+* **proxy:** govern Azure image edits and Files with virtual-key examples ([#9498](https://github.com/archestra-ai/archestra/issues/9498)) ([9530a90](https://github.com/archestra-ai/archestra/commit/9530a90f6f8a646dbc61b3da793299f8b211f241))
+
+
+### Bug Fixes
+
+* **agent-runtime:** share workspace transfer tickets across replicas ([#9503](https://github.com/archestra-ai/archestra/issues/9503)) ([3783acf](https://github.com/archestra-ai/archestra/commit/3783acfcda082326f685b85c1ab4b2a5ace19ef3))
+* **guardrails:** answer each OpenAPPA failure with an honest status and plain text ([#9492](https://github.com/archestra-ai/archestra/issues/9492)) ([fb8a2a9](https://github.com/archestra-ai/archestra/commit/fb8a2a9e5e08e539ae0372180489ee6a03702d6f))
+* **guardrails:** keep a session alive after a tool result with NUL characters ([#9490](https://github.com/archestra-ai/archestra/issues/9490)) ([40d3fe4](https://github.com/archestra-ai/archestra/commit/40d3fe43e59bdae77ae95a328b67e178e41e1a07))
+* **guardrails:** store and read escaped receipts on the host's own paths ([#9499](https://github.com/archestra-ai/archestra/issues/9499)) ([4d26feb](https://github.com/archestra-ai/archestra/commit/4d26febebb2570a9dad25641f8771af4de91d453))
+* **k8s:** emit the IPv6 egress floor rule only on clusters that serve IPv6 ([#9243](https://github.com/archestra-ai/archestra/issues/9243)) ([5948e1c](https://github.com/archestra-ai/archestra/commit/5948e1c8df4e2c34c7ed4c433b62368bc19cd370))
+* **openappa:** preserve Anthropic cache prefixes during remedy continuation ([#9505](https://github.com/archestra-ai/archestra/issues/9505)) ([6e3adf3](https://github.com/archestra-ai/archestra/commit/6e3adf3d45c7c57592a07d05b332f5413d7b80db))
+
 ## [1.5.0-rc.5](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.4...platform-v1.5.0-rc.5) (2026-10-22)
 
 

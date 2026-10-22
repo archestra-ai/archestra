@@ -39,7 +39,7 @@ mv "$failure.tmp" "$failure"
 exit 1
 ```
 
-Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details.
+Use an atomic rename to publish the complete file. The image owns the code and message. Codes need no platform registration. The backend validates the envelope, appends the runtime exit status, and propagates the message through task results, notifications, and run details. Run details also expose the code as `failure.code` = `image.<code>`, with `failure.retriable` set to `false` unless a maintained image's code names a transient problem.
 
 Version `1` accepts exactly these fields:
 

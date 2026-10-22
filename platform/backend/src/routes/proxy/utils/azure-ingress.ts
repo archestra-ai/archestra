@@ -41,7 +41,12 @@ export function rewriteAzureProxyUrl(
         !deployment ||
         deployment === "." ||
         deployment === ".." ||
-        /[/\\\u0000-\u001f\u007f]/.test(deployment)
+        Array.from(deployment).some((character) => {
+          const code = character.charCodeAt(0);
+          return (
+            code < 32 || code === 127 || character === "/" || character === "\\"
+          );
+        })
       ) {
         throw new Error("Invalid deployment segment");
       }

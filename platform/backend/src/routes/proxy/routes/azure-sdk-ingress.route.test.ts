@@ -68,7 +68,18 @@ describe("Azure SDK ingress over HTTP", () => {
           JSON.stringify({
             object: "list",
             model: body.model,
-            data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2] }],
+            data: [
+              {
+                object: "embedding",
+                index: 0,
+                embedding:
+                  body.encoding_format === "base64"
+                    ? Buffer.from(new Float32Array([0.1, 0.2]).buffer).toString(
+                        "base64",
+                      )
+                    : [0.1, 0.2],
+              },
+            ],
             usage: { prompt_tokens: 5, total_tokens: 5 },
           }),
         );
@@ -265,14 +276,51 @@ describe("Azure SDK ingress over HTTP", () => {
     );
   });
 
+  test("native SDK default and explicit base64 embeddings retain vectors and numeric logs", async () => {
+    const normal = await clientFor().embeddings.create({
+      model: "sdk-deployment",
+      input: "Synthetic input",
+    });
+    expect(normal.data[0].embedding).toHaveLength(2);
+    expect(normal.data[0].embedding[0]).toBeCloseTo(0.1);
+    const base64 = await clientFor().embeddings.create({
+      model: "sdk-deployment",
+      input: "Synthetic input",
+      encoding_format: "base64",
+    });
+    expect(base64.data[0].embedding).toBe(
+      Buffer.from(new Float32Array([0.1, 0.2]).buffer).toString("base64"),
+    );
+    const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
+    const logged = rows.at(-1)?.response as {
+      data: Array<{ embedding: number[] }>;
+    };
+    expect(logged.data[0].embedding).toHaveLength(2);
+    expect(logged.data[0].embedding[0]).toBeCloseTo(0.1);
+  });
+
   test("URL deployment overrides a different body model and fixed upstream deployment", async () => {
     const row = await LlmProviderApiKeyModel.findById(keyId);
     await LlmProviderApiKeyModel.update(keyId, {
       baseUrl: `${row?.baseUrl}/deployments/configured-default`,
     });
     await clientFor({
-      deployment: "%73dk%2Ddeployment",
+      deployment: "sdk-deployment",
     }).chat.completions.create({ ...payload, model: "body-model" });
+    expect(requests[0].body).toMatchObject({ model: "sdk-deployment" });
+    expect(requests[0].url).toContain("/deployments/sdk-deployment/");
+    const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
+    expect(rows.at(-1)?.model).toBe("sdk-deployment");
+  });
+
+  test("wire-encoded deployment names are decoded once before accounting", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/azure/openai/deployments/%73dk%2Ddeployment/chat/completions",
+      headers: { "api-key": token },
+      payload: { ...payload, model: "body-model" },
+    });
+    expect(response.statusCode, response.body).toBe(200);
     expect(requests[0].body).toMatchObject({ model: "sdk-deployment" });
     expect(requests[0].url).toContain("/deployments/sdk-deployment/");
     const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
@@ -298,6 +346,30 @@ describe("Azure SDK ingress over HTTP", () => {
         .find((url) => url.searchParams.has("probe"))
         ?.searchParams.get("probe"),
     ).toBe("a/b c");
+  });
+
+  test.each([
+    "2024-02-01",
+    "2025-01-01-preview",
+  ])("token parameter compatibility uses caller API version %s", async (apiVersion) => {
+    await clientFor({ apiVersion }).chat.completions.create({
+      ...payload,
+      model: "gpt-4.1",
+      max_tokens: 16,
+    });
+    expect(
+      new URL(requests[0].url, "http://upstream").searchParams.get(
+        "api-version",
+      ),
+    ).toBe(apiVersion);
+    expect(requests[0].body).toMatchObject(
+      apiVersion === "2024-02-01"
+        ? { max_tokens: 16 }
+        : { max_completion_tokens: 16 },
+    );
+    expect(requests[0].body).not.toHaveProperty(
+      apiVersion === "2024-02-01" ? "max_completion_tokens" : "max_tokens",
+    );
   });
 
   test.each([

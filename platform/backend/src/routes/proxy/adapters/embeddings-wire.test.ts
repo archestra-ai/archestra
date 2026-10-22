@@ -10,6 +10,32 @@ import {
 import { openAiEmbeddingsAdapterFactory } from "./openai";
 
 describe("embedding wire encoding", () => {
+  test.each([
+    "",
+    "!!!!",
+    "aQ==",
+    "not-base64",
+    "AADAfw==",
+  ])("rejects malformed upstream base64 vector %s", (embedding) => {
+    const factory = withEmbeddingEncoding(
+      openAiEmbeddingsAdapterFactory,
+      "base64",
+    );
+    expect(() =>
+      factory.createResponseAdapter({
+        object: "list",
+        model: "vector-model",
+        data: [
+          {
+            object: "embedding",
+            index: 0,
+            embedding: embedding as unknown as number[],
+          },
+        ],
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      }),
+    ).toThrow();
+  });
   test("real SDK default, float and base64 requests retain values and numeric log previews", async () => {
     const vector = [0.25, -0.5, 1.5];
     const bytes = Buffer.alloc(vector.length * 4);

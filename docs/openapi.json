@@ -107384,6 +107384,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -108988,6 +108997,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -109581,6 +109599,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -109998,6 +110025,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -110363,6 +110399,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -110373,8 +110418,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -110403,10 +110448,17 @@
                             ]
                           },
                           "embedding": {
-                            "type": "array",
-                            "items": {
-                              "type": "number"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
                           },
                           "index": {
                             "type": "number"
@@ -110750,6 +110802,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -110760,8 +110821,8 @@
             },
             "in": "header",
             "name": "authorization",
-            "required": true,
-            "description": "Bearer token for OpenAI"
+            "required": false,
+            "description": "Bearer token for Azure AI Foundry"
           }
         ],
         "responses": {
@@ -110790,10 +110851,17 @@
                             ]
                           },
                           "embedding": {
-                            "type": "array",
-                            "items": {
-                              "type": "number"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
                           },
                           "index": {
                             "type": "number"
@@ -111090,6 +111158,15 @@
           }
         },
         "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
           {
             "schema": {
               "type": "string"
@@ -111734,6 +111811,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -112331,6 +112417,15 @@
               "type": "string"
             },
             "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "user-agent",
             "required": false,
             "description": "The user agent of the client"
@@ -112802,6 +112897,15 @@
             "in": "path",
             "name": "agentId",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "api-key",
+            "required": false,
+            "description": "Archestra virtual API key for native Azure SDK clients"
           },
           {
             "schema": {

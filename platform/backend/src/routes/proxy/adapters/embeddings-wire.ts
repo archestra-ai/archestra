@@ -69,11 +69,14 @@ export function withEmbeddingEncoding(
 function decodeVector(vector: number[] | string): number[] {
   if (Array.isArray(vector)) return vector;
   const bytes = Buffer.from(vector, "base64");
-  if (bytes.length % 4 !== 0)
+  if (!vector || bytes.length % 4 !== 0 || bytes.toString("base64") !== vector)
     throw new ApiError(502, "Provider returned an invalid base64 embedding.");
-  return Array.from({ length: bytes.length / 4 }, (_, index) =>
+  const decoded = Array.from({ length: bytes.length / 4 }, (_, index) =>
     bytes.readFloatLE(index * 4),
   );
+  if (decoded.some((value) => !Number.isFinite(value)))
+    throw new ApiError(502, "Provider returned a non-finite embedding.");
+  return decoded;
 }
 
 function encodeVector(vector: number[]): string {

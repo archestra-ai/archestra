@@ -21,6 +21,10 @@ import { azureAdapterFactory, azureResponsesAdapterFactory } from "../adapters";
 import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
 import { azureImagesAdapterFactory } from "../adapters/azure-images";
 import { azureRealtimeAdapterFactory } from "../adapters/azure-realtime";
+import {
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
@@ -121,8 +125,8 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Create embeddings with Azure AI Foundry (uses default agent)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
-        headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        headers: Azure.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -134,7 +138,10 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        azureEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          azureEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );
@@ -152,8 +159,8 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
-        headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        headers: Azure.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -165,7 +172,10 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        azureEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          azureEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );

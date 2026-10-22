@@ -54,6 +54,10 @@ describe("GET /api/chatops/config/:provider", () => {
       enabled: false,
       appId: null,
       tenantId: null,
+      groupChatFileSignIn: false,
+      signInRedirectUri: expect.stringMatching(
+        /\/api\/webhooks\/chatops\/ms-teams\/sign-in\/callback$/,
+      ),
     });
     expect((await get("telegram")).json()).toEqual({
       configured: false,
@@ -105,6 +109,8 @@ describe("GET /api/chatops/config/:provider", () => {
       enabled: true,
       appId: "teams-app-id",
       tenantId: "teams-tenant-id",
+      groupChatFileSignIn: false,
+      signInRedirectUri: expect.any(String),
     });
     expect(telegram.json()).toEqual({
       configured: true,

@@ -5,7 +5,7 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
-  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
@@ -1143,7 +1143,28 @@ export class ChatOpsManager {
 
     // Files the platform keeps off the message (Teams channel and group-chat
     // files live in SharePoint) are read only now, once per answered message.
+    // As it arrived: a held message reads its platform files again on replay.
+    const arrivedMessage: IncomingChatMessage = { ...message };
     await this.addPlatformMessageFiles({ provider, message });
+    // A file only its sender can open (a Teams group-chat file in their
+    // OneDrive): hold the message and ask them to sign in; it is answered
+    // again, with the file, once they have.
+    const signInFiles =
+      message.skippedAttachments?.filter(
+        (skipped) => skipped.reason === "sign_in_required",
+      ) ?? [];
+    if (
+      signInFiles.length > 0 &&
+      provider.requestFileSignIn &&
+      (await provider.requestFileSignIn({
+        message: arrivedMessage,
+        fileNames: signInFiles.flatMap((file) =>
+          file.name ? [file.name] : [],
+        ),
+      }))
+    ) {
+      return { success: true };
+    }
     // A Teams channel message can look empty until its files are read; one
     // that is still empty has nothing to answer.
     if (
@@ -1834,7 +1855,7 @@ export class ChatOpsManager {
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
       ...(provider.providerId === "slack"
         ? [
-            `As the primary agent responding directly to this Slack thread, proactively send brief updates after meaningful milestones, when the plan materially changes, or when blocked or awaiting a user decision. During long-running work, occasionally explain what is still running or being waited on. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable, only while that task is active. If needed, discover it through the gateway's tool search. Keep updates to one or two sentences covering the result and next step; avoid narrating individual commands, repeating unchanged status, or duplicating acknowledgments or input notices already sent by the platform. Continue working after posting; sending a message does not end the turn or wait for a reply. Collect input and approvals through the available question or approval interface. Your final answer is posted automatically; do not send it with this tool. Delegated subagents must report internally to their parent and never post externally.`,
+            `As the primary agent responding directly to this Slack thread, proactively send brief updates after meaningful milestones, when the plan materially changes, or when blocked or awaiting a user decision. During long-running work, occasionally explain what is still running or being waited on. Use ${archestraMcpBranding.getToolName(TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable, only while that task is active. If needed, discover it through the gateway's tool search. Keep updates to one or two sentences covering the result and next step; avoid narrating individual commands, repeating unchanged status, or duplicating acknowledgments or input notices already sent by the platform. Continue working after posting; sending a message does not end the turn or wait for a reply. Collect input and approvals through the available question or approval interface. Your final answer is posted automatically; do not send it with this tool. Delegated subagents must report internally to their parent and never post externally.`,
           ]
         : []),
       ...(isGroup

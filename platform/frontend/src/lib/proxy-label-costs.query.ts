@@ -1,9 +1,7 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { labelCostsCsv } from "@/lib/label-costs-csv";
+import { useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 type Query = NonNullable<archestraApiTypes.GetProxyCostStatisticsData["query"]>;
@@ -40,12 +38,22 @@ export function useProxyLabelCosts({
   });
 }
 
-export function useCopyLabelCosts() {
-  return useMutation({
-    mutationFn: async (params: { key: string; groups: LabelGroups }) => {
-      await navigator.clipboard.writeText(labelCostsCsv(params));
+export function useProxyLabelKeys({
+  timeframe,
+  enabled,
+}: Pick<Query, "timeframe"> & { enabled: boolean }) {
+  return useQuery({
+    queryKey: ["statistics", "proxy-label-keys", timeframe],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getProxyCostStatistics({
+        query: { timeframe, includeLabelKeys: "true", limit: 1 },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data?.labelKeys)
+        throw new Error("No historical label keys received");
+      return data.labelKeys;
     },
-    onSuccess: () => toast.success("Copied all label values as CSV"),
-    onError: () => toast.error("Could not copy cost attribution"),
+    enabled,
+    staleTime: 30_000,
   });
 }

@@ -6,16 +6,13 @@ import type { InteractionAuthMethod } from "@/types/interaction";
 export async function resolveRequestAttributionLabels(params: {
   organizationId: string;
   authMethod?: InteractionAuthMethod;
-  serviceAccountId?: string;
   billingTeamId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
   oauthClientId?: string;
-  proxyLabels?: { key: string; value: string }[];
 }): Promise<AttributionLabels> {
   const rows = await AttributionLabelModel.findForRequest({
     organizationId: params.organizationId,
-    serviceAccountId: params.serviceAccountId,
     billingTeamId: params.billingTeamId,
     virtualKeyId:
       params.authMethod === "virtual_key"
@@ -28,11 +25,9 @@ export async function resolveRequestAttributionLabels(params: {
         ? params.oauthClientId
         : undefined,
   });
-  // Proxy defaults < service account < billing team < authenticated credential.
+  // Billing team < authenticated credential.
   // A single value per key keeps grouping additive, including cost centers.
-  const labels = new Map(
-    params.proxyLabels?.map(({ key, value }) => [key, value]),
-  );
+  const labels = new Map<string, string>();
   for (const { key, value } of rows.sort((a, b) => a.priority - b.priority)) {
     labels.set(key, value);
   }

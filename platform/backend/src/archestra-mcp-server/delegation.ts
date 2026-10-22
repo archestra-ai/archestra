@@ -729,6 +729,7 @@ function buildDelegationToolDescriptor(params: {
     name: string;
     description?: string | null;
     builtInAgentConfig?: Agent["builtInAgentConfig"];
+    hasRuntime?: boolean;
   };
   inputSchema: Tool["inputSchema"];
   externalA2a?: boolean;
@@ -741,9 +742,17 @@ function buildDelegationToolDescriptor(params: {
     params.attestable === true &&
     !externalA2a &&
     !targetAgent.builtInAgentConfig;
-  const description = targetAgent.description
-    ? `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
-    : `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}`;
+  const description = [
+    `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}.`,
+    ...(targetAgent.hasRuntime && !externalA2a
+      ? [
+          "Runs in the background in Agent Runtime and returns a run link, not the answer.",
+        ]
+      : []),
+    ...(targetAgent.description
+      ? [targetAgent.description.substring(0, 400)]
+      : []),
+  ].join(" ");
 
   return {
     name,

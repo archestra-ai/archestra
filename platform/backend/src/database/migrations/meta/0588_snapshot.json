@@ -1,5 +1,5 @@
 {
-  "id": "c4e06a5f-a61e-41aa-9ee8-5ec454844dfe",
+  "id": "98437b0e-71c1-4bd5-ab37-c30c0aa1ba58",
   "prevId": "c2c5b6a7-3d0e-41ac-a008-ca89179ff36c",
   "version": "7",
   "dialect": "postgresql",
@@ -7645,6 +7645,100 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.chatops_ms_teams_user_connections": {
+      "name": "chatops_ms_teams_user_connections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aad_object_id": {
+          "name": "aad_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secret_id": {
+          "name": "secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "chatops_ms_teams_user_connections_tenant_user_uidx": {
+          "name": "chatops_ms_teams_user_connections_tenant_user_uidx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "aad_object_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chatops_ms_teams_user_connections_secret_id_secret_id_fk": {
+          "name": "chatops_ms_teams_user_connections_secret_id_secret_id_fk",
+          "tableFrom": "chatops_ms_teams_user_connections",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.chatops_processed_message": {
       "name": "chatops_processed_message",
       "schema": "",
@@ -11144,12 +11238,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attribution_labels": {
-          "name": "attribution_labels",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -11678,12 +11766,6 @@
         "billing_team_id": {
           "name": "billing_team_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attribution_labels": {
-          "name": "attribution_labels",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

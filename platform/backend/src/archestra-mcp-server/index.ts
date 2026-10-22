@@ -11,17 +11,17 @@ import {
   isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
-  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
@@ -548,16 +548,16 @@ function brandTools(tools: ReturnType<typeof getAllTools>) {
 // tools are the other half of every delegated-run handle: the dynamic
 // per-Agent delegation tools have no assignment row, but their result promises
 // that the caller can observe and control the returned run. Access to the run
-// itself remains actor-scoped inside each handler.
+// itself remains actor-scoped inside each handler. list_agent_runs is exempt
+// only for the caller's own runs: by default it lists everyone's.
 const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
-  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
 ]);
 
 // Assignment gate with the dynamic-access relaxation: an unassigned built-in
@@ -566,10 +566,12 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 // exclusions, and the query_knowledge_sources connector check) — nothing is
 // assigned. RBAC already ran before this gate, so e.g. the sandbox tools
 // still require agent:read.
-async function resolveToolAssignment(
-  toolName: string,
-  context: ArchestraContext,
-): Promise<CallToolResult | null> {
+async function resolveToolAssignment(params: {
+  toolName: string;
+  args: Record<string, unknown> | undefined;
+  context: ArchestraContext;
+}): Promise<CallToolResult | null> {
+  const { toolName, context } = params;
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
   if (!context.agentId || !shortName) return null;
@@ -578,6 +580,11 @@ async function resolveToolAssignment(
   // search_tools invocation skips the extra queries (excluding these tools is
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+  if (
+    shortName === TOOL_LIST_AGENT_RUNS_SHORT_NAME &&
+    params.args?.mine_only === true
+  )
+    return null;
   if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
@@ -651,7 +658,11 @@ async function admitArchestraToolCall(params: {
   // Archestra tool the user has RBAC for, regardless of assignment. Under
   // dynamic tool access ("access all tools") unassigned built-ins are exempt
   // (see resolveToolAssignment).
-  const assignmentDenied = await resolveToolAssignment(toolName, context);
+  const assignmentDenied = await resolveToolAssignment({
+    toolName,
+    args,
+    context,
+  });
   if (assignmentDenied) return { error: assignmentDenied };
 
   const resolvedToolName =

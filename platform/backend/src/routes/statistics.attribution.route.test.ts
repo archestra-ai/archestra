@@ -4,6 +4,42 @@ import statisticsRoutes from "./statistics";
 
 describe("proxy label cost attribution", () => {
   const ctx = useRouteTestApp(statisticsRoutes);
+  test("discovers distinct captured label keys within the organization and time range", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "llm_proxy",
+    });
+    const foreign = await makeOrganization();
+    const otherProxy = await makeAgent({
+      organizationId: foreign.id,
+      agentType: "llm_proxy",
+    });
+    await makeInteraction(proxy.id, {
+      attributionLabels: { cost_center: "C100", application: "search" },
+    });
+    await makeInteraction(proxy.id, {
+      attributionLabels: { cost_center: "C200" },
+    });
+    await makeInteraction(proxy.id, { attributionLabels: null });
+    await makeInteraction(proxy.id, {
+      attributionLabels: { old_key: "old" },
+      createdAt: new Date("2020-01-01"),
+    });
+    await makeInteraction(otherProxy.id, {
+      attributionLabels: { private_key: "foreign" },
+    });
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/statistics/llm-proxy?timeframe=24h&includeLabelKeys=true&limit=1",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().labelKeys).toEqual(["application", "cost_center"]);
+    expect(response.json().totals.requests).toBe(3);
+  });
 
   test("label groups reconcile to totals, include unassigned history, and preserve billing modes and organization scope", async ({
     makeAgent,

@@ -53,6 +53,16 @@ describe("config routes", () => {
     await app.close();
   });
 
+  test("advertises the UI feedback overlay only when its flag is set", async () => {
+    config.devFeedback.enabled = true;
+    const on = await app.inject({ method: "GET", url: "/api/config" });
+    config.devFeedback.enabled = false;
+    const off = await app.inject({ method: "GET", url: "/api/config" });
+
+    expect(off.json().features.devFeedbackEnabled).toBe(false);
+    expect(on.json().features.devFeedbackEnabled).toBe(true);
+  });
+
   test.for([
     1, 2,
   ])("returns public config without authentication for isolated database %s", async () => {

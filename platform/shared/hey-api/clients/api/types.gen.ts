@@ -35841,6 +35841,7 @@ export type GetBootstrapResponses = {
                     redirectUri: string;
                 };
                 mcpGatewaySkillsEnabled: boolean;
+                devFeedbackEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -40768,6 +40769,41 @@ export type PostApiWebhooksChatopsMsTeamsResponses = {
 
 export type PostApiWebhooksChatopsMsTeamsResponse = PostApiWebhooksChatopsMsTeamsResponses[keyof PostApiWebhooksChatopsMsTeamsResponses];
 
+export type GetApiWebhooksChatopsMsTeamsSignInData = {
+    body?: never;
+    path?: never;
+    query?: {
+        key?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+        error_description?: string;
+    };
+    url: '/api/webhooks/chatops/ms-teams/sign-in/callback';
+};
+
+export type GetApiWebhooksChatopsMsTeamsSignInCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type PostApiWebhooksChatopsSlackData = {
     body: unknown;
     path?: never;
@@ -41844,6 +41880,8 @@ export type GetMsTeamsChatOpsConfigResponses = {
         enabled: boolean;
         appId: string | null;
         tenantId: string | null;
+        groupChatFileSignIn: boolean;
+        signInRedirectUri: string;
     };
 };
 
@@ -41855,6 +41893,7 @@ export type UpdateChatOpsConfigInQuickstartData = {
         appId?: string;
         appSecret?: string;
         tenantId?: string;
+        groupChatFileSignIn?: boolean;
     };
     path?: never;
     query?: never;
@@ -44752,6 +44791,7 @@ export type GetConfigResponses = {
                 redirectUri: string;
             };
             mcpGatewaySkillsEnabled: boolean;
+            devFeedbackEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -46591,6 +46631,849 @@ export type UpdateDefaultUserLimitResponses = {
 };
 
 export type UpdateDefaultUserLimitResponse = UpdateDefaultUserLimitResponses[keyof UpdateDefaultUserLimitResponses];
+
+export type GetDevFeedbackSetupData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup';
+};
+
+export type GetDevFeedbackSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackSetupError = GetDevFeedbackSetupErrors[keyof GetDevFeedbackSetupErrors];
+
+export type GetDevFeedbackSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        channelName: string | null;
+    };
+};
+
+export type GetDevFeedbackSetupResponse = GetDevFeedbackSetupResponses[keyof GetDevFeedbackSetupResponses];
+
+export type SaveDevFeedbackSetupData = {
+    body: {
+        botId: string;
+        channelId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup';
+};
+
+export type SaveDevFeedbackSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SaveDevFeedbackSetupError = SaveDevFeedbackSetupErrors[keyof SaveDevFeedbackSetupErrors];
+
+export type SaveDevFeedbackSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        channelName: string | null;
+    };
+};
+
+export type SaveDevFeedbackSetupResponse = SaveDevFeedbackSetupResponses[keyof SaveDevFeedbackSetupResponses];
+
+export type ListDevFeedbackBotsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/setup/bots';
+};
+
+export type ListDevFeedbackBotsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListDevFeedbackBotsError = ListDevFeedbackBotsErrors[keyof ListDevFeedbackBotsErrors];
+
+export type ListDevFeedbackBotsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+    }>;
+};
+
+export type ListDevFeedbackBotsResponse = ListDevFeedbackBotsResponses[keyof ListDevFeedbackBotsResponses];
+
+export type ListDevFeedbackChannelsData = {
+    body?: never;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/setup/bots/{botId}/channels';
+};
+
+export type ListDevFeedbackChannelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListDevFeedbackChannelsError = ListDevFeedbackChannelsErrors[keyof ListDevFeedbackChannelsErrors];
+
+export type ListDevFeedbackChannelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isPrivate: boolean;
+    }>;
+};
+
+export type ListDevFeedbackChannelsResponse = ListDevFeedbackChannelsResponses[keyof ListDevFeedbackChannelsResponses];
+
+export type GetDevFeedbackCommentsData = {
+    body?: never;
+    path?: never;
+    query: {
+        route: string;
+    };
+    url: '/api/dev-feedback/comments';
+};
+
+export type GetDevFeedbackCommentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackCommentsError = GetDevFeedbackCommentsErrors[keyof GetDevFeedbackCommentsErrors];
+
+export type GetDevFeedbackCommentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        id: string;
+        text: string;
+        authorName: string;
+        replyCount: number;
+        permalink: string | null;
+        createdAt: string;
+    }>;
+};
+
+export type GetDevFeedbackCommentsResponse = GetDevFeedbackCommentsResponses[keyof GetDevFeedbackCommentsResponses];
+
+export type CreateDevFeedbackCommentData = {
+    body: {
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        text: string;
+        url: string;
+        viewport: string;
+        screenshot?: {
+            mimeType: 'image/png' | 'image/jpeg';
+            base64: string;
+        };
+        clip?: {
+            mimeType: 'video/mp4' | 'video/webm';
+            base64: string;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dev-feedback/comments';
+};
+
+export type CreateDevFeedbackCommentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDevFeedbackCommentError = CreateDevFeedbackCommentErrors[keyof CreateDevFeedbackCommentErrors];
+
+export type CreateDevFeedbackCommentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        route: string;
+        selector: string;
+        label: string;
+        elementX: number;
+        elementY: number;
+        viewportX: number;
+        viewportY: number;
+        id: string;
+        text: string;
+        authorName: string;
+        replyCount: number;
+        permalink: string | null;
+        createdAt: string;
+    };
+};
+
+export type CreateDevFeedbackCommentResponse = CreateDevFeedbackCommentResponses[keyof CreateDevFeedbackCommentResponses];
+
+export type GetDevFeedbackRepliesData = {
+    body?: never;
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/replies';
+};
+
+export type GetDevFeedbackRepliesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDevFeedbackRepliesError = GetDevFeedbackRepliesErrors[keyof GetDevFeedbackRepliesErrors];
+
+export type GetDevFeedbackRepliesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        authorName: string;
+        text: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetDevFeedbackRepliesResponse = GetDevFeedbackRepliesResponses[keyof GetDevFeedbackRepliesResponses];
+
+export type CreateDevFeedbackReplyData = {
+    body: {
+        text: string;
+    };
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/replies';
+};
+
+export type CreateDevFeedbackReplyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDevFeedbackReplyError = CreateDevFeedbackReplyErrors[keyof CreateDevFeedbackReplyErrors];
+
+export type CreateDevFeedbackReplyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        authorName: string;
+        text: string;
+        createdAt: string;
+    };
+};
+
+export type CreateDevFeedbackReplyResponse = CreateDevFeedbackReplyResponses[keyof CreateDevFeedbackReplyResponses];
+
+export type ResolveDevFeedbackCommentData = {
+    body?: never;
+    path: {
+        commentId: string;
+    };
+    query?: never;
+    url: '/api/dev-feedback/comments/{commentId}/resolve';
+};
+
+export type ResolveDevFeedbackCommentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveDevFeedbackCommentError = ResolveDevFeedbackCommentErrors[keyof ResolveDevFeedbackCommentErrors];
+
+export type ResolveDevFeedbackCommentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveDevFeedbackCommentResponse = ResolveDevFeedbackCommentResponses[keyof ResolveDevFeedbackCommentResponses];
 
 export type EnvironmentLabelKeysData = {
     body?: never;
@@ -60723,6 +61606,9 @@ export type GetInteractionSummariesResponses = {
             baselineCost: string | null;
             durationMs: number | null;
             createdAt: string;
+            attributionLabels?: {
+                [key: string]: string;
+            } | null;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
@@ -60856,6 +61742,12 @@ export type GetInteractionSessionsResponses = {
      */
     200: {
         data: Array<{
+            /**
+             * Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.
+             */
+            attributionLabels?: {
+                [key: string]: string;
+            } | null;
             sessionId: string | null;
             sessionSource: string | null;
             source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -118627,6 +119519,10 @@ export type GetProxyCostStatisticsData = {
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         credentialId?: string;
         /**
+         * Include the distinct historical label keys in the filtered proxy usage.
+         */
+        includeLabelKeys?: string;
+        /**
          * Group by the admission-time value of this server-owned label.
          */
         labelKey?: string;
@@ -118759,6 +119655,7 @@ export type GetProxyCostStatisticsResponses = {
             offset: number;
             total: number;
         };
+        labelKeys?: Array<string>;
         labels?: {
             key: string;
             groups: Array<{

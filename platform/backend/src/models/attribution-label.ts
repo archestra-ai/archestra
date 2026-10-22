@@ -5,21 +5,11 @@ export default class AttributionLabelModel {
   /** One scoped query regardless of the number of labels on the principals. */
   static async findForRequest(params: {
     organizationId: string;
-    serviceAccountId?: string;
     billingTeamId?: string;
     virtualKeyId?: string;
     oauthClientId?: string;
   }): Promise<{ key: string; value: string; priority: number }[]> {
     const sources = [
-      {
-        id: params.serviceAccountId,
-        table: schema.serviceAccountLabelsTable,
-        column: schema.serviceAccountLabelsTable.serviceAccountId,
-        owner: schema.serviceAccountsTable,
-        ownerId: schema.serviceAccountsTable.id,
-        scope: sql`${schema.serviceAccountsTable.organizationId} = ${params.organizationId}`,
-        priority: 1,
-      },
       {
         id: params.billingTeamId,
         table: schema.teamLabelsTable,

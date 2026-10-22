@@ -1676,9 +1676,7 @@ export async function handleLLMProxy<
       virtualKeyId,
       passthroughVirtualKeyId,
       oauthClientId: authenticatedApp?.id,
-      serviceAccountId,
       billingTeamId,
-      proxyLabels: resolvedAgent.labels,
     });
     const ctx: LLMProxyContext<TRequest> = {
       attributionLabels,

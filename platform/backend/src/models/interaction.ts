@@ -992,6 +992,7 @@ class InteractionModel {
           source: schema.interactionsTable.source,
           // The row's small stored preview (not the payload), so the trace can
           // name a turn by the prompt it served; decrypted below.
+          attributionLabels: schema.interactionsTable.attributionLabels,
           sessionPreview: schema.interactionsTable.sessionPreview,
           encryptedChatConversationId:
             schema.interactionsTable.encryptedChatConversationId,
@@ -2686,6 +2687,24 @@ class InteractionModel {
       extractAllAgentIdsFromExternalAgentIds(allExternalAgentIds),
     );
 
+    // One bounded lookup for the displayed request snapshots; never merge labels
+    // across a session or resolve them from today's credential/team settings.
+    const tipIds = [...lastInteractionMap.values()].flatMap((tip) =>
+      tip.lastInteractionId ? [tip.lastInteractionId] : [],
+    );
+    const tipLabels = tipIds.length
+      ? await db
+          .select({
+            id: schema.interactionsTable.id,
+            labels: schema.interactionsTable.attributionLabels,
+          })
+          .from(schema.interactionsTable)
+          .where(and(whereClause, inArray(schema.interactionsTable.id, tipIds)))
+      : [];
+    const labelsByRequest = new Map(
+      tipLabels.map((row) => [row.id, row.labels]),
+    );
+
     // Resolve every virtual key referenced by the page in one query, rather
     // than per session.
     const virtualKeyMap = await VirtualApiKeyModel.findSummariesByIds({
@@ -2755,6 +2774,8 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
+        attributionLabels:
+          labelsByRequest.get(lastInteraction?.lastInteractionId ?? "") ?? null,
         contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,

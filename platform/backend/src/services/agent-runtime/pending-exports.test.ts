@@ -868,7 +868,7 @@ function readFile(
 ) {
   return executeArchestraTool(
     READ,
-    { task_id: seeded.taskId, path },
+    { run_id: seeded.taskId, path },
     seeded.context,
   );
 }
@@ -877,7 +877,7 @@ function transfer(seeded: Seeded, path = "out/report.txt") {
   return executeArchestraTool(
     TRANSFER,
     {
-      task_id: seeded.taskId,
+      run_id: seeded.taskId,
       direction: "download",
       path,
       local_path: "/tmp/report.txt",

@@ -11,6 +11,12 @@ export const ProxyCostQuerySchema = z.object({
     ),
   authMethod: InteractionAuthMethodSchema.optional(),
   credentialId: z.string().min(1).max(256).optional(),
+  includeLabelKeys: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Include the distinct historical label keys in the filtered proxy usage.",
+    ),
   labelKey: z
     .string()
     .min(1)
@@ -60,6 +66,7 @@ export const ProxyCostStatisticsSchema = z.object({
     offset: z.number(),
     total: z.number(),
   }),
+  labelKeys: z.array(z.string()).optional(),
   labels: z
     .object({
       key: z.string(),

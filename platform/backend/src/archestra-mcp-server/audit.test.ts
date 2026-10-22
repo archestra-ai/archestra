@@ -116,7 +116,7 @@ describe("archestra tool audit records", () => {
     const write = await executeArchestraTool(
       toolName("write_workspace_file"),
       {
-        task_id: task.id,
+        run_id: task.id,
         path: "notes.txt",
         content: "private workspace content",
         encoding: "utf8",
@@ -147,7 +147,7 @@ describe("archestra tool audit records", () => {
     const deleted = await executeArchestraTool(
       toolName("delete_workspace"),
       {
-        task_id: task.id,
+        run_id: task.id,
         confirm_delete: true,
       },
       mockContext,
@@ -179,11 +179,11 @@ describe("archestra tool audit records", () => {
       state: "TASK_STATE_COMPLETED",
     });
     const args = {
-      task_id: previous.id,
+      run_id: previous.id,
       message: "Private follow-up instructions",
     };
     const capture = await captureToolAuditBefore({
-      toolName: toolName("steer_run"),
+      toolName: toolName("steer_agent_run"),
       args,
       organizationId,
       userId: adminUserId,
@@ -195,17 +195,27 @@ describe("archestra tool audit records", () => {
       agentId: testAgent.id,
       state: "TASK_STATE_SUBMITTED",
     });
+    await AgentWorkspaceModel.create({
+      id: previous.id,
+      organizationId,
+      agentId: testAgent.id,
+      actorKind: "user",
+      actorId: adminUserId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: `test-${previous.id}`,
+      state: "active",
+      activeTaskId: continuation.id,
+      lastTaskId: continuation.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
     await recordToolAudit({
       capture,
-      toolName: toolName("steer_run"),
+      toolName: toolName("steer_agent_run"),
       args,
       result: {
         content: [],
-        structuredContent: {
-          success: true,
-          task_id: continuation.id,
-          previous_task_id: previous.id,
-        },
+        structuredContent: { status: "continued", run_id: previous.id },
       },
     });
     const rows = await findRows("agentRun");
@@ -213,7 +223,7 @@ describe("archestra tool audit records", () => {
     expect(rows[0]).toMatchObject({
       action: "agentRun.created",
       actorId: adminUserId,
-      resourceId: continuation.id,
+      resourceId: previous.id,
       before: null,
       after: {
         taskId: continuation.id,
@@ -226,11 +236,11 @@ describe("archestra tool audit records", () => {
     // A live steer produces no new run and must not claim one was created.
     await recordToolAudit({
       capture,
-      toolName: toolName("steer_run"),
+      toolName: toolName("steer_agent_run"),
       args,
       result: {
         content: [],
-        structuredContent: { success: true, task_id: previous.id },
+        structuredContent: { status: "steered", run_id: previous.id },
       },
     });
     expect(await findRows("agentRun")).toHaveLength(1);

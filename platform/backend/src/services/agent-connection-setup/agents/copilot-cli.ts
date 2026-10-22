@@ -26,6 +26,10 @@ import type {
   ShellAgentSetup,
 } from "../types";
 
+// Matches the VS Code identity in services/github-copilot-token.ts; updated by
+// the hourly client-version workflow.
+const GITHUB_COPILOT_VSCODE_VERSION = "1.142.0";
+
 export const copilotCliSetup: ShellAgentSetup = {
   label: "Copilot CLI",
   binary: "copilot",
@@ -122,7 +126,7 @@ ghcp_validate() {
   printf 'header = "authorization: token %s"\\n' "$1" | curl -fsS -o /dev/null \\
     --connect-timeout 10 --max-time 30 -K - \\
     -H 'accept: application/json' \\
-    -H 'editor-version: vscode/1.99.0' \\
+    -H 'editor-version: vscode/${GITHUB_COPILOT_VSCODE_VERSION}' \\
     -H 'copilot-integration-id: vscode-chat' \\
     ${sh(gh.tokenExchangeUrl)} 2>/dev/null
 }
@@ -258,7 +262,7 @@ function Test-ArchGhcp($arch_tok) {
     Invoke-RestMethod -Method Get -Uri ${psq(gh.tokenExchangeUrl)} -TimeoutSec 30 -Headers @{
       'authorization' = ('token ' + $arch_tok)
       'accept' = 'application/json'
-      'editor-version' = 'vscode/1.99.0'
+      'editor-version' = 'vscode/${GITHUB_COPILOT_VSCODE_VERSION}'
       'copilot-integration-id' = 'vscode-chat'
     } -ErrorAction Stop | Out-Null
     return $true

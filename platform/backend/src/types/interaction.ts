@@ -382,6 +382,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   durationMs: true,
   createdAt: true,
 }).extend({
+  attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
   externalAgentIdLabel: z.string().nullable(),
   requestType: RequestTypeSchema,
@@ -902,6 +903,9 @@ export const SessionLineageSchema = z.object({
 });
 
 export const SessionSummarySchema = z.object({
+  attributionLabels: AttributionLabelsSchema.nullish().describe(
+    "Captured attribution labels of lastInteractionId, the request shown in the row. Other requests in the session may have different labels. Null means no snapshot was captured.",
+  ),
   sessionId: z.string().nullable(),
   sessionSource: z.string().nullable(),
   source: InteractionSourceSchema.nullable(),

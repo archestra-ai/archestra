@@ -463,6 +463,9 @@ export const handlers: HttpHandler[] = [
     enabled: false,
     appId: null,
     tenantId: null,
+    groupChatFileSignIn: false,
+    signInRedirectUri:
+      "http://localhost:3000/api/webhooks/chatops/ms-teams/sign-in/callback",
   }),
   ...getJson("/api/chatops/config/telegram", {
     configured: false,

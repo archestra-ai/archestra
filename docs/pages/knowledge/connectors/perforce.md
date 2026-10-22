@@ -41,7 +41,7 @@ Use two dedicated Perforce identities:
 2. Give the permission user `admin` access with `dm.protects.allow.admin=1`, or `super` access, plus a password. This identity runs `p4 protects -a`, reads groups, and reads every user spec.
 3. Populate each Perforce user's `Email` field. Missing emails require [manual assignment](/docs/knowledge/connectors#credentials-and-email-resolution).
 
-Auto-sync permissions requires the Kubernetes orchestrator because it runs the Perforce CLI in a dedicated pod. For air-gapped deployments, configure an internal binary source under [Perforce permission-sync configuration](/docs/reference/configuration#perforce).
+Auto-sync permissions requires the Kubernetes orchestrator because it runs the Perforce CLI in a dedicated pod. For air-gapped deployments, configure an internal binary source under [Perforce permission-sync configuration](/docs/admin/deployment/configuration#perforce).
 
 Choosing the auto-sync-permissions visibility adds three fields to the form:
 

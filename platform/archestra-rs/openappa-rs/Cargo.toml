@@ -21,10 +21,11 @@ crate-type = ["cdylib"]
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
 # the attestation offered only where the parent covers its rank (#713),
 # and the archestra battery's agent-run rules (#716).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d" }
+# Pin #725's atomic remedy claim fix directly until it lands upstream.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

@@ -63,7 +63,7 @@ What to know:
 
 Give a built-in coding agent a `GITHUB_TOKEN`, and it can clone, commit, push, and open pull requests as that token's GitHub account.
 
-1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
+1. Save a GitHub token in [Credentials](/docs/admin/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
 3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
 4. Save the agent, start a new run, and ask it to clone the repository, make a change, and open a pull request. The pull request's commits show the token's GitHub account as their author. If GitHub rejects the token, the run stops before the agent starts.
@@ -99,7 +99,7 @@ What to know:
 
 ### Limits
 
-Set these under **Limits** on the agent's **Agent Runtime** tab. A field you leave empty uses the [deployment default](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS).
+Set these under **Limits** on the agent's **Agent Runtime** tab. A field you leave empty uses the [deployment default](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS).
 
 | Setting | What It Does |
 | --- | --- |

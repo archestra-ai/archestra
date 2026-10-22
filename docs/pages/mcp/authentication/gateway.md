@@ -34,7 +34,7 @@ A client registers itself in one of two ways. Archestra supports both, so any MC
 - **Client ID Metadata Document:** the client's ID is a URL that describes it. Newer clients use this.
 - **Dynamic Client Registration:** the client registers itself the first time it connects.
 
-To allow only clients you register yourself, set [`ARCHESTRA_AUTH_DCR_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_AUTH_DCR_ENABLED). That turns off both. Then register each client as an [OAuth client](/docs/mcp/authentication/applications).
+To allow only clients you register yourself, set [`ARCHESTRA_AUTH_DCR_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_DCR_ENABLED). That turns off both. Then register each client as an [OAuth client](/docs/mcp/authentication/applications).
 
 <span id="bearer-token"></span>
 

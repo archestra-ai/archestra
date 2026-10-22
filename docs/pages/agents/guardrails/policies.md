@@ -77,7 +77,7 @@ Open a report and click **Investigate in chat**. The agent compares the report w
 What to know:
 
 - With **Break the glass** on in **Settings → Guardrails** (the default), a yell also turns Guardrails off for that session, so the agent is no longer stuck. The list marks these yells.
-- Reports stay in your deployment. With analytics on, they also go to the shared [OpenAPPA reporting service](https://www.openappa.com/yell). To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
+- Reports stay in your deployment. With analytics on, they also go to the shared [OpenAPPA reporting service](https://www.openappa.com/yell). To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
 
 Required permissions:
 

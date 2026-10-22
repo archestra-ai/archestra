@@ -3847,6 +3847,15 @@ const config = {
    * the new connection page the default Connect destination — can key off it.
    */
   beta: process.env.ARCHESTRA_BETA === "true",
+  /**
+   * Internal UI feedback overlay for the team's own deployments: pin a comment
+   * on an element and post it, with a screenshot and an optional screen clip,
+   * to a Slack channel. Slack is the only storage. It posts as a chatops
+   * Slack bot; which one, and the channel, are picked in the UI on first use.
+   */
+  devFeedback: {
+    enabled: process.env.ARCHESTRA_DEV_FEEDBACK_ENABLED === "true",
+  },
   ngrok: {
     // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
     // agent SDK) so the instance is reachable from the Internet for inbound

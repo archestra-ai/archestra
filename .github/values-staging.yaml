@@ -60,6 +60,9 @@ archestra:
       maxSurge: "50%"
 
   env:
+    # Internal UI feedback overlay: comment on page elements, posted to Slack
+    # as a chatops bot. The bot and channel are picked in the UI on first use.
+    ARCHESTRA_DEV_FEEDBACK_ENABLED: "true"
     # Runtime pods reach this installation through its in-cluster API Service.
     ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
     # Retention stays OFF here on purpose. This deployment is where the

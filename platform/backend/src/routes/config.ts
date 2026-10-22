@@ -31,6 +31,7 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
@@ -194,6 +195,8 @@ export const ConfigResponseSchema = z.strictObject({
      * discovered from installed MCP servers.
      */
     mcpGatewaySkillsEnabled: z.boolean(),
+    /** Internal UI feedback overlay; on only where its Slack channel is set. */
+    devFeedbackEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -279,6 +282,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         redirectUri: getGoogleDriveOAuthRedirectUri(),
       },
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
+      devFeedbackEnabled: devFeedbackService.isAvailable,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,

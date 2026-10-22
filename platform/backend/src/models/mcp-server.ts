@@ -837,7 +837,8 @@ class McpServerModel {
    */
   static credentialUsableCondition(userId: string): SQL {
     const server = schema.mcpServersTable;
-    return or(
+    // A nullable owner or team makes the bare OR NULL instead of false.
+    return sql`coalesce(${or(
       eq(server.ownerId, userId),
       exists(
         db
@@ -858,7 +859,7 @@ class McpServerModel {
         }),
       ),
       eq(server.scope, "org"),
-    ) as SQL;
+    )}, false)`;
   }
 
   /**

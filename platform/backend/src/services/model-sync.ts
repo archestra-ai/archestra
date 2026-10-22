@@ -19,6 +19,7 @@ import {
   modelsDevCostToPerToken,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
+import config from "@/config";
 import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import { findCohereEmbeddingModel } from "@/knowledge-base/embedding-clients/cohere-models";
 import { findVertexMultimodalEmbeddingModel } from "@/knowledge-base/embedding-clients/vertex-models";
@@ -56,6 +57,7 @@ import type {
   ModelOutputModality,
 } from "@/types";
 import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 
 /**
  * Service for syncing models from provider APIs to the database.
@@ -179,12 +181,29 @@ class ModelSyncService {
       const pricingByModelId = new Map(
         providerModels.map((m) => [m.id, m.providerPricing]),
       );
-      const modelsWithIds = upsertedModels.map((m) => ({
-        providerPricing: pricingByModelId.get(m.modelId) ?? null,
-        id: m.id,
-        modelId: m.modelId,
-        recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
-      }));
+      const azureByModelId = new Map(
+        providerModels.map((m) => [m.id, m.azureCapabilities]),
+      );
+      const configurationHash = credentialRow
+        ? azureCapabilityConfigurationHash({
+            ...credentialRow,
+            baseUrl: baseUrl || config.llm.azure.baseUrl,
+            extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
+          })
+        : null;
+      const modelsWithIds = upsertedModels.map((m) => {
+        const azureEvidence = azureByModelId.get(m.modelId);
+        return {
+          azureCapabilities:
+            provider === "azure" && configurationHash && azureEvidence
+              ? { ...azureEvidence, configurationHash }
+              : null,
+          providerPricing: pricingByModelId.get(m.modelId) ?? null,
+          id: m.id,
+          modelId: m.modelId,
+          recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
+        };
+      });
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,

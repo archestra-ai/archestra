@@ -15,7 +15,6 @@ import {
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
-  getAzureModelKind,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
   PROVIDER_BASE_URL_HEADER,
@@ -34,6 +33,7 @@ import {
   subscriptionKindFromCredential,
   USER_ID_HEADER,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 
 import { context, propagation } from "@opentelemetry/api";
 import {
@@ -83,6 +83,7 @@ import {
   openappaEnabled,
 } from "@/openappa/service";
 import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -228,6 +229,7 @@ export function createLLMModel(params: {
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
   /** A platform guardrail call, exempt from blocking unrecognized clients. */
   internalCall?: boolean;
+  azureCapabilities?: AzureModelEvidence;
 }): LLMModel {
   const {
     provider,
@@ -315,6 +317,7 @@ export function createLLMModel(params: {
       headers,
       fetch: createTracedFetch(),
       supportedEndpoints,
+      azureCapabilities: params.azureCapabilities,
     }),
     { provider, modelName },
   );
@@ -463,6 +466,17 @@ export async function createLLMModelForAgent(params: {
       ? await personalTokenValue({ organizationId, userId })
       : apiKey;
 
+  const azureCapabilities =
+    provider === "azure"
+      ? await resolveAzureModelCapabilities({
+          providerApiKeyId: chatApiKeyId,
+          modelId: modelName,
+        })
+      : undefined;
+  if (azureCapabilities && azureCapabilities.status !== "known") {
+    throw new ApiError(400, azureCapabilities.reason);
+  }
+
   const model = createLLMModel({
     provider,
     apiKey: proxyCredential,
@@ -477,6 +491,8 @@ export async function createLLMModelForAgent(params: {
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
+    azureCapabilities:
+      azureCapabilities?.status === "known" ? azureCapabilities : undefined,
   });
 
   const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
@@ -527,6 +543,7 @@ type ProviderModelConfig = {
      * mean "use the provider's default surface", never a guess.
      */
     supportedEndpoints?: SupportedProviderEndpoint[] | null;
+    azureCapabilities?: AzureModelEvidence;
   }) => LLMModel;
   /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
   defaultBaseUrl: string | undefined;
@@ -934,13 +951,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       headers,
       fetch: providedFetch,
       direct,
+      azureCapabilities,
     }) => {
       // Azure has no usable default endpoint; without this guard createOpenAI
       // would fall back to api.openai.com and send the Azure api-key there.
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
-      const useResponses = isAzureOpenAiFirstPartyModelName(modelName);
+      const useResponses = isAzureOpenAiFirstPartyModelName(
+        azureCapabilities?.underlyingModelName ?? modelName,
+      );
 
       // The AI SDK client can't set Azure's api-version as a default query
       // param, so we wrap fetch and inject it on every request — except for
@@ -967,7 +987,20 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
 
-      const kind = getAzureModelKind(modelName);
+      const kind = azureCapabilities?.kind;
+      if (
+        azureCapabilities &&
+        !azureCapabilities.operations.some((operation) =>
+          ["chat", "responses", "image-generation", "realtime-turn"].includes(
+            operation,
+          ),
+        )
+      ) {
+        throw new ApiError(
+          400,
+          "This Azure deployment does not support Chat media turns. Use its explicit media endpoint.",
+        );
+      }
       if (direct && (kind === "realtime" || kind === "translation")) {
         throw new ApiError(
           400,

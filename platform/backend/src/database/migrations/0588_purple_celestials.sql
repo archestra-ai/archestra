@@ -1,0 +1,1 @@
+ALTER TABLE "api_key_models" ADD COLUMN "azure_capabilities" jsonb;

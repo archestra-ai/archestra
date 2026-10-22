@@ -26,6 +26,7 @@ import {
   TeamModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { classifyAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { withDistinctDisplayNames } from "@/services/model-sync";
 import { syncModelsForVisibleApiKeys } from "@/services/model-sync-schedule";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -695,6 +696,25 @@ export async function getAvailableLlmModels(params: {
       ({ model }) => model.provider === provider,
     );
   }
+
+  const azureLinks =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels(
+      apiKeyIds,
+    );
+  filteredModels = filteredModels.map((entry) => {
+    if (entry.model.provider !== "azure") return entry;
+    const evidence = azureLinks
+      .filter((link) => link.model.id === entry.model.id)
+      .map(classifyAzureModelCapabilities)
+      .find((evidence) => evidence.status === "known");
+    return {
+      ...entry,
+      model: {
+        ...entry.model,
+        azureCapabilities: evidence?.status === "known" ? evidence : null,
+      },
+    };
+  });
 
   // Filter by embedding status if requested
   if (isEmbedding !== undefined) {

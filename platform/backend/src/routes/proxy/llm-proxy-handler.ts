@@ -131,6 +131,7 @@ import {
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -1122,6 +1123,15 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    if (
+      provider.unavailableUsageAccounting &&
+      config.llmProxy.usageAccountingMode === "enforce"
+    ) {
+      throw new ApiError(
+        422,
+        "Authoritative usage and cost accounting are unavailable for this media operation",
+      );
+    }
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1129,6 +1139,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
+        unpricedMediaModel: provider.unavailableUsageAccounting
+          ? requestAdapter.getModel()
+          : undefined,
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
@@ -1550,6 +1563,7 @@ export async function handleLLMProxy<
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
+      provider.cancelOnDisconnect ||
       providerName === "microsoft-365-copilot" ||
       providerName === "azure" ||
       provider.interactionType === "azure:realtime" ||
@@ -1806,15 +1820,25 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage },
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(
+              { error: errorMessage },
+              {
+                inputTokens: 0,
+                outputTokens: 0,
+                usageUnavailable: true,
+                costUnavailable: true,
+              },
+            )
+          : { error: errorMessage }) as InteractionResponse,
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
         // Mirrors `model`, as every write path does now that nothing rewrites
         // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
       };
       await persistProxyInteraction({ record, encryptedChat, streamTiming });
     } catch (interactionError) {
@@ -2056,10 +2080,17 @@ async function handleStreaming<
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
-        response: response as InteractionResponse,
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(response, {
+              inputTokens: 0,
+              outputTokens: 0,
+              usageUnavailable: true,
+              costUnavailable: true,
+            })
+          : response) as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
         toolCallBlock,
       };
       await persistProxyInteraction({ record, encryptedChat, streamTiming });
@@ -2125,7 +2156,7 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce")
+        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -2859,6 +2890,10 @@ async function handleStreaming<
         "Stream failure preceded usage settlement failure",
       );
       streamError = settlementError;
+    }
+    if (provider.binaryStream && reply.raw.headersSent) {
+      reply.raw.destroy();
+      return reply;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     // Read once, here: nothing else writes to the client before the error

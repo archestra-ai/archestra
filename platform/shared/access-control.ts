@@ -462,6 +462,18 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   [RouteId.AzureRealtimeTurnWithDefaultAgent]: {},
   [RouteId.AzureRealtimeTurnWithAgent]: {},
+  [RouteId.AzureAudioSpeechWithDefaultAgent]: {},
+  [RouteId.AzureAudioSpeechWithAgent]: {},
+  [RouteId.AzureAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.AzureAudioTranscriptionsWithAgent]: {},
+  [RouteId.AzureAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.AzureAudioTranslationsWithAgent]: {},
+  [RouteId.OpenAiAudioSpeechWithDefaultAgent]: {},
+  [RouteId.OpenAiAudioSpeechWithAgent]: {},
+  [RouteId.OpenAiAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.OpenAiAudioTranscriptionsWithAgent]: {},
+  [RouteId.OpenAiAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
   // Public, stateless APPA endpoint. Returns only an empty annotation.

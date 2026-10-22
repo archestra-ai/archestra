@@ -80,6 +80,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
+import { hasUnavailableMediaCost } from "@/utils/media-usage";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -1538,6 +1539,9 @@ class InteractionModel {
         );
         return;
       }
+
+      // Audio/image counts cannot be repriced using generic text-token tariffs.
+      if (hasUnavailableMediaCost(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;

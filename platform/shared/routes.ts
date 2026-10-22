@@ -1,4 +1,21 @@
 export const RouteId = {
+  AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
+  AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
+  AzureAudioTranscriptionsWithDefaultAgent:
+    "azureAudioTranscriptionsWithDefaultAgent",
+  AzureAudioTranscriptionsWithAgent: "azureAudioTranscriptionsWithAgent",
+  AzureAudioTranslationsWithDefaultAgent:
+    "azureAudioTranslationsWithDefaultAgent",
+  AzureAudioTranslationsWithAgent: "azureAudioTranslationsWithAgent",
+  OpenAiAudioSpeechWithDefaultAgent: "openAiAudioSpeechWithDefaultAgent",
+  OpenAiAudioSpeechWithAgent: "openAiAudioSpeechWithAgent",
+  OpenAiAudioTranscriptionsWithDefaultAgent:
+    "openAiAudioTranscriptionsWithDefaultAgent",
+  OpenAiAudioTranscriptionsWithAgent: "openAiAudioTranscriptionsWithAgent",
+  OpenAiAudioTranslationsWithDefaultAgent:
+    "openAiAudioTranslationsWithDefaultAgent",
+  OpenAiAudioTranslationsWithAgent: "openAiAudioTranslationsWithAgent",
+
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
   GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
   InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",

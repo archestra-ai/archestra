@@ -28,10 +28,12 @@ import {
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { registerAudioRoutes } from "./audio";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/azure`;
+  await registerAudioRoutes(fastify, "azure");
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
   const EMBEDDINGS_SUFFIX = "/embeddings";
@@ -52,6 +54,9 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           EMBEDDINGS_SUFFIX,
           IMAGES_SUFFIX,
           "/realtime/turns",
+          "/audio/speech",
+          "/audio/transcriptions",
+          "/audio/translations",
         ],
         upstream: config.llm.azure.baseUrl,
         providerName: "Azure AI Foundry",

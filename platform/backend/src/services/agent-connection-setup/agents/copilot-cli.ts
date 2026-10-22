@@ -28,7 +28,7 @@ import type {
 
 // Matches the VS Code identity in services/github-copilot-token.ts; updated by
 // the hourly client-version workflow.
-const GITHUB_COPILOT_VSCODE_VERSION = "1.142.0";
+const GITHUB_COPILOT_VSCODE_VERSION = "1.143.0";
 
 export const copilotCliSetup: ShellAgentSetup = {
   label: "Copilot CLI",

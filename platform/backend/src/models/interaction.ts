@@ -73,6 +73,7 @@ import {
   LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH,
   normalizeInteractionResponse,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import {
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
@@ -2677,6 +2678,7 @@ class InteractionModel {
     const lastInteractionMap =
       await InteractionModel.getLastInteractionsForSessions(
         sessionKeys.filter((k): k is string => k !== null),
+        whereClause,
       );
 
     // Collect all external agent IDs to resolve prompt names
@@ -2685,24 +2687,6 @@ class InteractionModel {
     );
     const agentNamesMap = await getAgentNamesById(
       extractAllAgentIdsFromExternalAgentIds(allExternalAgentIds),
-    );
-
-    // One bounded lookup for the displayed request snapshots; never merge labels
-    // across a session or resolve them from today's credential/team settings.
-    const tipIds = [...lastInteractionMap.values()].flatMap((tip) =>
-      tip.lastInteractionId ? [tip.lastInteractionId] : [],
-    );
-    const tipLabels = tipIds.length
-      ? await db
-          .select({
-            id: schema.interactionsTable.id,
-            labels: schema.interactionsTable.attributionLabels,
-          })
-          .from(schema.interactionsTable)
-          .where(and(whereClause, inArray(schema.interactionsTable.id, tipIds)))
-      : [];
-    const labelsByRequest = new Map(
-      tipLabels.map((row) => [row.id, row.labels]),
     );
 
     // Resolve every virtual key referenced by the page in one query, rather
@@ -2774,8 +2758,7 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
-        attributionLabels:
-          labelsByRequest.get(lastInteraction?.lastInteractionId ?? "") ?? null,
+        attributionLabels: lastInteraction?.attributionLabels ?? null,
         contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
@@ -2888,6 +2871,7 @@ class InteractionModel {
    */
   private static async getLastInteractionsForSessions(
     sessionKeys: string[],
+    whereClause: SQL | undefined,
   ): Promise<
     Map<
       string,
@@ -2895,6 +2879,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        attributionLabels: AttributionLabels | null;
         contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
@@ -2930,6 +2915,7 @@ class InteractionModel {
       uuidKeys,
       newest: NEWEST_PER_SESSION,
       oldest: OLDEST_PER_SESSION,
+      whereClause,
     });
 
     // Group by session and find the "last main interaction" and "title interaction"
@@ -2939,6 +2925,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        attributionLabels: AttributionLabels | null;
         contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
@@ -3085,6 +3072,7 @@ class InteractionModel {
         // However many guardrail calls follow the last turn; a session of
         // nothing but them keeps the guardrail tip its sample found.
         skipGuardrails: true,
+        whereClause,
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
         const deep = selectTip(windowRows);
@@ -3143,6 +3131,7 @@ class InteractionModel {
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
+        attributionLabels: lastMainInteraction?.attributionLabels ?? null,
         contentNotStored: lastMainInteraction
           ? (lastMainInteraction.preview?.contentNotStored ??
             isLogContentNotStored(lastMainInteraction.request))
@@ -3169,12 +3158,14 @@ class InteractionModel {
     newest,
     oldest,
     skipGuardrails = false,
+    whereClause,
   }: {
     sessionKeys: string[];
     uuidKeys: string[];
     newest: number;
     oldest: number;
     skipGuardrails?: boolean;
+    whereClause: SQL | undefined;
   }): Promise<SessionWindowRow[]> {
     if (sessionKeys.length === 0) {
       return [];
@@ -3202,32 +3193,32 @@ class InteractionModel {
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
-         WHERE session_id = keys.key
+         WHERE session_id = keys.key AND ${whereClause ?? sql`true`}
          ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
     const newestFrom = skipGuardrails
       ? sql`(SELECT * FROM interactions
-             WHERE session_id = keys.key
+             WHERE session_id = keys.key AND ${whereClause ?? sql`true`}
              ORDER BY created_at DESC NULLS LAST, id DESC
              LIMIT ${GUARDRAIL_SKIP_SCAN_ROWS}) recent
            WHERE source IS NULL OR source NOT LIKE 'guardrail:%'`
-      : sql`interactions WHERE session_id = keys.key`;
+      : sql`interactions WHERE session_id = keys.key AND ${whereClause ?? sql`true`}`;
     const sessionlessBranch =
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
              encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
         uuidKeys.map((k) => sql`${k}::uuid`),
         sql`, `,
       )})
-        AND session_id IS NULL`
+        AND session_id IS NULL AND ${whereClause ?? sql`true`}`
         : sql``;
 
     // thread_id is selected so the chosen tip can be reconstructed from deltas.
@@ -3239,6 +3230,7 @@ class InteractionModel {
       thread_id: string | null;
       request: unknown;
       session_preview: unknown;
+      attribution_labels: AttributionLabels | null;
       type: string;
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
@@ -3255,11 +3247,11 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.session_preview, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.session_preview, t.attribution_labels, t.type,
              t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
                 encrypted_chat_conversation_id
          FROM ${newestFrom}
          ORDER BY created_at DESC NULLS LAST, id DESC
@@ -3301,6 +3293,7 @@ class InteractionModel {
         threadId: row.thread_id,
         request: row.request,
         preview,
+        attributionLabels: row.attribution_labels,
         response: undefined,
         isTitleGeneration:
           preview?.isTitleGeneration ??
@@ -3543,6 +3536,7 @@ export default InteractionModel;
 /** One interaction row sampled for a session's list entry. */
 type SessionWindowRow = {
   preview: InteractionSessionPreview | null;
+  attributionLabels: AttributionLabels | null;
   id: string;
   sessionId: string | null;
   sessionSource: string | null;

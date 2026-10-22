@@ -1,4 +1,5 @@
 import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -92,6 +93,8 @@ describe("provider resource authentication", () => {
       },
     });
     expect(resolved?.apiKey).toBe("synthetic-managed-provider-key");
+    expect(resolved?.limitContext).toMatchObject({ virtualKeyId });
+    expect(resolved?.limitContext.userId).toBeUndefined();
     const first = response.json().account.credentialBinding;
     expect(first).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(response.json())).not.toContain(token);
@@ -99,6 +102,95 @@ describe("provider resource authentication", () => {
       "synthetic-managed-provider-key",
     );
     expect((await call()).json().account.credentialBinding).toBe(first);
+  });
+
+  test("personal virtual keys retain both owner and key billing identities", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const team = await makeTeam(organizationId, user.id);
+    const personal = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Personal resource key",
+      scope: "personal",
+      authorId: user.id,
+      billingTeamId: team.id,
+      providerApiKeys: [{ provider: "azure", providerApiKeyId: keyId }],
+    });
+    const response = await call(personal.value, {
+      "x-archestra-user-id": "untrusted-hint",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(resolved?.limitContext).toMatchObject({
+      userId: user.id,
+      virtualKeyId: personal.virtualKey.id,
+      billingTeamId: team.id,
+    });
+  });
+
+  test("service account keys retain key limits and reject mixed human credentials", async ({
+    makeServiceAccount,
+    makeUser,
+    makeMember,
+  }) => {
+    const account = await makeServiceAccount(organizationId);
+    const service = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Service resource key",
+      authorId: serviceAccountUserId(account.id),
+      providerApiKeys: [{ provider: "azure", providerApiKeyId: keyId }],
+    });
+    const response = await call(service.value, {
+      "x-archestra-user-id": "untrusted-hint",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(resolved?.principal).toEqual({
+      kind: "service_account",
+      id: account.id,
+    });
+    expect(resolved?.limitContext.virtualKeyId).toBe(service.virtualKey.id);
+    expect(resolved?.limitContext.userId).toBeUndefined();
+    const user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const passthrough = await makePassthroughCredential({
+      organizationId,
+      ownerId: user.id,
+    });
+    expect(
+      (await call(service.value, { "x-archestra-virtual-key": passthrough }))
+        .statusCode,
+    ).toBe(401);
+  });
+
+  test("validated passthrough key billing takes precedence alongside a managed key", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const team = await makeTeam(organizationId, user.id);
+    const passthrough = await VirtualApiKeyModel.create({
+      organizationId,
+      name: "Resource passthrough",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+      billingTeamId: team.id,
+    });
+    const response = await call(token, {
+      "x-archestra-virtual-key": passthrough.value,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(resolved?.limitContext).toMatchObject({
+      userId: user.id,
+      virtualKeyId,
+      passthroughVirtualKeyId: passthrough.virtualKey.id,
+      billingTeamId: team.id,
+    });
   });
 
   test("no anonymous access even when unauthenticated inference is enabled", async () => {
@@ -229,6 +321,8 @@ describe("provider resource authentication", () => {
     const first = await call("first-provider-key", headers);
     expect(first.statusCode, first.body).toBe(200);
     expect(resolved?.apiKey).toBe("first-provider-key");
+    expect(resolved?.limitContext.userId).toBe(user.id);
+    expect(resolved?.limitContext.passthroughVirtualKeyId).toBeDefined();
     const second = await call("second-provider-key", headers);
     expect(second.statusCode, second.body).toBe(200);
     expect(second.json().principal).toEqual({ kind: "user", id: user.id });
@@ -249,6 +343,8 @@ describe("provider resource authentication", () => {
     const response = await call(value);
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().principal).toEqual({ kind: "user", id: user.id });
+    expect(resolved?.limitContext.userId).toBe(user.id);
+    expect(resolved?.limitContext.virtualKeyId).toBeUndefined();
     await MemberModel.deleteByMemberOrUserId(user.id, organizationId);
     expect((await call(value)).statusCode).toBe(403);
   });
@@ -270,11 +366,17 @@ describe("provider resource authentication", () => {
     expect(resolved).toBeUndefined();
   });
 
-  test("OAuth client credentials retain strict mapped-account selection", async () => {
+  test("OAuth client credentials retain strict mapped-account selection and billing", async ({
+    makeUser,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const team = await makeTeam(organizationId, user.id);
     const { oauthClient } = await ManagedOauthClientModel.create({
       organizationId,
-      authorId: crypto.randomUUID(),
+      authorId: user.id,
       name: "Resource client",
+      billingTeamId: team.id,
       providerApiKeys: [{ provider: "azure", providerApiKeyId: keyId }],
     });
     const raw = "synthetic-resource-oauth-token";
@@ -292,5 +394,10 @@ describe("provider resource authentication", () => {
       id: oauthClient.id,
     });
     expect(response.json().account.providerApiKeyId).toBe(keyId);
+    expect(resolved?.limitContext).toMatchObject({
+      llmOauthClientId: oauthClient.id,
+      billingTeamId: team.id,
+    });
+    expect(resolved?.limitContext.userId).toBeUndefined();
   });
 });

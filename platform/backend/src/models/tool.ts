@@ -47,6 +47,7 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import {
   type GatedCaller,
   gatedCatalogToolsFence,
+  hiddenAgentsAmong,
   mayUseCatalog,
 } from "@/auth/permission-gated";
 import config from "@/config";
@@ -2593,7 +2594,12 @@ class ToolModel {
       assignmentsByTool.set(toolId, []);
     }
 
+    const hidden = await hiddenAgentsAmong(
+      assignments.map((assignment) => assignment.agentId),
+      reader,
+    );
     for (const assignment of assignments) {
+      if (hidden.has(assignment.agentId)) continue;
       const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
       toolAssignments.push({
         id: assignment.agentId,

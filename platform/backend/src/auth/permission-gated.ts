@@ -48,7 +48,8 @@ export type GatedCaller =
         | "skills-discovery"
         | "install"
         | "docs-server"
-        | "app-backing";
+        | "app-backing"
+        | "scheduled-run";
     };
 
 /** The user or service account a token-authenticated call runs for. */
@@ -91,6 +92,19 @@ export async function assertMayConnect(
 ): Promise<void> {
   if (!(await mayUseCatalog(catalogId, caller)))
     throw new ApiError(404, "MCP server not found");
+}
+
+/** The gated agents among `agentIds` the caller may not see; free unless one is present. */
+export async function hiddenAgentsAmong(
+  agentIds: Iterable<string | null | undefined>,
+  caller: GatedCaller,
+): Promise<ReadonlySet<string>> {
+  if (caller.kind === "internal") return new Set();
+  const gated = [...new Set(agentIds)].filter(
+    (id): id is string => !!id && isPermissionGatedAgent(id),
+  );
+  const visible = await Promise.all(gated.map((id) => canUseAgent(id, caller)));
+  return new Set(gated.filter((_, index) => !visible[index]));
 }
 
 /** The gated agents of an organization the caller may not see. */

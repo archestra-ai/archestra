@@ -1,6 +1,7 @@
 import {
   A2A_OAUTH_SCOPE,
   ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   MEMBER_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,
@@ -25,6 +26,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import agentRoutes from "@/routes/agent";
 import agentToolRoutes from "@/routes/agent-tool";
 import chatRoutes from "@/routes/chat/routes";
+import internalMcpCatalogRoutes from "@/routes/internal-mcp-catalog";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import mcpOauthClientsRoutes from "@/routes/mcp-oauth-clients";
 import mcpServerRoutes from "@/routes/mcp-server";
@@ -294,6 +296,71 @@ describe("the SRE agent and its tools are hidden without sre:read", () => {
           })
         ).statusCode,
       ).toBe(canUse ? 200 : 404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test.for([
+    { caller: "platform admin", canSee: false },
+    { caller: "admin", canSee: true },
+  ] as const)("$caller: SRE chats and built-in tool assignments", async ({
+    caller,
+    canSee,
+  }, {
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeConversation,
+    seedAndAssignArchestraTools,
+  }) => {
+    const { organizationId, admin } = await seedSre({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      seedAndAssignArchestraTools,
+    });
+    await seedAndAssignArchestraTools(SRE_AGENT_ID);
+    const user =
+      caller === "admin"
+        ? admin
+        : await (async () => {
+            const created = await makeUser();
+            await makeMember(created.id, organizationId, {
+              role: PLATFORM_ADMIN_ROLE_NAME,
+            });
+            return created;
+          })();
+    const [conversation, deleted] = await Promise.all(
+      [1, 2].map(() =>
+        makeConversation(SRE_AGENT_ID, { userId: user.id, organizationId }),
+      ),
+    );
+    await db
+      .update(schema.conversationsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.conversationsTable.id, deleted.id));
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, { user, organizationId });
+    });
+    await app.register(chatRoutes);
+    await app.register(internalMcpCatalogRoutes);
+
+    try {
+      for (const url of [
+        `/api/chat/conversations/${conversation.id}`,
+        "/api/chat/conversations",
+        "/api/chat/conversations?search=Test",
+        "/api/chat/conversations/deleted",
+        `/api/internal_mcp_catalog/${ARCHESTRA_MCP_CATALOG_ID}/tools`,
+      ]) {
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body.includes(SRE_AGENT_ID), url).toBe(canSee);
+      }
     } finally {
       await app.close();
     }

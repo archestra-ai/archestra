@@ -6464,6 +6464,7 @@ function appendToLastUserTurn(
     });
     return;
   }
+  if (last.content === text) return;
   if (typeof last.content === "string")
     last.content = [
       { type: "text", text: last.content },

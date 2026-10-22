@@ -475,9 +475,10 @@ describe("asking through the client's own question tool", () => {
       pending: boolean;
       /** The newest user turn arrives without content. */
       noContent?: boolean;
-      stringContent?: boolean;
+      stringContent?: boolean | string;
       assistantTail?: boolean;
       controlTail?: Record<string, unknown>[];
+      historyTail?: Record<string, unknown>[];
     }) {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({
@@ -533,7 +534,13 @@ describe("asking through the client's own question tool", () => {
           params.noContent
             ? { role: "user" }
             : params.stringContent
-              ? { role: "user", content: "latest user" }
+              ? {
+                  role: "user",
+                  content:
+                    typeof params.stringContent === "string"
+                      ? params.stringContent
+                      : "latest user",
+                }
               : {
                   role: "user",
                   content: [
@@ -551,6 +558,8 @@ describe("asking through the client's own question tool", () => {
         request.messages.push({ role: "assistant", content: "prefill" });
       if (params.controlTail)
         request.messages.push(...structuredClone(params.controlTail));
+      if (params.historyTail)
+        request.messages.push(...structuredClone(params.historyTail));
       const beforeMessages = structuredClone(request.messages);
       await plugin.onBeforeModel({ ...context, request });
       await plugin.onCleanup(context);
@@ -707,6 +716,63 @@ describe("asking through the client's own question tool", () => {
         );
       });
     }
+
+    test("Anthropic guidance leaves mid-history control frames and signed assistant content unchanged", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        historyTail: [
+          { role: "system", content: "native hook control" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "signed continuation",
+                signature: "continuation-signature",
+              },
+              { type: "text", text: "assistant continuation" },
+            ],
+          },
+        ],
+      });
+      expect(result.messages.slice(0, -1)).toEqual(result.beforeMessages);
+      expect(result.messages.at(-1)?.role).toBe("user");
+      for (const text of PER_TURN) expect(result.turn).toContain(text);
+    });
+
+    test("Anthropic guidance does not duplicate an identical final user string", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const source = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+      const guidance = (
+        source.messages.at(-1)?.content as { type: string; text?: string }[]
+      ).find((block) => block.type === "text")?.text;
+      expect(guidance).toBeDefined();
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        stringContent: guidance,
+      });
+      expect(
+        (result.messages.at(-1)?.content as { text?: string }[]).filter(
+          (block) => block.text === guidance,
+        ),
+      ).toHaveLength(1);
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+    });
 
     for (const shape of [
       "stringContent",

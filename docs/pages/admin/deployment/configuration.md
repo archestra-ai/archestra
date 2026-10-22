@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -114,7 +114,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Values: `json` (one JSON object per line), `pretty` (colorized text)
   - The OTLP log exporter always receives structured records.
 
-- **`ARCHESTRA_ANALYTICS`** - Sends product analytics to Archestra, and forwards [Guardrails](#guardrails) diagnostic reports to the shared OpenAPPA reporting service.
+- **`ARCHESTRA_ANALYTICS`** - Sends product analytics, instance heartbeats, and backend error reports to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images; off in development
   - Values: `disabled` turns it off. Any other value turns it on.
 
@@ -1447,9 +1447,23 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
-- **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) is enabled.
+- **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
+
+- **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Sends new agent diagnostic reports to the shared OpenAPPA reporting service when the reporting tool is enabled. Independent of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS): setting analytics to `disabled` does not block this explicit opt-in, and enabling forwarding does not turn analytics on.
+  - Default: `false` in every environment, including deployments with analytics enabled. Upgrades require explicit opt-in to continue external forwarding.
+  - Values: `true`, `false`. Unset or empty keeps forwarding off; other values stop startup. Restart the backend after changing it.
+  - Reports contain filtered policy and decision diagnostics, policy-defined names, build information, and the configured frontend hostname. Prompts, tool argument values, tool results, credential values, and raw session identifiers are excluded by the native reporter. The free-text message is sent as written: do not include secrets, customer data, or conversation content.
+  - Encrypted-chat reports and automatic client-failure reports always remain local. Enabling this setting does not automatically resend stored reports; delivery failures keep the local archive.
+  - With Helm, set this variable through `archestra.env`; for example, to enable diagnostics while analytics stays disabled:
+
+  ```yaml
+  archestra:
+    env:
+      ARCHESTRA_ANALYTICS: "disabled"
+      ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED: "true"
+  ```
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

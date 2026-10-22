@@ -2021,6 +2021,7 @@ const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
  */
 export function parseOpenAppaConfig({
   yellEnabled,
+  yellForwardingEnabled,
   offerSigningSecret,
   postgresMaxConnections,
   reviewSummaryProvider,
@@ -2028,12 +2029,19 @@ export function parseOpenAppaConfig({
   authSecret,
 }: {
   yellEnabled?: string;
+  yellForwardingEnabled?: string;
   offerSigningSecret?: string;
   postgresMaxConnections?: string;
   reviewSummaryProvider?: string;
   reviewSummaryModel?: string;
   authSecret?: string;
 } = {}) {
+  const forwarding = yellForwardingEnabled?.trim() ?? "";
+  if (forwarding !== "" && forwarding !== "true" && forwarding !== "false") {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED must be true or false",
+    );
+  }
   const dedicated = offerSigningSecret ?? "";
   if (
     dedicated.length > 0 &&
@@ -2058,6 +2066,8 @@ export function parseOpenAppaConfig({
   return {
     enabled: true,
     yellEnabled: (yellEnabled ?? "true") === "true",
+    // External diagnostic delivery requires its own opt-in in every environment.
+    yellForwardingEnabled: forwarding === "true",
     offerSigningSecret: secret,
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
@@ -2184,6 +2194,7 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
     process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,

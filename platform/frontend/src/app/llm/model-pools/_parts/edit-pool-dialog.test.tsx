@@ -97,6 +97,27 @@ describe("EditPoolDialog", () => {
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
   });
 
+  it.each([
+    ["Priority", ""],
+    ["Priority", "0"],
+    ["Priority", "101"],
+    ["Weight", "0"],
+    ["Weight", "1001"],
+  ])("keeps Save off while %s is %j", async (field, value) => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<EditPoolDialog pool={saved} onOpenChange={() => {}} />);
+    await user.click(screen.getAllByRole("button", { name: "Members" })[0]);
+    const input = screen.getByRole("spinbutton", { name: new RegExp(field) });
+    await user.clear(input);
+    if (value) await user.type(input, value);
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+  });
+
   it("asks before Cancel discards edits", async () => {
     const user = userEvent.setup();
     const saved = pool(null);

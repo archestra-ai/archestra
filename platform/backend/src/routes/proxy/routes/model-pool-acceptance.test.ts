@@ -5,15 +5,22 @@
  * the ground truth, as in the lab. Criteria that need load, replicas or
  * latency routing (AC-Q1, AC-O1, AC-L1, AC-M1, AC-M2) are left out.
  */
+
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
-import { accessGrants, expect, test } from "@/test";
+import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import modelRouterRoutes from "./model-router";
+
+// Model pools are a beta feature; these tests run with it on.
+beforeEach(() => {
+  config.llmProxy.modelPoolsEnabled = true;
+});
 
 vi.mock("../model-pool-failover", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../model-pool-failover")>()),

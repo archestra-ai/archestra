@@ -11,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -20,6 +21,11 @@ import type { Agent } from "@/types";
 import { openaiAdapterFactory } from "./adapters";
 import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import openAiProxyRoutes from "./routes/openai";
+
+// Model pools are a beta feature; these tests run with it on.
+beforeEach(() => {
+  config.llmProxy.modelPoolsEnabled = true;
+});
 
 setupTestCacheManager();
 

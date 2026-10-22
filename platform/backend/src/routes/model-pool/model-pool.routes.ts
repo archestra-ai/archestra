@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import {
   LlmProviderApiKeyModel,
   ModelPoolModel,
@@ -31,10 +32,12 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ModelPoolWithHealthSchema)),
       },
     },
-    async ({ organizationId }, reply) =>
-      reply.send(
+    async ({ organizationId }, reply) => {
+      assertModelPoolsEnabled();
+      return reply.send(
         await withMemberHealth(await ModelPoolModel.list(organizationId)),
-      ),
+      );
+    },
   );
 
   fastify.post(
@@ -50,6 +53,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({ organizationId, input: body });
@@ -72,6 +76,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, params, body }, reply) => {
+      assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({
@@ -101,6 +106,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, params }, reply) => {
+      assertModelPoolsEnabled();
       const deleted = await ModelPoolModel.delete({
         organizationId,
         id: params.id,
@@ -110,6 +116,13 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/** Model pools are a beta feature: while off, their API is not there. */
+function assertModelPoolsEnabled(): void {
+  if (!config.llmProxy.modelPoolsEnabled) {
+    throw new ApiError(404, "Not found");
+  }
+}
 
 /** One pool per name: a request has to know which pool it belongs to. */
 async function assertNameHasNoOtherPool(params: {

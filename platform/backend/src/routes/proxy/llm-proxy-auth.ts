@@ -315,7 +315,8 @@ async function isGrantedModelPool(params: {
   virtualKeyId: string;
   requestedModel?: string | null;
 }): Promise<boolean> {
-  if (!params.requestedModel) return false;
+  if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
+    return false;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.organizationId,
     name: stripClaudeContextVariantSuffix(params.requestedModel),

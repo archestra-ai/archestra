@@ -80,6 +80,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Default: `false`
   - Values: `true`, `false`
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
+  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/reference/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
@@ -587,6 +588,10 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+
+- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
+  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA))
+  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
 
 ## Chat
 

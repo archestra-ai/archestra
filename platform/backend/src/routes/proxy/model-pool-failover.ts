@@ -15,6 +15,7 @@
 import { createHash } from "node:crypto";
 import type { SupportedProvider } from "@archestra/shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import { ModelPoolModel } from "@/models";
 import type { ModelPool, ModelPoolMember, ModelPoolWithHealth } from "@/types";
@@ -94,9 +95,9 @@ export function mayUseModelPool(params: {
 }
 
 /**
- * The plan for a request whose model is a pool's name, or null when no pool
- * has that name, the caller may not use it, or none of its members can answer
- * the client's wire. The session id keeps one conversation on one member
+ * The plan for a request whose model is a pool's name, or null when model
+ * pools are off (a beta feature), no pool has that name, the caller may not
+ * use it, or none of its members can answer the client's wire. The session id keeps one conversation on one member
  * while it is healthy, which keeps the provider's prompt cache warm.
  */
 export async function planModelPool(params: {
@@ -108,6 +109,7 @@ export async function planModelPool(params: {
   grantedPoolId?: string;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
+  if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.organizationId,
     name: params.name,

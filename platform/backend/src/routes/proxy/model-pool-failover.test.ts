@@ -1,5 +1,6 @@
+import config from "@/config";
 import { ModelPoolModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   type ModelPoolCaller,
@@ -12,6 +13,11 @@ import {
   withMemberHealth,
 } from "./model-pool-failover";
 import type { MemberTransport } from "./model-pool-transport";
+
+// Model pools are a beta feature; these tests run with it on.
+beforeEach(() => {
+  config.llmProxy.modelPoolsEnabled = true;
+});
 
 setupTestCacheManager();
 
@@ -144,6 +150,34 @@ describe("planModelPool", () => {
       planModelPool({
         organizationId: org.id,
         name: "glm-4.6",
+        inbound: "openai-chat",
+        caller: { providerApiKeyIds: [zai.id] },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  test("plans nothing while model pools are off", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "glm-5",
+        members: [member(zai.id, "glm-5", 1)],
+        virtualApiKeyIds: [],
+      },
+    });
+
+    config.llmProxy.modelPoolsEnabled = false;
+    await expect(
+      planModelPool({
+        organizationId: org.id,
+        name: "glm-5",
         inbound: "openai-chat",
         caller: { providerApiKeyIds: [zai.id] },
       }),

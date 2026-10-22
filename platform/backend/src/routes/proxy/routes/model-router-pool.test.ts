@@ -8,10 +8,15 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
-import { accessGrants, expect, test } from "@/test";
+import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import modelRouterRoutes from "./model-router";
+
+// Model pools are a beta feature; these tests run with it on.
+beforeEach(() => {
+  config.llmProxy.modelPoolsEnabled = true;
+});
 
 // One model on two providers: Z.ai answers on the OpenAI wire and Bedrock on
 // Converse. The caller's virtual key holds neither key; the pool granted to it

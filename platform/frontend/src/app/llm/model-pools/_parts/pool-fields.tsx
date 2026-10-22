@@ -2,9 +2,8 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import { Plus, TriangleAlert, X } from "lucide-react";
-import Image from "next/image";
 import { Controller, useFieldArray } from "react-hook-form";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
@@ -19,11 +18,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { ModelPool } from "@/lib/model-pools.query";
 import { MemberStatus } from "./member-status";
 import { suggestModelId } from "./model-name";
 import {
   hasRepeatedMember,
+  isValidPriority,
+  isValidWeight,
+  MAX_PRIORITY,
+  MAX_WEIGHT,
   nextPriority,
   type PoolForm,
   type PoolOptions,
@@ -85,8 +89,8 @@ export function ModelNameField({
         )}
       />
       <p className="text-xs text-muted-foreground">
-        Clients ask for this name, and each request goes to one of the members
-        below, whichever provider it is on.
+        Clients ask for this name, and each request goes to one of the pool's
+        members, whichever provider it is on.
       </p>
       {taken ? (
         <InlineNotice>
@@ -231,9 +235,12 @@ export function MembersEditor({
                     <Input
                       type="number"
                       min={1}
-                      max={100}
+                      max={MAX_PRIORITY}
                       className="w-16 font-mono"
                       disabled={disabled}
+                      aria-invalid={
+                        member ? !isValidPriority(member.priority) : undefined
+                      }
                       {...form.register(`members.${index}.priority`, {
                         valueAsNumber: true,
                       })}
@@ -244,9 +251,12 @@ export function MembersEditor({
                     <Input
                       type="number"
                       min={1}
-                      max={1000}
+                      max={MAX_WEIGHT}
                       className="w-20 font-mono"
                       disabled={disabled}
+                      aria-invalid={
+                        member ? !isValidWeight(member.weight) : undefined
+                      }
                       {...form.register(`members.${index}.weight`, {
                         valueAsNumber: true,
                       })}
@@ -457,36 +467,21 @@ const RELIABILITY_RULES = [
   },
 ];
 
-export function ProviderIcon({ provider }: { provider: string }) {
-  const config = PROVIDER_CONFIG[provider as SupportedProvider];
-  if (!config) return null;
-  return (
-    <Image
-      src={config.icon}
-      alt={config.name}
-      title={config.name}
-      width={16}
-      height={16}
-      className="shrink-0 rounded dark:invert"
-    />
-  );
-}
-
 /** The providers a pool's members are on, as icons. */
 export function PoolProviders({ pool }: { pool: ModelPool }) {
-  const providers = [...new Set(pool.members.map((member) => member.provider))];
+  const catalog = useModelProviderCatalog();
+  const providers = [
+    ...new Set(
+      pool.members.map((member) => member.provider as SupportedProvider),
+    ),
+  ];
   return (
     <span className="flex items-center gap-1.5">
       {providers.map((provider) => (
         <ProviderIcon key={provider} provider={provider} />
       ))}
       <span className="truncate">
-        {providers
-          .map(
-            (provider) =>
-              PROVIDER_CONFIG[provider as SupportedProvider]?.name ?? provider,
-          )
-          .join(", ")}
+        {providers.map((provider) => catalog.label(provider)).join(", ")}
       </span>
     </span>
   );

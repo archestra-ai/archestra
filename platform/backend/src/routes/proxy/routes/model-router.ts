@@ -16,7 +16,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
-import { getProviderConfiguredBaseUrl } from "@/config";
+import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
@@ -920,7 +920,11 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     includeEmbeddings: true,
   });
   // Pools come first: their names are what clients are meant to ask for.
-  const pools = (await ModelPoolModel.list(params.auth.organizationId)).filter(
+  const pools = (
+    config.llmProxy.modelPoolsEnabled
+      ? await ModelPoolModel.list(params.auth.organizationId)
+      : []
+  ).filter(
     (pool) =>
       pool.members.some((member) => member.enabled) &&
       mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
@@ -1104,6 +1108,7 @@ async function usableModelPoolId(params: {
   auth: ModelRouterAuth;
   model: string;
 }): Promise<string | null> {
+  if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.auth.organizationId,
     name: params.model.trim(),

@@ -1,8 +1,9 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -13,7 +14,6 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -28,7 +28,9 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   type ModelPool,
@@ -48,6 +50,15 @@ const EMPTY_MESSAGE =
   "No model pools yet. Create one to serve a model from several provider keys.";
 
 export default function ModelPoolsPage() {
+  // Model pools are a beta feature: while this deployment has them off, the
+  // page is not there, as their API is not.
+  const enabled = useFeature("llmModelPoolsEnabled");
+  if (enabled === false) notFound();
+  if (enabled !== true) return null;
+  return <ModelPools />;
+}
+
+function ModelPools() {
   // Benched members come back within a minute, so the list stays fresh.
   const query = useModelPools({ refetchInterval: 5_000, toastOnError: false });
   const pools = query.data ?? [];
@@ -61,6 +72,7 @@ export default function ModelPoolsPage() {
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
+  const providerCatalog = useModelProviderCatalog();
 
   const { data: canReadProviders } = useHasPermissions({
     llmProviderApiKey: ["read"],
@@ -72,7 +84,10 @@ export default function ModelPoolsPage() {
   const needsFirstProvider =
     canReadProviders === true &&
     providerKeys.isSuccess &&
-    !providerKeys.data.some((key) => key.userId === null) &&
+    // Only shared keys on a provider a pool can serve are of use here.
+    !providerKeys.data.some(
+      (key) => key.userId === null && isModelPoolProvider(key.provider),
+    ) &&
     query.isSuccess &&
     pools.length === 0;
 
@@ -82,7 +97,8 @@ export default function ModelPoolsPage() {
       (providerFilter === "all" ||
         pool.members.some((member) => member.provider === providerFilter)) &&
       (statusFilter === "all" ||
-        (statusFilter === "benched") === hasBenchedMember(pool)),
+        (statusFilter === "benched" && hasBenchedMember(pool)) ||
+        (statusFilter === "healthy" && isHealthy(pool))),
   );
   const hasActiveFilters =
     Boolean(search) || providerFilter !== "all" || statusFilter !== "all";
@@ -102,7 +118,7 @@ export default function ModelPoolsPage() {
         {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit",
-          permissions: { llmModel: ["read"] },
+          permissions: { llmModel: ["update"] },
           onClick: () => setEditingId(pool.id),
         },
         {
@@ -236,9 +252,7 @@ export default function ModelPoolsPage() {
                   { value: "all", label: "All providers" },
                   ...providers.map((provider) => ({
                     value: provider,
-                    label:
-                      PROVIDER_CONFIG[provider as SupportedProvider]?.name ??
-                      provider,
+                    label: providerCatalog.label(provider as SupportedProvider),
                   })),
                 ]}
               />
@@ -366,6 +380,13 @@ function PoolIcon() {
     >
       <Layers className="size-3.5" />
     </span>
+  );
+}
+
+/** Every member that is on is answering, and at least one is on. */
+function isHealthy(pool: ModelPool): boolean {
+  return (
+    pool.members.some((member) => member.enabled) && !hasBenchedMember(pool)
   );
 }
 

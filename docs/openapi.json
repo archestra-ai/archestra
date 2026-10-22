@@ -127859,6 +127859,9 @@
                             "kbMfilesConnectorEnabled": {
                               "type": "boolean"
                             },
+                            "llmModelPoolsEnabled": {
+                              "type": "boolean"
+                            },
                             "kbMfilesOauthEnabled": {
                               "type": "boolean"
                             },
@@ -127929,6 +127932,7 @@
                             "agentHooksEnabled",
                             "chatopsTelegramEnabled",
                             "kbMfilesConnectorEnabled",
+                            "llmModelPoolsEnabled",
                             "kbMfilesOauthEnabled",
                             "kbBm25DefaultK1",
                             "kbBm25DefaultB",
@@ -162191,6 +162195,9 @@
                         "kbMfilesConnectorEnabled": {
                           "type": "boolean"
                         },
+                        "llmModelPoolsEnabled": {
+                          "type": "boolean"
+                        },
                         "kbMfilesOauthEnabled": {
                           "type": "boolean"
                         },
@@ -162261,6 +162268,7 @@
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbMfilesConnectorEnabled",
+                        "llmModelPoolsEnabled",
                         "kbMfilesOauthEnabled",
                         "kbBm25DefaultK1",
                         "kbBm25DefaultB",

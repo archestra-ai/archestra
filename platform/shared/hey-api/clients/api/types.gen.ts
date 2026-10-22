@@ -35689,6 +35689,7 @@ export type GetBootstrapResponses = {
                 agentHooksEnabled: boolean;
                 chatopsTelegramEnabled: boolean;
                 kbMfilesConnectorEnabled: boolean;
+                llmModelPoolsEnabled: boolean;
                 kbMfilesOauthEnabled: boolean;
                 kbBm25DefaultK1: number;
                 kbBm25DefaultB: number;
@@ -44577,6 +44578,7 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
+            llmModelPoolsEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
             kbBm25DefaultB: number;

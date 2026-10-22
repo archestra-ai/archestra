@@ -3399,6 +3399,13 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    // BETA gate for model pools: hides the page and its API, and keeps the
+    // proxy and the Model Router from resolving a model name to a pool. Off
+    // by default; a blank value falls back to the ARCHESTRA_BETA master switch
+    // (see betaFeatureEnabled).
+    modelPoolsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
+    ),
     usageAccountingMode: parseUsageAccountingMode(
       process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
     ),

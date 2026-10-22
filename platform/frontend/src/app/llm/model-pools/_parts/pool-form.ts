@@ -27,6 +27,18 @@ export type PoolFormValues = {
 
 export type PoolForm = UseFormReturn<PoolFormValues>;
 
+/** The API's limits on a member's priority and weight. */
+export const MAX_PRIORITY = 100;
+export const MAX_WEIGHT = 1000;
+
+export function isValidPriority(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_PRIORITY;
+}
+
+export function isValidWeight(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_WEIGHT;
+}
+
 export function toFormValues(pool: ModelPool | null): PoolFormValues {
   return {
     name: pool?.name ?? "",
@@ -126,7 +138,7 @@ export type PoolOptions = ReturnType<typeof usePoolOptions>;
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,
-): "name" | "taken" | "members" | "repeated" | null {
+): "name" | "taken" | "members" | "numbers" | "repeated" | null {
   const name = form.watch("name").trim();
   const members = form.watch("members");
   const { data: pools = [] } = useModelPools({ toastOnError: false });
@@ -138,6 +150,13 @@ export function usePoolProblem(
     members.some((member) => !member.providerApiKeyId || !member.modelId.trim())
   )
     return "members";
+  if (
+    members.some(
+      (member) =>
+        !isValidPriority(member.priority) || !isValidWeight(member.weight),
+    )
+  )
+    return "numbers";
   if (hasRepeatedMember(members)) return "repeated";
   return null;
 }

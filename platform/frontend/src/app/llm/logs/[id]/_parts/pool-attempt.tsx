@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useModelPools } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
 import { OVERVIEW_GRID, OverviewCell, OverviewSection } from "./overview-parts";
@@ -19,8 +20,10 @@ const OUTCOME_LABELS: Record<string, string> = {
  */
 export function PoolAttempt({ row }: { row: PoolAttemptRow }) {
   // Most requests go through no pool, and those render nothing and fetch
-  // nothing.
-  if (!row.modelPoolId) return null;
+  // nothing. Neither do older pooled requests while model pools (a beta
+  // feature) are off, since their API is gone.
+  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
+  if (!row.modelPoolId || !poolsEnabled) return null;
   return <PoolAttemptSection row={row} />;
 }
 

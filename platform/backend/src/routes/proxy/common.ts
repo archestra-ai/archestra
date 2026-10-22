@@ -11,6 +11,9 @@ export const OPENAI_HANDLED_ENDPOINT_SUFFIXES = [
   RESPONSES_SUFFIX,
   RESPONSES_COMPACT_SUFFIX,
   EMBEDDINGS_SUFFIX,
+  "/audio/speech",
+  "/audio/transcriptions",
+  "/audio/translations",
 ] as const;
 
 /**

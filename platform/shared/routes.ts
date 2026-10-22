@@ -1,4 +1,21 @@
 export const RouteId = {
+  AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
+  AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
+  AzureAudioTranscriptionsWithDefaultAgent:
+    "azureAudioTranscriptionsWithDefaultAgent",
+  AzureAudioTranscriptionsWithAgent: "azureAudioTranscriptionsWithAgent",
+  AzureAudioTranslationsWithDefaultAgent:
+    "azureAudioTranslationsWithDefaultAgent",
+  AzureAudioTranslationsWithAgent: "azureAudioTranslationsWithAgent",
+  OpenAiAudioSpeechWithDefaultAgent: "openAiAudioSpeechWithDefaultAgent",
+  OpenAiAudioSpeechWithAgent: "openAiAudioSpeechWithAgent",
+  OpenAiAudioTranscriptionsWithDefaultAgent:
+    "openAiAudioTranscriptionsWithDefaultAgent",
+  OpenAiAudioTranscriptionsWithAgent: "openAiAudioTranscriptionsWithAgent",
+  OpenAiAudioTranslationsWithDefaultAgent:
+    "openAiAudioTranslationsWithDefaultAgent",
+  OpenAiAudioTranslationsWithAgent: "openAiAudioTranslationsWithAgent",
+
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
   GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
   InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",
@@ -446,6 +463,18 @@ export const RouteId = {
   AzureRealtimeTurnWithAgent: "azureRealtimeTurnWithAgent",
   AzureImagesWithDefaultAgent: "azureImagesWithDefaultAgent",
   AzureImagesWithAgent: "azureImagesWithAgent",
+  AzureImageEditsWithDefaultAgent: "azureImageEditsWithDefaultAgent",
+  AzureImageEditsWithAgent: "azureImageEditsWithAgent",
+  AzureCreateFile: "azureCreateFile",
+  AzureCreateFileWithAgent: "azureCreateFileWithAgent",
+  AzureListFiles: "azureListFiles",
+  AzureListFilesWithAgent: "azureListFilesWithAgent",
+  AzureRetrieveFile: "azureRetrieveFile",
+  AzureRetrieveFileWithAgent: "azureRetrieveFileWithAgent",
+  AzureFileContent: "azureFileContent",
+  AzureFileContentWithAgent: "azureFileContentWithAgent",
+  AzureDeleteFile: "azureDeleteFile",
+  AzureDeleteFileWithAgent: "azureDeleteFileWithAgent",
   AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
   AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 

@@ -11,6 +11,7 @@
     "./archestra-mcp-server": "./archestra-mcp-server.ts",
     "./built-in-agents": "./built-in-agents.ts",
     "./api-error": "./api-error.ts",
+    "./azure-models": "./azure-models.ts",
     "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",
     "./chat": "./chat.ts",

@@ -1,9 +1,9 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
-  getAzureModelKind,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
   and,
   count,
@@ -1249,17 +1249,23 @@ class ModelModel {
 
     return {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
-      inputModalities: model.inputModalities,
-      outputModalities: model.outputModalities,
+      inputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.inputModalities ?? null)
+        : model.inputModalities,
+      outputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.outputModalities ?? null)
+        : model.outputModalities,
       // Chat's Azure media bridge produces files without running agent tools,
       // even when the upstream model registry advertises native tool support.
       supportsToolCalling:
         model.provider === "azure" &&
         ["image", "audio", "realtime", "translation"].includes(
-          getAzureModelKind(model.modelId),
+          model.azureCapabilities?.kind ?? "text",
         )
           ? false
-          : model.supportsToolCalling,
+          : model.azureCapabilities
+            ? (model.azureCapabilities.supportsToolCalling ?? null)
+            : model.supportsToolCalling,
       supportsReasoningEffort: model.supportsReasoningEffort,
       supportedEndpoints: model.supportedEndpoints,
       recommendedForAgents,
@@ -1273,9 +1279,19 @@ class ModelModel {
     };
   }
 
-  static supportsTextChat(model: Model): boolean {
+  static supportsTextChat(
+    model: Model & { azureCapabilities?: AzureModelEvidence | null },
+  ): boolean {
     if (model.ignored) {
       return false;
+    }
+
+    if (model.provider === "azure" && model.azureCapabilities) {
+      return model.azureCapabilities.operations.some((operation) =>
+        ["chat", "responses", "image-generation", "realtime-turn"].includes(
+          operation,
+        ),
+      );
     }
 
     if (model.embeddingDimensions !== null) {
@@ -1285,7 +1301,7 @@ class ModelModel {
     // Translation uses typed text as a language setting and a WAV upload as input.
     if (
       model.provider === "azure" &&
-      getAzureModelKind(model.modelId) === "translation"
+      model.azureCapabilities?.kind === "translation"
     )
       return true;
 
@@ -1295,7 +1311,7 @@ class ModelModel {
 
     if (
       model.provider === "azure" &&
-      getAzureModelKind(model.modelId) === "image"
+      model.azureCapabilities?.kind === "image"
     ) {
       return true;
     }
@@ -1307,10 +1323,13 @@ class ModelModel {
     return true;
   }
 
-  static supportsEmbeddings(model: Model): boolean {
+  static supportsEmbeddings(model: ProviderPricedModel): boolean {
     if (model.ignored) {
       return false;
     }
+
+    if (model.provider === "azure" && model.azureCapabilities)
+      return model.azureCapabilities.kind === "embedding";
 
     return model.embeddingDimensions !== null;
   }

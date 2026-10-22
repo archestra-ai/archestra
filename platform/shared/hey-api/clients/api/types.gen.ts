@@ -31042,7 +31042,7 @@ export type AzureImageEditsWithDefaultAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -31177,7 +31177,7 @@ export type AzureImageEditsWithAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -31623,7 +31623,7 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32120,7 +32120,7 @@ export type AzureRealtimeTurnWithAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32303,7 +32303,7 @@ export type AzureImagesWithDefaultAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32431,7 +32431,7 @@ export type AzureImagesWithAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32551,7 +32551,7 @@ export type AzureEmbeddingsWithDefaultAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32666,7 +32666,7 @@ export type AzureEmbeddingsWithAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32778,7 +32778,7 @@ export type AzureChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -32979,7 +32979,7 @@ export type AzureResponsesWithDefaultAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -33155,7 +33155,7 @@ export type AzureResponsesWithAgentData = {
     };
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**
@@ -33298,7 +33298,7 @@ export type AzureChatCompletionsWithAgentData = {
     body: XaiChatCompletionRequestInput;
     headers?: {
         /**
-         * Archestra virtual API key for native Azure SDK clients
+         * Virtual API key for native Azure SDK clients
          */
         'api-key'?: string;
         /**

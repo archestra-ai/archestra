@@ -109752,7 +109752,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -110273,7 +110273,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -111690,7 +111690,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -113303,7 +113303,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -113933,7 +113933,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -114387,7 +114387,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -114761,7 +114761,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -115164,7 +115164,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -115525,7 +115525,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -116173,7 +116173,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -116779,7 +116779,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {
@@ -117265,7 +117265,7 @@
             "in": "header",
             "name": "api-key",
             "required": false,
-            "description": "Archestra virtual API key for native Azure SDK clients"
+            "description": "Virtual API key for native Azure SDK clients"
           },
           {
             "schema": {

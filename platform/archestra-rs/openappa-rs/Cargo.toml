@@ -20,11 +20,14 @@ crate-type = ["cdylib"]
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
 # the attestation offered only where the parent covers its rank (#713),
-# and the archestra battery's agent-run rules (#716).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "a50060ab41eb45df1fb609acdd5b1d68c834ab0d" }
+# and the archestra battery's agent-run rules (#716); then explicit
+# no-remedy refusal feedback (#720), a failed subagent reported as stopped
+# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
+# escape (#724).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b94c95052c9b1f643be2b8fff34e1510f6975f1" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

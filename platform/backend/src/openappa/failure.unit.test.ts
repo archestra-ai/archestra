@@ -16,6 +16,8 @@ const STORAGE_TRANSIENT_TEXT =
   "Guardrails could not save its decision for this request because its database was busy or unreachable. Retry the request in a few seconds.";
 const DEFECT_TEXT =
   "Guardrails failed unexpectedly while checking this request. Retrying will not help. Give this reference to your administrator.";
+const SERVICE_UNREACHABLE_TEXT =
+  "Guardrails could not reach a service it needs. Retry the request in a few seconds.";
 
 describe("openappaFailure: storage", () => {
   test.each([
@@ -431,8 +433,18 @@ describe("openappaFailure: defects", () => {
 
     expectNoRetry(failure, 500);
     expect(failure.message).toBe(
-      "Guardrails failed unexpectedly while checking this request. Retry the request once. If it fails again, give this reference to your administrator. (code: unknown)",
+      "Guardrails failed unexpectedly while checking this request. Give this reference to your administrator. (code: unknown)",
     );
+  });
+
+  test.each([
+    new ApiError(502, "GitHub returned HTTP 503 for the App"),
+    new ApiError(429, "rate limited"),
+  ])("an upstream's own outage, relayed by the host, is retried: %s", (cause) => {
+    const failure = openappaFailure(cause);
+
+    expectRetry(failure);
+    expect(failure.message).toBe(SERVICE_UNREACHABLE_TEXT);
   });
 
   test.each([
@@ -452,15 +464,31 @@ describe("openappaFailure: defects", () => {
     "ECONNREFUSED",
     "ECONNRESET",
     "ETIMEDOUT",
+    "ENOTFOUND",
+    "UND_ERR_CONNECT_TIMEOUT",
   ])("the host failing to reach another service is retried without blaming the database: %s", (code) => {
     const failure = openappaFailure(
-      Object.assign(new Error(`connect ${code} 10.0.0.1:8200`), { code }),
+      new Error("fetch failed", {
+        cause: Object.assign(new Error(`connect ${code} 10.0.0.1:8200`), {
+          code,
+        }),
+      }),
     );
 
     expectRetry(failure);
-    expect(failure.message).toBe(
-      "Guardrails could not reach a service it needs. Retry the request in a few seconds.",
+    expect(failure.message).toBe(SERVICE_UNREACHABLE_TEXT);
+  });
+
+  test("a request the host gave up waiting on is retried", () => {
+    const failure = openappaFailure(
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      ),
     );
+
+    expectRetry(failure);
+    expect(failure.message).toBe(SERVICE_UNREACHABLE_TEXT);
   });
 });
 
@@ -513,14 +541,29 @@ describe("openappaFailure: conversations that cannot continue", () => {
     expect(failure.message).toBe(text);
   });
 
-  test("does not log a failure the conversation's state caused", () => {
+  test("records a failure the conversation's state caused without alarm", () => {
     vi.mocked(logger.error).mockClear();
     vi.mocked(logger.warn).mockClear();
+    vi.mocked(logger.info).mockClear();
 
-    openappaFailure(runtimeFailure("untrusted_log", "stored batch 7"));
+    openappaFailure(
+      runtimeFailure(
+        "principal",
+        "OpenAPPA processing interrupted: the session already acts for another principal",
+      ),
+    );
 
     expect(logger.error).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        code: "principal",
+        status: 409,
+        cause:
+          "OpenAPPA processing interrupted: the session already acts for another principal",
+      },
+      "OpenAPPA could not safely complete an operation",
+    );
   });
 
   test("classifies by the runtime's code, not by its wording", () => {
@@ -549,11 +592,7 @@ describe("openappaFailure: the model's requests", () => {
 
   test.each([
     [
-      "OpenAPPA remedy awaiting an answer: [appa] authority hitl cannot be reached from this session, so executing the offer again obtains no ruling. Tell the user that the call waits on hitl.",
-      "Guardrails could not complete this remedy: authority hitl cannot be reached from this session, so executing the offer again obtains no ruling. Tell the user that the call waits on hitl.",
-    ],
-    [
-      "OpenAPPA remedy awaiting an answer: [appa] the return declaration is refused: the reserved attest-schema sanitizer is not registered, or its rank is above this trajectory's; the offer stands and may be executed again",
+      "OpenAPPA remedy interrupted: [appa] the return declaration is refused: the reserved attest-schema sanitizer is not registered, or its rank is above this trajectory's; the offer stands and may be executed again",
       "Guardrails could not complete this remedy: the return declaration is refused: the reserved attest-schema sanitizer is not registered, or its rank is above this trajectory's; the offer stands and may be executed again.",
     ],
     [
@@ -569,6 +608,24 @@ describe("openappaFailure: the model's requests", () => {
 
     expectNoRetry(failure, 400);
     expect(failure.message).toBe(text);
+  });
+
+  test("a long refusal is cut short once and an empty one still reads", () => {
+    const long = openappaFailure(
+      runtimeFailure(
+        "annotation_refused",
+        `OpenAPPA processing interrupted: annotator=appa/do_something error=${"x".repeat(300)}`,
+      ),
+    );
+    expect(long.message).toMatch(/x… Change the request and try again\.$/);
+    expect(long.message).not.toContain("….");
+
+    const empty = openappaFailure(
+      runtimeFailure("peer_message", "OpenAPPA processing interrupted: "),
+    );
+    expect(empty.message).toBe(
+      "Guardrails refused this message. Change the request and try again.",
+    );
   });
 
   test.each([

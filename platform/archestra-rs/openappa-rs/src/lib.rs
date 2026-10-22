@@ -490,6 +490,9 @@ fn read_failure(read: appa_eventlog::ReadError) -> napi::Error {
         | ReadError::PolicyFileMismatch { .. }
         | ReadError::UnknownRevision { .. } => RefusalClass::PolicyUnavailable,
         ReadError::LegacyFamily { .. } => RefusalClass::LegacyFamily,
+        // The session names a root whose log is gone: as `read_refused`
+        // classes it, a trajectory that cannot continue.
+        ReadError::UnknownRoot { .. } => RefusalClass::Trajectory,
         _ => return storage(read),
     };
     failure(Failure::Refused(class), read)
@@ -506,7 +509,9 @@ fn status_read_failure(read: appa_runtime::api::StatusReadError) -> napi::Error 
             failure(Failure::Refused(RefusalClass::PolicyUnavailable), read)
         }
         StatusReadError::Replay(_) => failure(Failure::Refused(RefusalClass::UntrustedLog), read),
-        StatusReadError::UnknownRoot { .. } => storage(read),
+        StatusReadError::UnknownRoot { .. } => {
+            failure(Failure::Refused(RefusalClass::Trajectory), read)
+        }
     }
 }
 
@@ -5557,6 +5562,12 @@ mod failure_tests {
                 "legacy_family",
             ),
             (
+                ReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
                 ReadError::Postgres(PostgresError("PostgreSQL ERROR (SQLSTATE 08006)".into())),
                 "storage",
             ),
@@ -5570,6 +5581,12 @@ mod failure_tests {
                 "policy_unavailable",
             ),
             (StatusReadError::Replay("diverged".into()), "untrusted_log"),
+            (
+                StatusReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
             (
                 StatusReadError::Read(ReadError::Postgres(PostgresError(
                     "PostgreSQL ERROR (SQLSTATE 57P01)".into(),

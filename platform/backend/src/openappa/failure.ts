@@ -168,11 +168,11 @@ type Failure = {
 /**
  * Logs the native cause with its classification and the trace id the logger
  * adds, its URL credentials removed. The error handler logs only the
- * classified message. A failure the request's content caused is logged as a
- * warning; one the conversation's state caused is not logged here.
+ * classified message. A failure the request's content caused is a warning;
+ * one the conversation's state caused is information, so a session another
+ * user presented still leaves a record; the rest are errors.
  */
 function logCause(error: unknown, failure: Failure): void {
-  if (failure.statusCode === 409) return;
   const fields = {
     code: runtimeFailureCode(error),
     status: failure.statusCode,
@@ -182,9 +182,10 @@ function logCause(error: unknown, failure: Failure): void {
       MAX_CAUSE,
     ),
   };
-  if (failure.statusCode === 400)
-    logger.warn(fields, "OpenAPPA could not safely complete an operation");
-  else logger.error(fields, "OpenAPPA could not safely complete an operation");
+  const line = "OpenAPPA could not safely complete an operation";
+  if (failure.statusCode === 400) logger.warn(fields, line);
+  else if (failure.statusCode === 409) logger.info(fields, line);
+  else logger.error(fields, line);
 }
 
 function classify(error: unknown): Failure {
@@ -203,6 +204,13 @@ function classify(error: unknown): Failure {
     };
   // A runtime whose refusal carries no policy-moved class yet reports it in text.
   if (isPolicyMoved(error)) return POLICY_MOVED;
+  // A credential provider or another upstream the host called answered with
+  // an outage of its own, relayed as the provider's status.
+  if (
+    error instanceof ApiError &&
+    UPSTREAM_OUTAGE_STATUSES.has(error.statusCode)
+  )
+    return SERVICE_UNREACHABLE;
   // The host's own database or network failed while it served the runtime.
   switch (transientHostFailure(error)) {
     case "database":
@@ -219,7 +227,6 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
     case "storage":
       return classifyStorage(message);
     case "remedy":
-      return classifyMasked(message, code);
     case "trajectory":
       return classifyMasked(message, code);
     case "annotation_refused":
@@ -457,16 +464,19 @@ function modelRefusal(head: string, message: string): Failure {
   const inner = message.replace(MASK_PREFIX, "");
   // An `[appa]` notice already says what to do next.
   const notice = inner.startsWith(APPA_NOTICE);
-  const text = summarize(inner.slice(notice ? APPA_NOTICE.length : 0)).replace(
-    /\.?$/,
-    ".",
+  const text = sentence(
+    summarize(inner.slice(notice ? APPA_NOTICE.length : 0)),
   );
+  const reason = text ? `${head}: ${text}` : `${head}.`;
   return {
     statusCode: 400,
-    detail: notice
-      ? `${head}: ${text}`
-      : `${head}: ${text} Change the request and try again.`,
+    detail: notice ? reason : `${reason} Change the request and try again.`,
   };
+}
+
+/** Ends `text` with one period, unless it is empty or already cut short. */
+function sentence(text: string): string {
+  return text === "" || /[.…]$/.test(text) ? text : `${text}.`;
 }
 
 function defect(code: RuntimeFailureCode): Failure {
@@ -507,7 +517,8 @@ function unansweredAnnotation(message: string): {
  * How the host itself failed transiently while it served the runtime, on the
  * error or a cause it wraps: a PostgreSQL error class a retry can get past
  * (`database`), or a network error reaching any service (`network`), which
- * can be the database, a credential store or a helper.
+ * can be the database, a credential store or a helper. A request that ran
+ * out of time (`AbortSignal.timeout`) carries no code, only its name.
  */
 function transientHostFailure(
   error: unknown,
@@ -520,6 +531,7 @@ function transientHostFailure(
       return "database";
     if (TRANSIENT_NETWORK_CODES.has(code)) return "network";
   }
+  if (error.name === "TimeoutError") return "network";
   return transientHostFailure(error.cause, depth + 1);
 }
 
@@ -555,13 +567,25 @@ const NUL_SQLSTATES = new Set(["22021", "22P05"]);
 
 const SQLSTATE = /\(SQLSTATE ([0-9A-Z]{5})\)/;
 
+/** Socket, DNS and undici codes a retry can get past. */
 const TRANSIENT_NETWORK_CODES = new Set([
   "ECONNREFUSED",
   "ECONNRESET",
+  "ECONNABORTED",
   "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
   "EPIPE",
   "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
 ]);
+
+/** The statuses an upstream's own outage is relayed with. */
+const UPSTREAM_OUTAGE_STATUSES = new Set([429, 502, 503, 504]);
 
 const MAX_CAUSE_DEPTH = 5;
 
@@ -570,7 +594,6 @@ const PERSISTENT_STORAGE = [
   /has an invalid status/,
   /lacks call context/,
   /requires its conversation key/,
-  /conversation key .* (?:does not|cannot) /,
 ];
 
 const ENCRYPTED_PEER_VIEW =
@@ -610,13 +633,13 @@ const SUBAGENT_ENDED: Failure = {
 const UNKNOWN: Failure = {
   statusCode: 500,
   detail:
-    "Guardrails failed unexpectedly while checking this request. Retry the request once. If it fails again, give this reference to your administrator.",
+    "Guardrails failed unexpectedly while checking this request. Give this reference to your administrator.",
   code: "unknown",
 };
 
 /** The prefixes the binding puts before the runtime's own error text. */
 const MASK_PREFIX =
-  /^(?:OpenAPPA (?:processing interrupted|remedy interrupted|remedy awaiting an answer): |the root fork could not be opened: )+/;
+  /^(?:OpenAPPA (?:processing|remedy) interrupted: |the root fork could not be opened: )+/;
 
 /** The runtime's mark on text it writes for the model. */
 const APPA_NOTICE = "[appa] ";

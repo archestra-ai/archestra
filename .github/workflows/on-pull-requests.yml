@@ -686,7 +686,7 @@ jobs:
       - name: Set up Node.js for triage parity
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24.11.1"
+          node-version: "24.22.1"
 
       - name: Run Node triage parity test
         run: node --test ../.agents/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs

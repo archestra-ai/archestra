@@ -21,6 +21,7 @@ import urllib.request
 
 GATEWAY_URL = os.environ["ARCHESTRA_MCP_GATEWAY_URL"]
 SESSION = os.environ.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or os.environ["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
+GATEWAY_TIMEOUT_SECONDS = 600
 HEADERS = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream",
@@ -84,7 +85,9 @@ def post(message: dict) -> list[dict]:
         GATEWAY_URL, data=json.dumps(message).encode(), headers=headers, method="POST"
     )
     try:
-        response = urllib.request.urlopen(request)
+        # A gateway tool call can run for minutes, but a silent socket must not
+        # hold one of the relay workers forever.
+        response = urllib.request.urlopen(request, timeout=GATEWAY_TIMEOUT_SECONDS)
     except urllib.error.HTTPError as error:
         # JSON-RPC errors can arrive with an HTTP error status.
         response = error

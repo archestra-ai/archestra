@@ -1,5 +1,10 @@
 import client from "prom-client";
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  ScheduleTriggerRunModel,
+} from "@/models";
 import AgentRuntimeHealthModel from "@/models/agent-runtime-health";
 import { expect, test } from "@/test";
 import { agentRuntimeHealthMetrics } from "./agent-runtime-health";
@@ -162,4 +167,124 @@ test("counts failures before pod creation and paused authentication without blam
     heartbeatAge: 0,
   });
   expect(rows.find((row) => row.agentId === ordinaryAgent.id)).toBeUndefined();
+});
+
+test("reports rejected scheduled launches without a runtime task, excluding overlap skips and duplicate failures", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({
+    organizationId: organization.id,
+    runtime: {
+      image: "example/runtime:latest",
+      backend: "kubernetes",
+      command: null,
+      inferenceProtocol: "openai_responses",
+      steerMode: "pipe",
+      privileged: false,
+      resources: null,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+    },
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: organization.id,
+    agentId: agent.id,
+    actorUserId: user.id,
+  });
+  const rejected = await makeScheduleTriggerRun(trigger.id);
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: rejected.id,
+    status: "failed",
+    error: "Runtime launch rejected",
+  });
+  expect(
+    (await AgentRuntimeHealthModel.snapshot()).find(
+      (row) => row.agentId === agent.id,
+    ),
+  ).toMatchObject({ failedRecent: 1, working: 0, submitted: 0 });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_FAILED",
+  });
+  const launched = await makeScheduleTriggerRun(trigger.id);
+  await ScheduleTriggerRunModel.setRuntimeTaskId({
+    runId: launched.id,
+    taskId: task.id,
+  });
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: launched.id,
+    status: "failed",
+    error: "Runtime exited with failure",
+  });
+  const skipped = await ScheduleTriggerRunModel.recordDueRun({
+    trigger,
+    now: new Date(),
+    skip: {
+      error: "Skipped: previous work is unfinished",
+      blockedBy: {
+        phase: "running",
+        runId: rejected.id,
+        runtimeTaskId: null,
+        startedAt: new Date().toISOString(),
+        elapsedSeconds: 60,
+        deadline: null,
+        maximumDurationSeconds: null,
+      },
+    },
+  });
+  expect(skipped?.status).toBe("failed");
+  const ordinaryAgent = await makeAgent({ organizationId: organization.id });
+  const ordinaryTrigger = await makeScheduleTrigger({
+    organizationId: organization.id,
+    agentId: ordinaryAgent.id,
+    actorUserId: user.id,
+  });
+  const ordinary = await makeScheduleTriggerRun(ordinaryTrigger.id);
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: ordinary.id,
+    status: "failed",
+    error: "Foreground chat failed",
+  });
+
+  // One rejected launch and one failed task; the linked schedule is not counted twice.
+  const now = new Date();
+  const rows = await AgentRuntimeHealthModel.snapshot(now);
+  expect(rows.find((row) => row.agentId === agent.id)).toMatchObject({
+    failedRecent: 2,
+    working: 0,
+    submitted: 0,
+  });
+  expect(rows.find((row) => row.agentId === ordinaryAgent.id)).toBeUndefined();
+
+  agentRuntimeHealthMetrics.initialize();
+  const scrape = await client.register
+    .getSingleMetric("agent_runtime_health_tasks")
+    ?.get();
+  expect(scrape?.values).toContainEqual(
+    expect.objectContaining({
+      labels: {
+        agent_id: agent.id,
+        backend: "kubernetes",
+        condition: "failed_recent",
+      },
+      value: 2,
+    }),
+  );
+  const later = await AgentRuntimeHealthModel.snapshot(
+    new Date(now.getTime() + 16 * 60_000),
+  );
+  expect(later.find((row) => row.agentId === agent.id)).toBeUndefined();
 });

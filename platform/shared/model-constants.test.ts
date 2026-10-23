@@ -207,6 +207,10 @@ describe("getAgentRuntimeModelCompatibility", () => {
         runtimeCommand: ["archestra-openclaw"],
         inferenceProtocol: "openai_chat",
       },
+      {
+        runtimeCommand: ["archestra-grok"],
+        inferenceProtocol: "openai_chat",
+      },
     ] as const) {
       expect(
         getAgentRuntimeModelCompatibility({
@@ -467,6 +471,9 @@ describe("getAgentRuntimeAllowedProtocols", () => {
     ).toEqual(["anthropic"]);
     expect(getAgentRuntimeAllowedProtocols(["archestra-codex"])).toEqual([
       "openai_responses",
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
       "openai_chat",
     ]);
     for (const command of [

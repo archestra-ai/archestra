@@ -2,7 +2,7 @@
 set -eu
 
 # The client started with its MCP tools, but the task never reached its input.
-message="The Agent started, but its task could not be submitted to the Claude Code terminal. Retry the task; if it fails again, report this runtime error."
+message="The Agent started, but its task could not be submitted to the Agent's terminal. Retry the task; if it fails again, report this runtime error."
 "$(dirname "$0")/archestra-agent-failure" task_submission "$message"
 printf 'archestra: %s\n' "$message" >&2
 if [ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" = one_shot ]; then

@@ -524,6 +524,9 @@ export function getAgentRuntimeAllowedProtocols(
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
+    // Grok Build supports only Chat Completions on a custom model endpoint.
+    case "archestra-grok":
+      return ["openai_chat"];
     default:
       return ["openai_responses", "openai_chat", "anthropic"];
   }

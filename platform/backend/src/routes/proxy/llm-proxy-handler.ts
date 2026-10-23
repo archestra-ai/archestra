@@ -115,6 +115,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -203,6 +204,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   attributionLabels?: AttributionLabels;
+  throughput?: LlmThroughput;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
@@ -1736,6 +1738,12 @@ export async function handleLLMProxy<
     });
     const ctx: LLMProxyContext<TRequest> = {
       attributionLabels,
+      throughput: new LlmThroughput({
+        entities: [...uniqueBillingEntities.values()],
+        model: actualModel,
+        provider: providerName,
+        subscription: billingMode === "subscription",
+      }),
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
@@ -1823,8 +1831,10 @@ export async function handleLLMProxy<
       }
     }
     if (
-      lifecycleError instanceof ObservedProviderUsageError &&
-      lifecycleError.billingRecorded
+      (lifecycleError instanceof ObservedProviderUsageError &&
+        lifecycleError.billingRecorded) ||
+      (lifecycleError instanceof ThroughputError &&
+        lifecycleError.interactionRecorded)
     )
       return handleError(
         lifecycleError,
@@ -2152,6 +2162,7 @@ async function handleStreaming<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        throughput: ctx.throughput,
       });
     } catch (interactionError) {
       logger.error(
@@ -2177,6 +2188,13 @@ async function handleStreaming<
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
+    try {
+      await ctx.throughput?.reconcile(streamAdapter.state.usage);
+    } catch (error) {
+      // A committed stream cannot become an HTTP 503. Preserve interaction
+      // accounting and surface the metering failure in server logs.
+      logger.error({ err: error }, "Unable to record streaming token usage");
+    }
 
     // Always record interaction (whether stream completed or was aborted)
     if (!upstreamFinished && !streamCompleted) {
@@ -2318,6 +2336,7 @@ async function handleStreaming<
           encryptedChat,
           streamTiming,
           attributionLabels,
+          throughput: ctx.throughput,
         });
       } catch (interactionError) {
         logger.error(
@@ -2370,6 +2389,13 @@ async function handleStreaming<
       callback: async (llmSpan) => {
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
+        }
+        if (reply.raw.destroyed)
+          throw new ApiError(499, "Client disconnected before inference");
+        await ctx.throughput?.admit(request);
+        if (reply.raw.destroyed) {
+          await ctx.throughput?.cancelBeforeSend();
+          throw new ApiError(499, "Client disconnected before inference");
         }
         const stream = await openUpstreamWithRetry({
           open: async () =>
@@ -3058,6 +3084,7 @@ async function handleNonStreaming<
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
   let codexGenerationError: CodexResponsesGenerationError | undefined;
+  let tokenAccountingError: unknown;
 
   logger.debug(
     { model: actualModel },
@@ -3097,6 +3124,13 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
+        if (reply.raw.destroyed)
+          throw new ApiError(499, "Client disconnected before inference");
+        await ctx.throughput?.admit(request);
+        if (reply.raw.destroyed) {
+          await ctx.throughput?.cancelBeforeSend();
+          throw new ApiError(499, "Client disconnected before inference");
+        }
         result = await openUpstreamWithRetry({
           open: () =>
             llmProxyTiming.upstream(reply, () =>
@@ -3118,6 +3152,16 @@ async function handleNonStreaming<
         billingMode = getBillingMode();
       } catch (error) {
         if (error instanceof ObservedProviderUsageError) {
+          try {
+            await ctx.throughput?.reconcile(error.usage);
+          } catch (accountingError) {
+            // Preserve the provider failure and its billed interaction even
+            // when recording the reported token usage also fails.
+            logger.error(
+              { err: accountingError },
+              "Unable to record tokens from failed provider generation",
+            );
+          }
           const costs = await calculateInteractionCosts({
             actualModel,
             usage: error.usage,
@@ -3155,6 +3199,7 @@ async function handleNonStreaming<
             encryptedChat,
             streamTiming,
             attributionLabels,
+            throughput: ctx.throughput,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3206,6 +3251,13 @@ async function handleNonStreaming<
         );
       }
       const adapter = provider.createResponseAdapter(result, request);
+      try {
+        await ctx.throughput?.reconcile(adapter.getUsage());
+      } catch (error) {
+        // Preserve interaction/spend accounting for the completed provider
+        // call before reporting token-meter storage failure to the client.
+        tokenAccountingError = error;
+      }
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
       // usage here so the span cost and the downstream cost/persistence (which
@@ -3531,7 +3583,13 @@ async function handleNonStreaming<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        throughput: ctx.throughput,
       });
+      if (tokenAccountingError) {
+        if (tokenAccountingError instanceof ThroughputError)
+          tokenAccountingError.interactionRecorded = true;
+        throw tokenAccountingError;
+      }
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -3710,6 +3768,7 @@ async function handleNonStreaming<
       encryptedChat,
       streamTiming,
       attributionLabels,
+      throughput: ctx.throughput,
     });
     responsePersisted = true;
   } catch (interactionError) {
@@ -3719,6 +3778,11 @@ async function handleNonStreaming<
     );
     if (ctx.usageAccountingMode === "enforce")
       throw new ApiError(503, "Unable to settle LLM usage");
+  }
+  if (tokenAccountingError) {
+    if (tokenAccountingError instanceof ThroughputError)
+      tokenAccountingError.interactionRecorded = responsePersisted;
+    throw tokenAccountingError;
   }
 
   if (generationFailed) {
@@ -4092,11 +4156,13 @@ async function persistProxyInteraction({
   encryptedChat,
   streamTiming,
   attributionLabels,
+  throughput,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
   attributionLabels?: AttributionLabels;
+  throughput?: LlmThroughput;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
@@ -4110,6 +4176,10 @@ async function persistProxyInteraction({
       ? redactEncryptedChatInteraction(record)
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
+  );
+  await throughput?.settleSpend(
+    record.cost,
+    record.billingMode === "subscription" ? "subscription" : "metered",
   );
 }
 

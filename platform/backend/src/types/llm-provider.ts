@@ -735,6 +735,8 @@ export interface UsageView {
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
+  /** True for locally synthesized output metrics; excluded from token quotas. */
+  outputTokensEstimated?: boolean;
   /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
   providerReportedCost?: number;
 }

@@ -92,7 +92,11 @@ export function LimitModelFilter({
             <Layers className="size-3.5" />
           )}
           <span className="truncate">
-            {selected ? selected.displayName : "All models"}
+            {selected
+              ? selected.displayName
+              : value === "all"
+                ? "All models"
+                : value}
           </span>
           <ChevronDown className="size-4 shrink-0 opacity-50" />
         </Button>
@@ -112,6 +116,15 @@ export function LimitModelFilter({
                 <SelectedCheck visible={value === "all"} />
               </CommandItem>
             </CommandGroup>
+            {!selected && value !== "all" && (
+              <CommandGroup heading="Selected model">
+                <CommandItem value={value} onSelect={() => select(value)}>
+                  <Layers className="size-4 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{value}</span>
+                  <SelectedCheck visible />
+                </CommandItem>
+              </CommandGroup>
+            )}
             {groups.map((group) => (
               <CommandGroup key={group.provider} heading={group.label}>
                 {group.models.map((model) => {

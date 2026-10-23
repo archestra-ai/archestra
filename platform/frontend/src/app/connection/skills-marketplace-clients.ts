@@ -21,6 +21,7 @@ export interface SkillMarketplaceClient {
     | "codex"
     | "cursor"
     | "copilot-cli"
+    | "pi"
     | OpenCodeFamilyClientId;
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
@@ -94,6 +95,21 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         label: "Load or update skills",
         body: "Reload Cursor and verify the skills under Customize → Skills. Run this command later to fetch updates.",
         code: `git -C "$HOME/.cursor/skills/${marketplaceName}" pull --ff-only`,
+        language: "bash",
+      },
+    ],
+  },
+  {
+    id: "pi",
+    getInstallSteps: () => [
+      {
+        label: "Include shared skills in connection setup",
+        body: "Keep Skills selected in Choose what to include. The connection command installs the selected skills from the authorized marketplace.",
+      },
+      {
+        label: "Start Pi with shared skills",
+        body: "arcpi refreshes the marketplace and loads its SKILL.md files using Pi’s native skill loader. Your own skills stay available.",
+        code: "arcpi",
         language: "bash",
       },
     ],

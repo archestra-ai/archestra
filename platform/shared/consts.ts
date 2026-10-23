@@ -278,6 +278,13 @@ export const COPILOT_PROVIDER_ENV_KEYS = {
  * guard entry — its connect is reversed from the Disconnect panel instead.
  */
 export const STARTUP_GUARD_INSTALL = {
+  pi: {
+    scriptRelpath: ".archestra/pi/startup.sh",
+    psScriptRelpath: ".archestra/pi/startup.ps1",
+    skipRelpath: ".archestra/pi/startup.skip",
+    markerStart: "# >>> archestra pi guard >>>",
+    markerEnd: "# <<< archestra pi guard <<<",
+  },
   "claude-code": {
     scriptRelpath: ".archestra/claude-startup-guard.sh",
     // Windows (PowerShell) guard; forward slashes — PowerShell accepts them.

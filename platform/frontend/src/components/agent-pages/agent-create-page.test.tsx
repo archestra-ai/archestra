@@ -150,6 +150,7 @@ describe("AgentCreatePage", () => {
       "OpenCode",
       "Hermes",
       "OpenClaw",
+      "Grok Build",
     ]) {
       const card = screen.getByRole("button", { name: new RegExp(name, "i") });
       expect(card).toBeDisabled();
@@ -218,6 +219,7 @@ describe("AgentCreatePage", () => {
       "OpenCode",
       "Hermes",
       "OpenClaw",
+      "Grok Build",
     ]) {
       expect(
         screen.getByRole("button", { name: new RegExp(name, "i") }),
@@ -237,6 +239,7 @@ describe("AgentCreatePage", () => {
       "OpenCode",
       "Hermes",
       "OpenClaw",
+      "Grok Build",
       "Custom image",
     ]);
     expect(formProps).not.toHaveBeenCalled();

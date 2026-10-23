@@ -62,6 +62,7 @@ describe("OpenCode client attribution", () => {
       "codex",
       "opencode",
       "kilo",
+      "pi",
       "copilot-cli",
     ]);
   });
@@ -87,6 +88,28 @@ describe("OpenCode client attribution", () => {
         mark: OPENCODE_FAMILY.opencode.mark,
       }),
     );
+  });
+});
+
+describe("Pi coding client attribution", () => {
+  test("resolves normalized client ids and exposes the exact stored-id filter", () => {
+    expect(clientForExternalAgentIds(["unrelated", " PI "])).toMatchObject({
+      filter: "pi",
+      label: "Pi",
+      mark: { viewBox: "0 0 560 560" },
+    });
+    expect(ClientFilterSchema.parse("pi")).toBe("pi");
+    expect(clientFilterToAgentIds("pi")).toEqual(["pi"]);
+    expect(CLIENT_FILTER_OPTIONS).toContainEqual(
+      expect.objectContaining({
+        value: "pi",
+        label: "Pi",
+        mark: expect.any(Object),
+      }),
+    );
+    expect(
+      clientForExternalAgentIds(["inflection", "pi_session", "pi-other"]),
+    ).toBeNull();
   });
 });
 

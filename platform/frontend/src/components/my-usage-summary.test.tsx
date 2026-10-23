@@ -43,7 +43,9 @@ const baseStats: MyStatistics = {
   inputTokens: 800,
   outputTokens: 200,
   cacheReadTokens: 50,
-  totalTokens: 1000,
+  cacheWriteTokens: 20,
+  // Unestimated input + output + cache read + cache write.
+  totalTokens: 1070,
   billedCost: 1.5,
   subscriptionCost: 0,
   activeDays: 3,
@@ -100,7 +102,16 @@ describe("MyUsageSummary", () => {
   });
 
   it("says so plainly when the timeframe holds no activity", () => {
-    mockStats({ ...baseStats, requests: 0, totalTokens: 0, billedCost: 0 });
+    mockStats({
+      ...baseStats,
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      billedCost: 0,
+    });
 
     render(<MyUsageSummary timeframe="30d" />);
 

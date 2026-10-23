@@ -255,11 +255,12 @@ describe("managed catalog plugin", () => {
       name: "Vendor",
       activation: "enabled",
       settings: { apiKey: "managed-secret", baseURL: managedRoute },
-      headers: { "X-Archestra-Agent-Id": "opencode" },
     });
-    expect(result.vendor.provider.headers).not.toHaveProperty(
-      "X-Archestra-Virtual-Key",
-    );
+    // The user's own headers stay, minus any credential.
+    expect(result.vendor.provider.headers).toEqual({
+      "X-Local": "kept",
+      "X-Archestra-Agent-Id": "opencode",
+    });
     expect(result.vendor.models).toEqual({
       "fixture/model": { id: "fixture/model", modelID: "fixture/model" },
     });
@@ -566,6 +567,50 @@ describe("managed catalog plugin", () => {
     expect(JSON.stringify(config)).not.toContain("archestra-");
   });
 
+  test("a managed-only provider is not listed while the key file is unreadable", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-nokey-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: path.join(root, "missing.key"),
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: { vendor: { options: { apiKey: "user-vendor-key" } } },
+    };
+    await hooks.config(config);
+    // vendor is served only by the organization's key, which is missing:
+    // it stays out of the picker instead of loading against its stock URL.
+    // openai is the user's own sign-in, listed so they can sign in.
+    expect(config).toMatchObject({ enabled_providers: ["openai"] });
+    expect(config.provider.vendor).toEqual({
+      options: { apiKey: "user-vendor-key" },
+    });
+  });
+
   test("V2 keeps every provider's own name and disables the ones the connection does not serve", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-names-"));
     roots.push(root);
@@ -766,7 +811,7 @@ function run(file: string): Promise<{
 const calls = [];
 const providers = new Map([
   ["openai", { provider: { id: "openai", settings: { apiKey: "user-openai-key" }, headers: {} }, models: new Map([["user-inventory", { id: "user-inventory" }]]) }],
-  ["vendor", { provider: { id: "vendor", name: "Vendor", activation: "auto", settings: { apiKey: "stale" }, headers: { Authorization: "Bearer stale", "ChatGPT-Account-Id": "acct" } }, models: new Map([["retired", { id: "retired", modelID: "retired" }], ["fixture/model", { id: "fixture/model", modelID: "fixture/model" }]]) }],
+  ["vendor", { provider: { id: "vendor", name: "Vendor", activation: "auto", settings: { apiKey: "stale" }, headers: { Authorization: "Bearer stale", "ChatGPT-Account-Id": "acct", "X-Local": "kept" } }, models: new Map([["retired", { id: "retired", modelID: "retired" }], ["fixture/model", { id: "fixture/model", modelID: "fixture/model" }]]) }],
 ]);
 const editor = {
   list: () => [...providers.values()],

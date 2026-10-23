@@ -299,8 +299,10 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
       }
     }
     proxyOrigins = computeProxyOrigins(routes);
-    // Only the connection's providers stay in the picker, signed in or not.
-    const providerIds = Object.keys(routes);
+    // Only the connection's providers stay in the picker: the ones the user
+    // may sign in to, signed in or not, and the ones the organization's key
+    // serves while that key is readable.
+    const providerIds = Object.keys(routes).filter((id) => !hasCatalog || catalogPassthrough.includes(id) || managedKeys.has(id));
     config.enabled_providers = providerIds;
     if (Array.isArray(config.disabled_providers)) {
       config.disabled_providers = config.disabled_providers.filter((id) => !providerIds.includes(id));
@@ -482,14 +484,15 @@ const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
 // Providers the organization's credential serves in the current transform.
 const managedProviders = new Set();
 let managedCredential = "";
+// Every credential the client set goes before the managed key is added.
+const clientCredentialHeaderNames = ["authorization", "chatgpt-account-id", "x-goog-api-key", "x-api-key", openAiOAuthBridgeHeader];
 const stripAliasAuth = (headers) => {
-  const names = ["authorization", "chatgpt-account-id", "x-goog-api-key", openAiOAuthBridgeHeader];
   if (typeof headers.delete === "function") {
-    for (const name of names) headers.delete(name);
+    for (const name of clientCredentialHeaderNames) headers.delete(name);
     if (managedCredential) headers.set("Authorization", "Bearer " + managedCredential);
     return;
   }
-  for (const key of Object.keys(headers)) if (names.includes(key.toLowerCase())) delete headers[key];
+  for (const key of Object.keys(headers)) if (clientCredentialHeaderNames.includes(key.toLowerCase())) delete headers[key];
   if (managedCredential) headers.Authorization = "Bearer " + managedCredential;
 };
 const managedAliasTarget = (url) => {
@@ -529,12 +532,13 @@ export default {
         if (native) continue;
         managedProviders.add(id);
         effectiveRouteHeaders[id] = {};
-        // Stock name, ids and model data stay; only the served models and the
-        // credential change.
+        // Stock name, ids and model data stay, as do the user's own headers
+        // other than a credential; only the served models, the base URL and
+        // the credential change.
         editor.update(id, (provider) => {
           provider.activation = "enabled";
           provider.settings = { ...provider.settings, apiKey: managedKey, baseURL: routes[id] };
-          provider.headers = { ...managedHeaders };
+          provider.headers = { ...Object.fromEntries(Object.entries(provider.headers ?? {}).filter(([name]) => !clientCredentialHeaderNames.includes(name.toLowerCase()))), ...managedHeaders };
         });
         const models = record.models instanceof Map ? [...record.models.values()] : Object.values(record.models ?? {});
         editor.models.set(id, models.filter((model) => served.includes(model.id)));
@@ -614,4 +618,5 @@ const OPENCODE_CREDENTIAL_ENV_BY_PROVIDER: Record<string, readonly string[]> = {
   zhipuai: ["ZHIPU_API_KEY"],
   minimax: ["MINIMAX_API_KEY"],
   moonshotai: ["MOONSHOT_API_KEY"],
+  xai: ["XAI_API_KEY"],
 };

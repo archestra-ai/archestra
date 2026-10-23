@@ -148,6 +148,9 @@ test("connect writes the key and leaves the client's providers, allowlists and p
       compaction: { model: "kimi-code-plan-global/k3" },
       build: { model: "openai/gpt-own", prompt: "build" },
       review: { model: "moonshotai/kimi-k2.6" },
+      // An earlier setup's id for the Anthropic key: the plugin moves it to
+      // the client's provider, so it is served.
+      old: { model: "archestra-anthropic/claude-test" },
     },
     mcp: { tools: { type: "remote", url: "https://tools.example" } },
   };
@@ -180,7 +183,7 @@ test("connect writes the key and leaves the client's providers, allowlists and p
       "warn:Acme does not offer OpenCode small_model local/coder. OpenCode ignores it while connected. Choose a model in OpenCode with /models.",
       "warn:Acme does not offer OpenCode agent.compaction.model kimi-code-plan-global/k3. The agent uses the session's model while connected.",
       "warn:Acme does not offer OpenCode agent.review.model moonshotai/kimi-k2.6. The agent uses the session's model while connected.",
-      "info:Lab cluster has no OpenCode provider, so OpenCode does not list its models.",
+      "warn:Lab cluster has no OpenCode provider, so OpenCode does not list its models.",
     ]);
 
     // Disconnect removes the key and state and changes nothing else.

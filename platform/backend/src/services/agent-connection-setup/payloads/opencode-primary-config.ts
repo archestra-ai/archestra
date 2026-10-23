@@ -44,20 +44,21 @@ type PrimaryProviders = NonNullable<
 
 /**
  * The catalog over the client's stock providers. A primary provider without a
- * row in the route table has no stock provider in the client and is left out;
- * `unsupportedPrimaryProviders` names those for the installer's notice.
+ * row in the route table has no stock provider in the client, so it cannot be
+ * shown; `unsupported` names those keys for the installer's notice.
  */
 function openCodeCatalog(params: {
   primaryProviders?: PrimaryProviders;
   passthroughProviders?: SupportedProvider[];
   routeUrl: (route: OpenCodeProviderRoute) => string;
-}): ManagedRuntimeCatalog {
+}): { catalog: ManagedRuntimeCatalog; unsupported: string[] } {
   const catalog: ManagedRuntimeCatalog = {
     routes: {},
     managed: {},
     passthrough: [],
     legacy: {},
   };
+  const shown = new Set<SupportedProvider>();
   for (const route of OPENCODE_PASSTHROUGH_PROVIDER_ROUTES) {
     const id = route.openCodeProviderId;
     const entry = params.primaryProviders?.find(
@@ -68,26 +69,16 @@ function openCodeCatalog(params: {
     if (!entry && !passthrough) continue;
     catalog.routes[id] = params.routeUrl(route);
     if (entry) {
+      shown.add(entry.provider);
       catalog.managed[id] = entry.models.map((model) => model.id);
       catalog.legacy[`archestra-${route.provider}`] = id;
     }
     if (passthrough) catalog.passthrough.push(id);
   }
-  return catalog;
-}
-
-/** Primary providers the client cannot show: no stock provider speaks their wire. */
-function unsupportedPrimaryProviders(
-  primaryProviders: PrimaryProviders | undefined,
-): string[] {
-  return (primaryProviders ?? [])
-    .filter(
-      (entry) =>
-        !OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.some(
-          (route) => route.provider === entry.provider,
-        ),
-    )
+  const unsupported = (params.primaryProviders ?? [])
+    .filter((entry) => !shown.has(entry.provider))
     .map((entry) => entry.name);
+  return { catalog, unsupported };
 }
 
 /**
@@ -99,7 +90,7 @@ export function openCodePrimaryConfig(
   proxy: SetupScriptProxySection,
   appName: string,
 ) {
-  const catalog = openCodeCatalog({
+  const { catalog, unsupported } = openCodeCatalog({
     primaryProviders: proxy.primaryProviders,
     passthroughProviders: proxy.passthroughProviders,
     routeUrl: (route) => openCodePassthroughBaseUrl(proxy.baseUrl, route),
@@ -116,7 +107,7 @@ export function openCodePrimaryConfig(
     routes: catalog.routes,
     routeHeaders,
     catalog,
-    unsupported: unsupportedPrimaryProviders(proxy.primaryProviders),
+    unsupported,
     appName,
   };
 }
@@ -141,7 +132,7 @@ export function publicManagedCatalog(params: {
         ...route,
         pathSuffix: `/${params.routingAgentId}${route.pathSuffix}`,
       }),
-  });
+  }).catalog;
 }
 
 /**
@@ -203,10 +194,14 @@ if (input) {
   const routes = input.routes ?? {};
   const managed = input.catalog?.managed ?? {};
   const passthrough = Array.isArray(input.catalog?.passthrough) ? input.catalog.passthrough : [];
+  const legacy = input.catalog?.legacy ?? {};
+  // The same test the plugin applies at load: a pin on an id an earlier
+  // setup wrote moves to the client's own provider.
   const served = (pin) => {
     const slash = pin.indexOf("/");
     if (slash <= 0) return false;
-    const providerId = pin.slice(0, slash), modelId = pin.slice(slash + 1);
+    const pinned = pin.slice(0, slash), modelId = pin.slice(slash + 1);
+    const providerId = Object.hasOwn(legacy, pinned) ? legacy[pinned] : pinned;
     if (!routes[providerId]) return false;
     return passthrough.includes(providerId) || (managed[providerId] ?? []).includes(modelId);
   };
@@ -221,7 +216,7 @@ if (input) {
     notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} agent.`)} + name + ".model " + agent.model + ". The agent uses the session's model while connected.");
   }
   for (const name of input.unsupported ?? []) {
-    notices.push("info:" + name + ${JSON.stringify(` has no ${client.label} provider, so ${client.label} does not list its models.`)});
+    notices.push("warn:" + name + ${JSON.stringify(` has no ${client.label} provider, so ${client.label} does not list its models.`)});
   }
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify({ sections: {}, fields: {}, agents: {} }), { mode: 0o600 });

@@ -6,10 +6,7 @@ import {
   MANAGED_TUI_BOOTSTRAP,
   managedPluginBootstrap,
 } from "./managed-runtime-bootstrap";
-import {
-  type ManagedRuntimeCatalog,
-  publicManagedCatalog,
-} from "./opencode-primary-config";
+import { publicManagedCatalog } from "./opencode-primary-config";
 
 export function managedRuntimeInstall(params: {
   client: OpenCodeFamilyClient;
@@ -17,7 +14,6 @@ export function managedRuntimeInstall(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
-  catalog?: ManagedRuntimeCatalog;
 }): { script: string; v1: string; v2: string } | null {
   const source = params.context.managedRuntimeSource;
   if (!source) return null;

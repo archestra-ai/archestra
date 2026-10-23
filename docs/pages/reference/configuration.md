@@ -376,10 +376,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: a Vertex AI location, for example `europe-west1` or `global`
   - Some regions, including `us-east1`, list an incomplete model catalog. `us-central1` and `global` list the full catalog.
 
-- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer, to the global endpoint.
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer and Nano Banana 2.1, to the global endpoint.
   - Default: `false`
   - Values: `true`, `false`
-  - While `false`, those models do not appear in the model list. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - With a regional location and this set to `false`, those models do not appear in the model list. When enabled, their discovery and requests use `global`. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - A configured location of `global` already sends all Gemini requests there, regardless of this setting.
   - Leave it `false` when your region is a data residency requirement. Google routes global-endpoint requests to any region.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to a Google Cloud service account JSON key for Gemini on Vertex AI.

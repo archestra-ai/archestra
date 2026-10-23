@@ -39,7 +39,17 @@ export function getExemplarLabels(): Record<string, string> {
   };
 
   const sessionId = getActiveSessionId();
-  if (sessionId) {
+  // OpenMetrics limits the combined label names and values to 128 characters.
+  // Keep trace correlation, but omit an oversized session rather than truncate
+  // it into an identifier that cannot resolve to the original session.
+  const traceLabelLength = Object.entries(labels).reduce(
+    (length, [key, value]) => length + key.length + value.length,
+    0,
+  );
+  if (
+    sessionId &&
+    traceLabelLength + "sessionID".length + sessionId.length <= 128
+  ) {
     labels.sessionID = sessionId;
   }
 

@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { forwardUrl, loopbackOrigin } from "./native-measurement-proxy.mjs";
+import {
+  fixedRoutes,
+  loopbackOrigin,
+  selectFixedRoute,
+} from "./native-measurement-proxy.mjs";
 import { renderSequentialChecks } from "./sequential-project-workload.mjs";
 
 const origin = loopbackOrigin("http://127.0.0.1:9000/");
 const agent = "agent-12345678";
 
 test("forwarding accepts only fixed loopback routes", () => {
-  const url = forwardUrl(origin, agent, "/v1/mcp/agent-12345678");
+  const routes = fixedRoutes(origin, agent);
+  const url = selectFixedRoute(routes, "/v1/mcp/agent-12345678");
   assert.equal(url.href, "http://127.0.0.1:9000/v1/mcp/agent-12345678");
   for (const hostile of [
     "http://169.254.169.254/latest/meta-data",
@@ -16,9 +21,10 @@ test("forwarding accepts only fixed loopback routes", () => {
     "/v1/mcp/other-agent",
     "https://127.0.0.1:9000/v1/mcp/agent-12345678",
     "/v1/mcp/agent-12345678?next=http://example.com",
+    "/v1/mcp/agent-12345678#fragment",
     "http://127.0.0.1:9001/v1/mcp/agent-12345678",
   ]) {
-    assert.throws(() => forwardUrl(origin, agent, hostile), hostile);
+    assert.throws(() => selectFixedRoute(routes, hostile), hostile);
   }
   assert.throws(() => loopbackOrigin("http://example.com/"));
   assert.throws(() => loopbackOrigin("http://user:pw@127.0.0.1:9000/"));
@@ -36,13 +42,25 @@ test("generated checks embed hostile fixture text as data", () => {
     path: "src/safeName.mjs",
     cases: [
       {
-        args: ["`${process.exit(1)}`\n\"; require('child_process')"],
+        args: [
+          "`${process.exit(1)}`\n\u2028\u2029\"; <script>require('child_process')",
+        ],
         expected: "ok",
       },
     ],
   };
   const generated = renderSequentialChecks([hostile], 1);
-  assert.ok(generated.includes("\\\"; require('child_process')"));
-  assert.equal(generated.split('\\"').length, 2);
-  assert.match(generated, /safeName/);
+  assert.match(generated, /decode\("[A-Za-z0-9+/]+=*"\)/);
+  assert.doesNotMatch(
+    generated,
+    /process\.exit|require\(|`|\$\{|\u2028|\u2029/,
+  );
+  const encoded = generated.match(/decode\("([A-Za-z0-9+/]+=*)"\)/g);
+  assert.ok(encoded.length >= 2);
+  const decoded = encoded.map((call) =>
+    JSON.parse(Buffer.from(call.slice(8, -2), "base64").toString("utf8")),
+  );
+  assert.deepEqual(decoded[1], [
+    "`${process.exit(1)}`\n\u2028\u2029\"; <script>require('child_process')",
+  ]);
 });

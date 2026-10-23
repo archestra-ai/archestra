@@ -474,26 +474,36 @@ export function renderSequentialChecks(tasks, stageCount) {
   return renderChecks(tasks.slice(0, stageCount));
 }
 
+function base64Literal(value) {
+  const encoded = Buffer.from(JSON.stringify(value), "utf8").toString("base64");
+  assert.match(encoded, /^[A-Za-z0-9+/]*={0,2}$/);
+  return `"${encoded}"`;
+}
+
 function sequentialChecks(stageCount) {
   return renderSequentialChecks(SEQUENTIAL_TASKS, stageCount);
 }
 
 function renderChecks(tasks) {
-  return `import test from "node:test";\nimport assert from "node:assert/strict";\n${tasks
+  return `import test from "node:test";\nimport assert from "node:assert/strict";\nconst decode = (value) => JSON.parse(Buffer.from(value, "base64").toString("utf8"));\n${tasks
     .map((task, index) => {
       assert.match(task.name, /^[A-Za-z][A-Za-z0-9]*$/);
       assert.match(task.path, /^src\/[A-Za-z][A-Za-z0-9]*\.mjs$/);
       const binding = `feature${index}`;
       const cases = task.cases
         .map((entry, caseIndex) => {
-          const title = JSON.stringify(
+          const value = Array.isArray(entry)
+            ? { args: entry[0], expected: entry[1] }
+            : entry;
+          const title = base64Literal(
             `${index + 1}:${task.name}:${caseIndex + 1}`,
           );
-          const args = JSON.stringify(entry.args);
-          const invocation = entry.throws
+          const args = base64Literal(value.args);
+          const expected = base64Literal(value.expected);
+          const invocation = value.throws
             ? `assert.throws(() => ${binding}(...args));`
-            : `assert.deepEqual(${binding}(...args), ${JSON.stringify(entry.expected)});`;
-          return `test(${title}, () => { const args = ${args}; const before = structuredClone(args); ${invocation} assert.deepEqual(args, before); });`;
+            : `assert.deepEqual(${binding}(...args), decode(${expected}));`;
+          return `test(decode(${title}), () => { const args = decode(${args}); const before = structuredClone(args); ${invocation} assert.deepEqual(args, before); });`;
         })
         .join("\n");
       return `import { ${task.name} as ${binding} } from ${JSON.stringify(`/workspace/${task.path}`)};\n${cases}`;

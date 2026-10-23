@@ -16,6 +16,7 @@ export function createNativeMeasurementProxy({
 }) {
   const origin = loopbackOrigin(base);
   assert.match(agent, /^[a-z0-9-]{8,80}$/i);
+  const routes = fixedRoutes(origin, agent);
   const observations = [];
   const sockets = new Set();
   const upstreams = new Set();
@@ -52,7 +53,7 @@ export function createNativeMeasurementProxy({
     );
     res.once("close", () => end("cancelled"));
     try {
-      const url = forwardUrl(origin, agent, req.url);
+      const url = selectFixedRoute(routes, req.url);
       const anthropic = url.pathname === `/v1/anthropic/${agent}/v1/messages`;
       const codex = url.pathname === `/v1/openai/${agent}/responses`;
       const gateway = url.pathname === gatewayPath;
@@ -646,21 +647,30 @@ export function loopbackOrigin(base) {
   return origin;
 }
 
-export function forwardUrl(origin, agent, requestUrl) {
-  const parsed = new URL(requestUrl, origin);
-  assert.equal(parsed.origin, origin.origin);
-  assert.equal(parsed.username, "");
-  assert.equal(parsed.password, "");
-  assert.equal(parsed.search, "");
-  assert.equal(parsed.hash, "");
-  const routes = new Set([
-    `/v1/anthropic/${agent}/v1/messages`,
-    `/v1/anthropic/${agent}/v1/messages/count_tokens`,
-    `/v1/openai/${agent}/responses`,
-    `/v1/mcp/${agent}`,
-  ]);
-  assert.ok(routes.has(parsed.pathname), "route_not_allowed");
-  return new URL(parsed.pathname, origin);
+export function fixedRoutes(origin, agent) {
+  assert.match(agent, /^[a-z0-9-]{8,80}$/i);
+  return {
+    anthropic: new URL(`/v1/anthropic/${agent}/v1/messages`, origin),
+    tokenCount: new URL(
+      `/v1/anthropic/${agent}/v1/messages/count_tokens`,
+      origin,
+    ),
+    codex: new URL(`/v1/openai/${agent}/responses`, origin),
+    gateway: new URL(`/v1/mcp/${agent}`, origin),
+  };
+}
+
+export function selectFixedRoute(routes, requestUrl) {
+  assert.equal(typeof requestUrl, "string");
+  assert.ok(requestUrl.startsWith("/"), "absolute_url_rejected");
+  assert.ok(
+    !requestUrl.includes("?") && !requestUrl.includes("#"),
+    "route_not_allowed",
+  );
+  for (const route of Object.values(routes)) {
+    if (requestUrl === route.pathname) return route;
+  }
+  throw new Error("route_not_allowed");
 }
 
 function count(value) {

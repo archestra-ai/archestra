@@ -17,7 +17,7 @@ catalog:
   # fixed in 1.6.22. The @better-auth/* packages release in lockstep with it.
   better-auth: 1.6.22
   "@better-auth/core": 1.6.22
-  "@better-auth/oauth-provider": 1.6.22
+  "@better-auth/oauth-provider": 1.7.0
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`

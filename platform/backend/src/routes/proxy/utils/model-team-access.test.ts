@@ -1,4 +1,6 @@
 import type { ResourcePermissionGrant } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -43,6 +45,47 @@ async function setModelGrants(params: {
 }
 
 describe("checkModelTeamAccess", () => {
+  test("legacy role audiences preserve role checks for authenticated members", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const model = await createModel("legacy-role-model");
+    await setModelGrants({
+      organizationId: org.id,
+      modelId: model.id,
+      grants: [
+        { subject: { type: "role", id: "admin" }, actions: ["read", "use"] },
+      ],
+    });
+    const table = schema.resourcePermissionPoliciesTable;
+    await db
+      .update(table)
+      .set({ legacyOrganizationAudience: true })
+      .where(
+        and(
+          eq(table.organizationId, org.id),
+          eq(table.resource, "llmModel"),
+          eq(table.scope, model.id),
+        ),
+      );
+    const context = {
+      organizationId: org.id,
+      provider: "anthropic" as const,
+      modelId: model.modelId,
+    };
+    await expect(
+      checkModelTeamAccess({ ...context, authenticatedUserId: user.id }),
+    ).resolves.toMatchObject({ allowed: false });
+    // Shared credentials retain the legacy organization-audience rule.
+    await expect(
+      checkModelTeamAccess({ ...context, authenticatedUserId: undefined }),
+    ).resolves.toEqual({ allowed: true });
+  });
+
   test("organization-wide access observes membership and policy revocation on the next call", async ({
     makeOrganization,
     makeUser,

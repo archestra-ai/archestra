@@ -56,11 +56,18 @@ export async function checkModelTeamAccess(params: {
   ).some(
     (entry) =>
       (entry.scope === "*" || entry.scope === model.id) &&
-      ResourcePermissionPolicyModel.isOrganizationWide({
-        policy: entry,
-        scope: model.id,
-        action: "use",
-      }),
+      (authenticatedUserId
+        ? entry.grants.some(
+            (grant) =>
+              grant.subject.type === "organization" &&
+              grant.subject.id === "*" &&
+              grant.actions.includes("use"),
+          )
+        : ResourcePermissionPolicyModel.isOrganizationWide({
+            policy: entry,
+            scope: model.id,
+            action: "use",
+          })),
   );
   const member =
     organizationWide && authenticatedUserId

@@ -125,14 +125,14 @@ runs:
         fi
 
     - name: Install Kind
-      uses: ./.github/actions/install-kind-cluster
+      uses: $/.github/actions/install-kind-cluster
       with:
         config: ${{ inputs.kind-config-path }}
         cluster-name: ${{ inputs.kind-cluster-name }}
 
     - name: Build Docker image
       if: ${{ inputs.build-platform-image == 'true' }}
-      uses: ./.github/actions/build-docker-image
+      uses: $/.github/actions/build-docker-image
       with:
         context: ${{ inputs.platform-context }}
         load: "true"

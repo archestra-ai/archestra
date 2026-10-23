@@ -77,7 +77,7 @@ jobs:
       - name: Verify candidate revision
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Build candidate locally
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
@@ -100,7 +100,7 @@ jobs:
           echo "reference=local://${image_id}" >> "$GITHUB_OUTPUT"
           echo "Candidate ${GITHUB_SHA}: ${IMAGE} -> ${image_id}" >> "$GITHUB_STEP_SUMMARY"
       - name: Scan exact candidate bytes
-        uses: ./.github/actions/scan-docker-image
+        uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
@@ -173,7 +173,7 @@ jobs:
           fetch-depth: 1
 
       - name: Scan exact full and slim Platform image bytes
-        uses: ./.github/actions/scan-platform-image-bytes
+        uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}

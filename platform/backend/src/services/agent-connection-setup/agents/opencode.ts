@@ -88,6 +88,7 @@ const LEGACY_PINNED_DEFAULT_MODELS: Partial<Record<SupportedProvider, string>> =
     openai: "gpt-5.5",
     gemini: "gemini-3.6-flash",
     openrouter: "openrouter/auto",
+    kimi: "kimi-k2-0711-preview",
   };
 
 /**

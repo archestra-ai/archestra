@@ -76,6 +76,7 @@ import {
   AgentWorkspaceStateSchema,
   ApiError,
 } from "@/types";
+import type { A2ATaskFailure } from "@/types/a2a-task";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
   type RuntimeLaunchFailureReason,
@@ -259,6 +260,13 @@ async function launchDelegatedTask(params: {
  * workspace id), and every tool resolves that to the current turn.
  */
 
+const RunFailureSchema = z
+  .object({ code: z.string(), retriable: z.boolean() })
+  .nullable()
+  .describe(
+    "Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise.",
+  );
+
 const RunSummarySchema = z.object({
   run_id: z
     .string()
@@ -275,6 +283,7 @@ const RunSummarySchema = z.object({
     .string()
     .nullable()
     .describe("Why the run is in its state, when there is something to say."),
+  failure: RunFailureSchema,
   created_at: z.string().describe("ISO 8601."),
   state_changed_at: z.string().describe("ISO 8601 of the last transition."),
 });
@@ -349,6 +358,7 @@ const ListAgentRunsOutputSchema = z.object({
         prompt: z.string(),
         state: z.string(),
         status_reason: z.string().nullable(),
+        failure: RunFailureSchema,
         started_at: z.string(),
         ended_at: z.string().nullable(),
         state_changed_at: z.string().nullable(),
@@ -996,6 +1006,9 @@ const registry = defineArchestraTools([
           prompt: narrow ? "" : row.prompt,
           state: displayState(row.state),
           status_reason: modelFacingStatusReason(row.statusReason, narrow),
+          failure: row.failure
+            ? { code: row.failure.code, retriable: row.failure.retriable }
+            : null,
           started_at: row.startedAt.toISOString(),
           ended_at: row.endedAt?.toISOString() ?? null,
           state_changed_at: row.stateChangedAt?.toISOString() ?? null,
@@ -1811,11 +1824,11 @@ function transferResult(params: {
     expires_in_seconds: Math.floor(WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000),
     command:
       args.direction === "download"
-        ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
+        ? `curl --fail --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
         : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
     next_step:
       args.direction === "download"
-        ? "Run the command. Re-run the same command to resume an interrupted download."
+        ? "Run the command. Re-run the same command to resume an interrupted download. A refused request (HTTP 404 or 409) writes no file; authorize the transfer again instead."
         : "Run the command. It reports the stored path, size and checksum on success.",
   });
 }
@@ -1989,6 +2002,7 @@ type RunSummaryRow = {
   state: string;
   agentId: string | null;
   statusReason?: string | null;
+  failure?: A2ATaskFailure | null;
   createdAt: Date;
   stateChangedAt: Date | null;
 };
@@ -2008,6 +2022,10 @@ function runSummary(params: {
       row.statusReason,
       params.narrow ?? false,
     ),
+    // A bounded identifier (platform vocabulary or an image envelope code),
+    // not free-form run text, so it stays visible under Guardrails.
+    failure:
+      row.state === "TASK_STATE_FAILED" && row.failure ? row.failure : null,
     created_at: row.createdAt.toISOString(),
     state_changed_at: (row.stateChangedAt ?? row.createdAt).toISOString(),
   };

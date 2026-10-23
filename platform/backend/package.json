@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.5.0-rc.4",
+  "version": "1.5.0-rc.6",
   "description": "",
   "author": "",
   "private": true,
@@ -91,6 +91,7 @@
     "@cantoo/pdf-lib": "^2.8.1",
     "@chonkiejs/core": "^0.0.7",
     "@crawlee/cheerio": "3.18.2",
+    "@fastify/busboy": "3.2.3",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "^11.4.4",

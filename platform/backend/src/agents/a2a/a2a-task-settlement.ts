@@ -1,4 +1,5 @@
 import { A2ATaskModel } from "@/models";
+import type { A2ATaskFailure } from "@/types/a2a-task";
 import {
   type A2AProtocolMessage,
   A2AProtocolRole,
@@ -15,12 +16,15 @@ export async function settleFailedA2ATask(params: {
   taskId: string;
   contextId: string;
   statusReason: string;
+  /** Machine-readable classification, recorded for Agent Runtime runs. */
+  failure?: A2ATaskFailure;
 }): Promise<void> {
   await A2ATaskModel.transitionStateWithEvent({
     id: params.taskId,
     to: A2AProtocolTaskState.Failed,
     allowedFrom: [A2AProtocolTaskState.Submitted, A2AProtocolTaskState.Working],
     statusReason: params.statusReason,
+    failure: params.failure,
     eventPayload: {
       statusUpdate: {
         taskId: params.taskId,

@@ -68,6 +68,8 @@ export type HostedToolCall = {
  * Options for creating an LLM provider client
  */
 export interface CreateClientOptions {
+  /** Request-local native Azure SDK deployment and original query. */
+  azureRequest?: Readonly<{ deployment?: string; rawQuery: string }>;
   /** Base URL override for the provider API */
   baseUrl?: string;
   /**
@@ -568,6 +570,13 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Provider name */
   readonly provider: SupportedProvider;
 
+  /** This operation cannot provide authoritative usage/pricing for enforced accounting. */
+  readonly unavailableUsageAccounting?: boolean;
+  /** Propagate downstream disconnection to upstream work. */
+  readonly cancelOnDisconnect?: boolean;
+  /** End failed binary streams by closing the transport, never injecting SSE bytes. */
+  readonly binaryStream?: boolean;
+
   /** Interaction type for database storage */
   readonly interactionType: SupportedProviderDiscriminator;
 
@@ -709,6 +718,10 @@ export interface UsageView {
     provider: SupportedProvider;
     priced: PricedBillingUsage;
   };
+  /** Missing provider counts; persist null instead of inventing zero usage. */
+  usageUnavailable?: boolean;
+  /** Token counts exist but this operation cannot be priced by token tariffs. */
+  costUnavailable?: boolean;
   /** Uncached input tokens only (normalized across providers). */
   inputTokens: number;
   outputTokens: number;

@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -135,11 +135,51 @@ What to know:
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
 - **A2A:** A2A clients start runs and continue them with the same `contextId`. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
+- **Scripts and CI:** a script starts a run with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) through an MCP Gateway and polls [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run). The run ends when the agent finishes. A failed run says whether to start again: see [Read Why a Run Failed](#read-why-a-run-failed). Continue the saved workspace with [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run).
+
+### Read Why a Run Failed
+
+A failed run carries a stable `failure.code`, so a script can retry or stop without parsing the message.
+
+| Code | Retry | What happened |
+| --- | --- | --- |
+| `launch.kubernetes_unavailable` | Yes | The Kubernetes API was overloaded or unavailable. |
+| `launch.kubernetes_rejected` | No | Kubernetes refused the run's objects. |
+| `launch.controller_missing` | No | The cluster has no Agent Sandbox controller. |
+| `launch.misconfigured` | No | The agent's settings or the caller's credentials do not allow a start. |
+| `launch.capacity_timeout` | Yes | The pod did not start or resume in time. |
+| `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
+| `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
+| `pod.oom_killed` | No | The agent ran out of memory. |
+| `pod.image_pull` | No | The image could not be pulled. |
+| `pod.failed` | No | The pod failed for another reason. |
+| `turn.interrupted` | Yes | The pod was replaced while the agent worked. The turn is not repeated. |
+| `turn.recording_failed` | Yes | The terminal recording stopped, so the turn stopped. |
+| `turn.process_exited` | No | The agent exited before it reported a result. |
+| `turn.exit_status` | No | The agent exited with an error and gave no reason. |
+| `budget.exceeded` | No | The run spent its **Metered LLM budget**. |
+| `run.settings_changed` | No | The agent's image or host access changed. Start a new run. |
+| `run.resume_refused` | No | The saved workspace cannot take this turn. |
+| `run.workspace_busy` | Yes | Another turn took the saved workspace first. |
+| `run.workspace_missing` | No | The workspace was deleted while the agent worked. |
+| `run.deadline_exceeded` | No | The workspace reached its retention deadline. |
+| `run.unknown` | No | No other code applies. |
+| `image.<code>` | Depends | The agent's image reported this code. Maintained images mark rate limits, provider outages, and proxy or tool startup failures as retriable. |
+
+What to know:
+
+- `failure.retriable` is `true` when a new run of the same agent is likely to succeed without a change.
+- `failure` is `null` on a run that did not fail, and on a failed run with no code.
+- Under [Guardrails](/docs/agents/guardrails), [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run) withholds the status reason but still returns the code. [`GET /api/agent-runs/:taskId`](/docs/reference/api#/Agents/getMyAgentRun) also returns `failure.message`, the same text as `statusReason`.
 
 ## Troubleshooting
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
-- **A model call fails with HTTP 500 and `x-should-retry: false`:** the organization's [Guardrails](/docs/agents/guardrails) policy is invalid. An administrator must fix it. Retrying does not help.
+- **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
+  - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.
+  - `409`: the conversation cannot continue. Start a new one.
+  - `500` with `x-should-retry: false`: an administrator must fix the policy or the deployment setting the message names, or report the reference it carries.
+  - `503`: a short outage. The client retries on its own.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

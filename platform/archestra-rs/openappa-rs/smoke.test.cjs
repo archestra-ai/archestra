@@ -527,6 +527,15 @@ builtin = "hitl"
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
 
+    // Binary output and arguments can carry U+0000, which PostgreSQL text and
+    // jsonb refuse. Their receipts are stored escaped, replay exactly, and the
+    // review lookup still reads them.
+    const binary = scope();
+    assert.equal((await call(binary, 'binary-read', 'read_plain')).decision, 'allow_call');
+    const binaryResult = await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000');
+    assert.equal(binaryResult.approved_output, 'ck.json\u0000\u001ewarn\u0000', JSON.stringify(binaryResult));
+    assert.deepEqual(await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000'), binaryResult);
+
     const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
@@ -540,6 +549,15 @@ builtin = "hitl"
       'allow_call',
       'an unavailable authority must not authorize the call',
     );
+    const binaryEmail = await call(session, 'binary-email', 'send_email', { to: 'recipient\u0000@example.com' });
+    assert.ok(binaryEmail.review?.length > 0, JSON.stringify(binaryEmail));
+    const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
+    assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
+    assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
+    const binaryRemedy = await hook(session, {
+      event: 'remedy', operation_id: 'remedy:binary-email', arguments: { offer_id: binaryEmail.review[0].offer_id },
+    });
+    assert.match(binaryRemedy.result.content[0].text, /gave no answer|cannot be reached/);
   });
 
   await t.test('compact keeps labels on the root; an unprepared fork is refused; a stranger stays clean', async () => {
@@ -993,6 +1011,27 @@ builtin = "hitl"
     const crossings = await native.loadChildReturns(organization_id, lead.session_id);
     assert.ok(crossings.some((record) => record.childSessionId === teammate.session_id
       && record.value === 'Three triggers are stuck'));
+
+    // A message with U+0000 is stored escaped and is still the newest crossing.
+    const binary = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-2',
+      output: 'Two\u0000 triggers recovered',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(binary.decision, 'ack', JSON.stringify(binary));
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, {
+        childSessionId: teammate.session_id, operationPrefix: 'child_send:',
+      })).map((record) => [record.operationId, record.value, record.spawnCallId]),
+      [['child_send:message-2', 'Two\u0000 triggers recovered', spawnCallId]],
+    );
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, { childSessionId: teammate.session_id }))
+        .map((record) => record.value),
+      ['Two\u0000 triggers recovered', 'Three triggers are stuck'],
+    );
   });
 
   await t.test('a teammate message through a sanitizing return reaches its lead as the sanitizer output', async () => {
@@ -1047,12 +1086,14 @@ builtin = "hitl"
     };
     assert.equal((await hook(lead, address)).decision, 'ack');
     assert.deepEqual(await hook(lead, address), { decision: 'ack' }, 'a transport replay repeats the decision');
+    const binaryAddress = { ...address, operation_id: 'address:message-2', output: 'Post\u0000 the table' };
+    assert.equal((await hook(lead, binaryAddress)).decision, 'ack');
 
     const write = await call(teammate, 'writer-after', 'write_public');
     assert.equal(write.decision, 'deny_call', JSON.stringify(write));
     assert.deepEqual(
       (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
-      ['Post the summary'],
+      ['Post the summary', 'Post\u0000 the table'],
     );
   });
 
@@ -1074,6 +1115,27 @@ builtin = "hitl"
     assert.deepEqual(
       (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
       ['Start with the summary'],
+    );
+  });
+
+  await t.test('a lead message with U+0000 to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'binary-late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'binary-late-lead-read');
+    const lateSession = `${lead.session_id}:binary-late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:binary-before-start',
+      spawned_id: lateSession,
+      output: 'Start\u0000 with the table',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'binary-late@team');
+    const write = await call(teammate, 'binary-late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start\u0000 with the table'],
     );
   });
 

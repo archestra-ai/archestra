@@ -17,6 +17,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureResponsesBaseUrl,
+  createAzureFetchWithRequestQuery,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
@@ -130,9 +131,14 @@ export const azureResponsesAdapterFactory: LLMProvider<
       );
     }
 
-    const customFetch = options.agent
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
+    const customFetch = createAzureFetchWithRequestQuery({
+      fetch: observableFetch,
+      rawQuery: options.azureRequest?.rawQuery,
+      abortSignal: options.abortSignal,
+    });
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({

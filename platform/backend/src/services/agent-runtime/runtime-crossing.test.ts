@@ -1190,7 +1190,7 @@ for (const transformed of [false, true]) {
         new Error("the runtime snapshot changed"),
       );
       const stream = await workspaceTransferTickets.read({
-        ticket: workspaceTransferTickets.resolve(
+        ticket: await workspaceTransferTickets.resolve(
           minted.ticket.id,
           minted.token,
         ),
@@ -1294,7 +1294,7 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
   expect(backend.runWorkspaceTransferCommand).not.toHaveBeenCalledWith(
     expect.objectContaining({ args: ["discard", "big"] }),
   );
-  const ticket = workspaceTransferTickets.resolve(
+  const ticket = await workspaceTransferTickets.resolve(
     minted.ticket.id,
     minted.token,
   );

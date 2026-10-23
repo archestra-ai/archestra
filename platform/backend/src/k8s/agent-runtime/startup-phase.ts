@@ -117,6 +117,18 @@ export type AgentRuntimeStartupProgressReporter = (
   progress: AgentRuntimeStartupProgress & { resourceName?: string | null },
 ) => void;
 
+/** Whether a container is stuck because its image cannot be pulled. */
+export function hasAgentRuntimeImagePullFailure(
+  pod: k8s.V1Pod | null | undefined,
+): boolean {
+  return [
+    ...(pod?.status?.initContainerStatuses ?? []),
+    ...(pod?.status?.containerStatuses ?? []),
+  ].some((status) =>
+    IMAGE_WAITING_REASONS.has(status.state?.waiting?.reason ?? ""),
+  );
+}
+
 // ===================== internals =====================
 
 /**

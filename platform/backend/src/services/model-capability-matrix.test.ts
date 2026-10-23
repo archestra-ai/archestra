@@ -872,21 +872,23 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "azure/deployment named after its model, with no underlying name reported",
+    // Deployment names are arbitrary aliases, even when they resemble a vendor
+    // model id. Only reported backing-model evidence can supply registry facts.
+    name: "azure/vendor-looking deployment alias without backing-model evidence stays unknown",
     provider: "azure",
     modelId: "gpt-4o",
     expected: {
-      contextLength: 128000,
-      outputLength: 16384,
-      inputModalities: ["text", "image", "pdf"],
-      outputModalities: ["text"],
-      supportsToolCalling: true,
-      pricePerMillionInput: "2.5",
-      pricePerMillionOutput: "10",
-      priceSource: "models_dev",
-      pricePerMillionCacheRead: "1.25",
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "50.00",
+      pricePerMillionOutput: "50.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
-      cachePriceSource: "models_dev",
+      cachePriceSource: null,
     },
   },
   {
@@ -1269,7 +1271,8 @@ const MATRIX: MatrixRow[] = [
  * the guard below fails until someone updates this number, which is the moment
  * to ask whether that model should really be unpriced.
  */
-const EXPECTED_DEFAULT_PRICED_ROWS = 10;
+// Includes the Azure alias whose backing model was not reported.
+const EXPECTED_DEFAULT_PRICED_ROWS = 11;
 
 /**
  * Reproduce what the LLM proxy does the first time it sees a model: write the

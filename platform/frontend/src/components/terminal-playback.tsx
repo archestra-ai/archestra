@@ -3,11 +3,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
-import {
-  parseTerminalSize,
-  prepareTerminalRecording,
-} from "./terminal-recording-geometry";
+import { prepareTerminalRecording } from "./terminal-recording-geometry";
 import { inferTerminalRecordingLinks } from "./terminal-recording-links";
+import { createTerminalReplayer } from "./terminal-recording-replay";
 import { snapshotTerminalRecording } from "./terminal-recording-snapshot";
 
 /**
@@ -95,23 +93,10 @@ export function TerminalPlayback({
       });
       initializedTerminal = terminal;
 
-      // Alternate buffers have no scrollback and are discarded on exit. Keep
-      // replay in the normal buffer so snapshots retain earlier output.
-      terminal.parser.registerCsiHandler(
-        { prefix: "?", final: "h" },
-        containsAlternateScreenMode,
-      );
-      terminal.parser.registerCsiHandler(
-        { prefix: "?", final: "l" },
-        containsAlternateScreenMode,
-      );
-
-      terminal.parser.registerOscHandler(777, (data) => {
-        const size = parseTerminalSize(data);
-        if (!size) return false;
-        terminal.resize(size.cols, size.rows);
-        return true;
-      });
+      // Alternate buffers have no scrollback and are discarded on exit. The
+      // replayer keeps replay in the normal buffer, so snapshots retain
+      // earlier output, and resizes xterm as tmux resized the recorded pane.
+      const replayer = createTerminalReplayer(terminal);
 
       let rendered: TerminalRecording | null = null;
       let writing = false;
@@ -133,53 +118,51 @@ export function TerminalPlayback({
             : next.content;
         if (!append) {
           if (rendered) terminal.reset();
+          replayer.reset();
           terminal.resize(next.dimensions.cols, next.dimensions.rows);
         }
         rendered = next;
         writing = true;
-        // reset() does not discard xterm's pending write buffer. Drain it
-        // before seeking, otherwise old bytes can resurrect a later screen.
-        terminal.write(bytes, () => {
-          const finish = async () => {
-            if (disposed) return;
-            let view: ReturnType<typeof snapshotTerminalRecording> | null =
-              null;
-            if (!queued) {
-              const length = terminal.buffer.active.length;
-              if (length <= 5000) {
-                view = snapshotTerminalRecording(terminal);
-              } else {
-                view = { cols: terminal.cols, rows: terminal.rows, lines: [] };
-                // Yield between chunks while retaining the write lock to keep
-                // the buffer stable. A queued seek discards this stale snapshot.
-                for (let start = 0; start < length; start += 2000) {
-                  if (disposed || queued) {
-                    view = null;
-                    break;
-                  }
-                  const chunk = snapshotTerminalRecording(terminal, {
-                    start,
-                    end: start + 2000,
-                  });
-                  view.lines.push(...chunk.lines);
-                  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        // reset() does not discard xterm's pending write buffer. Every write
+        // completes before the next render starts, so a seek never meets old
+        // bytes that could resurrect a later screen.
+        void replayer.write(bytes).then(async () => {
+          if (disposed) return;
+          let view: ReturnType<typeof snapshotTerminalRecording> | null = null;
+          if (!queued) {
+            const length = terminal.buffer.active.length;
+            if (length <= 5000) {
+              view = snapshotTerminalRecording(terminal);
+            } else {
+              view = { cols: terminal.cols, rows: terminal.rows, lines: [] };
+              // Yield between chunks while retaining the write lock to keep
+              // the buffer stable. A queued seek discards this stale snapshot.
+              for (let start = 0; start < length; start += 2000) {
+                if (disposed || queued) {
+                  view = null;
+                  break;
                 }
-                while (view?.lines.length && !view.lines.at(-1)?.runs.length)
-                  view.lines.pop();
+                const chunk = snapshotTerminalRecording(terminal, {
+                  start,
+                  end: start + 2000,
+                });
+                view.lines.push(...chunk.lines);
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
               }
+              while (view?.lines.length && !view.lines.at(-1)?.runs.length)
+                view.lines.pop();
             }
-            if (disposed) return;
-            writing = false;
-            if (queued) {
-              const latest = queued;
-              queued = null;
-              renderRecording(latest);
-            } else if (view) {
-              inferTerminalRecordingLinks(view.lines);
-              setSnapshot(view);
-            }
-          };
-          void finish();
+          }
+          if (disposed) return;
+          writing = false;
+          if (queued) {
+            const latest = queued;
+            queued = null;
+            renderRecording(latest);
+          } else if (view) {
+            inferTerminalRecordingLinks(view.lines);
+            setSnapshot(view);
+          }
         });
       };
       renderRecordingRef.current = renderRecording;
@@ -261,15 +244,8 @@ export function TerminalPlayback({
 
 // ===================== internals =====================
 
-const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
 const RETAINED_SCROLLBACK_LINES = 1_000_000;
 /** How close to the end still counts as "at the end" for following output. */
 const FOLLOW_END_SLACK_PX = 10;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
-
-function containsAlternateScreenMode(params: (number | number[])[]): boolean {
-  return params.some(
-    (param) => typeof param === "number" && ALTERNATE_SCREEN_MODES.has(param),
-  );
-}

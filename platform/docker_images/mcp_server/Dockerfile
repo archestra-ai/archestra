@@ -5,8 +5,14 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
 ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
+# The Node.js runtime is copied from the official image (the same pin as
+# platform/Dockerfile) because Alpine's nodejs package can lag a security release
+# on one architecture: aarch64 kept 24.18.1-r0 after x86_64 received 24.22.1-r0.
+ARG NODE_RUNTIME_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 
 FROM ${GOLANG_IMAGE} AS go-bin
+
+FROM ${NODE_RUNTIME_IMAGE} AS node-bin
 
 FROM ${UV_IMAGE} AS uv-bin
 
@@ -113,9 +119,10 @@ RUN npm ci
 # Final stage - minimal runtime image with Python 3.12
 FROM ${PYTHON_IMAGE}
 
-# Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
+# Install runtime dependencies only. Node.js and npm are copied from the node-bin and
+# node-builder stages below, so Alpine's nodejs and npm packages are not installed.
 RUN apk add --no-cache \
-   nodejs \
+   # Shared libraries the official Node.js binary links against (besides musl)
    libstdc++ \
    libgcc \
    openssl \
@@ -134,8 +141,6 @@ RUN apk add --no-cache \
    bind-tools \
    # Additional SSL/TLS libraries
    openssl-dev && \
-   # CVE-2025-55130, CVE-2025-55131: Node.js vulnerabilities fixed in 24.13.0-r0
-   # CVE-2026-21637: Node.js vulnerability
    # CVE-2025-13878: BIND vulnerability fixed in 9.20.18-r0
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
@@ -150,10 +155,9 @@ RUN apk add --no-cache \
    # runtime dependency), so it must be upgraded explicitly here.
    # Copy the same Go 1.26.9 toolchain used by the platform builders for the
    # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
-   apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
-   # Require the fixed Node.js package and invalidate cached runtime layers.
-   # CVE-2026-106069, CVE-2026-105483 and CVE-2026-105482 affect older builds.
-   apk add --no-cache --upgrade "nodejs>=24.22.1-r0" && \
+   # ca-certificates was upgraded as a dependency of Alpine's nodejs package; keep
+   # upgrading it so the system trust store stays current without that package.
+   apk upgrade --no-cache ca-certificates bind openssl zlib expat sqlite-libs && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
    # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
    # CVE-2026-96888 and CVE-2026-19630 in addition to the earlier fixes.
@@ -190,6 +194,14 @@ RUN apk add --no-cache \
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go
+
+# Node.js 24.22.1 from the official image, for CVE-2026-106069, CVE-2026-105483 and
+# CVE-2026-105482 (fixed in 24.22.1) on every architecture.
+COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
+# Alpine's nodejs package verified TLS against the system store, so CAs added with
+# update-ca-certificates were trusted. The official binary uses its bundled roots
+# unless told to read the system store as well.
+ENV NODE_USE_SYSTEM_CA=1
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

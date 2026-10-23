@@ -7,7 +7,7 @@ This is the base Docker image for running Model Context Protocol (MCP) servers i
 The MCP Server Base Image provides a minimal, secure runtime environment for MCP servers written in Python or Node.js. It includes:
 
 - Python 3.12 with MCP SDK and common dependencies
-- Node.js 20 with TypeScript and MCP SDK
+- Node.js 24 (official build) with TypeScript and MCP SDK
 - Non-root user for enhanced security
 - Health checks and proper signal handling
 - Multi-stage build for minimal image size

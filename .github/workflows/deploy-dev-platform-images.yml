@@ -47,10 +47,11 @@ jobs:
           fetch-depth: 1
 
       - name: Authenticate to Google Artifact Registry
-        uses: $/.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       # The previous main image already contains older static chunks. Fall back
       # to the deployed image when that commit did not publish an image.

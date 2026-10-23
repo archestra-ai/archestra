@@ -81,8 +81,8 @@ import {
   toolCallUsageFor,
   userStatisticsFor,
 } from "./data/statistics";
-
 import { registryHandlers } from "./registry";
+import { scheduledRunsHandlers } from "./scheduled-runs";
 
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
@@ -161,6 +161,9 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...(process.env.NEXT_PUBLIC_SCHEDULE_REVIEW === "enabled"
+    ? scheduledRunsHandlers
+    : []),
   http.get("/api/skill-sandbox/artifacts/preview-fixture-wide.csv", () => {
     const headers = [
       "Team",

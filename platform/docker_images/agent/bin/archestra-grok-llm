@@ -141,15 +141,24 @@ def function_name(tool) -> str | None:
 
 
 def wrapped_arguments(key: str, arguments: str) -> str:
-    """The `use_tool` arguments for a gateway call; a non-object input becomes empty."""
-    try:
-        tool_input = json.loads(arguments or "{}")
-    except ValueError:
-        print(f"archestra: the model's arguments for {key} are not JSON; the tool runs without them", file=sys.stderr, flush=True)
-        tool_input = {}
-    if not isinstance(tool_input, dict):
-        print(f"archestra: the model's arguments for {key} are not an object; the tool runs without them", file=sys.stderr, flush=True)
-        tool_input = {}
+    """The `use_tool` arguments for a gateway call.
+
+    Only an absent argument text means an argument-less call. Text that is
+    not JSON stays as it is, so Grok refuses the call as it would any tool
+    call with unreadable arguments; a JSON value that is not an object is
+    wrapped as it is, so Grok's own schema check refuses it. Neither runs the
+    tool with arguments the model did not write.
+    """
+    if not arguments.strip():
+        tool_input: object = {}
+    else:
+        try:
+            tool_input = json.loads(arguments)
+        except ValueError:
+            print(f"archestra: the model's arguments for {key} are not JSON; Grok receives them as written", file=sys.stderr, flush=True)
+            return arguments
+        if not isinstance(tool_input, dict):
+            print(f"archestra: the model's arguments for {key} are not an object; Grok receives them as written", file=sys.stderr, flush=True)
     return json.dumps({"tool_name": key, "tool_input": tool_input}, ensure_ascii=False)
 
 

@@ -735,6 +735,109 @@ describe("Grok Build LLM wire adapter", () => {
     }
   });
 
+  test.each([
+    {
+      case: "truncated JSON stays as written",
+      arguments: '{"dry_run":true,',
+      wrapped: '{"dry_run":true,',
+    },
+    {
+      case: "a value that is not an object is wrapped as it is",
+      arguments: "null",
+      wrapped: JSON.stringify({
+        tool_name: "archestra__github--list_repos",
+        tool_input: null,
+      }),
+    },
+  ])("never runs a gateway tool with arguments the model did not write ($case)", async ({
+    arguments: written,
+    wrapped,
+  }) => {
+    const call = (name: string, args: string) => ({
+      id: "call_1",
+      type: "function",
+      function: { name, arguments: args },
+    });
+    const upstream = await fakeUpstream((body) =>
+      body.stream
+        ? {
+            contentType: "text/event-stream",
+            body:
+              chunk({
+                tool_calls: [
+                  {
+                    index: 0,
+                    ...call("github__list_repos", written.slice(0, 5)),
+                  },
+                ],
+              }) +
+              chunk({
+                tool_calls: [
+                  { index: 0, function: { arguments: written.slice(5) } },
+                ],
+              }) +
+              chunk({}, "tool_calls") +
+              "data: [DONE]\n\n",
+          }
+        : {
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: "chatcmpl-1",
+              object: "chat.completion",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [call("github__list_repos", written)],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            }),
+          },
+    );
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const request = (stream: boolean) =>
+        fetch(`http://127.0.0.1:${adapter.port}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            stream,
+            tools: GROK_TOOLS,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        });
+      const complete = (await (await request(false)).json()).choices[0].message
+        .tool_calls[0];
+      expect(complete.function).toEqual({
+        name: "use_tool",
+        arguments: wrapped,
+      });
+
+      const events = (await (await request(true)).text())
+        .split("\n\n")
+        .filter((event) => event.startsWith("data: {"))
+        .map((event) => JSON.parse(event.slice(6)));
+      const streamed = events
+        .flatMap((event) => event.choices[0].delta.tool_calls ?? [])
+        .reduce(
+          (entry, part) => ({
+            name: part.function.name ?? entry.name,
+            arguments: entry.arguments + (part.function.arguments ?? ""),
+          }),
+          { name: "", arguments: "" },
+        );
+      expect(streamed).toEqual({ name: "use_tool", arguments: wrapped });
+    } finally {
+      await adapter.stop();
+      await upstream.close();
+    }
+  });
+
   test("refuses a request that declares the dispatcher before the gateway is listed", async () => {
     const upstream = await fakeUpstream(() => ({
       contentType: "application/json",

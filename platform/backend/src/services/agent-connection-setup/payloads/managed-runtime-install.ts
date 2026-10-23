@@ -14,7 +14,6 @@ export function managedRuntimeInstall(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
-  providerTwins?: Record<string, string>;
 }): { script: string; v1: string; v2: string } | null {
   const source = params.context.managedRuntimeSource;
   if (!source) return null;
@@ -33,7 +32,6 @@ export function managedRuntimeInstall(params: {
     routes: params.routes,
     headers: params.headers,
     routeHeaders: params.routeHeaders,
-    providerTwins: params.providerTwins,
     mcp: params.context.mcp,
     skipRelpath: `.archestra/${params.client.stateName}-startup-guard.skip`,
     ...(params.context.proxy?.virtualKey

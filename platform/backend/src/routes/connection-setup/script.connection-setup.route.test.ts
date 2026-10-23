@@ -245,9 +245,11 @@ describe("GET /api/connection-setups/script/:token", () => {
           string,
           Record<string, string>
         >;
-        expect(routes["archestra-anthropic"]).toMatch(
-          /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/model-router$/,
-        );
+        // The organization's Anthropic key and the user's own Anthropic
+        // sign-in share the client's provider and its route.
+        expect(
+          Object.keys(routes).some((id) => id.startsWith("archestra-")),
+        ).toBe(false);
         expect(routes.anthropic).toMatch(
           /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/anthropic\/v1$/,
         );
@@ -256,7 +258,6 @@ describe("GET /api/connection-setups/script/:token", () => {
         expect(routeHeaders.anthropic).toEqual({
           [VIRTUAL_KEY_HEADER]: passthroughValue,
         });
-        expect(routeHeaders["archestra-anthropic"]).toBeUndefined();
       }
     });
   }

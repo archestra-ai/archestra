@@ -1,6 +1,7 @@
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 
 /**
@@ -62,6 +63,7 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
       await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
+      await LlmThroughputModel.deleteExpired();
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
       );

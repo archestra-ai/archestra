@@ -27,12 +27,17 @@ export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
  */
 export const LimitTypeSchema = z.enum([
   "token_cost",
+  "requests",
+  "tokens",
+  "requests_per_minute",
+  "tokens_per_minute",
   "mcp_server_calls",
   "tool_calls",
 ]);
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
 export const LimitCleanupIntervalSchema = z.enum([
+  "minute",
   "1h",
   "12h",
   "24h",
@@ -44,6 +49,10 @@ export const LimitCleanupIntervalSchema = z.enum([
   "calendar_month",
 ]);
 export type LimitCleanupInterval = z.infer<typeof LimitCleanupIntervalSchema>;
+export const BudgetCleanupIntervalSchema = LimitCleanupIntervalSchema.exclude([
+  "minute",
+]);
+export type BudgetCleanupInterval = z.infer<typeof BudgetCleanupIntervalSchema>;
 
 /**
  * Base database schema derived from Drizzle
@@ -84,6 +93,8 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
   .refine(
     (data) => {
+      // Normalization is intentional: callers persist this parsed object with
+      // empty model lists cleared and legacy rate intervals set to minute.
       // Validation: mcp_server_calls requires mcpServerName and should not have model
       if (data.limitType === "mcp_server_calls") {
         if (!data.mcpServerName) {
@@ -103,7 +114,13 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         }
       }
       // Validation: token_cost should not have mcp or tool specificity
-      if (data.limitType === "token_cost") {
+      if (
+        data.limitType === "token_cost" ||
+        data.limitType === "requests" ||
+        data.limitType === "tokens" ||
+        data.limitType === "requests_per_minute" ||
+        data.limitType === "tokens_per_minute"
+      ) {
         if (data.mcpServerName || data.toolName) {
           return false;
         }
@@ -114,6 +131,35 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         ) {
           data.model = null;
         }
+      }
+      const throughput =
+        data.limitType === "requests" ||
+        data.limitType === "tokens" ||
+        data.limitType === "requests_per_minute" ||
+        data.limitType === "tokens_per_minute";
+      const legacy = data.limitType.endsWith("_per_minute");
+      if (
+        (throughput || data.limitType === "token_cost") &&
+        (!Number.isSafeInteger(data.limitValue) ||
+          data.limitValue <
+            (data.limitType === "token_cost" &&
+            data.cleanupInterval !== "minute"
+              ? 0
+              : 1) ||
+          data.limitValue > 2147483647)
+      )
+        return false;
+      if (throughput || data.cleanupInterval === "minute") {
+        if (
+          !["organization", "team", "virtual_key"].includes(data.entityType) ||
+          !Number.isSafeInteger(data.limitValue) ||
+          data.limitValue <= 0 ||
+          data.limitValue > 2147483647 ||
+          (legacy && data.cleanupInterval && data.cleanupInterval !== "minute")
+        )
+          return false;
+        if (legacy) data.cleanupInterval = "minute";
+        if (!throughput && data.limitType !== "token_cost") return false;
       }
       return true;
     },
@@ -155,6 +201,20 @@ export interface ModelUsageBreakdown {
  * Limit with per-model usage breakdown
  */
 export const LimitWithUsageSchema = SelectLimitSchema.extend({
+  throughputUsage: z
+    .object({
+      currentUsage: z
+        .number()
+        .describe(
+          "Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap.",
+        ),
+      resetsAt: z
+        .string()
+        .describe(
+          "Minute: projected full allowance recovery without new traffic. Other intervals: next reset.",
+        ),
+    })
+    .optional(),
   labels: z.array(LabelWithDetailsSchema),
   modelUsage: z
     .array(

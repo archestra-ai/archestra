@@ -782,6 +782,23 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    services:
+      # One disposable database for the usage-limits suite, not one per shard.
+      # Same digest-pinned pgvector image as the native ledger job: migrations
+      # create the vector extension, and a stock postgres image fails that step.
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        env:
+          POSTGRES_USER: archestra
+          POSTGRES_PASSWORD: archestra_ci_password
+          POSTGRES_DB: archestra_limits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U archestra -d archestra_limits_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -834,6 +851,22 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
+
+      # After native addons are restored or built. Direct script invocation, not
+      # a cacheable turbo task: a cache hit would replay logs and run nothing.
+      # Failure fails this job, which the shard gate requires to be success.
+      - name: Migrate usage-limits test database
+        env:
+          ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_limits_test
+        run: pnpm --dir backend db:migrate
+
+      - name: Real PostgreSQL usage-limits tests
+        working-directory: ./platform/backend
+        env:
+          NODE_ENV: test
+          ARCHESTRA_DATABASE_POOL_MAX: "16"
+          ARCHESTRA_LLM_LIMITS_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_limits_test
+        run: pnpm test:llm-limits:postgres
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the

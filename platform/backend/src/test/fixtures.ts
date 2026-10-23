@@ -973,6 +973,7 @@ async function makeInteraction(
       | "type"
       | "model"
       | "inputTokens"
+      | "inputTokensEstimated"
       | "outputTokens"
       | "cost"
       | "baselineCost"

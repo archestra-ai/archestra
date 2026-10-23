@@ -271,10 +271,7 @@ export function useKpis({
           tokens: 0,
         };
         totals.requests += point.requests ?? 0;
-        totals.tokens +=
-          (point.inputTokens ?? 0) +
-          (point.outputTokens ?? 0) +
-          (point.cacheReadTokens ?? 0);
+        totals.tokens += point.totalTokens ?? 0;
         byTimestamp.set(point.timestamp, totals);
       }
     }
@@ -299,11 +296,7 @@ export function useKpis({
         series: requests,
       },
       tokens: {
-        value: modelRows.reduce(
-          (total, row) =>
-            total + row.inputTokens + row.outputTokens + row.cacheReadTokens,
-          0,
-        ),
+        value: modelRows.reduce((total, row) => total + row.totalTokens, 0),
         series: tokens,
       },
       people: {

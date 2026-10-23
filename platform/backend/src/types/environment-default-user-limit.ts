@@ -16,7 +16,7 @@ export const SelectEnvironmentDefaultUserLimitSchema = createSelectSchema(
   schema.environmentDefaultUserLimitsTable,
   {
     model: z.array(z.string()).nullable().optional(),
-    cleanupInterval: LimitCleanupIntervalSchema,
+    cleanupInterval: LimitCleanupIntervalSchema.exclude(["minute"]),
   },
 );
 
@@ -32,7 +32,7 @@ export const CreateEnvironmentDefaultUserLimitSchema = createInsertSchema(
     environmentId: z.string().uuid().nullable().optional(),
     limitValue: z.number().int().positive(),
     model: z.array(z.string()).nullable().optional(),
-    cleanupInterval: LimitCleanupIntervalSchema.optional(),
+    cleanupInterval: LimitCleanupIntervalSchema.exclude(["minute"]).optional(),
   },
 ).omit({
   id: true,
@@ -51,7 +51,7 @@ export const UpdateEnvironmentDefaultUserLimitSchema = createUpdateSchema(
   {
     limitValue: z.number().int().positive(),
     model: z.array(z.string()).nullable().optional(),
-    cleanupInterval: LimitCleanupIntervalSchema,
+    cleanupInterval: LimitCleanupIntervalSchema.exclude(["minute"]),
   },
 )
   .pick({

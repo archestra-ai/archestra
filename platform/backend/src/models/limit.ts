@@ -27,6 +27,7 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import { BudgetCleanupIntervalSchema, CreateLimitSchema } from "@/types";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -35,8 +36,10 @@ import { priceTokens, sumMoney } from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
+import CacheEntryModel from "./cache-entry";
 import { LimitLabelModel } from "./entity-labels";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
+import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
 
 type LimitsCleanupOptionsEntities = {
@@ -128,6 +131,16 @@ class LimitModel {
    * Create a new limit
    */
   static async create(data: CreateLimit): Promise<LimitWithLabels> {
+    if (
+      data.limitType === "requests_per_minute" ||
+      data.limitType === "tokens_per_minute" ||
+      data.limitType === "requests" ||
+      data.limitType === "tokens" ||
+      data.limitType === "token_cost" ||
+      data.cleanupInterval === "minute"
+    ) {
+      data = CreateLimitSchema.parse(data);
+    }
     const { labels, ...columns } = data;
     const [limit] = await db
       .insert(schema.limitsTable)
@@ -352,6 +365,9 @@ class LimitModel {
     }
 
     const [limit] = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`cache-entry:llm-throughput:${id}`}, 0))`,
+      );
       const [existingLimit] = await tx
         .select()
         .from(schema.limitsTable)
@@ -362,11 +378,53 @@ class LimitModel {
         return [];
       }
 
+      if (
+        [existingLimit.limitType, patchData.limitType].some(
+          (type) =>
+            type === "requests_per_minute" ||
+            type === "tokens_per_minute" ||
+            type === "requests" ||
+            type === "tokens",
+        ) ||
+        patchData.cleanupInterval === "minute" ||
+        existingLimit.cleanupInterval === "minute" ||
+        existingLimit.limitType === "token_cost"
+      ) {
+        const validated = CreateLimitSchema.safeParse({
+          ...existingLimit,
+          ...patchData,
+        });
+        if (!validated.success)
+          throw new ApiError(400, "Invalid limit configuration");
+      }
+      if (
+        patchData.limitType &&
+        patchData.limitType !== existingLimit.limitType &&
+        patchData.limitType !==
+          existingLimit.limitType.replace("_per_minute", "")
+      ) {
+        throw new ApiError(
+          400,
+          "Create a separate limit to change its throughput dimension",
+        );
+      }
+      if (
+        (patchData.entityType &&
+          patchData.entityType !== existingLimit.entityType) ||
+        (patchData.entityId && patchData.entityId !== existingLimit.entityId)
+      )
+        throw new ApiError(400, "Create a separate limit to change its scope");
+
       const shouldResetUsage =
         patchData.cleanupInterval !== undefined &&
         patchData.cleanupInterval !== existingLimit.cleanupInterval;
       const limitPatchData = shouldResetUsage
-        ? { ...patchData, lastCleanup: sql`now()` }
+        ? {
+            ...patchData,
+            // JS dates retain milliseconds. Keep interval epochs distinct even
+            // for rapid edits or a database clock moving backwards.
+            lastCleanup: sql`greatest(clock_timestamp(), ${schema.limitsTable.lastCleanup} + interval '1 millisecond')`,
+          }
         : patchData;
 
       const updatedLimits = await tx
@@ -375,7 +433,17 @@ class LimitModel {
         .where(eq(schema.limitsTable.id, id))
         .returning();
 
+      if (updatedLimits[0]) {
+        await LlmThroughputModel.reconfigure({
+          entries: new CacheEntryModel(tx),
+          limit: updatedLimits[0],
+        });
+      }
+
       if (shouldResetUsage) {
+        await tx
+          .delete(schema.limitBillingUsageTable)
+          .where(eq(schema.limitBillingUsageTable.limitId, id));
         await tx
           .update(schema.limitModelUsageTable)
           .set({
@@ -405,26 +473,24 @@ class LimitModel {
    * Delete a limit
    */
   static async delete(id: string): Promise<boolean> {
-    // First check if the limit exists
-    const existing = await LimitModel.findById(id);
-    if (!existing) {
-      return false;
-    }
-
-    await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
-
-    return true;
+    return (await LimitModel.deleteMany([id])).length > 0;
   }
 
   /** Deletes an already organization-fenced batch in one statement. */
   static async deleteMany(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return [];
 
-    const deleted = await db
-      .delete(schema.limitsTable)
-      .where(inArray(schema.limitsTable.id, ids))
-      .returning({ id: schema.limitsTable.id });
-    return deleted.map(({ id }) => id);
+    return CacheEntryModel.withLocks(
+      ids.map((id) => `llm-throughput:${id}`),
+      async (entries, tx) => {
+        const deleted = await tx
+          .delete(schema.limitsTable)
+          .where(inArray(schema.limitsTable.id, ids))
+          .returning();
+        await LlmThroughputModel.deleteCounters(entries, deleted);
+        return deleted.map(({ id }) => id);
+      },
+    );
   }
 
   /**
@@ -446,6 +512,7 @@ class LimitModel {
           eq(schema.limitsTable.entityType, params.entityType),
           inArray(schema.limitsTable.entityId, params.entityIds),
           eq(schema.limitsTable.limitType, "token_cost"),
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
           isNull(schema.limitsTable.model),
         ),
       )
@@ -481,7 +548,9 @@ class LimitModel {
       caps.set(entityId, {
         limitId: row.id,
         limitValue: row.limitValue,
-        cleanupInterval: row.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        cleanupInterval: BudgetCleanupIntervalSchema.parse(
+          row.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        ),
         currentUsage: computeModelUsageCosts(
           usagesByLimitId.get(row.id) ?? [],
           pricing,
@@ -535,14 +604,16 @@ class LimitModel {
     entityType: LimitEntityType;
     entityId: string;
   }): Promise<void> {
-    await db
-      .delete(schema.limitsTable)
+    const limits = await db
+      .select({ id: schema.limitsTable.id })
+      .from(schema.limitsTable)
       .where(
         and(
           eq(schema.limitsTable.entityType, params.entityType),
           eq(schema.limitsTable.entityId, params.entityId),
         ),
       );
+    await LimitModel.deleteMany(limits.map(({ id }) => id));
   }
 
   /**
@@ -711,7 +782,11 @@ class LimitModel {
       .select()
       .from(schema.limitsTable)
       .where(
-        and(eq(schema.limitsTable.limitType, "token_cost"), or(...conditions)),
+        and(
+          eq(schema.limitsTable.limitType, "token_cost"),
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
+          or(...conditions),
+        ),
       )
       .orderBy(schema.limitsTable.id)
       .for("no key update");
@@ -897,6 +972,8 @@ class LimitModel {
       .where(
         and(
           ...scopeConditions,
+          sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
           or(
             sql`${schema.limitsTable.lastCleanup} IS NULL`,
             buildCleanupDueCondition(),
@@ -1222,6 +1299,7 @@ class LimitModel {
           ON ${limits.entityType} = entity_refs.entity_type
           AND ${limits.entityId} = entity_refs.entity_id
         WHERE ${limits.limitType} = ${"token_cost"}
+          AND ${limits.cleanupInterval} <> 'minute'
           AND (${limits.model} ? ${model} OR ${limits.model} IS NULL)
         GROUP BY ${limits.id}
       )
@@ -1622,6 +1700,8 @@ export class LimitValidationService {
 
     const limitsByEntity = new Map<string, Limit[]>();
     for (const limit of limits) {
+      // Minute spend is actual-cost accounting in the shared continuous bucket.
+      if (limit.cleanupInterval === "minute") continue;
       const key = `${limit.entityType}:${limit.entityId}`;
       const existing = limitsByEntity.get(key);
       if (existing) existing.push(limit);

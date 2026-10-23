@@ -7,10 +7,12 @@ import {
 } from "fastify";
 import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation";
 import logger from "@/logging";
+import LlmThroughputModel from "@/models/llm-throughput";
 import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
+import { ThroughputError } from "@/services/llm-throughput";
 import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
 import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
@@ -155,7 +157,6 @@ export function createProxyPreHandler(params: {
   };
 
   const { authenticate } = params;
-  if (!authenticate) return rewritePreHandler;
   return (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -164,9 +165,46 @@ export function createProxyPreHandler(params: {
     const agentId = request.url.replace(apiPrefix, "").match(UUID_REGEX)?.[1];
     // .catch rather than a second .then argument, so a synchronous throw in
     // the rewrite reaches Fastify instead of becoming an unhandled rejection.
-    authenticate({ request, agentId })
+    Promise.resolve()
+      .then(async () => {
+        await authenticate?.({ request, agentId });
+        // Raw passthrough has neither resolved billing ownership nor a usage
+        // adapter. Fail explicitly rather than let it evade configured quotas.
+        // Metadata, stored results, file transfer and cancellation do not start
+        // inference. Keep these available even when another key has a quota.
+        if (isNonInferenceOperation(request)) return;
+        let configured: boolean;
+        try {
+          configured = await LlmThroughputModel.hasRules();
+        } catch {
+          throw new ThroughputError({
+            status: 503,
+            code: "archestra_quota_storage_unavailable",
+            message: "The gateway cannot verify its throughput quota.",
+          });
+        }
+        if (configured)
+          throw new ThroughputError({
+            status: 400,
+            code: "archestra_quota_unsupported_endpoint",
+            message:
+              "Throughput limits require a supported native inference endpoint. Unhandled inference operations are disabled while throughput limits are configured.",
+          });
+      })
       .then(() => rewritePreHandler(request, reply, next))
-      .catch(next);
+      .catch((error) => {
+        if (error instanceof ThroughputError) {
+          reply.code(error.status).send({
+            error: {
+              message: error.message,
+              type: "archestra_throughput_error",
+              code: error.code,
+            },
+          });
+          return;
+        }
+        next(error);
+      });
   };
 }
 
@@ -308,4 +346,20 @@ function readBody(params: {
     stream.on("end", onEnd);
     stream.on("error", onError);
   });
+}
+
+function isNonInferenceOperation(request: FastifyRequest): boolean {
+  const path = request.url.split("?")[0].replace(/\/+$/, "");
+  // Realtime upgrades can start generation even though the handshake is GET.
+  if (request.headers.upgrade || /\/(?:realtime|live)(?:\/|$)/i.test(path))
+    return false;
+  if (["GET", "HEAD", "OPTIONS", "DELETE"].includes(request.method))
+    return true;
+  if (request.method !== "POST") return false;
+  return (
+    /(?:\/count_tokens|\/input_tokens|:countTokens)$/.test(path) ||
+    /\/files(?:\/[^/]+)?(?::upload)?$/.test(path) ||
+    /\/uploads(?:\/[^/]+(?:\/(?:parts|complete|cancel))?)?$/.test(path) ||
+    /\/(?:batches|responses)\/[^/]+\/cancel$/.test(path)
+  );
 }

@@ -83540,7 +83540,7 @@ export type GetLimitsData = {
     query?: {
         entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -83625,15 +83625,25 @@ export type GetLimitsResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        throughputUsage?: {
+            /**
+             * Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap.
+             */
+            currentUsage: number;
+            /**
+             * Minute: projected full allowance recovery without new traffic. Other intervals: next reset.
+             */
+            resetsAt: string;
+        };
         labels: Array<{
             key: string;
             value: string;
@@ -83655,12 +83665,12 @@ export type CreateLimitData = {
     body: {
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
         labels?: Array<{
             key: string;
@@ -83750,12 +83760,12 @@ export type CreateLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -83937,15 +83947,25 @@ export type GetLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        throughputUsage?: {
+            /**
+             * Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap.
+             */
+            currentUsage: number;
+            /**
+             * Minute: projected full allowance recovery without new traffic. Other intervals: next reset.
+             */
+            resetsAt: string;
+        };
         labels: Array<{
             key: string;
             value: string;
@@ -83965,12 +83985,12 @@ export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
     body: {
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
         labels?: Array<{
             key: string;
@@ -84062,12 +84082,12 @@ export type UpdateLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -121491,6 +121511,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
         };
@@ -121499,6 +121521,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             timestamp: string;
@@ -121508,6 +121532,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
@@ -121517,6 +121543,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
@@ -121536,6 +121564,8 @@ export type GetProxyCostStatisticsResponses = {
                 inputTokens: number;
                 outputTokens: number;
                 cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
                 billedCost: number;
                 subscriptionCost: number;
                 value: string | null;
@@ -121640,6 +121670,9 @@ export type GetTeamStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -121648,6 +121681,8 @@ export type GetTeamStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121746,6 +121781,8 @@ export type GetAgentStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -121754,6 +121791,8 @@ export type GetAgentStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121849,6 +121888,8 @@ export type GetModelStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         percentage: number;
         timeSeries: Array<{
@@ -121858,6 +121899,8 @@ export type GetModelStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121972,6 +122015,7 @@ export type GetUserStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
@@ -121983,6 +122027,7 @@ export type GetUserStatisticsResponses = {
                 inputTokens: number;
                 outputTokens: number;
                 cacheReadTokens: number;
+                cacheWriteTokens: number;
                 totalTokens: number;
                 percentage: number;
                 billedCost: number;
@@ -121994,6 +122039,8 @@ export type GetUserStatisticsResponses = {
                     inputTokens?: number;
                     outputTokens?: number;
                     cacheReadTokens?: number;
+                    cacheWriteTokens?: number;
+                    totalTokens?: number;
                     billedCost?: number;
                     subscriptionCost?: number;
                 }>;
@@ -122005,6 +122052,8 @@ export type GetUserStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -122108,6 +122157,7 @@ export type GetMyStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
         totalTokens: number;
         billedCost: number;
         subscriptionCost: number;
@@ -122119,6 +122169,7 @@ export type GetMyStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             percentage: number;
             billedCost: number;
@@ -122130,6 +122181,8 @@ export type GetMyStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -122141,6 +122194,8 @@ export type GetMyStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -122245,6 +122300,7 @@ export type GetMyUsageBreakdownResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             percentage: number;
             billedCost: number;
@@ -122690,6 +122746,8 @@ export type GetCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             cost: number;
             percentage: number;
             timeSeries: Array<{
@@ -122699,6 +122757,8 @@ export type GetCostStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -123093,6 +123153,9 @@ export type GetAppUsageResponses = {
             llmRequests: number;
             inputTokens: number;
             outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
         }>;

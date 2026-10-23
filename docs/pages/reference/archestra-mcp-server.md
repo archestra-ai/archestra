@@ -1906,7 +1906,15 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.resources.memoryLimit` | `string` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | Yes |  |
+| `runtime.environment[].key` | `string` | Yes |  |
+| `runtime.environment[].value` | `string` | Yes |  |
 | `runtime.credentials` | `object[] \| null` | Yes |  |
+| `runtime.credentials[].key` | `string` | Yes |  |
+| `runtime.credentials[].scope` | `"shared" \| "per_user"` | Yes |  |
+| `runtime.credentials[].credentialId` | `string` | No |  |
+| `runtime.credentials[].label` | `string` | Yes |  |
+| `runtime.credentials[].description` | `string` | No |  |
+| `runtime.credentials[].required` | `boolean` | Yes |  |
 | `runtime.allowAgentSuppliedCredentialValues` | `boolean` | No |  |
 | `runtime.claudeCode` | `object` | No |  |
 | `runtime.claudeCode.authentication` | `"provider" \| "subscription"` | Yes |  |
@@ -3170,6 +3178,9 @@ Required RBAC permission: [`guardrailsPolicy:read`](/docs/reference/permissions#
 |-----------|------|----------|-------------|
 | `content` | `string \| null` | No | The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits. |
 | `edits` | `object[] \| null` | No | Exact-text replacements applied in order to the current policy, each to the result of the one before. Use them to change an existing policy. To insert rules, replace an anchor line with the new rules followed by that same anchor line. |
+| `edits[].oldText` | `string` | Yes | Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true. |
+| `edits[].newText` | `string` | Yes | The text that replaces oldText. Empty deletes oldText. |
+| `edits[].replaceAll` | `boolean \| null` | No | Replace every match of oldText instead of exactly one. |
 | `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
 
 
@@ -3183,6 +3194,9 @@ Required RBAC permission: [`guardrailsPolicy:update`](/docs/reference/permission
 |-----------|------|----------|-------------|
 | `content` | `string \| null` | No | The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits. |
 | `edits` | `object[] \| null` | No | Exact-text replacements applied in order to the current policy, each to the result of the one before. Use them to change an existing policy. To insert rules, replace an anchor line with the new rules followed by that same anchor line. |
+| `edits[].oldText` | `string` | Yes | Exact text copied from the current policy, including whitespace and line breaks. It must match one place unless replaceAll is true. |
+| `edits[].newText` | `string` | Yes | The text that replaces oldText. Empty deletes oldText. |
+| `edits[].replaceAll` | `boolean \| null` | No | Replace every match of oldText instead of exactly one. |
 | `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
 | `title` | `string` | No |  |
 | `summary` | `string` | No |  |

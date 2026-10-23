@@ -12,6 +12,7 @@ import {
   ToolContent,
   ToolErrorDetails,
   ToolHeader,
+  type ToolHeaderProps,
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
@@ -27,6 +28,7 @@ import {
   getRemedyChainStatus,
   type RemedyChain,
   type RemedyChainMember,
+  type RemedyChainStatus,
 } from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { ToolStatusRow } from "./tool-status-row";
@@ -78,15 +80,7 @@ export function RemedyChainCard({
       <ToolHeader
         type={`tool-${chain.targetToolName}`}
         title={getToolCardTitle(chain.targetToolName)}
-        state={
-          status.state === "running"
-            ? "input-available"
-            : status.state === "error"
-              ? "output-error"
-              : status.state === "completed"
-                ? "output-available"
-                : "output-denied"
-        }
+        state={CHAIN_HEADER_STATES[status.state]}
         statusLabel={status.label}
         isCollapsible={collapsible && (canExpandToolCalls || needsAction)}
       />
@@ -133,6 +127,17 @@ export function RemedyGuardrailsSteps({
 }
 
 // === Internal helpers ===
+
+/** One header state per chain state, so a new chain state cannot fall through. */
+const CHAIN_HEADER_STATES: Record<
+  RemedyChainStatus["state"],
+  ToolHeaderProps["state"]
+> = {
+  running: "input-available",
+  completed: "output-available",
+  error: "output-error",
+  denied: "output-denied",
+};
 
 /** A negotiation step, collapsed by default and display-only like subagent calls. */
 function RemedyStepCard({

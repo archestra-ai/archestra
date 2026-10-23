@@ -33,7 +33,7 @@ function fixture() {
   git("init", "--quiet");
   const commit = (name: string, content: string | null) => {
     const file = path.join(remote, name);
-    if (content === null) rmSync(file);
+    if (content === null) git("rm", "--", name);
     else {
       mkdirSync(path.dirname(file), { recursive: true });
       writeFileSync(file, content);
@@ -174,7 +174,11 @@ test("rejects remote symlink entries before checkout; a corrected first installa
   const f = fixture();
   symlinkSync("/tmp/outside", path.join(f.remote, "bad-link"));
   f.commit("revision.txt", "symlink revision");
-  expect(f.run().status).toBe(1);
+  const rejected = f.run();
+  expect(rejected.status, rejected.stderr).toBe(1);
+  expect(rejected.stderr).toContain(
+    "The skills marketplace contains a link or unsupported file.",
+  );
   expect(existsSync(f.checkout)).toBe(false);
   f.commit("bad-link", null);
   const retry = f.run();

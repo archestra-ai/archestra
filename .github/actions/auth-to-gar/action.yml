@@ -11,7 +11,7 @@ runs:
   using: composite
   steps:
     - name: Authenticate to Google Cloud
-      uses: ./.github/actions/google-auth
+      uses: $/.github/actions/google-auth
       with:
         service_account: ${{ inputs.service_account }}
         workload_identity_provider: ${{ inputs.workload_identity_provider }}

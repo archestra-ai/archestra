@@ -280,7 +280,7 @@ class WorkflowContractTests(unittest.TestCase):
                     env=os.environ | {"RESULT": result})
                 self.assertEqual(completed.returncode == 0, result == "success")
         e2e = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
-        self.assertNotIn("uses: ./.github/actions/scan-docker-image", e2e)
+        self.assertNotIn(".github/actions/scan-docker-image", e2e)
         self.assertNotIn("run-docker-scan", source)
 
 

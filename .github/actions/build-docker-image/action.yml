@@ -126,7 +126,7 @@ runs:
     - name: Setup Docker Builder
       id: builder
       if: ${{ inputs.setup-builder == 'true' }}
-      uses: ./.github/actions/setup-docker-builder
+      uses: $/.github/actions/setup-docker-builder
       with:
         cache-key: ${{ inputs.builder-cache-key }}
 

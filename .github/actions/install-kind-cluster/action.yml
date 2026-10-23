@@ -43,7 +43,7 @@ runs:
         wait: 300s
 
     - name: Configure Docker Hub cache for Kind nodes
-      uses: ./.github/actions/configure-kind-registry-cache
+      uses: $/.github/actions/configure-kind-registry-cache
       with:
         cluster-name: ${{ inputs.cluster-name }}
 

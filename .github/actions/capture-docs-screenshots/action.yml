@@ -14,7 +14,7 @@ runs:
   using: composite
   steps:
     - name: Setup environment
-      uses: ./.github/actions/setup-env
+      uses: $/.github/actions/setup-env
       with:
         working-directory: ./platform
 

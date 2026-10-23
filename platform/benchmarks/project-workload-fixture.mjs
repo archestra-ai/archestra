@@ -42,7 +42,11 @@ export async function createProjectFixture({
   for (const [name, text] of Object.entries(seedFiles))
     await writeFile(join(project, name), text, { mode: 0o644 });
   const checkFile = join(checks, "checks.spec.mjs");
-  await writeFile(checkFile, sequential?.checks() ?? CHECKS, { mode: 0o644 });
+  const checkData = sequential ? join(checks, "checks.json") : undefined;
+  const initialChecks = sequential?.checks();
+  await writeFile(checkFile, initialChecks?.source ?? CHECKS, { mode: 0o644 });
+  if (initialChecks)
+    await writeFile(checkData, initialChecks.data, { mode: 0o644 });
   const writable = Object.keys(seedFiles).filter(
     (name) => name.startsWith("src/") && name !== "src/index.mjs",
   );
@@ -169,11 +173,15 @@ export async function createProjectFixture({
       } else if (name === "project_check") {
         assert.equal(Object.keys(args).length, 0);
         const digest = await sourceDigest();
-        if (sequential)
-          await writeFile(checkFile, sequential.checks(), { mode: 0o644 });
+        if (sequential) {
+          const nextChecks = sequential.checks();
+          await writeFile(checkFile, nextChecks.source, { mode: 0o644 });
+          await writeFile(checkData, nextChecks.data, { mode: 0o644 });
+        }
         const result = await checkRunner({
           project,
           checkFile,
+          checkData,
           image,
           containers,
           expectedTests: sequential?.expectedTests() ?? 10,
@@ -337,6 +345,7 @@ export async function createProjectFixture({
 async function dockerCheck({
   project,
   checkFile,
+  checkData,
   image,
   containers,
   expectedTests = 10,
@@ -347,7 +356,11 @@ async function dockerCheck({
       expectedTests >= 1 &&
       expectedTests <= 200,
   );
-  assert.ok(![project, checkFile].some((path) => /[,\r\n]/.test(path)));
+  assert.ok(
+    ![project, checkFile, checkData]
+      .filter(Boolean)
+      .some((path) => /[,\r\n]/.test(path)),
+  );
   const name = `appa-project-check-${randomUUID()}`;
   containers.add(name);
   try {
@@ -382,6 +395,12 @@ async function dockerCheck({
           `type=bind,src=${project},dst=/workspace,readonly`,
           "--mount",
           `type=bind,src=${checkFile},dst=/checks/checks.spec.mjs,readonly`,
+          ...(checkData
+            ? [
+                "--mount",
+                `type=bind,src=${checkData},dst=/checks/checks.json,readonly`,
+              ]
+            : []),
           "--workdir",
           "/workspace",
           image,

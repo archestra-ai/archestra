@@ -465,50 +465,58 @@ export const SEQUENTIAL_APPLICATION_BYTES = Buffer.byteLength(
   JSON.stringify({ files: SEQUENTIAL_FILES, tasks: SEQUENTIAL_TASKS }),
 );
 
-export function renderSequentialChecks(tasks, stageCount) {
+export const STATIC_CHECK_SOURCE = `import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+
+const data = JSON.parse(await readFile(new URL("./checks.json", import.meta.url), "utf8"));
+for (const [index, task] of data.tasks.entries()) {
+  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(task.name)) throw new Error("task_name_rejected");
+  const path = String(task.path ?? "");
+  if (!path.startsWith("/workspace/src/") || path.includes("..")) throw new Error("task_path_rejected");
+  const feature = await import(pathToFileURL(path).href);
+  const fn = feature[task.name];
+  for (const [caseIndex, entry] of task.cases.entries()) {
+    test(String(index + 1) + ":" + task.name + ":" + String(caseIndex + 1), () => {
+      const args = structuredClone(entry.args);
+      const before = structuredClone(args);
+      if (entry.throws) assert.throws(() => fn(...args));
+      else assert.deepEqual(fn(...args), entry.expected);
+      assert.deepEqual(args, before);
+    });
+  }
+}
+`;
+
+export function prepareChecksData(tasks, stageCount) {
   assert.ok(
     Number.isInteger(stageCount) &&
       stageCount >= 1 &&
       stageCount <= tasks.length,
   );
-  return renderChecks(tasks.slice(0, stageCount));
-}
-
-function base64Literal(value) {
-  const encoded = Buffer.from(JSON.stringify(value), "utf8").toString("base64");
-  assert.match(encoded, /^[A-Za-z0-9+/]*={0,2}$/);
-  return `"${encoded}"`;
+  return JSON.stringify({
+    tasks: tasks.slice(0, stageCount).map((task) => ({
+      name: task.name,
+      path: `/workspace/${task.path}`,
+      cases: task.cases.map((entry) =>
+        Array.isArray(entry)
+          ? { args: entry[0], expected: entry[1], throws: false }
+          : {
+              args: entry.args,
+              expected: entry.expected,
+              throws: entry.throws === true,
+            },
+      ),
+    })),
+  });
 }
 
 function sequentialChecks(stageCount) {
-  return renderSequentialChecks(SEQUENTIAL_TASKS, stageCount);
-}
-
-function renderChecks(tasks) {
-  return `import test from "node:test";\nimport assert from "node:assert/strict";\nconst decode = (value) => JSON.parse(Buffer.from(value, "base64").toString("utf8"));\n${tasks
-    .map((task, index) => {
-      assert.match(task.name, /^[A-Za-z][A-Za-z0-9]*$/);
-      assert.match(task.path, /^src\/[A-Za-z][A-Za-z0-9]*\.mjs$/);
-      const binding = `feature${index}`;
-      const cases = task.cases
-        .map((entry, caseIndex) => {
-          const value = Array.isArray(entry)
-            ? { args: entry[0], expected: entry[1] }
-            : entry;
-          const title = base64Literal(
-            `${index + 1}:${task.name}:${caseIndex + 1}`,
-          );
-          const args = base64Literal(value.args);
-          const expected = base64Literal(value.expected);
-          const invocation = value.throws
-            ? `assert.throws(() => ${binding}(...args));`
-            : `assert.deepEqual(${binding}(...args), decode(${expected}));`;
-          return `test(decode(${title}), () => { const args = decode(${args}); const before = structuredClone(args); ${invocation} assert.deepEqual(args, before); });`;
-        })
-        .join("\n");
-      return `import { ${task.name} as ${binding} } from ${JSON.stringify(`/workspace/${task.path}`)};\n${cases}`;
-    })
-    .join("\n")}\n`;
+  return {
+    source: STATIC_CHECK_SOURCE,
+    data: prepareChecksData(SEQUENTIAL_TASKS, stageCount),
+  };
 }
 
 export function createSequentialWorkload() {

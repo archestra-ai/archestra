@@ -3,6 +3,7 @@ import { ModelModel } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import type { Model } from "@/types/model";
 
 export type ModelTeamAccessResult =
   | { allowed: true }
@@ -24,10 +25,16 @@ export async function checkModelTeamAccess(params: {
   modelId: string;
   organizationId: string;
   authenticatedUserId: string | undefined;
+  /** The catalog row read by this request; grants are always read below. */
+  catalogModel?: Pick<Model, "id" | "provider" | "modelId">;
 }): Promise<ModelTeamAccessResult> {
   const { provider, modelId, organizationId, authenticatedUserId } = params;
 
-  const model = await ModelModel.findByProviderAndModelId(provider, modelId);
+  const model =
+    params.catalogModel?.provider === provider &&
+    params.catalogModel.modelId === modelId
+      ? params.catalogModel
+      : await ModelModel.findByProviderAndModelId(provider, modelId);
   if (!model) {
     // Unknown models cannot carry a restriction (nothing to reference), and
     // grants are per model, so there is no policy to read either. Demanding

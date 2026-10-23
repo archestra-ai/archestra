@@ -1253,9 +1253,15 @@ export async function handleLLMProxy<
     );
 
     // Ensure a model entry exists for cost tracking
-    const discovered = [
-      await ModelModel.ensureModelExists(actualModel, providerName),
-    ].filter((model) => model !== null);
+    const catalogModel = await ModelModel.findByProviderAndModelId(
+      providerName,
+      actualModel,
+    );
+    const discovered = catalogModel
+      ? []
+      : [await ModelModel.ensureModelExists(actualModel, providerName)].filter(
+          (model) => model !== null,
+        );
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
     // update stay off the per-request path. Enrichment is best-effort: a model
@@ -1323,6 +1329,7 @@ export async function handleLLMProxy<
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
       authenticatedUserId,
+      catalogModel: catalogModel ?? undefined,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(

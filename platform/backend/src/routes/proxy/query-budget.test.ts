@@ -94,7 +94,7 @@ describe("LLM proxy query budget", () => {
     expect(warm.statusCode, warm.body).toBe(200);
     const { result, statements } = await recordQueries(call);
     expect(result.statusCode, result.body).toBe(200);
-    expect(statements.length).toBeLessThanOrEqual(25);
+    expect(statements.length).toBeLessThanOrEqual(24);
   });
 
   test("virtual-key chat completion with token limits", async ({

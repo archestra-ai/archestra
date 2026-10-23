@@ -5,7 +5,7 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, createSecretKey, randomBytes } from "node:crypto";
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
@@ -1160,11 +1160,13 @@ function hasLlmProxyScope(scopes: string[] | null | undefined): boolean {
  * effective threshold by the replica count. A deployment with no auth secret
  * configured falls back to a per-process key and accepts that fragmentation.
  */
-const CREDENTIAL_FINGERPRINT_KEY = config.auth.secret
-  ? createHmac("sha256", config.auth.secret)
-      .update("virtual-key-rate-limit-fingerprint")
-      .digest()
-  : randomBytes(32);
+const CREDENTIAL_FINGERPRINT_KEY = createSecretKey(
+  config.auth.secret
+    ? createHmac("sha256", config.auth.secret)
+        .update("virtual-key-rate-limit-fingerprint")
+        .digest()
+    : randomBytes(32),
+);
 
 /**
  * Reduce a presented credential to a stable, non-reversible bucket id for the

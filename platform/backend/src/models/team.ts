@@ -13,6 +13,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { requestScope } from "@/auth/request-scope";
 import db, { schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 import type {
@@ -660,20 +661,7 @@ class TeamModel {
     userId: string;
     organizationId: string;
   }): Promise<Team[]> {
-    const { userId, organizationId } = params;
-    return db
-      .select(getTableColumns(schema.teamsTable))
-      .from(schema.teamsTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.teamMembersTable.userId, userId),
-          eq(schema.teamsTable.organizationId, organizationId),
-        ),
-      );
+    return TeamModel.byUserAndOrganization.get().execute(params);
   }
 
   /**
@@ -1670,6 +1658,26 @@ class TeamModel {
     }
     return [...expanded];
   }
+  private static readonly byUserAndOrganization = new PreparedQuery(
+    (database) =>
+      database
+        .select(getTableColumns(schema.teamsTable))
+        .from(schema.teamsTable)
+        .innerJoin(
+          schema.teamMembersTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(
+          and(
+            eq(schema.teamMembersTable.userId, sql.placeholder("userId")),
+            eq(
+              schema.teamsTable.organizationId,
+              sql.placeholder("organizationId"),
+            ),
+          ),
+        )
+        .prepare("archestra_teams_by_user_and_organization"),
+  );
 }
 
 export default TeamModel;

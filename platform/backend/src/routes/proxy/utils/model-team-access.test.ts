@@ -100,6 +100,7 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic" as const,
       modelId: model.modelId,
       authenticatedUserId: user.id,
+      catalogModel: model,
     };
     await expect(checkModelTeamAccess(context)).resolves.toEqual({
       allowed: true,
@@ -143,6 +144,7 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic" as const,
       modelId: model.modelId,
       authenticatedUserId: `service-account:${account.id}`,
+      catalogModel: model,
     };
     const grant = (grants: ResourcePermissionGrant[]) =>
       setModelGrants({ organizationId: org.id, modelId: model.id, grants });

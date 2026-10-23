@@ -28,6 +28,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
@@ -1176,19 +1177,11 @@ export default class ResourcePermissionPolicyModel {
     resource: ScopedResource;
     scopes: string[];
   }) {
-    const table = schema.resourcePermissionPoliciesTable;
-    return db
-      .select()
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.resource, params.resource),
-          // Bind the scopes as one array so large lists cannot exhaust the
-          // PostgreSQL protocol's parameter limit.
-          sql`${table.scope} = ANY(${sql.param([...params.scopes, "*"])}::text[])`,
-        ),
-      );
+    return ResourcePermissionPolicyModel.byApplicableScopes.get().execute({
+      organizationId: params.organizationId,
+      resource: params.resource,
+      scopes: [...params.scopes, "*"],
+    });
   }
 
   /** revision=0 creates a policy; stale writers never overwrite newer revocations. */
@@ -1278,6 +1271,20 @@ export default class ResourcePermissionPolicyModel {
       .returning({ scope: table.scope });
     return !!updated;
   }
+  private static readonly byApplicableScopes = new PreparedQuery((database) => {
+    const table = schema.resourcePermissionPoliciesTable;
+    return database
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, sql.placeholder("organizationId")),
+          eq(table.resource, sql.placeholder("resource")),
+          sql`${table.scope} = ANY(${sql.placeholder("scopes")}::text[])`,
+        ),
+      )
+      .prepare("archestra_applicable_resource_policies");
+  });
 }
 
 type ReadRecipients = {

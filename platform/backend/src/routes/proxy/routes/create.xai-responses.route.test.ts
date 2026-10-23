@@ -6,14 +6,12 @@
  * real.
  */
 
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import {
+  createFastifyInstance,
+  type FastifyInstanceWithZod,
+} from "@/fastify-instance";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -23,7 +21,7 @@ import xaiProxyRoutes from "./xai";
 const MODEL = "grok-4.7";
 
 describe("xAI Responses surface", () => {
-  let app: FastifyInstance;
+  let app: FastifyInstanceWithZod;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -39,9 +37,7 @@ describe("xAI Responses surface", () => {
   /** Records what reaches xAI's chat completions and answers a fixed reply. */
   async function setupRoute() {
     const calls: OpenAI.Chat.Completions.ChatCompletionCreateParams[] = [];
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
+    app = createFastifyInstance();
 
     vi.spyOn(xaiAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -95,6 +91,20 @@ describe("xAI Responses surface", () => {
                     },
                   };
                 }
+                const toolCall = request.tools?.length
+                  ? {
+                      tool_calls: [
+                        {
+                          id: "call_1",
+                          type: "function" as const,
+                          function: {
+                            name: "read_file",
+                            arguments: JSON.stringify({ path: "README.md" }),
+                          },
+                        },
+                      ],
+                    }
+                  : {};
                 return {
                   id: "chatcmpl-xai-responses",
                   object: "chat.completion",
@@ -105,10 +115,15 @@ describe("xAI Responses surface", () => {
                       index: 0,
                       message: {
                         role: "assistant" as const,
-                        content: "Hello from Grok",
+                        content: request.tools?.length
+                          ? null
+                          : "Hello from Grok",
                         refusal: null,
+                        ...toolCall,
                       },
-                      finish_reason: "stop" as const,
+                      finish_reason: request.tools?.length
+                        ? ("tool_calls" as const)
+                        : ("stop" as const),
                       logprobs: null,
                     },
                   ],
@@ -210,6 +225,67 @@ describe("xAI Responses surface", () => {
       model: MODEL,
       messages: [{ role: "user", content: "Hello" }],
     });
+  });
+
+  test("translates a function tool and the tool call it produces", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "xAI Responses tools",
+      agentType: "llm_proxy",
+    });
+    const tokenValue = await seed({
+      organizationId: org.id,
+      makeSecret: makeSecret as never,
+      makeLlmProviderApiKey: makeLlmProviderApiKey as never,
+    });
+    const calls = await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/xai/${agent.id}/responses`,
+      headers: {
+        Authorization: `Bearer ${tokenValue}`,
+        "Content-Type": "application/json",
+      },
+      payload: {
+        model: MODEL,
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Read it" }] },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "read_file",
+            parameters: {
+              type: "object",
+              properties: { path: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // The Responses tool becomes a chat function tool upstream, and the
+    // upstream tool call comes back as a Responses function_call item.
+    expect(calls[0]).toMatchObject({
+      tools: [{ type: "function", function: { name: "read_file" } }],
+    });
+    expect(response.json().output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "function_call",
+          name: "read_file",
+          arguments: JSON.stringify({ path: "README.md" }),
+        }),
+      ]),
+    );
   });
 
   test("streams a Responses request as Responses events", async ({

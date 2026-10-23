@@ -63,6 +63,13 @@ const xaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       upstream: config.llm.xai.baseUrl,
       providerName: "xAI",
       authenticate: createPassthroughAuthenticator("xai"),
+      skipErrorResponse: {
+        error: {
+          message:
+            "Chat completions and Responses requests should use the dedicated endpoints",
+          type: "invalid_request_error",
+        },
+      },
     }),
   });
 

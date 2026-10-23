@@ -7,11 +7,7 @@
  * @see https://docs.x.ai/docs/api-reference
  */
 import type OpenAIProvider from "openai";
-import type {
-  Response,
-  ResponseCreateParams,
-  ResponseStreamEvent,
-} from "openai/resources/responses/responses";
+import type { ResponseCreateParams } from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as XaiAPI from "./api";
 import * as XaiMessages from "./messages";
@@ -33,14 +29,9 @@ namespace Xai {
       typeof XaiAPI.ChatCompletionResponseSchema
     >;
     export type Usage = z.infer<typeof XaiAPI.ChatCompletionUsageSchema>;
-    // The Responses surface, typed off the OpenAI Responses SDK types it is
+    // The Responses surface, typed off the OpenAI Responses SDK type it is
     // served from.
-    export type ResponsesHeaders = z.infer<
-      typeof XaiAPI.ResponsesHeadersSchema
-    >;
     export type ResponsesRequest = ResponseCreateParams & { model: string };
-    export type ResponsesResponse = Response;
-    export type ResponseChunk = ResponseStreamEvent;
 
     export type FinishReason = z.infer<typeof XaiAPI.FinishReasonSchema>;
     export type Message = z.infer<typeof XaiMessages.MessageParamSchema>;

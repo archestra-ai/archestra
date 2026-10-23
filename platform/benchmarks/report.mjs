@@ -6,6 +6,31 @@ const names = {
   stream: "Streaming",
 };
 
+function hasComparisonSetup(setup) {
+  return (
+    setup &&
+    ["workloadVersion", "node", "os", "arch", "cpu", "auth"].every(
+      (key) =>
+        typeof setup[key] === "string" &&
+        setup[key].length > 0 &&
+        setup[key].length <= 256,
+    ) &&
+    [
+      "logicalCpus",
+      "memoryGiB",
+      "count",
+      "streamCount",
+      "warmup",
+      "repeats",
+    ].every((key) => Number.isFinite(setup[key]) && setup[key] > 0) &&
+    Array.isArray(setup.concurrencyLevels) &&
+    setup.concurrencyLevels.length > 0 &&
+    Array.isArray(setup.scenarios) &&
+    setup.scenarios.length > 0 &&
+    setup.mock?.benchmarkMock === 1
+  );
+}
+
 export function createSummary(report) {
   const rows = [];
   for (const scenario of report.metadata.scenarios) {
@@ -76,6 +101,24 @@ export function createSummary(report) {
     schemaVersion: 1,
     complete,
     gitCommit: report.metadata.gitCommit,
+    platformTree: report.metadata.platformTree,
+    comparison: {
+      workloadVersion: report.metadata.workloadVersion,
+      node: report.metadata.node,
+      os: report.metadata.os,
+      arch: report.metadata.arch,
+      cpu: report.metadata.cpu,
+      logicalCpus: report.metadata.logicalCpus,
+      memoryGiB: Math.round(report.metadata.totalMemoryBytes / 1024 ** 3),
+      auth: report.metadata.auth,
+      count: report.metadata.count,
+      streamCount: report.metadata.streamCount,
+      warmup: report.metadata.warmup,
+      repeats: report.metadata.repeats,
+      concurrencyLevels: report.metadata.concurrencyLevels,
+      scenarios: report.metadata.scenarios,
+      mock: report.metadata.mock,
+    },
     logicalCpus: report.metadata.logicalCpus,
     memoryGiB: report.metadata.totalMemoryBytes / 1024 ** 3,
     repeats: report.metadata.repeats,
@@ -85,7 +128,7 @@ export function createSummary(report) {
   };
 }
 
-export function renderSummary(summary) {
+export function renderSummary(summary, baseline = null) {
   if (
     summary.schemaVersion !== 1 ||
     !/^[a-f0-9]{40}$/.test(summary.gitCommit) ||
@@ -111,15 +154,59 @@ export function renderSummary(summary) {
     "| Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
+  const comparable = baseline?.state === "available";
+  const setupMatches =
+    comparable &&
+    hasComparisonSetup(summary.comparison) &&
+    JSON.stringify(summary.comparison) ===
+      JSON.stringify(baseline.summary.comparison);
   for (const row of summary.rows) {
     if (!Object.hasOwn(names, row.scenario))
       throw new Error("Invalid benchmark workload");
-    const percentiles = (value) =>
+    const previous = baseline?.summary?.rows.find(
+      (candidate) =>
+        candidate.scenario === row.scenario &&
+        candidate.concurrency === row.concurrency,
+    );
+    const measurement = (value, prior, digits = 2, unit = "") => {
+      const rendered = `${number(value, digits)}${value === null ? "" : unit}`;
+      if (!baseline) return rendered;
+      let change;
+      if (value === null || value === undefined) change = "unmeasured";
+      else if (!summary.complete) change = "N/A: incomplete run";
+      else if (baseline.state !== "available")
+        change =
+          baseline.state === "first-run"
+            ? "first run"
+            : "N/A: baseline missing";
+      else if (!setupMatches) change = "N/A: setup changed";
+      else if (!previous) change = "N/A: new workload";
+      else if (prior == null) change = "N/A: unmeasured baseline";
+      else if (!Number.isFinite(prior) || prior < 0)
+        throw new Error("Invalid baseline measurement");
+      else if (prior === 0 && value !== 0) change = "N/A: baseline zero";
+      else {
+        const delta = prior === 0 ? 0 : (100 * (value - prior)) / prior;
+        change = `${delta > 0 ? "+" : ""}${delta.toFixed(1)}%`;
+      }
+      return `${rendered} (${change})`;
+    };
+    const percentiles = (value, prior) =>
       value == null
-        ? "—"
-        : [value.p50, value.p95, value.p99].map((v) => number(v)).join(" / ");
+        ? measurement(null, null)
+        : ["p50", "p95", "p99"]
+            .map((key) => measurement(value[key], prior?.[key]))
+            .join(" / ");
     lines.push(
-      `| ${names[row.scenario]} (c=${number(row.concurrency, 0)}) | ${number(row.requestsPerSecond, 1)} | ${row.successPercent === null ? "—" : `${number(row.successPercent)}%`} | ${percentiles(row.gatewayMs)} | ${percentiles(row.overheadMs)} | ${percentiles({ p50: row.p50Ms, p95: row.p95Ms, p99: row.p99Ms })} | ${number(row.firstContentP50Ms)} |`,
+      `| ${names[row.scenario]} (c=${number(row.concurrency, 0)}) | ${measurement(row.requestsPerSecond, previous?.requestsPerSecond, 1)} | ${measurement(row.successPercent, previous?.successPercent, 2, "%")} | ${percentiles(row.gatewayMs, previous?.gatewayMs)} | ${percentiles(row.overheadMs, previous?.overheadMs)} | ${percentiles({ p50: row.p50Ms, p95: row.p95Ms, p99: row.p99Ms }, previous && { p50: previous.p50Ms, p95: previous.p95Ms, p99: previous.p99Ms })} | ${measurement(row.firstContentP50Ms, previous?.firstContentP50Ms)} |`,
+    );
+  }
+  if (baseline) {
+    lines.push(
+      "",
+      baseline.state === "available"
+        ? `Changes versus last released benchmark (\`${baseline.tag}\`). Signed percentages are relative changes; higher throughput/success and lower latency are better. ${setupMatches ? "" : "Setup differs or its comparison metadata is missing; percentages are unavailable."}`
+        : baseline.reason,
     );
   }
   lines.push(

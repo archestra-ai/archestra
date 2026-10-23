@@ -91,6 +91,7 @@ const report = {
   schemaVersion: 1,
   startedAt: new Date().toISOString(),
   metadata: {
+    workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),
     platformTree: getGit(["rev-parse", "HEAD:platform"]),
     node: process.version,

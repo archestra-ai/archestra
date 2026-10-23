@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  benchmarkMarker,
+  benchmarkPayload,
+  findReleaseBenchmark,
+} from "./proxy-benchmark-baseline.mjs";
 import { publishBenchmarkComment } from "./publish-proxy-benchmark-comment.mjs";
 
 function fixture() {
@@ -12,6 +17,7 @@ function fixture() {
     payload: {
       pull_request: {
         number: 12,
+        base: { ref: "main", sha: "f".repeat(40) },
         head: {
           sha,
           ref: "release-please--branches--main--components--platform",
@@ -22,8 +28,49 @@ function fixture() {
   };
   let currentSha = sha;
   const calls = [];
+  const releases = [
+    {
+      tag_name: "platform-v1.5.0-rc.3",
+      draft: false,
+      prerelease: true,
+      published_at: "2026-10-20T00:00:00Z",
+    },
+  ];
+  const previousComments = [];
+  const previousPr = {
+    number: 11,
+    merged_at: "2026-10-20T00:00:00Z",
+    merge_commit_sha: "e".repeat(40),
+    head: {
+      sha: "b".repeat(40),
+      ref: "release-please--branches--main--components--platform",
+      repo: { full_name: "example/gateway" },
+    },
+  };
+  const lookups = [];
   const github = {
     rest: {
+      repos: {
+        listReleases() {},
+        listPullRequestsAssociatedWithCommit() {},
+        compareCommits: async () => ({ data: { status: "ahead" } }),
+        getCommit: async ({ ref }) => {
+          lookups.push(ref);
+          return {
+            data: {
+              sha: "e".repeat(40),
+              commit: { tree: { sha: "f".repeat(40) } },
+            },
+          };
+        },
+      },
+      git: {
+        getTree: async () => ({
+          data: {
+            tree: [{ path: "platform", type: "tree", sha: "c".repeat(40) }],
+          },
+        }),
+      },
       pulls: { get: async () => ({ data: { head: { sha: currentSha } } }) },
       issues: {
         listComments() {},
@@ -37,28 +84,66 @@ function fixture() {
         },
       },
     },
-    paginate: async () => comments,
+    paginate: async (method, args) => {
+      if (method === github.rest.repos.listReleases) return releases;
+      if (method === github.rest.repos.listPullRequestsAssociatedWithCommit)
+        return [previousPr];
+      return args.issue_number === 11 ? previousComments : comments;
+    },
   };
   return {
     github,
     context,
+    releases,
+    previousComments,
+    previousPr,
+    lookups,
     comments,
     calls,
-    setHead: (value) => { currentSha = value; },
+    setHead: (value) => {
+      currentSha = value;
+    },
     summary: {
       schemaVersion: 1,
       complete: true,
       gitCommit: sha,
+      platformTree: "d".repeat(40),
+      comparison: {
+        workloadVersion: "test-v1",
+        node: "v24",
+        os: "Linux",
+        arch: "x64",
+        cpu: "Test CPU",
+        auth: "passthrough-virtual-key",
+        logicalCpus: 4,
+        memoryGiB: 8,
+        count: 300,
+        streamCount: 60,
+        warmup: 30,
+        repeats: 2,
+        concurrencyLevels: [1, 10, 50],
+        scenarios: ["chat"],
+        mock: { benchmarkMock: 1, chunks: 20, intervalMs: 10 },
+      },
       logicalCpus: 4,
       memoryGiB: 8,
       repeats: 2,
       requestsPerBlock: 300,
       streamingRequestsPerBlock: 60,
-      rows: [{
-        scenario: "chat", concurrency: 50, requestsPerSecond: 100,
-        successPercent: 100, p50Ms: 10, p95Ms: 20, p99Ms: 30,
-        firstContentP50Ms: null,
-      }],
+      rows: [
+        {
+          scenario: "chat",
+          concurrency: 50,
+          requestsPerSecond: 100,
+          successPercent: 100,
+          p50Ms: 10,
+          p95Ms: 20,
+          p99Ms: 30,
+          gatewayMs: { p50: 5, p95: 10, p99: 20 },
+          overheadMs: { p50: 4, p95: 8, p99: 16 },
+          firstContentP50Ms: null,
+        },
+      ],
     },
     benchmarkResult: "success",
   };
@@ -74,7 +159,10 @@ test("later runs update the existing bot comment instead of adding comments", as
   assert.equal(await publishBenchmarkComment(f), "updated");
   assert.equal(f.comments.length, 1);
   assert.match(f.comments[0].body, new RegExp(next));
-  assert.deepEqual(f.calls.map(([action]) => action), ["create", "update"]);
+  assert.deepEqual(
+    f.calls.map(([action]) => action),
+    ["create", "update"],
+  );
 });
 
 test("superseded runs cannot replace results for a newer commit", async () => {
@@ -83,7 +171,10 @@ test("superseded runs cannot replace results for a newer commit", async () => {
   assert.equal(await publishBenchmarkComment(f), "superseded");
   assert.equal(f.calls.length, 0);
   f.setHead(f.context.payload.pull_request.head.sha);
-  f.github.paginate = async () => { f.setHead("c".repeat(40)); return []; };
+  f.github.paginate = async () => {
+    f.setHead("c".repeat(40));
+    return [];
+  };
   assert.equal(await publishBenchmarkComment(f), "superseded");
   assert.equal(f.calls.length, 0);
 });
@@ -117,12 +208,29 @@ test("results from a different commit cannot be presented as current", async () 
 });
 
 test("workflow selects release updates and benchmark changes without loading unrelated PRs", async () => {
-  const workflow = await readFile(new URL("../workflows/llm-proxy-benchmark.yml", import.meta.url), "utf8");
-  const script = workflow.split("          script: |\n")[1].split("\n  benchmark:")[0].split("\n").map((line) => line.slice(12)).join("\n");
-  const execute = new (Object.getPrototypeOf(async () => {}).constructor)("github", "context", "core", script);
+  const workflow = await readFile(
+    new URL("../workflows/llm-proxy-benchmark.yml", import.meta.url),
+    "utf8",
+  );
+  const script = workflow
+    .split("          script: |\n")[1]
+    .split("\n  benchmark:")[0]
+    .split("\n")
+    .map((line) => line.slice(12))
+    .join("\n");
+  const execute = new (Object.getPrototypeOf(async () => {}).constructor)(
+    "github",
+    "context",
+    "core",
+    script,
+  );
   const f = fixture();
   const output = {};
-  const core = { setOutput: (key, value) => { output[key] = value; } };
+  const core = {
+    setOutput: (key, value) => {
+      output[key] = value;
+    },
+  };
   f.github.rest.pulls.listFiles = () => {};
   f.github.paginate = async () => [{ filename: "platform/CHANGELOG.md" }];
   await execute(f.github, f.context, core);
@@ -138,8 +246,149 @@ test("workflow selects release updates and benchmark changes without loading unr
 test("malformed measurement content replaces stale success without rendering artifact text", async () => {
   const f = fixture();
   await publishBenchmarkComment(f);
-  f.summary.rows = [{scenario: "injected | table"}];
+  f.summary.rows = [{ scenario: "injected | table" }];
   await publishBenchmarkComment(f);
   assert.match(f.comments[0].body, /measurement summary was invalid/);
   assert.doesNotMatch(f.comments[0].body, /injected|Completed successfully/);
+});
+
+function savePrevious(f, transform = (s) => s) {
+  const summary = transform(structuredClone(f.summary));
+  summary.gitCommit = f.previousPr.head.sha;
+  summary.platformTree = "c".repeat(40);
+  f.previousComments.push({
+    user: { type: "Bot" },
+    body: `${benchmarkMarker}\n${benchmarkPayload(summary, summary.gitCommit)}`,
+  });
+  return summary;
+}
+
+test("release comments compare every percentile and numeric cell with the published release", async () => {
+  const f = fixture();
+  savePrevious(f, (s) => {
+    s.rows[0].requestsPerSecond = 50;
+    s.rows[0].successPercent = 90;
+    s.rows[0].p50Ms = 20;
+    s.rows[0].p95Ms = 40;
+    s.rows[0].p99Ms = 60;
+    s.rows[0].gatewayMs = { p50: 10, p95: 20, p99: 40 };
+    s.rows[0].overheadMs = { p50: 8, p95: 16, p99: 32 };
+    return s;
+  });
+  await publishBenchmarkComment(f);
+  const body = f.comments[0].body;
+  assert.match(body, /100.0 \(\+100.0%\)/);
+  assert.match(body, /100.00% \(\+11.1%\)/);
+  assert.match(body, /5.00 \(-50.0%\) \/ 10.00 \(-50.0%\) \/ 20.00 \(-50.0%\)/);
+  assert.match(body, /4.00 \(-50.0%\) \/ 8.00 \(-50.0%\) \/ 16.00 \(-50.0%\)/);
+  assert.match(
+    body,
+    /10.00 \(-50.0%\) \/ 20.00 \(-50.0%\) \/ 30.00 \(-50.0%\)/,
+  );
+  assert.match(body, /— \(unmeasured\)/);
+  assert.match(body, /platform-v1.5.0-rc.3/);
+  assert.match(body, /archestra-llm-proxy-benchmark-data:v1:/);
+});
+
+test("first runs and missing, legacy or unsuccessful release records are distinct", async () => {
+  const f = fixture();
+  assert.equal((await findReleaseBenchmark(f)).state, "first-run");
+  f.previousComments.push({ user: { type: "Bot" }, body: benchmarkMarker });
+  assert.match(
+    (await findReleaseBenchmark(f)).reason,
+    /machine-readable metrics/,
+  );
+  f.previousComments.length = 0;
+  f.previousComments.push({
+    user: { type: "Bot" },
+    body: benchmarkMarker + benchmarkPayload(null, f.previousPr.head.sha),
+  });
+  assert.match(
+    (await findReleaseBenchmark(f)).reason,
+    /successful complete benchmark/,
+  );
+  f.releases.length = 0;
+  assert.match(
+    (await findReleaseBenchmark(f)).reason,
+    /no earlier published platform release/,
+  );
+});
+
+test("stale revisions, different released source trees and invalid saved data cannot become a baseline", async () => {
+  for (const mode of ["stale", "tree", "invalid", "corrupt"]) {
+    const f = fixture();
+    savePrevious(f, (s) => {
+      if (mode === "invalid") s.rows[0].p50Ms = "injected";
+      return s;
+    });
+    if (mode === "stale") f.previousPr.head.sha = "0".repeat(40);
+    if (mode === "tree")
+      f.github.rest.git.getTree = async () => ({ data: { tree: [] } });
+    if (mode === "corrupt")
+      f.previousComments[0].body =
+        benchmarkMarker + "<!-- archestra-llm-proxy-benchmark-data:v1:AAAA -->";
+    assert.equal((await findReleaseBenchmark(f)).state, "missing", mode);
+  }
+});
+
+test("missing last-release numbers never silently fall back to an older release", async () => {
+  const f = fixture();
+  f.releases.push({
+    ...f.releases[0],
+    tag_name: "platform-v1.5.0-rc.2",
+    published_at: "2026-10-19T00:00:00Z",
+  });
+  assert.equal((await findReleaseBenchmark(f)).state, "first-run");
+  assert.deepEqual(f.lookups, ["platform-v1.5.0-rc.3"]);
+});
+
+test("stable release tracks exclude other minors and prereleases", async () => {
+  const f = fixture();
+  f.context.payload.pull_request.base.ref = "release/1.4";
+  f.releases.push({
+    tag_name: "platform-v1.4.8",
+    draft: false,
+    prerelease: false,
+    published_at: "2026-10-18T00:00:00Z",
+  });
+  await findReleaseBenchmark(f);
+  assert.deepEqual(f.lookups, ["platform-v1.4.8"]);
+});
+
+test("API failure is explicit and saved artifact metadata cannot terminate an HTML comment", async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommits = async () => {
+    throw Error("unavailable");
+  };
+  assert.match((await findReleaseBenchmark(f)).reason, /could not be read/);
+  assert.doesNotMatch(
+    benchmarkPayload({ comparison: { cpu: "--> injected" } }, "a".repeat(40)),
+    /injected/,
+  );
+});
+
+test("oversized metadata cannot overflow the sticky comment payload", () => {
+  const payload = benchmarkPayload(
+    { unexpected: "x".repeat(65536) },
+    "a".repeat(40),
+  );
+  assert.ok(payload.length < 1000);
+  assert.match(
+    Buffer.from(payload.split(":v1:")[1].split(" ")[0], "base64").toString(),
+    /"summary":null/,
+  );
+});
+
+test("a release outside the base ancestry is skipped before selecting its benchmark", async () => {
+  const f = fixture();
+  f.releases.unshift({
+    ...f.releases[0],
+    tag_name: "platform-v9.0.0",
+    published_at: "2026-10-22T00:00:00Z",
+  });
+  f.github.rest.repos.compareCommits = async ({ base }) => ({
+    data: { status: base === "platform-v9.0.0" ? "diverged" : "ahead" },
+  });
+  await findReleaseBenchmark(f);
+  assert.deepEqual(f.lookups, ["platform-v1.5.0-rc.3"]);
 });

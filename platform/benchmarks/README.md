@@ -74,8 +74,24 @@ The runner stops scheduling after the first measured failure, lets in-flight req
 
 ## CI
 
-The `LLM Proxy Benchmark` workflow runs on benchmark changes, on every platform Release Please PR update, and on manual dispatch. Release PRs get one sticky summary comment, updated in place for the current head. Superseded runs cannot overwrite a newer head; failed runs replace the success table with diagnostics or clearly marked partial measurements. Benchmark code runs without a write token; a separate publisher uses trusted base-branch code and can comment only on same-repository release PRs. It uses 300 non-streaming and 60 streaming requests per block, two repeats, and concurrency 1, 10, and 50. It uploads raw measurements and stack logs for 14 days and publishes a job summary. The launcher builds the native bindings and backend before measurement. Failures fail CI; latency has no absolute threshold on shared runners. Compare equivalent runner types and workload settings.
+The `LLM Proxy Benchmark` workflow runs on benchmark changes, on every platform Release Please PR update, and on manual dispatch. Release PRs get one sticky summary comment, updated in place for the current head. Every measured value includes a signed percentage change from the last published platform release on the same release track when workload and host metadata match. The publisher resolves the release tag and its merged release PR, verifies that the benchmark matches the released platform source tree, and reads the saved machine-readable metrics in that PR’s bot comment. These compact records survive artifact expiry. First recorded runs, absent or invalid metrics, failed prior runs, changed setups, zero baselines and unmeasured values get explicit labels; a missing latest release baseline never falls back silently to an older release. Superseded runs cannot overwrite a newer head; failed runs replace the success table with diagnostics or clearly marked partial measurements. Benchmark code runs without a write token; a separate publisher uses trusted base-branch code and can comment only on same-repository release PRs. It uses 300 non-streaming and 60 streaming requests per block, two repeats, and concurrency 1, 10, and 50. It uploads raw measurements and stack logs for 14 days and publishes a job summary. The launcher builds the native bindings and backend before measurement. Failures fail CI; latency has no absolute threshold on shared runners. Compare equivalent runner types and workload settings.
 
 ## Historical GCP Scripts
 
 `setup-gcp-benchmark.sh`, `cleanup-gcp-benchmark.sh`, and `.env.example` describe the older GCP/Apache Bench setup. They are retained for reference and were not used or revalidated for this baseline. The current runner no longer reads `benchmark-config.env`, `NUM_REQUESTS`, or `CONCURRENCY`. The old WireMock fixture does not implement the new runner's health and streaming contracts.
+
+## Recorded Optimization Comparison
+
+[2026-10-23-optimization.json](baselines/2026-10-23-optimization.json) records all final trial summaries, environment details, source revisions and SHA-256 digests of the per-request raw files. It includes the slower sequential runs; none were discarded. The individual request samples remain local diagnostic artifacts, following the existing summary-only baseline convention.
+
+Baseline: `795f52fcd90fccf94c9ca210d5a8fdaa42c8c3d5`. Optimized backend: `cfe85dca1f464d825f24cff73d5369f9ff46c45f`. The benchmark harness is identical at both revisions.
+
+The long confirmation runs used `--scenarios=chat,tools --concurrency=50 --requests=5000 --warmup=200 --repeats=3`, alternating complete baseline/optimized runs twice. The separate sweep used `--requests=1000 --stream-requests=50 --warmup=20 --repeats=3`.
+
+For the paired check, build each revision in this isolated worktree, copy its complete `backend/dist` to `benchmarks/results/artifacts/baseline-final-dist` or `optimized-final-dist`, and save its `git rev-parse HEAD` output as `source-commit.txt` inside that directory. Link each copy’s `node_modules` to `backend/node_modules`; the native workspace packages and dependencies must already be built with the pinned lockfile. Return to the optimization branch and run:
+
+```bash
+node benchmarks/baselines/2026-10-23-interleaved.mjs
+```
+
+The saved runner refuses occupied ports or existing Compose projects, starts two separate disposable databases and identical mocks, alternates six 1,000-request blocks per workload and variant at concurrency 50, then removes its own stack. Only one variant receives proxy load at a time; both remain resident. This protocol reduces drift between long sequential runs and does not represent one production replica’s resource footprint.

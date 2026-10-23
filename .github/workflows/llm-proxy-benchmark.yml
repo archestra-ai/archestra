@@ -9,6 +9,7 @@ on:
       - platform/CHANGELOG.md
       - .github/workflows/llm-proxy-benchmark.yml
       - .github/scripts/publish-proxy-benchmark-comment*
+      - .github/scripts/proxy-benchmark-baseline*
   workflow_dispatch:
 
 permissions: {}
@@ -36,7 +37,7 @@ jobs:
             let run = context.eventName === 'workflow_dispatch' || release;
             if (pr && !run) {
               const files = await github.paginate(github.rest.pulls.listFiles, {...context.repo, pull_number: pr.number, per_page: 100});
-              run = files.some(({filename}) => filename.startsWith('platform/benchmarks/') || filename.startsWith('platform/backend/src/server/llm-proxy-timing') || filename === '.github/workflows/llm-proxy-benchmark.yml' || filename.startsWith('.github/scripts/publish-proxy-benchmark-comment'));
+              run = files.some(({filename}) => filename.startsWith('platform/benchmarks/') || filename.startsWith('platform/backend/src/server/llm-proxy-timing') || filename === '.github/workflows/llm-proxy-benchmark.yml' || filename.startsWith('.github/scripts/publish-proxy-benchmark-comment') || filename.startsWith('.github/scripts/proxy-benchmark-baseline'));
             }
             core.setOutput('run', String(run));
             core.setOutput('release', String(release));
@@ -74,7 +75,7 @@ jobs:
           save-if: 'false'
       - run: pnpm exec biome check benchmarks/*.mjs
       - name: Validate timing and reporting
-        run: node --test benchmarks/*.test.mjs ../.github/scripts/publish-proxy-benchmark-comment.test.mjs
+        run: node --test benchmarks/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
       - name: Validate server timing boundaries
         run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
       - name: Run mock inference benchmark

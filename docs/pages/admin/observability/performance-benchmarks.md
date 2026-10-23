@@ -2,7 +2,7 @@
 title: Performance & Latency
 description: LLM proxy throughput, response latency, and repeatable release benchmarks
 order: 5
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,15 +15,17 @@ Measure time inside Archestra separately from upstream model calls and client de
 
 ## Results
 
-The reference local run handled 143 chat requests per second with 50 requests in flight and 100% successful responses.
+The 2026-10-23 local comparison handled 549 chat requests per second with 50 requests in flight and 100% successful responses. These results pool six alternating trials of 1,000 requests on the optimized revision.
 
 | Non-Streaming Chat Latency | P50 | P95 | P99 |
 | --- | ---: | ---: | ---: |
-| Gateway request latency | 333 ms | 396 ms | 407 ms |
-| Gateway overhead | 316 ms | 378 ms | 394 ms |
-| Complete client response | 342 ms | 406 ms | 417 ms |
+| Gateway request latency | 83 ms | 111 ms | 152 ms |
+| Gateway overhead | 77 ms | 103 ms | 128 ms |
+| Complete client response | 87 ms | 117 ms | 159 ms |
 
-Streaming time to first content was 445 ms at P50, measured separately. The mock sends 20 content events, spaced 10 ms apart.
+Two longer sequential runs pooled 30,000 proxied chat requests on the optimized revision, measuring 124 ms client P50 and 286 ms P99. Those measurements use a different trial length and remain separate from the alternating results above.
+
+A separate concurrency sweep measured complete chat responses at 21 ms P50 and 36 ms P99 with 10 requests in flight. At concurrency 50, streaming time to first content was 91 ms P50, based on 150 proxy requests; the mock sends 20 content events, spaced 10 ms apart.
 
 ## What the Timings Mean
 
@@ -38,17 +40,17 @@ Compare the same metric when evaluating gateway performance.
 
 ## Test Setup
 
-These results come from one production web process on an Apple M5 Pro with 64 GiB RAM, Node.js 24 and PostgreSQL 17. The client, proxy and mock run locally. Authentication validates a passthrough virtual key paired with a synthetic provider key; no real inference provider is called.
+These results come from an Apple M5 Pro with 64 GiB RAM, Node.js 24.21.0 and PostgreSQL 17.11. The paired comparison keeps two production builds resident with separate disposable databases and identical local mocks; one web process receives load at a time. Authentication validates a passthrough virtual key paired with a synthetic provider key; no real inference provider is called.
 
 The test runs OpenAI chat completions, tool definitions and streaming as separate workloads, using a short prompt and an output limit of 32 tokens. It uses fixed concurrency and measures successful responses after warmup. Response caching and configured virtual-key budgets are not enabled.
 
-Compare throughput only when hardware, prompt size, streaming mix, concurrency and enabled features match. A local result is not a production capacity guarantee.
+Compare throughput only when hardware, prompt size, streaming mix, concurrency and enabled features match. The host was shared with development work, and longer sequential runs had wide latency ranges. A local result is not a production capacity guarantee or a sub-50 ms claim at concurrency 50.
 
 ## Release Benchmarks
 
-Each platform release PR runs the same mock workloads and updates one comment with throughput, success rate, gateway latency, overhead and client latency. The linked workflow retains the detailed measurements and diagnostics for 14 days.
+Each platform release PR runs the same mock workloads and updates one comment with throughput, success rate, gateway latency, overhead and client latency. Each measured value includes its percentage increase or decrease against the last published release on that release track, when the setup matches. The comment identifies a first recorded run, missing or failed release data, changed setups and unmeasured values instead of inventing a percentage.
 
-Use those results to compare release candidates on the same runner configuration. Shared-runner timing can vary; failed requests fail the benchmark rather than disappearing from its report.
+The comment saves compact metrics for future release comparisons; detailed workflow measurements and diagnostics expire after 14 days. Shared-runner timing can vary; failed requests fail the benchmark rather than disappearing from its report.
 
 ## Reproduction
 
@@ -56,7 +58,7 @@ Run the benchmark from a clean checkout's `platform/` directory with Node.js, pn
 
 ```bash
 pnpm install --frozen-lockfile
-bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+bash benchmarks/ci.sh --requests=1000 --stream-requests=50 --warmup=20 --repeats=3
 ```
 
-The launcher creates a disposable database, measures the proxy and removes the stack. See the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) for workload options and the [reference measurements](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/local-authenticated.json) for the local results above.
+The launcher creates a disposable database, measures the proxy and removes the stack. See the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) for workload options and the [recorded comparison](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/2026-10-23-optimization.json) for all trial summaries and the [separate concurrency sweep](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/local-authenticated.json). The README also gives the alternating-build reproduction steps; the command above reproduces the sweep.

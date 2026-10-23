@@ -1,6 +1,10 @@
 import { renderSummary } from "../../platform/benchmarks/report.mjs";
-
-const marker = "<!-- archestra-llm-proxy-benchmark -->";
+import {
+  benchmarkMarker as marker,
+  benchmarkPayload,
+  findReleaseBenchmark,
+  isPlatformReleasePr,
+} from "./proxy-benchmark-baseline.mjs";
 
 export async function publishBenchmarkComment({
   github,
@@ -10,10 +14,7 @@ export async function publishBenchmarkComment({
 }) {
   const source = context.payload.pull_request;
   if (
-    !source ||
-    source.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}` ||
-    !source.head.ref.startsWith("release-please--branches--") ||
-    !source.head.ref.endsWith("--components--platform")
+    !isPlatformReleasePr(source, `${context.repo.owner}/${context.repo.repo}`)
   )
     return "ineligible";
   const args = { ...context.repo, issue_number: source.number };
@@ -24,19 +25,26 @@ export async function publishBenchmarkComment({
   if (current.data.head.sha !== source.head.sha) return "superseded";
   const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
   let body = `${marker}\n## LLM Proxy Benchmark\n\nBenchmark did not complete successfully. See the workflow diagnostics.\n`;
+  let savedSummary = null;
   if (
     summary &&
     summary.gitCommit === source.head.sha &&
     (benchmarkResult !== "success" || summary.complete)
   ) {
     try {
-      body = `${marker}\n${renderSummary(summary)}`;
+      const baseline = await findReleaseBenchmark({ github, context });
+      body = `${marker}\n${renderSummary(summary, baseline)}`;
+      if (benchmarkResult === "success" && summary.complete)
+        savedSummary = summary;
       if (benchmarkResult !== "success")
-        body += "\nThe workflow failed after or during measurement; inspect its diagnostics.\n";
+        body +=
+          "\nThe workflow failed after or during measurement; inspect its diagnostics.\n";
     } catch {
-      body += "\nThe measurement summary was invalid; no performance result is available.\n";
+      body +=
+        "\nThe measurement summary was invalid; no performance result is available.\n";
     }
   }
+  body += `\n${benchmarkPayload(savedSummary, source.head.sha)}\n`;
   body += `\nRevision: \`${source.head.sha}\` · [Workflow and measurements](${runUrl})\n`;
   const comments = await github.paginate(github.rest.issues.listComments, {
     ...args,

@@ -7,6 +7,14 @@ function report() {
   return {
     metadata: {
       gitCommit: sha,
+      workloadVersion: "test-v1",
+      node: "v24.21.0",
+      os: "Linux",
+      arch: "x64",
+      cpu: "Test CPU",
+      auth: "passthrough-virtual-key",
+      warmup: 30,
+      mock: { benchmarkMock: 1, chunks: 20, intervalMs: 10 },
       scenarios: ["chat"],
       concurrencyLevels: [1, 10],
       repeats: 2,
@@ -129,4 +137,68 @@ test("port offsets isolate a benchmark and reject values that could select unsaf
     assert.equal(shifted[key] - original[key], 400);
   for (const value of ["-1", "0.5", "10000", "400;exit", "", "Infinity"])
     assert.throws(() => benchmarkPorts(value), /port offset/);
+});
+
+function comparison(summary) {
+  return {
+    state: "available",
+    tag: "platform-v1.0.0",
+    summary: structuredClone(summary),
+  };
+}
+
+test("each metric reports first-run and missing-baseline states", () => {
+  const summary = createSummary(report());
+  const first = renderSummary(summary, {
+    state: "first-run",
+    reason: "First release benchmark.",
+  });
+  assert.match(first, /4.0 \(first run\)/);
+  assert.match(first, /20.00 \(first run\)/);
+  const missing = renderSummary(summary, {
+    state: "missing",
+    reason: "Previous metrics expired.",
+  });
+  assert.match(missing, /4.0 \(N\/A: baseline missing\)/);
+  assert.match(missing, /Previous metrics expired/);
+});
+
+test("zero, absent and newly added metrics never fabricate percentages", () => {
+  const summary = createSummary(report());
+  const baseline = comparison(summary);
+  baseline.summary.rows[0].requestsPerSecond = 0;
+  baseline.summary.rows[0].gatewayMs.p50 = 0;
+  summary.rows[0].gatewayMs.p50 = 0;
+  baseline.summary.rows[0].overheadMs = null;
+  let rendered = renderSummary(summary, baseline);
+  assert.match(rendered, /4.0 \(N\/A: baseline zero\)/);
+  assert.match(rendered, /0.00 \(0.0%\)/);
+  assert.match(rendered, /1.00 \(N\/A: unmeasured baseline\)/);
+  baseline.summary.rows = [];
+  rendered = renderSummary(summary, baseline);
+  assert.match(rendered, /4.0 \(N\/A: new workload\)/);
+  assert.doesNotMatch(rendered, /Infinity|NaN/);
+});
+
+test("changed or missing setup and incomplete runs suppress comparisons", () => {
+  const summary = createSummary(report());
+  const baseline = comparison(summary);
+  baseline.summary.comparison.auth = "synthetic-provider-key";
+  assert.match(renderSummary(summary, baseline), /N\/A: setup changed/);
+  delete baseline.summary.comparison;
+  assert.match(renderSummary(summary, baseline), /N\/A: setup changed/);
+  summary.complete = false;
+  assert.match(renderSummary(summary, baseline), /N\/A: incomplete run/);
+});
+
+test("streaming first content gets its own release delta while server timing stays unmeasured", () => {
+  const summary = createSummary(report());
+  summary.rows[0].scenario = "stream";
+  summary.rows[0].firstContentP50Ms = 10;
+  summary.rows[0].gatewayMs = null;
+  summary.rows[0].overheadMs = null;
+  const baseline = comparison(summary);
+  baseline.summary.rows[0].firstContentP50Ms = 20;
+  assert.match(renderSummary(summary, baseline), /10.00 \(-50.0%\)/);
+  assert.match(renderSummary(summary, baseline), /— \(unmeasured\)/);
 });

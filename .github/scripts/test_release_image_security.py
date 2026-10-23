@@ -290,7 +290,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("needs: [classify, scan-release-images]", gate)
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
-            self.assertIn("if: ${{ always() && github.event_name != 'merge_group' }}", section)
+            self.assertIn("if: ${{ always() }}", section)
             self.assertIn("needs: [release-image-security]", section)
             for result in ("success", "failure", "cancelled", "skipped", ""):
                 command = section.split("        run: ", 1)[1].splitlines()[0]
@@ -298,14 +298,7 @@ class WorkflowContractTests(unittest.TestCase):
                     env=os.environ | {"RESULT": result})
                 self.assertEqual(completed.returncode == 0, result == "success")
         e2e = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
-        queue = e2e.split("  merge-queue-image-scanning:\n", 1)[1].split("  platform-e2e-cancel-on-build-failure:\n", 1)[0]
-        self.assertIn("github.event_name == 'merge_group'", queue)
-        self.assertIn("needs: [platform-e2e-build]", queue)
-        self.assertIn("uses: ./.github/actions/scan-docker-image", queue)
-        self.assertIn('exit-code: "true"', queue)
-        p4 = source.split("  merge-queue-p4-image-scanning:\n", 1)[1]
-        self.assertIn("github.event_name == 'merge_group'", p4)
-        self.assertIn('exit-code: "true"', p4)
+        self.assertNotIn("uses: ./.github/actions/scan-docker-image", e2e)
         self.assertNotIn("run-docker-scan", source)
 
 

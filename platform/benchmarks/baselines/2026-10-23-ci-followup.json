@@ -1,0 +1,1320 @@
+{
+  "description": "Final additional proxy optimization comparison. The baseline already includes earlier optimizations; both revisions include the same main changes. Single-build release results and paired results use different process footprints and must not be treated as one benchmark.",
+  "candidate": "aef6514ff564f9447ae62115112ca84ee88a3241",
+  "singleBuildRuns": [
+    {
+      "run": "https://github.com/archestra-ai/archestra/actions/runs/40006511033",
+      "artifactSha256": "ee4bc44f1dc7849f5d7eaf1c5bc390eb0070811dbd65f0a9ce2d971902623be8",
+      "rawSha256": "44648749f67e6de78f2662aac8d3bfd3bddc6286de3aa1fb97a5237544d9dfb4",
+      "totalRequests": 7920,
+      "proxiedRequests": 3960,
+      "failures": 0,
+      "summary": {
+        "schemaVersion": 1,
+        "complete": true,
+        "gitCommit": "aef6514ff564f9447ae62115112ca84ee88a3241",
+        "platformTree": "b00c02eba23805f44bc4714cfd5a00a00b942530",
+        "comparison": {
+          "workloadVersion": "openai-chat-authenticated-v1",
+          "node": "v24.11.1",
+          "os": "Linux",
+          "arch": "x64",
+          "cpu": "AMD EPYC 7763 64-Core Processor",
+          "logicalCpus": 4,
+          "memoryGiB": 16,
+          "auth": "passthrough-virtual-key",
+          "count": 300,
+          "streamCount": 60,
+          "warmup": 30,
+          "repeats": 2,
+          "concurrencyLevels": [
+            1,
+            10,
+            50
+          ],
+          "scenarios": [
+            "chat",
+            "tools",
+            "stream"
+          ],
+          "mock": {
+            "benchmarkMock": 1,
+            "chunks": 20,
+            "intervalMs": 10
+          }
+        },
+        "logicalCpus": 4,
+        "memoryGiB": 15.614940643310547,
+        "repeats": 2,
+        "requestsPerBlock": 300,
+        "streamingRequestsPerBlock": 60,
+        "rows": [
+          {
+            "scenario": "chat",
+            "concurrency": 50,
+            "attempted": 600,
+            "succeeded": 600,
+            "requestsPerSecond": 192.44883471484843,
+            "successPercent": 100,
+            "p50Ms": 254.9507799999992,
+            "p95Ms": 278.608400000001,
+            "p99Ms": 285.10180200000104,
+            "addedMedianMs": 248.43542700000035,
+            "gatewayMs": {
+              "count": 600,
+              "mean": 233.3240516666665,
+              "p50": 232.96,
+              "p95": 257.901,
+              "p99": 261.931,
+              "min": 191.515,
+              "max": 267.234
+            },
+            "upstreamMs": {
+              "count": 600,
+              "mean": 21.99989499999999,
+              "p50": 21.789,
+              "p95": 35.793,
+              "p99": 37.917,
+              "min": 5.411,
+              "max": 43.535
+            },
+            "overheadMs": {
+              "count": 600,
+              "mean": 211.32416333333333,
+              "p50": 211.319,
+              "p95": 231.911,
+              "p99": 244.514,
+              "min": 175.75,
+              "max": 252.717
+            },
+            "firstContentP50Ms": null
+          },
+          {
+            "scenario": "tools",
+            "concurrency": 50,
+            "attempted": 600,
+            "succeeded": 600,
+            "requestsPerSecond": 180.3141888189361,
+            "successPercent": 100,
+            "p50Ms": 272.5001390000034,
+            "p95Ms": 302.2839060000042,
+            "p99Ms": 316.9927420000022,
+            "addedMedianMs": 266.6889730000039,
+            "gatewayMs": {
+              "count": 600,
+              "mean": 250.40721833333345,
+              "p50": 249.794,
+              "p95": 284.908,
+              "p99": 291.919,
+              "min": 209.053,
+              "max": 305.387
+            },
+            "upstreamMs": {
+              "count": 600,
+              "mean": 21.88550166666667,
+              "p50": 22.73,
+              "p95": 30.853,
+              "p99": 33.985,
+              "min": 5.826,
+              "max": 40.539
+            },
+            "overheadMs": {
+              "count": 600,
+              "mean": 228.52173166666654,
+              "p50": 227.799,
+              "p95": 258.685,
+              "p99": 266.672,
+              "min": 190.296,
+              "max": 279.856
+            },
+            "firstContentP50Ms": null
+          },
+          {
+            "scenario": "stream",
+            "concurrency": 50,
+            "attempted": 120,
+            "succeeded": 120,
+            "requestsPerSecond": 83.83132435034223,
+            "successPercent": 100,
+            "p50Ms": 449.18348700000206,
+            "p95Ms": 464.95872999999847,
+            "p99Ms": 471.14054100000067,
+            "addedMedianMs": 235.3485970000038,
+            "gatewayMs": null,
+            "upstreamMs": null,
+            "overheadMs": null,
+            "firstContentP50Ms": 214.8563759999961
+          }
+        ]
+      }
+    },
+    {
+      "run": "https://github.com/archestra-ai/archestra/actions/runs/40007140323",
+      "artifactSha256": "850ccadadc4dab287553567b4142eadd9d5ebdd4445978be4fc455001a7006ad",
+      "rawSha256": "608f13d948fb4caaf26993076d02bed8c9fafa35f7e180c92e9a3fc9bb290e65",
+      "totalRequests": 7920,
+      "proxiedRequests": 3960,
+      "failures": 0,
+      "summary": {
+        "schemaVersion": 1,
+        "complete": true,
+        "gitCommit": "aef6514ff564f9447ae62115112ca84ee88a3241",
+        "platformTree": "b00c02eba23805f44bc4714cfd5a00a00b942530",
+        "comparison": {
+          "workloadVersion": "openai-chat-authenticated-v1",
+          "node": "v24.11.1",
+          "os": "Linux",
+          "arch": "x64",
+          "cpu": "AMD EPYC 9V74 80-Core Processor",
+          "logicalCpus": 4,
+          "memoryGiB": 16,
+          "auth": "passthrough-virtual-key",
+          "count": 300,
+          "streamCount": 60,
+          "warmup": 30,
+          "repeats": 2,
+          "concurrencyLevels": [
+            1,
+            10,
+            50
+          ],
+          "scenarios": [
+            "chat",
+            "tools",
+            "stream"
+          ],
+          "mock": {
+            "benchmarkMock": 1,
+            "chunks": 20,
+            "intervalMs": 10
+          }
+        },
+        "logicalCpus": 4,
+        "memoryGiB": 15.614940643310547,
+        "repeats": 2,
+        "requestsPerBlock": 300,
+        "streamingRequestsPerBlock": 60,
+        "rows": [
+          {
+            "scenario": "chat",
+            "concurrency": 50,
+            "attempted": 600,
+            "succeeded": 600,
+            "requestsPerSecond": 269.23011971310535,
+            "successPercent": 100,
+            "p50Ms": 182.42516500000056,
+            "p95Ms": 199.74237600000015,
+            "p99Ms": 208.28958799999964,
+            "addedMedianMs": 178.6049839999996,
+            "gatewayMs": {
+              "count": 600,
+              "mean": 166.13090166666683,
+              "p50": 166.104,
+              "p95": 184.253,
+              "p99": 192.417,
+              "min": 130.324,
+              "max": 201.565
+            },
+            "upstreamMs": {
+              "count": 600,
+              "mean": 15.660096666666675,
+              "p50": 15.523,
+              "p95": 23.404,
+              "p99": 28.869,
+              "min": 4.173,
+              "max": 30.617
+            },
+            "overheadMs": {
+              "count": 600,
+              "mean": 150.47077833333344,
+              "p50": 150.776,
+              "p95": 166.209,
+              "p99": 174.881,
+              "min": 117.593,
+              "max": 180.242
+            },
+            "firstContentP50Ms": null
+          },
+          {
+            "scenario": "tools",
+            "concurrency": 50,
+            "attempted": 600,
+            "succeeded": 600,
+            "requestsPerSecond": 256.3541697331704,
+            "successPercent": 100,
+            "p50Ms": 189.74385600000096,
+            "p95Ms": 218.30874199999744,
+            "p99Ms": 224.34843199999887,
+            "addedMedianMs": 185.97527199999968,
+            "gatewayMs": {
+              "count": 600,
+              "mean": 175.3093683333334,
+              "p50": 174.208,
+              "p95": 200.359,
+              "p99": 207.214,
+              "min": 135.614,
+              "max": 210.735
+            },
+            "upstreamMs": {
+              "count": 600,
+              "mean": 16.59236833333333,
+              "p50": 16.215,
+              "p95": 25.856,
+              "p99": 29.351,
+              "min": 2.948,
+              "max": 30.118
+            },
+            "overheadMs": {
+              "count": 600,
+              "mean": 158.7169616666667,
+              "p50": 158.053,
+              "p95": 180.916,
+              "p99": 191.415,
+              "min": 123.066,
+              "max": 194.964
+            },
+            "firstContentP50Ms": null
+          },
+          {
+            "scenario": "stream",
+            "concurrency": 50,
+            "attempted": 120,
+            "succeeded": 120,
+            "requestsPerSecond": 92.73019396863823,
+            "successPercent": 100,
+            "p50Ms": 392.91120799999044,
+            "p95Ms": 418.87599200000113,
+            "p99Ms": 420.9855150000076,
+            "addedMedianMs": 183.70042099998682,
+            "gatewayMs": null,
+            "upstreamMs": null,
+            "overheadMs": null,
+            "firstContentP50Ms": 172.2067459999962
+          }
+        ]
+      }
+    }
+  ],
+  "paired": {
+    "run": "https://github.com/archestra-ai/archestra/actions/runs/40007140323",
+    "rawSha256": "d9a5fed6a8f417a1b8e65c636114b4742508583b25eebf0a796f2c65a9c30f97",
+    "complete": true,
+    "startedAt": "2026-10-23T19:05:09.453Z",
+    "finishedAt": "2026-10-23T19:08:04.755Z",
+    "cleanupFinishedAt": "2026-10-23T19:08:05.945Z",
+    "metadata": {
+      "node": "v24.11.1",
+      "os": "Linux",
+      "osRelease": "6.17.0-1022-azure",
+      "arch": "x64",
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "logicalCpus": 4,
+      "totalMemoryBytes": 16766414848,
+      "auth": "passthrough-virtual-key",
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 100,
+      "repeats": 6,
+      "scenarios": [
+        "chat",
+        "tools"
+      ],
+      "methodology": "Both compiled variants resident with separate disposable PostgreSQL databases and identical loopback mocks; one variant receives load at a time. Six paired trials alternate baseline/candidate and candidate/baseline order. Direct mock control before each pair. HTTP/1.1 closed loop keep-alive. Gateway overhead is measured per request. No production services, paid inference or shared data.",
+      "mock": {
+        "benchmarkMock": 1,
+        "chunks": 20,
+        "intervalMs": 10
+      }
+    },
+    "variants": [
+      {
+        "target": "baseline",
+        "commit": "c4b813b8fb02d1cc023925c72d8e1f75a51c6c9a"
+      },
+      {
+        "target": "candidate",
+        "commit": "aef6514ff564f9447ae62115112ca84ee88a3241"
+      }
+    ],
+    "rows": [
+      {
+        "scenario": "chat",
+        "target": "baseline",
+        "requests": 6000,
+        "failures": 0,
+        "clientMs": {
+          "count": 6000,
+          "mean": 287.65771747583364,
+          "p50": 268.8623510000034,
+          "p95": 434.1182470000058,
+          "p99": 518.3401440000016,
+          "min": 202.10278500000277,
+          "max": 541.9357010000094
+        },
+        "overheadMs": {
+          "count": 6000,
+          "mean": 255.91625116666654,
+          "p50": 240.54,
+          "p95": 385.885,
+          "p99": 471.301,
+          "min": 178.038,
+          "max": 522.673
+        },
+        "requestsPerSecond": 172.86513645410295
+      },
+      {
+        "scenario": "chat",
+        "target": "candidate",
+        "requests": 6000,
+        "failures": 0,
+        "clientMs": {
+          "count": 6000,
+          "mean": 212.7408588988337,
+          "p50": 199.64299800001027,
+          "p95": 319.65925699999934,
+          "p99": 427.9639029999962,
+          "min": 145.80381599999964,
+          "max": 467.68849699999555
+        },
+        "overheadMs": {
+          "count": 6000,
+          "mean": 181.91641816666657,
+          "p50": 172.392,
+          "p95": 266.781,
+          "p99": 378.012,
+          "min": 116.999,
+          "max": 431.695
+        },
+        "requestsPerSecond": 233.2604658583879
+      },
+      {
+        "scenario": "tools",
+        "target": "baseline",
+        "requests": 6000,
+        "failures": 0,
+        "clientMs": {
+          "count": 6000,
+          "mean": 284.14401536166747,
+          "p50": 273.3816280000028,
+          "p95": 339.82764800000587,
+          "p99": 532.5084720000013,
+          "min": 214.307541999995,
+          "max": 579.0541689999955
+        },
+        "overheadMs": {
+          "count": 6000,
+          "mean": 251.99419550000124,
+          "p50": 243.443,
+          "p95": 297.225,
+          "p99": 486.013,
+          "min": 193.562,
+          "max": 552.692
+        },
+        "requestsPerSecond": 175.04196469627362
+      },
+      {
+        "scenario": "tools",
+        "target": "candidate",
+        "requests": 6000,
+        "failures": 0,
+        "clientMs": {
+          "count": 6000,
+          "mean": 217.65135591999987,
+          "p50": 211.0630999999994,
+          "p95": 254.8410730000178,
+          "p99": 440.89735299997847,
+          "min": 155.31776500001433,
+          "max": 534.0222920000087
+        },
+        "overheadMs": {
+          "count": 6000,
+          "mean": 187.50923299999963,
+          "p50": 182.23,
+          "p95": 224.931,
+          "p99": 375.507,
+          "min": 134.284,
+          "max": 509.523
+        },
+        "requestsPerSecond": 228.1705709067738
+      }
+    ],
+    "trials": [
+      {
+        "scenario": "chat",
+        "repeat": 1,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 186.110055000001,
+        "requestsPerSecond": 5373.164819063615,
+        "clientMs": {
+          "count": 1000,
+          "mean": 9.139431268000004,
+          "p50": 8.958082000001014,
+          "p95": 16.762966999998753,
+          "p99": 20.287728999999672,
+          "min": 1.7330310000033933,
+          "max": 23.253349000002345
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 1,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 6430.887067,
+        "requestsPerSecond": 155.49954299951634,
+        "clientMs": {
+          "count": 1000,
+          "mean": 319.64510218799995,
+          "p50": 299.7567540000018,
+          "p95": 466.48850200000015,
+          "p99": 505.4401949999956,
+          "min": 248.4481620000006,
+          "max": 540.4439590000038
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 283.31819900000016,
+          "p50": 261.084,
+          "p95": 431.031,
+          "p99": 465.609,
+          "min": 220.765,
+          "max": 522.673
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 1,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4538.076975999997,
+        "requestsPerSecond": 220.3576548587837,
+        "clientMs": {
+          "count": 1000,
+          "mean": 225.52208898,
+          "p50": 219.86313800000062,
+          "p95": 283.252622,
+          "p99": 353.168620000004,
+          "min": 158.20787299999938,
+          "max": 359.9542399999991
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 192.09399499999992,
+          "p50": 190.417,
+          "p95": 228.699,
+          "p99": 275.366,
+          "min": 141.021,
+          "max": 313.943
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 2,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 99.61877699999604,
+        "requestsPerSecond": 10038.268187131425,
+        "clientMs": {
+          "count": 1000,
+          "mean": 4.899103482000028,
+          "p50": 4.197591999996803,
+          "p95": 8.448045999997703,
+          "p99": 9.374919000001682,
+          "min": 0.7620390000010957,
+          "max": 16.108022000000346
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 2,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 3878.875672000002,
+        "requestsPerSecond": 257.80666475561105,
+        "clientMs": {
+          "count": 1000,
+          "mean": 192.58162057100017,
+          "p50": 191.10821299999952,
+          "p95": 218.3419889999932,
+          "p99": 230.48964100000012,
+          "min": 145.80381599999964,
+          "max": 248.08476999999402
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 165.68563099999997,
+          "p50": 164.229,
+          "p95": 194.025,
+          "p99": 205.917,
+          "min": 123.959,
+          "max": 218.653
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 2,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5376.096449000004,
+        "requestsPerSecond": 186.00856764502575,
+        "clientMs": {
+          "count": 1000,
+          "mean": 267.4474504699998,
+          "p50": 257.10363200000575,
+          "p95": 368.34748299999774,
+          "p99": 480.98933699999907,
+          "min": 204.79223900000216,
+          "max": 496.3838240000041
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 238.386802,
+          "p50": 229.634,
+          "p95": 342.938,
+          "p99": 442.439,
+          "min": 185.339,
+          "max": 471.301
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 3,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 93.70671999999468,
+        "requestsPerSecond": 10671.59324326,
+        "clientMs": {
+          "count": 1000,
+          "mean": 4.60505670899999,
+          "p50": 3.832485999999335,
+          "p95": 7.6941379999989294,
+          "p99": 9.245726000001014,
+          "min": 0.8782240000000456,
+          "max": 14.722063000001071
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 3,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5270.195698999996,
+        "requestsPerSecond": 189.74627454341916,
+        "clientMs": {
+          "count": 1000,
+          "mean": 262.03437809099984,
+          "p50": 250.88343599999644,
+          "p95": 378.6673379999993,
+          "p99": 406.5206259999977,
+          "min": 202.10278500000277,
+          "max": 473.31502100000216
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 234.28534199999996,
+          "p50": 224.636,
+          "p95": 340.767,
+          "p99": 377.622,
+          "min": 178.038,
+          "max": 451.136
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 3,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4204.130083999997,
+        "requestsPerSecond": 237.86133635726026,
+        "clientMs": {
+          "count": 1000,
+          "mean": 208.67165683099995,
+          "p50": 194.9116800000047,
+          "p95": 331.236539000005,
+          "p99": 433.71786900000006,
+          "min": 146.94383499999822,
+          "max": 454.5350860000035
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 177.81247299999984,
+          "p50": 167.042,
+          "p95": 284.908,
+          "p99": 396.419,
+          "min": 125.827,
+          "max": 428.324
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 4,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 105.74279799999931,
+        "requestsPerSecond": 9456.908828911512,
+        "clientMs": {
+          "count": 1000,
+          "mean": 5.209065522000092,
+          "p50": 4.795706000004429,
+          "p95": 11.061880999994173,
+          "p99": 13.085062999998627,
+          "min": 0.7259960000010324,
+          "max": 13.109701000001223
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 4,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4039.179654000007,
+        "requestsPerSecond": 247.57502405462412,
+        "clientMs": {
+          "count": 1000,
+          "mean": 199.983038223,
+          "p50": 189.40821799999685,
+          "p95": 297.8402300000016,
+          "p99": 406.8619539999927,
+          "min": 147.5887539999967,
+          "max": 417.30518799999845
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 172.20167999999987,
+          "p50": 163.082,
+          "p95": 280.861,
+          "p99": 364.532,
+          "min": 116.999,
+          "max": 381.258
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 4,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 6283.065853000007,
+        "requestsPerSecond": 159.1579689591388,
+        "clientMs": {
+          "count": 1000,
+          "mean": 312.58586306200016,
+          "p50": 280.394438000003,
+          "p95": 511.6024319999997,
+          "p99": 524.9143500000064,
+          "min": 223.61513299999933,
+          "max": 541.9357010000094
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 279.3354529999998,
+          "p50": 248.503,
+          "p95": 469.137,
+          "p99": 484.426,
+          "min": 212.327,
+          "max": 502.6
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 5,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 67.02544199999829,
+        "requestsPerSecond": 14919.7076537,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.2884808980000524,
+          "p50": 3.0073750000010477,
+          "p95": 5.18844800000079,
+          "p99": 6.051886999994167,
+          "min": 0.6733390000008512,
+          "max": 9.485728999992716
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 5,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5586.125855999999,
+        "requestsPerSecond": 179.01494269519733,
+        "clientMs": {
+          "count": 1000,
+          "mean": 277.8529598560002,
+          "p50": 268.3250870000047,
+          "p95": 364.79493899999943,
+          "p99": 442.74828400000115,
+          "min": 226.00539999999455,
+          "max": 486.39976499999466
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 244.9183839999998,
+          "p50": 239.223,
+          "p95": 303.386,
+          "p99": 382.037,
+          "min": 195.473,
+          "max": 424.466
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 5,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5004.573392999999,
+        "requestsPerSecond": 199.8172314544774,
+        "clientMs": {
+          "count": 1000,
+          "mean": 248.59415641200016,
+          "p50": 222.06035600000178,
+          "p95": 426.3641510000016,
+          "p99": 449.77126400001,
+          "min": 160.1658610000013,
+          "max": 467.68849699999555
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 212.09249200000025,
+          "p50": 187.957,
+          "p95": 375.82,
+          "p99": 413.159,
+          "min": 144.876,
+          "max": 431.695
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 6,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 73.70588900000439,
+        "requestsPerSecond": 13567.436924883172,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.621043706000186,
+          "p50": 3.1960069999913685,
+          "p95": 5.556134999991627,
+          "p99": 8.109947000004468,
+          "min": 0.6793959999922663,
+          "max": 10.787243000013405
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "chat",
+        "repeat": 6,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4057.482737000013,
+        "requestsPerSecond": 246.45822664408215,
+        "clientMs": {
+          "count": 1000,
+          "mean": 201.09259237600003,
+          "p50": 200.12015200000315,
+          "p95": 225.19509500000277,
+          "p99": 236.5195209999947,
+          "min": 150.70350799999142,
+          "max": 248.79386799999338
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 171.6122380000001,
+          "p50": 171.782,
+          "p95": 197.321,
+          "p99": 207.9,
+          "min": 124.91,
+          "max": 220.121
+        }
+      },
+      {
+        "scenario": "chat",
+        "repeat": 6,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5762.767790000013,
+        "requestsPerSecond": 173.52772772404177,
+        "clientMs": {
+          "count": 1000,
+          "mean": 286.38055118799997,
+          "p50": 272.7911129999993,
+          "p95": 327.0008950000047,
+          "p99": 520.0551529999939,
+          "min": 234.54761199999484,
+          "max": 537.929713000005
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 255.25332699999993,
+          "p50": 243.909,
+          "p95": 283.295,
+          "p99": 465.248,
+          "min": 205.841,
+          "max": 473.764
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 1,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 68.69004800000403,
+        "requestsPerSecond": 14558.14967548052,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.371108779000133,
+          "p50": 3.2684949999966193,
+          "p95": 4.517200000002049,
+          "p99": 6.669072999997297,
+          "min": 0.6786550000106217,
+          "max": 7.663830000004964
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 1,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5839.531735000011,
+        "requestsPerSecond": 171.2466076699895,
+        "clientMs": {
+          "count": 1000,
+          "mean": 290.3095639050001,
+          "p50": 277.17380299999786,
+          "p95": 403.11325399999623,
+          "p99": 504.12045000000217,
+          "min": 233.8776840000064,
+          "max": 531.6693519999972
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 254.0376010000001,
+          "p50": 245.834,
+          "p95": 329.067,
+          "p99": 404.873,
+          "min": 214.546,
+          "max": 442.905
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 1,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4742.610437999989,
+        "requestsPerSecond": 210.8543413111769,
+        "clientMs": {
+          "count": 1000,
+          "mean": 235.557634881,
+          "p50": 216.37810299999546,
+          "p95": 365.5818830000062,
+          "p99": 452.5288989999972,
+          "min": 167.50615000000107,
+          "max": 463.1751890000014
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 204.63812500000003,
+          "p50": 187.962,
+          "p95": 331.873,
+          "p99": 406.314,
+          "min": 142.154,
+          "max": 437.976
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 2,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 81.08958200000052,
+        "requestsPerSecond": 12332.040384669803,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.982194906000019,
+          "p50": 3.5573440000007395,
+          "p95": 5.80592099999194,
+          "p99": 10.201721999997972,
+          "min": 0.6777009999932488,
+          "max": 11.420060999997077
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 2,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4240.7793260000035,
+        "requestsPerSecond": 235.80571473480134,
+        "clientMs": {
+          "count": 1000,
+          "mean": 210.67976459600027,
+          "p50": 208.67758400000457,
+          "p95": 238.97652799999923,
+          "p99": 248.99718900000153,
+          "min": 164.13564200000837,
+          "max": 289.0762289999984
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 181.5522789999999,
+          "p50": 180.391,
+          "p95": 209.048,
+          "p99": 223.442,
+          "min": 138.029,
+          "max": 263.691
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 2,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 6448.498862000008,
+        "requestsPerSecond": 155.07485096924546,
+        "clientMs": {
+          "count": 1000,
+          "mean": 320.96010383900034,
+          "p50": 286.76875199998904,
+          "p95": 535.6342609999992,
+          "p99": 558.5953010000085,
+          "min": 251.63377200000104,
+          "max": 579.0541689999955
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 285.51779799999997,
+          "p50": 254.929,
+          "p95": 491.618,
+          "p99": 525.103,
+          "min": 225.653,
+          "max": 552.692
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 3,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 66.5303600000043,
+        "requestsPerSecond": 15030.731834307457,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.26551023799993,
+          "p50": 3.1424780000088504,
+          "p95": 5.037767000001622,
+          "p99": 6.269962999998825,
+          "min": 0.5686069999937899,
+          "max": 8.575437000006787
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 3,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5768.838822999998,
+        "requestsPerSecond": 173.34510994016034,
+        "clientMs": {
+          "count": 1000,
+          "mean": 286.8825462639996,
+          "p50": 273.623408000014,
+          "p95": 362.18979799999215,
+          "p99": 516.2734269999928,
+          "min": 229.32771599999978,
+          "max": 530.837658000004
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 252.68059300000007,
+          "p50": 243.147,
+          "p95": 294.938,
+          "p99": 451.242,
+          "min": 202.014,
+          "max": 473.08
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 3,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4779.096357000002,
+        "requestsPerSecond": 209.24457790755517,
+        "clientMs": {
+          "count": 1000,
+          "mean": 237.2204337980003,
+          "p50": 222.01023899999564,
+          "p95": 374.9057599999942,
+          "p99": 505.67243400000734,
+          "min": 183.13141000000178,
+          "max": 534.0222920000087
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 203.45938999999998,
+          "p50": 191.479,
+          "p95": 313.81,
+          "p99": 454.529,
+          "min": 153.753,
+          "max": 509.523
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 4,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 72.71068299998296,
+        "requestsPerSecond": 13753.137210940986,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.5707500099995815,
+          "p50": 3.0824500000162516,
+          "p95": 6.316555999976117,
+          "p99": 7.211842999997316,
+          "min": 0.6690879999950994,
+          "max": 10.93367099997704
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 4,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4362.161124000006,
+        "requestsPerSecond": 229.24416856088573,
+        "clientMs": {
+          "count": 1000,
+          "mean": 216.53968885099957,
+          "p50": 216.18218199998955,
+          "p95": 244.9325260000187,
+          "p99": 254.60203999999794,
+          "min": 165.48245899999165,
+          "max": 270.7378059999901
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 187.00324300000008,
+          "p50": 187.283,
+          "p95": 216.671,
+          "p99": 227.036,
+          "min": 138.791,
+          "max": 237.985
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 4,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5581.1221880000085,
+        "requestsPerSecond": 179.17543574840624,
+        "clientMs": {
+          "count": 1000,
+          "mean": 277.5500372729995,
+          "p50": 276.16569100000197,
+          "p95": 307.3228010000021,
+          "p99": 318.56308300001547,
+          "min": 216.88189600000624,
+          "max": 329.31530600000406
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 247.32973299999983,
+          "p50": 246.995,
+          "p95": 276.846,
+          "p99": 290.376,
+          "min": 197.878,
+          "max": 302.975
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 5,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 63.29835500000627,
+        "requestsPerSecond": 15798.198863144245,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.10484538299992,
+          "p50": 3.060313000023598,
+          "p95": 4.262055999977747,
+          "p99": 6.1200949999911245,
+          "min": 0.6669920000131242,
+          "max": 6.366138000012143
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 5,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5331.91175900001,
+        "requestsPerSecond": 187.54999054739574,
+        "clientMs": {
+          "count": 1000,
+          "mean": 265.24285155999974,
+          "p50": 261.1512229999935,
+          "p95": 316.3126330000232,
+          "p99": 334.2425579999981,
+          "min": 223.1616009999998,
+          "max": 343.7273850000056
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 236.21612399999995,
+          "p50": 232.175,
+          "p95": 287.149,
+          "p99": 305.664,
+          "min": 198.89,
+          "max": 314.825
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 5,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4073.9894379999896,
+        "requestsPerSecond": 245.45964470907464,
+        "clientMs": {
+          "count": 1000,
+          "mean": 202.4228335790001,
+          "p50": 201.75462899997365,
+          "p95": 224.14359100000001,
+          "p99": 237.9033519999939,
+          "min": 162.23747000002186,
+          "max": 252.89832199999364
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 173.4420740000002,
+          "p50": 172.676,
+          "p95": 198.46,
+          "p99": 206.83,
+          "min": 134.284,
+          "max": 222.424
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 6,
+        "target": "direct",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 62.24907099999837,
+        "requestsPerSecond": 16064.496769759444,
+        "clientMs": {
+          "count": 1000,
+          "mean": 3.050883708999987,
+          "p50": 3.0825429999968037,
+          "p95": 3.223316999996314,
+          "p99": 6.163383999984944,
+          "min": 0.6790690000052564,
+          "max": 6.397162000008393
+        },
+        "overheadMs": null
+      },
+      {
+        "scenario": "tools",
+        "repeat": 6,
+        "target": "candidate",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 4097.480192000017,
+        "requestsPerSecond": 244.05243055290788,
+        "clientMs": {
+          "count": 1000,
+          "mean": 203.4877798150001,
+          "p50": 202.26624599998468,
+          "p95": 229.22513000000617,
+          "p99": 244.57190000000992,
+          "min": 155.31776500001433,
+          "max": 254.9916309999826
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 174.9602870000001,
+          "p50": 174.617,
+          "p95": 201.231,
+          "p99": 212.64,
+          "min": 134.326,
+          "max": 222.986
+        }
+      },
+      {
+        "scenario": "tools",
+        "repeat": 6,
+        "target": "baseline",
+        "attempted": 1000,
+        "failed": 0,
+        "elapsedMs": 5307.591235,
+        "requestsPerSecond": 188.40938492129376,
+        "clientMs": {
+          "count": 1000,
+          "mean": 263.9189893290002,
+          "p50": 262.73497799999313,
+          "p95": 287.0762959999847,
+          "p99": 293.7889819999982,
+          "min": 214.307541999995,
+          "max": 308.451785000012
+        },
+        "overheadMs": {
+          "count": 1000,
+          "mean": 236.1833239999998,
+          "p50": 236.697,
+          "p95": 260.352,
+          "p99": 271.399,
+          "min": 193.562,
+          "max": 284.432
+        }
+      }
+    ]
+  }
+}

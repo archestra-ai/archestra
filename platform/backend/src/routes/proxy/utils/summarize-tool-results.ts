@@ -217,7 +217,7 @@ function createPlaceholder(
 export function stripBrowserToolsResults<T extends Message>(
   messages: T[],
 ): T[] {
-  logger.info(
+  logger.debug(
     { messageCount: messages.length },
     "[stripBrowserToolsResults] Starting",
   );
@@ -272,7 +272,7 @@ export function stripBrowserToolsResults<T extends Message>(
     return msg;
   });
 
-  logger.info(
+  logger.debug(
     { strippedCount, toolMessagesCount, totalMessages: messages.length },
     "[stripBrowserToolsResults] Completed",
   );

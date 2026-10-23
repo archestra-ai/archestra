@@ -4,21 +4,69 @@ on:
   pull_request:
     paths:
       - platform/benchmarks/**
+      - platform/backend/src/server/llm-proxy-timing*
+      - platform/package.json
+      - platform/CHANGELOG.md
       - .github/workflows/llm-proxy-benchmark.yml
+      - .github/scripts/publish-proxy-benchmark-comment*
+      - .github/scripts/proxy-benchmark-baseline*
+      - .github/scripts/update-proxy-benchmark-docs*
   workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: Optional full baseline commit SHA for a paired comparison on this runner
+        required: false
+        default: ''
+        type: string
 
-permissions:
-  contents: read
-
-concurrency:
-  group: llm-proxy-benchmark-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
+  select:
+    name: Select benchmark runs
+    concurrency:
+      group: llm-proxy-select-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read # Inspect generated table commits to avoid benchmark loops.
+      pull-requests: read # Read changed paths; no PR code is executed.
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+      release: ${{ steps.select.outputs.release }}
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: select
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const release = Boolean(pr && pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.ref.startsWith('release-please--branches--') && pr.head.ref.endsWith('--components--platform'));
+            let run = context.eventName === 'workflow_dispatch' || release;
+            if (release && context.eventName === 'pull_request') {
+              const {data: commit} = await github.rest.repos.getCommit({...context.repo, ref: pr.head.sha});
+              const generated = commit.commit.message.split('\n')[0] === 'docs: update proxy benchmark results' && commit.parents?.length === 1 && commit.files?.length === 1 && commit.files[0].filename === 'docs/pages/admin/observability/performance-benchmarks.md' && commit.files[0].status === 'modified';
+              if (generated) run = false;
+            }
+            if (pr && !run && !release) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {...context.repo, pull_number: pr.number, per_page: 100});
+              run = files.some(({filename}) => filename.startsWith('platform/benchmarks/') || filename.startsWith('platform/backend/src/server/llm-proxy-timing') || filename === '.github/workflows/llm-proxy-benchmark.yml' || filename.startsWith('.github/scripts/publish-proxy-benchmark-comment') || filename.startsWith('.github/scripts/proxy-benchmark-baseline') || filename.startsWith('.github/scripts/update-proxy-benchmark-docs'));
+            }
+            core.setOutput('run', String(run));
+            core.setOutput('release', String(release));
+
   benchmark:
     name: Measure LLM proxy latency
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    needs: select
+    if: needs.select.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # A generated table commit skips this job. Scope cancellation here so
+    # that commit cannot cancel the successful run publishing its own docs.
+    concurrency:
+      group: llm-proxy-measure-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: platform
@@ -26,6 +74,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
@@ -36,18 +85,32 @@ jobs:
           cache: pnpm
           cache-dependency-path: platform/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+      - uses: ./.github/actions/setup-rust-build # zizmor: ignore[self-repository] Build using the explicitly checked-out measured revision.
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
       - run: pnpm exec biome check benchmarks/*.mjs
-      - name: Validate timing and failure handling
-        run: node --test benchmarks/measure.test.mjs
+      - name: Validate timing and reporting
+        run: node --test benchmarks/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
+      - name: Validate server timing boundaries
+        run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
       - name: Run mock inference benchmark
-        # CI is a correctness check and a separate hardware baseline, not an
-        # absolute latency gate on noisy shared runners.
+        # A repeatable shared-runner measurement, not an absolute latency gate.
         run: bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+      - name: Compare pinned revisions on the same runner
+        if: github.event_name == 'workflow_dispatch' && inputs.baseline_sha != ''
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: bash benchmarks/compare.sh "$BASELINE_SHA"
       - name: Publish summary
         if: always()
         run: |
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/comparison/summary.md ]; then
+            cat benchmarks/results/comparison/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload measurements and diagnostics
         if: always()
@@ -56,3 +119,69 @@ jobs:
           name: llm-proxy-benchmark
           path: platform/benchmarks/results/
           retention-days: 14
+
+  comment:
+    name: Update release benchmark summary and docs
+    needs: [select, benchmark]
+    if: ${{ always() && !cancelled() && needs.select.outputs.release == 'true' && needs.benchmark.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: llm-proxy-publish-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write # Maintain one summary on the same-repository release PR.
+    steps:
+      # Execute the publisher from the trusted base, never measured PR code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true # Setup failures can precede artifact creation.
+        with:
+          name: llm-proxy-benchmark
+          path: benchmark-artifact
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: publish
+        env:
+          BENCHMARK_RESULT: ${{ needs.benchmark.result }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            let summary = null;
+            const file = 'benchmark-artifact/ci/report.json';
+            try {
+              if (fs.existsSync(file)) {
+                if (fs.statSync(file).size > 65536) throw new Error('Benchmark summary is too large');
+                summary = JSON.parse(fs.readFileSync(file, 'utf8'));
+              }
+            } catch {
+              core.warning('Benchmark summary is unavailable or invalid; publishing failure status.');
+            }
+            const { publishBenchmarkComment } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/publish-proxy-benchmark-comment.mjs`);
+            const result = await publishBenchmarkComment({github, context, summary, benchmarkResult: process.env.BENCHMARK_RESULT});
+            core.info(result);
+            core.setOutput('update-docs', String(['created', 'updated'].includes(result) && process.env.BENCHMARK_RESULT === 'success' && summary?.complete && summary.gitCommit === context.payload.pull_request.head.sha && context.payload.pull_request.user.login === 'archestra-ci[bot]'));
+      # App-token pushes trigger ordinary PR validation. The select job skips
+      # the generated table commit, and screenshot capture also suppresses its
+      # follow-up commit, so volatile timings cannot create a commit loop.
+      - name: Generate docs commit token
+        if: steps.publish.outputs.update-docs == 'true'
+        id: docs-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: read
+      - name: Commit generated benchmark table
+        if: steps.publish.outputs.update-docs == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.docs-token.outputs.token }}
+          script: |
+            const fs = require('node:fs');
+            const summary = JSON.parse(fs.readFileSync('benchmark-artifact/ci/report.json', 'utf8'));
+            const { commitBenchmarkDocs } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/update-proxy-benchmark-docs.mjs`);
+            core.info(await commitBenchmarkDocs({github, context, summary, benchmarkResult: 'success'}));

@@ -6,6 +6,41 @@ import LimitModel, { LimitValidationService } from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
 describe("unit and interval quotas", () => {
+  test("scoped budget cleanup preserves throughput windows and minute spend", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const budget = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      cleanupInterval: "calendar_day",
+      limitValue: 10,
+    });
+    const untouched = [];
+    for (const [limitType, cleanupInterval] of [
+      ["requests", "minute"],
+      ["tokens", "calendar_day"],
+      ["token_cost", "minute"],
+    ] as const)
+      untouched.push(
+        await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType,
+          cleanupInterval,
+          limitValue: 10,
+        }),
+      );
+    const scope = { entities: { organization: org.id } };
+    expect(await LimitModel.findLimitIdsToReset(scope)).toEqual([budget.id]);
+    await LimitModel.cleanupLimitsIfNeeded(scope);
+    expect((await LimitModel.findById(budget.id))?.lastCleanup).toBeInstanceOf(
+      Date,
+    );
+    for (const rule of untouched)
+      expect((await LimitModel.findById(rule.id))?.lastCleanup).toBeNull();
+  });
   test("interval epochs advance monotonically and reject old minute spend receipts", async ({
     makeOrganization,
   }) => {

@@ -27,6 +27,13 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.6.6
 overrides:
+  # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
+  # Run their validators on patched Zod 4; the package patches below adapt
+  # their record/function/error APIs while preserving current SDK interfaces.
+  # Remove these selectors and patches when the SDKs adopt patched Zod 4.
+  '@microsoft/agents-activity@1.9.1>zod': '>=4.6.6 <5'
+  '@microsoft/agents-hosting@1.9.1>zod': '>=4.6.6 <5'
+  'confluence.js@2.1.0>zod': '>=4.6.6 <5'
   # iconv-lite 0.6.x publishes a .idea/ folder, which sandboxed agents can't
   # write, so installs fail there. 0.7 keeps the same API and ships without it.
   iconv-lite@<0.7: ^0.7.2
@@ -258,6 +265,10 @@ patchedDependencies:
   # without discovery and verified private GitHub email lookup in SSO;
   # re-run backend/src/auth/github-sso.ee.test.ts and real GitHub sign-in.
   '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
+  # Keep the SDK's string-keyed semantic-action records under Zod 4.
+  '@microsoft/agents-activity@1.9.1': patches/@microsoft__agents-activity@1.9.1.patch
+  # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
+  confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
   # and the package opened the text part on `content != null` and processed text
   # before thinking — so the UI text part was created before the reasoning part

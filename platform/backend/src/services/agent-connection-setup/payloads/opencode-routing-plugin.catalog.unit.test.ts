@@ -494,6 +494,129 @@ describe("managed catalog plugin", () => {
     expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
+  test.each([
+    {
+      setup: "an older setup that stored the key beside OpenAI only",
+      installed: {
+        routeHeaders: {
+          openai: {
+            "X-Archestra-Virtual-Key": "passthrough-secret",
+            "X-Route-Only": "openai",
+          },
+        },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup that knew no passthrough route",
+      installed: {
+        routeHeaders: {},
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "an older setup with an empty passthrough field",
+      installed: {
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        passthroughHeaders: {},
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup that left an empty entry for the route",
+      installed: {
+        routeHeaders: { xai: {} },
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup without a passthrough key",
+      installed: { routeHeaders: {} },
+      key: undefined,
+    },
+  ])("a passthrough route the catalog adds later gets the passthrough key from $setup", async ({
+    installed,
+    key,
+  }) => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-new-route-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    // The user's own xAI sign-in. The deployment routed xAI after setup.
+    await mkdir(path.join(root, "data", "kilo"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "kilo", "auth.json"),
+      JSON.stringify({
+        xai: { type: "oauth", access: "native-xai-token", refresh: "r" },
+      }),
+    );
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        // A setup without any route leaves the proxy out, and the plugin
+        // does not load at all.
+        routes: { vendor: managedRoute },
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        ...installed,
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const xaiRoute = "https://deployment.example/v1/xai/agent";
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          ...catalog,
+          routes: { ...catalog.routes, xai: xaiRoute },
+          managed: { ...catalog.managed, xai: ["grok-x"] },
+          // Vendor allows the user's own sign-in too, but this user has none.
+          passthrough: ["openai", "xai", "vendor"],
+        },
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: { vendor: { options: {} }, xai: { options: {} } },
+    };
+    await hooks.config(config);
+    expect(config.provider.xai.options).toEqual({
+      baseURL: xaiRoute,
+      headers: {
+        "X-Archestra-Agent-Id": "kilo",
+        ...(key ? { "X-Archestra-Virtual-Key": key } : {}),
+      },
+    });
+    // A request the organization's credential authenticates never carries it.
+    expect(config.provider.vendor.options).toMatchObject({
+      apiKey: "managed-secret",
+    });
+    expect(JSON.stringify(config.provider.vendor)).not.toContain(
+      "passthrough-secret",
+    );
+  });
+
   test("keeps the client's provider names and ids and adds no provider of its own", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-names-"));
     roots.push(root);
@@ -743,6 +866,30 @@ describe("managed catalog plugin", () => {
     expect(result.finalAuth).toBe("Bearer native-openai-token");
     expect(result.finalAccount).toBe("acct");
   });
+
+  test.each([
+    {
+      setup: "an older setup that stored the key beside Google only",
+      installed: {
+        routeHeaders: {
+          google: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+      },
+    },
+    {
+      setup: "a setup that knew no passthrough route",
+      installed: {
+        routeHeaders: {},
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+    },
+  ])("V2 gives a passthrough route the catalog adds later the passthrough key from $setup", async ({
+    installed,
+  }) => {
+    const result = await runManagedOpenAi(true, installed);
+    expect(result.hook.Authorization).toBe("Bearer native-openai-token");
+    expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
+  });
 });
 
 /** Runs the V2 transform twice over providers the client already lists. */
@@ -844,7 +991,14 @@ console.log(JSON.stringify({ vendor: pack("vendor"), openai: pack("openai"), cal
 
 const openAiRoute = "https://deployment.example/v1/openai/agent";
 
-async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
+async function prepareManagedOpenAi(
+  nativeAllowed: boolean,
+  installed: Record<string, unknown> = {
+    routeHeaders: {
+      openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+    },
+  },
+): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-openai-"));
   roots.push(root);
   const revision = path.join(root, "revision");
@@ -856,9 +1010,7 @@ async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
     JSON.stringify({
       routes: {},
       headers: { "X-Archestra-Agent-Id": "opencode" },
-      routeHeaders: {
-        openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
-      },
+      ...installed,
       managedKeyPath: keyPath,
       clientId: "opencode",
       origin: "https://deployment.example",
@@ -882,7 +1034,10 @@ async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
   return path.join(revision, "routing.mjs");
 }
 
-function runManagedOpenAi(nativeAllowed: boolean): Promise<{
+function runManagedOpenAi(
+  nativeAllowed: boolean,
+  installed?: Record<string, unknown>,
+): Promise<{
   hook: Record<string, string>;
   sourceConnection: { id: string } | null;
   finalUrl: string;
@@ -894,7 +1049,7 @@ function runManagedOpenAi(nativeAllowed: boolean): Promise<{
   keptAuth: string | null;
   redirect: string;
 }> {
-  return prepareManagedOpenAi(nativeAllowed).then(
+  return prepareManagedOpenAi(nativeAllowed, installed).then(
     (file) =>
       new Promise((resolve, reject) => {
         const child = spawn(

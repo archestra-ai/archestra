@@ -19,6 +19,7 @@ export function AgentNameCell({
   description,
   labels,
   extraBadges,
+  nameIndicator,
   icon,
   owner,
 }: {
@@ -34,6 +35,8 @@ export function AgentNameCell({
   description?: string | null;
   labels?: AgentLabels;
   extraBadges?: ReactNode;
+  /** Compact trailing affordance that stays visible when metadata badges wrap. */
+  nameIndicator?: ReactNode;
   /**
    * The entity's icon, rendered inline before the name (as the knowledge
    * connectors table does) rather than in its own column, so the table isn't
@@ -56,7 +59,13 @@ export function AgentNameCell({
   // one of them several times taller than the rest.
   const content = (
     <div className="min-w-0 font-medium">
-      <div className="flex min-w-0 items-center gap-2">
+      <div
+        className={
+          nameIndicator
+            ? "flex min-w-0 items-center gap-2 [&>a]:min-w-0 [&>a]:shrink [&>button]:min-w-0 [&>button]:shrink [&>span]:min-w-0 [&>span]:shrink"
+            : "flex min-w-0 items-center gap-2"
+        }
+      >
         {href ? (
           // The row itself navigates to the same page; the link stays for
           // keyboard users and open-in-new-tab, and keeps its click to
@@ -89,6 +98,11 @@ export function AgentNameCell({
           >
             {name}
           </span>
+        )}
+        {nameIndicator && (
+          <RowClickShield className="flex shrink-0 items-center empty:hidden">
+            {nameIndicator}
+          </RowClickShield>
         )}
         {hasMetadata && (
           // The name comes first and keeps its width; badges take what is

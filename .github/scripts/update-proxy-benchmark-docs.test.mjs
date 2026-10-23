@@ -107,11 +107,18 @@ function fixture() {
 
 test("only the marked table changes; rendering is idempotent and has no dates or release deltas", () => {
   const f = fixture();
+  f.summary.rows.find((row) => row.scenario === "tools").overheadMs = {
+    p50: 6,
+    p95: 7,
+    p99: 8,
+  };
+  f.summary.rows.reverse();
   const result = updateBenchmarkTable(markdown, f.summary);
   assert.ok(result.startsWith(markdown.split("old table")[0]));
   assert.ok(result.endsWith(markdown.split("old table")[1]));
-  assert.match(result, /Chat \(c=50\) \| 100.0 \| 100.00%/);
-  assert.match(result, /Streaming \(c=50\).*— \| —.*7.00/);
+  assert.match(result, /Concurrent HTTP requests \| Median added latency/);
+  assert.match(result, /\| 4 vCPU \/ ~16 GiB RAM \| 50 \| 5.00 ms \|/);
+  assert.doesNotMatch(result, /Chat|Streaming|Gateway|Client|Requests\/sec/);
   assert.equal(updateBenchmarkTable(result, f.summary), result);
   assert.doesNotMatch(
     result,
@@ -119,8 +126,30 @@ test("only the marked table changes; rendering is idempotent and has no dates or
   );
 });
 
+test("runner resources refresh from each measured host", () => {
+  const f = fixture();
+  const previous = updateBenchmarkTable(markdown, f.summary);
+  f.summary.logicalCpus = 8;
+  f.summary.memoryGiB = 31.6;
+  const updated = updateBenchmarkTable(previous, f.summary);
+  assert.match(updated, /\| 8 vCPU \/ ~32 GiB RAM \| 50 \| 5.00 ms \|/);
+  assert.doesNotMatch(updated, /4 vCPU|16 GiB/);
+});
+
 test("partial, unsuccessful, missing, duplicate or injected results cannot replace the docs table", () => {
   for (const change of [
+    (s) => {
+      s.logicalCpus = 0;
+    },
+    (s) => {
+      s.logicalCpus = 1.5;
+    },
+    (s) => {
+      s.memoryGiB = 0;
+    },
+    (s) => {
+      s.memoryGiB = Number.NaN;
+    },
     (s) => {
       s.complete = false;
     },

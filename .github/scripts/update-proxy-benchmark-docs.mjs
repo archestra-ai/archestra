@@ -9,14 +9,20 @@ const end = "<!-- proxy-benchmark-results:end -->";
 const sha = /^[a-f0-9]{40}$/;
 
 export function updateBenchmarkTable(markdown, summary) {
-  const rendered = renderSummary(summary);
+  renderSummary(summary);
   if (
     !summary.complete ||
+    !Number.isInteger(summary.logicalCpus) ||
+    summary.logicalCpus <= 0 ||
+    !Number.isFinite(summary.memoryGiB) ||
+    summary.memoryGiB <= 0 ||
     summary.rows.length !== 3 ||
     new Set(summary.rows.map((row) => row.scenario)).size !== 3 ||
     summary.rows.some(
       (row) =>
         row.successPercent !== 100 ||
+        !Number.isInteger(row.concurrency) ||
+        row.concurrency <= 0 ||
         !Number.isInteger(row.attempted) ||
         row.attempted <= 0 ||
         row.succeeded !== row.attempted ||
@@ -38,10 +44,12 @@ export function updateBenchmarkTable(markdown, summary) {
     markdown.indexOf(start) > markdown.indexOf(end)
   )
     throw new Error("Benchmark docs must contain exactly one results block");
-  const table = rendered
-    .split("\n")
-    .filter((line) => line.startsWith("|"))
-    .join("\n");
+  const request = summary.rows.find((row) => row.scenario === "chat");
+  const table = [
+    "| Runner resources | Concurrent HTTP requests | Median added latency |",
+    "| --- | ---: | ---: |",
+    `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${request.concurrency} | ${request.overheadMs.p50.toFixed(2)} ms |`,
+  ].join("\n");
   return (
     markdown.slice(0, markdown.indexOf(start) + start.length) +
     `\n${table}\n` +

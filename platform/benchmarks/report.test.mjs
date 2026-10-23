@@ -68,6 +68,8 @@ test("release summary pools samples and weights throughput by measured duration"
   assert.equal(row.gatewayMs.p50, 9);
   assert.equal(row.overheadMs.p50, 1); // Not gateway P50 - upstream P50 (8).
   assert.equal(row.overheadMs.p99, 17);
+  assert.match(renderSummary(summary), /HTTP proxy request \(c=10\)/);
+  assert.doesNotMatch(renderSummary(summary), /Chat|chat block/);
 });
 
 test("a failed or truncated run stays incomplete and includes unsuccessful requests", () => {

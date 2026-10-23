@@ -1,6 +1,6 @@
 ---
 title: Performance & Latency
-description: LLM proxy throughput, response latency, and repeatable release benchmarks
+description: Latency added by the LLM proxy, measured with external HTTP requests
 order: 5
 lastUpdated: 2026-10-23
 ---
@@ -11,7 +11,7 @@ its numbers or add run dates to this page's prose. Tested revisions, dates,
 host settings and raw measurements belong in the benchmark artifacts.
 -->
 
-Measure time inside Archestra separately from upstream model calls and client delivery. These results use the production backend, virtual-key authentication and request persistence against a local mock model.
+See how much latency Archestra adds to an external HTTP request. The benchmark calls the LLM proxy directly using a production backend, virtual-key authentication and request persistence against a local mock provider.
 
 <span id="local-baseline"></span>
 <span id="complete-non-streaming-responses"></span>
@@ -19,24 +19,22 @@ Measure time inside Archestra separately from upstream model calls and client de
 
 ## Results
 
-Each workload runs separately; its row pools measured requests at the highest tested concurrency.
+Median added latency is the time spent in Archestra, excluding that request's upstream provider call. The result pools successful requests at the stated concurrency after warmup.
 
 <!-- proxy-benchmark-results:start -->
-| Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chat (c=50) | 204.6 | 100.00% | 176.74 / 460.28 / 476.97 | 170.35 / 447.06 / 464.67 | 194.38 / 481.07 / 490.44 | — |
-| Tool definition (c=50) | 273.3 | 100.00% | 165.26 / 191.37 / 212.67 | 151.70 / 174.21 / 190.66 | 179.19 / 210.07 / 228.02 | — |
-| Streaming (c=50) | 98.7 | 100.00% | — | — | 354.11 / 381.27 / 382.29 | 149.90 |
+| Runner resources | Concurrent HTTP requests | Median added latency |
+| --- | ---: | ---: |
+| 4 vCPU / ~16 GiB RAM | 50 | 275.59 ms |
 <!-- proxy-benchmark-results:end -->
 
-Gateway latency spans server receipt through response serialization, including authentication and awaited persistence. Gateway overhead subtracts each request's upstream SDK-call duration before calculating percentiles. Client latency ends after complete body delivery; streaming reports time to first content, with complete-stream gateway timing unmeasured (`—`).
+The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating the median; it does not subtract separate median values.
 
 <span id="environment"></span>
 <span id="method"></span>
 
 ## Test Setup
 
-The benchmark uses one production web process, PostgreSQL and a deterministic OpenAI chat mock on a shared Linux CI runner. Authentication validates a passthrough virtual key paired with a synthetic provider key. Requests use a short prompt and an output limit of 32 tokens; tool definitions execute no tools, and streaming emits 20 content events 10 ms apart.
+An external HTTP client sends ordinary API requests to an OpenAI-compatible endpoint and receives non-streaming JSON responses. The test uses one production web process, PostgreSQL and a deterministic mock provider on a shared Linux runner with the resources shown in the table. Each request carries a short prompt and an output limit of 32 tokens, authenticated with a passthrough virtual key and a synthetic provider key.
 
 Response caching, configured key budgets and real inference are absent. Shared-runner results track release changes; compare only matching hardware, workloads, concurrency and enabled features. They are not a production capacity guarantee.
 

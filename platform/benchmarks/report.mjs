@@ -1,9 +1,9 @@
 import { summarize } from "./measure.mjs";
 
 const names = {
-  chat: "Chat",
-  tools: "Tool definition",
-  stream: "Streaming",
+  chat: "HTTP proxy request",
+  tools: "HTTP request with tool definition",
+  stream: "Streaming HTTP request",
 };
 
 function hasComparisonSetup(setup) {
@@ -212,7 +212,7 @@ export function renderSummary(summary, baseline = null) {
   lines.push(
     "",
     `One production web process; PostgreSQL; local mock upstream. Host: ${number(summary.logicalCpus, 0)} logical CPUs, ${number(summary.memoryGiB, 1)} GiB RAM.`,
-    `Each row pools ${number(summary.repeats, 0)} repeats at the highest tested concurrency; ${number(summary.requestsPerBlock, 0)} requests per chat block and ${number(summary.streamingRequestsPerBlock, 0)} per streaming block. Warmup is excluded.`,
+    `Each row pools ${number(summary.repeats, 0)} repeats at the highest tested concurrency; ${number(summary.requestsPerBlock, 0)} requests per non-streaming block and ${number(summary.streamingRequestsPerBlock, 0)} per streaming block. Warmup is excluded.`,
     "Gateway latency measures server request receipt through response serialization, before socket delivery. Overhead subtracts each request's upstream SDK-call duration before calculating percentiles; it includes authentication, routing, policies and persistence. Client latency ends at the complete response body. Streaming reports client latency and first content only (— means unmeasured).",
     "The isolated launcher validates a passthrough virtual key and persists requests; no real inference requests. Workloads run separately, with a short prompt and max_tokens=32; streaming uses 20 content events, 10 ms apart. Response caching and configured key budgets are not enabled.",
     "Shared-runner measurements track release changes; they are not a production capacity rating. Compare the same hardware, workload, concurrency, authentication and logging settings.",

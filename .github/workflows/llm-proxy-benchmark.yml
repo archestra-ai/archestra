@@ -18,6 +18,9 @@ permissions: {}
 jobs:
   select:
     name: Select benchmark runs
+    concurrency:
+      group: llm-proxy-select-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     permissions:
       contents: read # Inspect generated table commits to avoid benchmark loops.
@@ -76,7 +79,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: platform/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
-      - uses: ./.github/actions/setup-rust-build
+      - uses: ./.github/actions/setup-rust-build # zizmor: ignore[self-repository] Build using the explicitly checked-out measured revision.
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
@@ -152,7 +155,7 @@ jobs:
       - name: Generate docs commit token
         if: steps.publish.outputs.update-docs == 'true'
         id: docs-token
-        uses: ./.github/actions/github-app-token
+        uses: ./.github/actions/github-app-token # zizmor: ignore[self-repository] Load the action from the trusted base checkout, never measured PR code.
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

@@ -169,6 +169,10 @@ export function identifyRemedyChains(
     }
 
     const attempt = resolveAttempt({ part, toolName, getToolShortName });
+    // The two searches run in opposite directions on purpose. A streaming
+    // retry joins the newest chain that has a remedy, the one the model is
+    // retrying now. A complete retry closes the oldest matching chain, so
+    // identical parallel retries close identical parallel chains in order.
     const chain =
       part.state === "input-streaming"
         ? // Provisional: its arguments are not complete enough to compare.

@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { KILO_CLIENT, OPENCODE_CLIENT } from "../opencode-family";
+import type { SetupScriptProxySection } from "../types";
 import { managedRuntimeManifest } from "./managed-runtime";
 import { MANAGED_RUNTIME_BOOTSTRAP } from "./managed-runtime-bootstrap";
 import { managedRuntimeInstall } from "./managed-runtime-install";
@@ -32,10 +33,12 @@ async function fixture({
   client = KILO_CLIENT,
   apiMajor = 1,
   version,
+  proxy = null,
 }: {
   client?: typeof KILO_CLIENT;
   apiMajor?: number;
   version?: string;
+  proxy?: SetupScriptProxySection | null;
 } = {}) {
   const home = await mkdtemp(path.join(tmpdir(), "managed-runtime-"));
   roots.push(home);
@@ -44,7 +47,7 @@ async function fixture({
     platform: "linux" as const,
     appName: "Test Platform",
     mcp: { serverName: name, url, toolPrefix: name },
-    proxy: null,
+    proxy,
     skills: null,
     managedRuntimeSource: {
       url: "https://deployment.example.com/api/connection-setups/runtime",
@@ -155,6 +158,29 @@ describe("managed runtime trust boundary", () => {
       await readFile(path.join(files.root, "params.json"), "utf8"),
     );
     expect(parameters.questionCards).toBe(true);
+  });
+
+  test("stores the passthrough key apart from any route", async () => {
+    // A setup that knew no passthrough route still keeps the key, so a route
+    // the deployment's catalog lists later can carry it.
+    const files = await fixture({
+      proxy: {
+        virtualKey: null,
+        passthroughVirtualKey: "passthrough-secret",
+      } as SetupScriptProxySection,
+    });
+    const parameters = JSON.parse(
+      await readFile(path.join(files.root, "params.json"), "utf8"),
+    );
+    expect(parameters.passthroughHeaders).toEqual({
+      "X-Archestra-Virtual-Key": "passthrough-secret",
+    });
+    const withoutKey = await fixture();
+    expect(
+      JSON.parse(
+        await readFile(path.join(withoutKey.root, "params.json"), "utf8"),
+      ),
+    ).not.toHaveProperty("passthroughHeaders");
   });
 
   test.each([

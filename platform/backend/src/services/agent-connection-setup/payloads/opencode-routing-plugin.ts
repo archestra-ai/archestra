@@ -58,7 +58,7 @@ const installedRoutes = ${params.runtime ? "runtimeParams.routes ?? {}" : JSON.s
 const routes = hasCatalog ? { ...catalogRoutes } : { ...installedRoutes };
 let activeRoutes = { ...routes };
 const managedHeaders = ${params.runtime ? "{ ...runtimeParams.headers }" : JSON.stringify(params.headers)};
-const routeHeaders = ${params.runtime ? RUNTIME_ROUTE_HEADERS : JSON.stringify(params.routeHeaders ?? {})};
+const routeHeaders = ${params.runtime ? runtimeRouteHeaders(params) : JSON.stringify(params.routeHeaders ?? {})};
 let effectiveRouteHeaders = { ...routeHeaders };
 // Providers the organization's credential serves in the current config pass,
 // with the key they carry and the models that credential serves on each.
@@ -455,7 +455,7 @@ ${catalogSource(params)}
 const installedRoutes = ${params.runtime ? "runtimeParams.routes ?? {}" : JSON.stringify(params.routes)};
 const routes = hasCatalog ? { ...catalogRoutes } : { ...installedRoutes };
 let activeRoutes = { ...routes };
-const routeHeaders = ${params.runtime ? RUNTIME_ROUTE_HEADERS : JSON.stringify(params.routeHeaders ?? {})};
+const routeHeaders = ${params.runtime ? runtimeRouteHeaders(params) : JSON.stringify(params.routeHeaders ?? {})};
 let effectiveRouteHeaders = { ...routeHeaders };
 const managedHeaders = ${params.runtime ? "runtimeParams.headers" : JSON.stringify(params.headers)};
 const credentialEnvByProvider = ${JSON.stringify(OPENCODE_CREDENTIAL_ENV_BY_PROVIDER)};
@@ -597,14 +597,22 @@ export default {
 `;
 }
 
-// Setup stores the passthrough key once for each passthrough route it knew.
-// A route the deployment's catalog adds later, such as a newly routed
-// provider, takes the same key; without it the proxy rejects the user's own
-// sign-in on that route.
-const RUNTIME_ROUTE_HEADERS = `((installed) => {
-  const passthroughKey = Object.values(installed).find((headers) => headers && Object.keys(headers).length > 0);
-  return passthroughKey ? { ...Object.fromEntries(catalogPassthrough.map((id) => [id, passthroughKey])), ...installed } : installed;
-})(runtimeParams.routeHeaders ?? {})`;
+/**
+ * Route headers for a runtime plugin. Setup stores the passthrough key in
+ * `passthroughHeaders`; older setups stored it only beside each passthrough
+ * route they knew, and those entries hold that key alone. A passthrough route
+ * the deployment's catalog lists later, such as a newly routed provider, takes
+ * the same key; without it the proxy rejects the user's own sign-in there.
+ */
+function runtimeRouteHeaders(
+  params: RenderOpenCodeRoutingPluginParams,
+): string {
+  const passthrough = JSON.stringify(params.catalog?.passthrough ?? []);
+  return `((installed, passthroughKey) => passthroughKey ? { ...Object.fromEntries(${passthrough}.map((id) => [id, passthroughKey])), ...installed } : installed)(
+  runtimeParams.routeHeaders ?? {},
+  runtimeParams.passthroughHeaders ?? Object.values(runtimeParams.routeHeaders ?? {}).find((headers) => headers && Object.keys(headers).length > 0),
+)`;
+}
 
 function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {
   const catalog = params.catalog;

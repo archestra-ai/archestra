@@ -46,7 +46,7 @@ const context: SetupScriptContext = {
     model: "test-model",
   },
 };
-function fixture(version = "1.4.0") {
+function fixture(version = "1.4.0", nodeVersion?: string) {
   const home = mkdtempSync(path.join(tmpdir(), "pi setup 日本語 "));
   homes.push(home);
   mkdirSync(path.join(home, "bin"));
@@ -63,7 +63,8 @@ function fixture(version = "1.4.0") {
   const network = path.join(home, "network.cjs");
   writeFileSync(
     network,
-    `global.fetch = async (url) => new Response(JSON.stringify(String(url).endsWith("/models") ? { data: [{ id: "test-model" }] } : { result: { tools: [] } }), { headers: { "content-type": "application/json" } });`,
+    `${nodeVersion ? `Object.defineProperty(process.versions, "node", { value: ${JSON.stringify(nodeVersion)} });` : ""}
+global.fetch = async (url) => new Response(JSON.stringify(String(url).endsWith("/models") ? { data: [{ id: "test-model" }] } : { result: { tools: [] } }), { headers: { "content-type": "application/json" } });`,
   );
   vi.stubEnv("NODE_OPTIONS", `--require=${JSON.stringify(network)}`);
   writeFileSync(path.join(home, "bin/pi"), `#!/bin/sh\necho '${version}'\n`);
@@ -248,6 +249,83 @@ test("refuses an unsupported Pi version before writes", () => {
   expect(existsSync(path.join(f.home, ".archestra/pi/connection.json"))).toBe(
     false,
   );
+});
+
+test.each([
+  "18.20.8",
+  "20.19.0",
+  "22.18.0",
+])("refuses setup under Node %s before writing configuration", (version) => {
+  const f = fixture("1.4.0", version);
+  const result = f.run();
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Node.js 22.19.0 or later");
+  expect(
+    existsSync(path.join(f.home, ".archestra/pi/install-state.json")),
+  ).toBe(false);
+  expect(existsSync(path.join(f.home, ".local/bin/arcpi"))).toBe(false);
+});
+
+test.each([
+  "22.19.0",
+  "24.22.0",
+])("accepts supported setup Node %s", (version) => {
+  const f = fixture("1.4.0", version);
+  const result = f.run();
+  expect(result.status, result.stderr).toBe(0);
+  expect(existsSync(path.join(f.home, ".archestra/pi/connection.json"))).toBe(
+    true,
+  );
+});
+
+test.each([
+  ".pi/agent/extensions/archestra-pi.js",
+  ".archestra/pi/connection.json",
+  ".archestra/pi/lifecycle.cjs",
+])("disconnect stays retryable through arcpi after a restoration error at %s", (target) => {
+  const f = fixture();
+  const installed = f.run();
+  expect(installed.status, installed.stderr).toBe(0);
+  const preload = path.join(f.home, "network.cjs");
+  writeFileSync(
+    preload,
+    readFileSync(preload, "utf8") +
+      `
+if (process.env.PI_TEST_RESTORE_FAILURE) {
+  const fs = require("node:fs"), path = require("node:path"), remove = fs.rmSync;
+  fs.rmSync = (file, options) => {
+    if (file === path.join(process.env.HOME, process.env.PI_TEST_RESTORE_FAILURE)) throw new Error("Test restoration error");
+    return remove(file, options);
+  };
+}
+`,
+  );
+  const disconnect = (fail: string) =>
+    spawnSync(path.join(f.home, ".local/bin/arcpi"), ["--disconnect"], {
+      encoding: "utf8",
+      env: { ...process.env, HOME: f.home, PI_TEST_RESTORE_FAILURE: fail },
+    });
+  const failed = disconnect(target);
+  expect(failed.status).not.toBe(0);
+  expect(failed.stderr).toContain("Test restoration error");
+  for (const file of [
+    ".local/bin/arcpi",
+    ".archestra/pi/launch.cjs",
+    ".archestra/pi/lifecycle.cjs",
+    ".archestra/pi/connection.json",
+    ".archestra/pi/install-state.json",
+  ])
+    expect(existsSync(path.join(f.home, file)), file).toBe(true);
+  const retry = disconnect("");
+  expect(retry.status, retry.stderr).toBe(0);
+  expect(retry.stdout).toContain("Disconnected Pi");
+  expect(
+    existsSync(path.join(f.home, ".archestra/pi/install-state.json")),
+  ).toBe(false);
+  expect(existsSync(path.join(f.home, ".local/bin/arcpi"))).toBe(false);
+  expect(
+    readFileSync(path.join(f.home, ".pi/agent/mcp-auth.json"), "utf8"),
+  ).toContain("test-oauth");
 });
 
 test("requires both transport sections", () => {

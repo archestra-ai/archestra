@@ -116,10 +116,6 @@ const PiInstallation = (() => {
       if (entry && !equal(entry, this.state.authBefore) && (entry.serverUrl !== this.state.gateway || (this.state.authClient && entry.clientInformation?.client_id !== this.state.authClient))) throw new Error("The gateway sign-in record changed. No settings were removed.");
       // Validate every touched path before making changes, including the mutable native stores.
       this.safe(authFile); this.safe(settingsFile);
-      if (this.state.windowsPath?.added) {
-        const script = path.join(this.root, "path.ps1"); this.safe(script);
-        require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-File", script, "remove", this.state.windowsPath.bin], { stdio: "pipe", timeout: 10000 });
-      }
       if (this.state.mcp) {
         const file = path.join(agent, "mcp.json"); const current = this.readJson(file) || {};
         current.mcpServers ||= {};
@@ -141,18 +137,45 @@ const PiInstallation = (() => {
         }
         this.save(settingsFile, JSON.stringify(settings, null, 2) + "\n");
       }
+      // Keep the supported recovery command and everything it loads until all
+      // ordinary configuration restoration succeeds, regardless of install order.
+      const recoveryPaths = new Set([
+        ...["launch.cjs", "lifecycle.cjs", "connection.json", "startup.sh", "startup.ps1", "path.ps1"].map(name => path.join(this.root, name)),
+        ...["arcpi", "arcpi.cmd", "arcpi.ps1"].map(name => path.join(this.home, ".local/bin", name)),
+      ]);
+      const files = Object.entries(this.state.files);
+      const restore = ([key, entry]) => {
+        const file = path.join(this.home, key); this.save(file, entry.before === null ? null : Buffer.from(entry.before, "base64"));
+        if (entry.before !== null && typeof entry.beforeMode === "number") fs.chmodSync(file, entry.beforeMode);
+      };
+      for (const item of files) if (!recoveryPaths.has(path.join(this.home, item[0]))) restore(item);
       for (const [key, entry] of Object.entries(this.state.profiles)) {
         const file = path.join(this.home, key), bytes = this.read(file); if (bytes === entry.before) continue;
         const text = Buffer.from(bytes || "", "base64").toString("utf8").replace(entry.block, "");
         this.save(file, !text && entry.before === null ? null : text);
         if (fs.existsSync(file) && typeof entry.beforeMode === "number") fs.chmodSync(file, entry.beforeMode);
       }
-      // Restore exact prior bytes only for unchanged owned files. No recursive removal.
-      for (const [key, entry] of Object.entries(this.state.files)) {
-        const file = path.join(this.home, key); this.save(file, entry.before === null ? null : Buffer.from(entry.before, "base64"));
-        if (entry.before !== null && typeof entry.beforeMode === "number") fs.chmodSync(file, entry.beforeMode);
+      if (this.state.windowsPath?.added) {
+        const script = path.join(this.root, "path.ps1"); this.safe(script);
+        require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-File", script, "remove", this.state.windowsPath.bin], { stdio: "pipe", timeout: 10000 });
+        this.state.windowsPath.added = false; this.persist();
       }
-      this.save(this.stateFile, null);
+      const recovery = files.filter(([key]) => recoveryPaths.has(path.join(this.home, key)));
+      const savedRecovery = recovery.map(([key]) => {
+        const file = path.join(this.home, key), bytes = this.read(file);
+        return { file, bytes, mode: bytes === null ? null : fs.statSync(file).mode & 0o777 };
+      });
+      try {
+        for (const item of recovery) restore(item);
+        this.save(this.stateFile, null);
+      } catch (error) {
+        // A late helper/state cleanup error must not strand the retry command.
+        for (const { file, bytes, mode } of savedRecovery) {
+          this.save(file, bytes === null ? null : Buffer.from(bytes, "base64"));
+          if (mode !== null) fs.chmodSync(file, mode);
+        }
+        throw error;
+      }
       this.state = null;
     }
   };

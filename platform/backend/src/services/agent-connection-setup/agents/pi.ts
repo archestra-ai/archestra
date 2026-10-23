@@ -95,6 +95,8 @@ function renderPiSetup(ctx: SetupScriptContext): string {
   );
   return String.raw`const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { execFileSync } = require("node:child_process");
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+if (!Number.isInteger(nodeMajor) || !Number.isInteger(nodeMinor) || nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19)) throw new Error("Pi requires Node.js 22.19.0 or later. Run setup with a supported Node.js version.");
 ${PI_COMMAND_RESOLVER}
 ${MARKETPLACE_SKILLS_SYNC}
 ${PI_INSTALLATION}

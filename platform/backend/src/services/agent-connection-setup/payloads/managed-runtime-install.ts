@@ -1,3 +1,4 @@
+import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
 import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptContext } from "../types";
 import { managedRuntimeManifest } from "./managed-runtime";
@@ -31,6 +32,15 @@ export function managedRuntimeInstall(params: {
     routes: params.routes,
     headers: params.headers,
     routeHeaders: params.routeHeaders,
+    // Stored apart from any route, so a passthrough route the deployment's
+    // catalog lists after this setup can carry it too.
+    ...(params.context.proxy?.passthroughVirtualKey
+      ? {
+          passthroughHeaders: {
+            [VIRTUAL_KEY_HEADER]: params.context.proxy.passthroughVirtualKey,
+          },
+        }
+      : {}),
     mcp: params.context.mcp,
     skipRelpath: `.archestra/${params.client.stateName}-startup-guard.skip`,
     ...(params.context.proxy?.virtualKey

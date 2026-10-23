@@ -1,4 +1,5 @@
 import { DEFAULT_APP_NAME, OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
 import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
 import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
 
@@ -56,7 +57,7 @@ const installedRoutes = ${params.runtime ? "runtimeParams.routes ?? {}" : JSON.s
 const routes = hasCatalog ? { ...catalogRoutes } : { ...installedRoutes };
 let activeRoutes = { ...routes };
 const managedHeaders = ${params.runtime ? "{ ...runtimeParams.headers }" : JSON.stringify(params.headers)};
-const routeHeaders = ${params.runtime ? "runtimeParams.routeHeaders ?? {}" : JSON.stringify(params.routeHeaders ?? {})};
+${params.runtime ? RUNTIME_ROUTE_HEADERS : `const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};`}
 let effectiveRouteHeaders = { ...routeHeaders };
 // Providers the organization's credential serves in the current config pass,
 // with the key they carry and the models that credential serves on each.
@@ -451,7 +452,7 @@ ${catalogSource(params)}
 const installedRoutes = ${params.runtime ? "runtimeParams.routes ?? {}" : JSON.stringify(params.routes)};
 const routes = hasCatalog ? { ...catalogRoutes } : { ...installedRoutes };
 let activeRoutes = { ...routes };
-const routeHeaders = ${params.runtime ? "runtimeParams.routeHeaders ?? {}" : JSON.stringify(params.routeHeaders ?? {})};
+${params.runtime ? RUNTIME_ROUTE_HEADERS : `const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};`}
 let effectiveRouteHeaders = { ...routeHeaders };
 const managedHeaders = ${params.runtime ? "runtimeParams.headers" : JSON.stringify(params.headers)};
 const credentialEnvByProvider = ${JSON.stringify(OPENCODE_CREDENTIAL_ENV_BY_PROVIDER)};
@@ -592,6 +593,21 @@ export default {
 };
 `;
 }
+
+/**
+ * Route headers for a runtime plugin. Setup stores the passthrough key in
+ * `passthroughHeaders`; older setups stored it only beside each passthrough
+ * route they knew. A passthrough route in the deployment's catalog without
+ * an entry of its own, such as a provider routed after setup, takes that key;
+ * without it the proxy rejects the user's own sign-in there.
+ */
+const RUNTIME_ROUTE_HEADERS = `const installedRouteHeaders = runtimeParams.routeHeaders ?? {};
+const nonEmptyHeaders = (headers) => headers && Object.keys(headers).length > 0 ? headers : undefined;
+const passthroughKeyOnly = (headers) => nonEmptyHeaders(Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => name.toLowerCase() === ${JSON.stringify(VIRTUAL_KEY_HEADER.toLowerCase())})));
+const passthroughHeaders = nonEmptyHeaders(runtimeParams.passthroughHeaders) ?? Object.values(installedRouteHeaders).map(passthroughKeyOnly).find(Boolean);
+const routeHeaders = passthroughHeaders
+  ? { ...installedRouteHeaders, ...Object.fromEntries(catalogPassthrough.map((id) => [id, nonEmptyHeaders(installedRouteHeaders[id]) ?? passthroughHeaders])) }
+  : installedRouteHeaders;`;
 
 function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {
   const catalog = params.catalog;

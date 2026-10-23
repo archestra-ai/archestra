@@ -4,16 +4,13 @@ import {
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
-import {
-  logs,
-  type Logger as OtelLogger,
-  SeverityNumber,
-} from "@opentelemetry/api-logs";
+import { logs, type Logger as OtelLogger } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
 import { createLogger } from "@/logging/create-logger";
 import { LOG_FORMAT } from "@/logging/log-format";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
+import { toOtelLogRecord } from "@/logging/otel-log-record";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -149,29 +146,10 @@ function injectTraceContext(): Record<string, string> {
 
 // --- Internal helpers (OTEL log stream) ---
 
-/** Map pino log levels → OTEL severity numbers */
-const PINO_TO_OTEL_SEVERITY: Record<number, SeverityNumber> = {
-  10: SeverityNumber.TRACE,
-  20: SeverityNumber.DEBUG,
-  30: SeverityNumber.INFO,
-  40: SeverityNumber.WARN,
-  50: SeverityNumber.ERROR,
-  60: SeverityNumber.FATAL,
-};
-
-/** Convert epoch milliseconds to `[seconds, nanoseconds]` HrTime tuple */
-function millisToHrTime(millis: number): [number, number] {
-  return [Math.trunc(millis / 1000), (millis % 1000) * 1_000_000];
-}
-
 /**
- * Create a writable stream that forwards pino log records to the OTEL Logs API.
- *
- * Mirrors `@opentelemetry/instrumentation-pino`'s `OTelPinoStream`:
- * - Parses JSON log records from pino
- * - Strips redundant fields (hostname, pid, trace context injected by mixin)
- * - Maps pino levels to OTEL severity numbers
- * - Emits records via the global OTEL LoggerProvider
+ * Create a writable stream that forwards pino log records to the OTEL Logs API
+ * via the global OTEL LoggerProvider. `toOtelLogRecord` shapes each record
+ * (see `otel-log-record.ts`).
  */
 function createOtelLogStream(): Writable {
   const otelLogger: OtelLogger = logs.getLogger("pino");
@@ -183,34 +161,7 @@ function createOtelLogStream(): Writable {
       callback: (error?: Error | null) => void,
     ) {
       try {
-        const record = JSON.parse(chunk.toString());
-        const {
-          time,
-          msg,
-          level,
-          // Strip fields redundant with OTEL resource attributes
-          hostname: _hostname,
-          pid: _pid,
-          // Strip trace context fields added by mixin (redundant — the OTEL SDK
-          // captures the active span context automatically via `context.active()`)
-          trace_id: _traceId,
-          span_id: _spanId,
-          trace_flags: _traceFlags,
-          ...attributes
-        } = record;
-
-        const timestamp = millisToHrTime(
-          typeof time === "number" ? time : Date.now(),
-        );
-
-        otelLogger.emit({
-          timestamp,
-          observedTimestamp: timestamp,
-          severityNumber: PINO_TO_OTEL_SEVERITY[level] ?? SeverityNumber.INFO,
-          severityText: pino.levels.labels[level] ?? "INFO",
-          body: msg,
-          attributes,
-        });
+        otelLogger.emit(toOtelLogRecord(JSON.parse(chunk.toString())));
       } catch {
         // Ignore JSON parse errors (shouldn't happen with standard pino output)
       }

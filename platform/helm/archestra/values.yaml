@@ -68,6 +68,11 @@ archestra:
   #     azure.workload.identity/use: "true"
   podLabels: {}
 
+  # Shared scheduling defaults for web and worker pods.
+  # Each field can be overridden independently in archestra.web / archestra.worker.
+  # Missing or null overrides inherit; {} (nodeSelector/affinity) or [] (tolerations)
+  # clears the corresponding shared value. Overrides replace the whole field.
+  #
   # Node selector for scheduling the web and worker pods on specific nodes
   # This is useful for targeting specific node pools or nodes with particular labels
   # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
@@ -114,6 +119,13 @@ archestra:
   #             matchLabelKeys:
   #               - app.kubernetes.io/component
   affinity: {}
+
+  # Scheduling for the main platform Deployment (also when worker.enabled=false).
+  # null inherits the corresponding shared value above; {} / [] clears it.
+  web:
+    nodeSelector: null
+    tolerations: null
+    affinity: null
 
   # Topology spread constraints for the web and worker pods
   # Use this to spread replicas across availability zones or nodes
@@ -713,6 +725,12 @@ archestra:
 
     # Number of worker pod replicas
     replicaCount: 1
+
+    # Scheduling for the separate worker Deployment only.
+    # null inherits the corresponding shared archestra.* value; {} / [] clears it.
+    nodeSelector: null
+    tolerations: null
+    affinity: null
 
     # Resource requests and limits for worker pods
     # If not set, inherits from archestra.resources

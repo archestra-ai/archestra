@@ -10,7 +10,7 @@ describe("connection model defaults", () => {
     ],
     [["gpt-5.5", "gpt-6-luna"], "gpt-6-luna"],
     [["gpt-5.5", "openai/gpt-6.1-sol"], "openai/gpt-6.1-sol"],
-    [["o4-mini", "gpt-5.5"], "gpt-5.5"],
+    [["o4-mini", "gpt-5.5"], "o4-mini"],
     [["o4-mini"], "o4-mini"],
     [["gpt-60", "gpt-6.1-sol"], "gpt-6.1-sol"],
     [[], null],

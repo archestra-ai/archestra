@@ -563,7 +563,7 @@ describe("Grok Build LLM wire adapter", () => {
         content: "ruling",
       });
     } finally {
-      adapter.stop();
+      await adapter.stop();
       upstream.close();
     }
   });
@@ -663,7 +663,7 @@ describe("Grok Build LLM wire adapter", () => {
         [null, null, null, { total_tokens: 3 }],
       ]);
     } finally {
-      adapter.stop();
+      await adapter.stop();
       upstream.close();
     }
   });
@@ -730,7 +730,7 @@ describe("Grok Build LLM wire adapter", () => {
         tool_input: {},
       });
     } finally {
-      adapter.stop();
+      await adapter.stop();
       upstream.close();
     }
   });
@@ -778,7 +778,7 @@ describe("Grok Build LLM wire adapter", () => {
         { type: "function", function: { name: "session_title" } },
       ]);
     } finally {
-      adapter.stop();
+      await adapter.stop();
       upstream.close();
     }
   });
@@ -914,9 +914,9 @@ async function startAdapter(
   }
   return {
     port: Number(port),
-    stop: () => {
+    stop: async () => {
       adapter.kill();
-      void rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     },
   };
 }

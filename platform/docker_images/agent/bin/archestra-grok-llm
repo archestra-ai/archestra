@@ -404,6 +404,8 @@ class Handler(BaseHTTPRequestHandler):
 def watch_parent(parent: int) -> None:
     while os.getppid() == parent:
         time.sleep(1)
+    # The adapter holds nothing worth flushing, and sys.exit would wait on a
+    # handler thread that may still be reading the proxy's stream.
     os._exit(0)
 
 

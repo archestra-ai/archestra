@@ -32,7 +32,7 @@ jobs:
     concurrency:
       group: on-commits-to-main-build-${{ github.ref }}
       cancel-in-progress: true
-    uses: ./.github/workflows/deploy-dev-platform-images.yml
+    uses: $/.github/workflows/deploy-dev-platform-images.yml
     permissions:
       contents: read # Required to invoke the reusable image publishing workflow.
       id-token: write # Required for Workload Identity Federation.
@@ -52,7 +52,7 @@ jobs:
     concurrency:
       group: on-commits-to-main-deploy-${{ github.ref }}
       cancel-in-progress: false
-    uses: ./.github/workflows/deploy-platform-environment.yml
+    uses: $/.github/workflows/deploy-platform-environment.yml
     permissions:
       contents: read # Required by the reusable workflow to check out the chart.
       id-token: write # Required for Google Workload Identity Federation.
@@ -85,7 +85,7 @@ jobs:
     concurrency:
       group: on-commits-to-main-demo-${{ github.ref }}
       cancel-in-progress: false
-    uses: ./.github/workflows/deploy-platform-environment.yml
+    uses: $/.github/workflows/deploy-platform-environment.yml
     permissions:
       contents: read # Required by the reusable workflow to check out the chart.
       id-token: write # Required for Google Workload Identity Federation.
@@ -127,18 +127,18 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Restore backend NAPI binaries
         id: native-cache
-        uses: ./.github/actions/cache-backend-napi
+        uses: $/.github/actions/cache-backend-napi
 
       # shared-key must stay identical to the backend preparation job's.
       - name: Cache cargo registry and target on native cache miss
         if: steps.native-cache.outputs.usable != 'true'
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

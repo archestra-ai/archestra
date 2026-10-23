@@ -5,10 +5,16 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
 ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
+# TODO: return to Alpine's `nodejs` apk once v3.23 aarch64 ships nodejs>=24.22.1-r0
+# (CVE-2026-111497); it lagged at 24.18.1-r0 while x86_64 already had the fix.
+# Same 24.22.1 digest as platform/Dockerfile; it bundles its own Brotli.
+ARG NODE_RUNTIME_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 
 FROM ${GOLANG_IMAGE} AS go-bin
 
 FROM ${UV_IMAGE} AS uv-bin
+
+FROM ${NODE_RUNTIME_IMAGE} AS node-runtime
 
 # Multi-stage build for minimal final image
 FROM ${PYTHON_IMAGE} AS python-builder
@@ -115,7 +121,6 @@ FROM ${PYTHON_IMAGE}
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
-   nodejs \
    libstdc++ \
    libgcc \
    openssl \
@@ -150,12 +155,8 @@ RUN apk add --no-cache \
    # runtime dependency), so it must be upgraded explicitly here.
    # Copy the same Go 1.26.9 toolchain used by the platform builders for the
    # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
-   apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
-   # Require the fixed Node.js package and invalidate cached runtime layers.
-   # CVE-2026-106069, CVE-2026-105483 and CVE-2026-105482 affect older builds.
-   apk add --no-cache --upgrade "nodejs>=24.22.1-r0" && \
-   # Alpine's nodejs links the shared Brotli decoder, so the Node.js fix alone
-   # does not cover CVE-2026-111497; require the patched brotli-libs too.
+   apk upgrade --no-cache bind openssl zlib expat sqlite-libs && \
+   # CVE-2026-111497: libcurl links the shared Brotli decoder.
    apk add --no-cache --upgrade "brotli-libs>=1.2.1-r0" && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
    # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
@@ -195,6 +196,8 @@ RUN apk add --no-cache \
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go
+
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

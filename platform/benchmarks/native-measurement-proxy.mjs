@@ -213,7 +213,8 @@ export function createNativeMeasurementProxy({
         logicalFailure: false,
       };
       observations.push(observation);
-      if (kind === "llm_client") await onModelRequest({ requestBytes: bytes.length });
+      if (kind === "llm_client")
+        await onModelRequest({ requestBytes: bytes.length });
       if (
         disallowHumanReview &&
         isTool &&

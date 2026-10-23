@@ -83,8 +83,7 @@ export async function runStatefulCodexNativeDelegation({
   );
   assert.ok(
     Array.isArray(fixtureNames) &&
-      fixtureNames.length ===
-        (projectMode ? 6 : 128) &&
+      fixtureNames.length === (projectMode ? 6 : 128) &&
       new Set(fixtureNames).size === fixtureNames.length,
   );
   assert.ok(
@@ -141,7 +140,11 @@ export async function runStatefulCodexNativeDelegation({
       ? 20
       : 200;
   const model = env.ARCHESTRA_BENCHMARK_CODEX_MODEL ?? "gpt-6.1-sol";
-  assert.match(model, /^(?:gpt|codex|chatgpt)-[a-zA-Z0-9_.-]+$/, "native_delegation_model_invalid");
+  assert.match(
+    model,
+    /^(?:gpt|codex|chatgpt)-[a-zA-Z0-9_.-]+$/,
+    "native_delegation_model_invalid",
+  );
   const scope = { parent: null, child: null };
   const stats = {
     parent: {
@@ -1226,7 +1229,7 @@ export async function runStatefulCodexNativeDelegation({
       ? workload.prompt
       : inventoryOnly
         ? "Discover the configured task MCP tool declarations only. No inference or tool execution is requested."
-         : `${prefixText}\nBenchmark namespace: ${namespace}.\nThis is a real native delegation qualification, not a simulation. Use only advertised tools. Never use shell, files, web search, or invented tool results.\nPerform exactly ${goal} parent fixture reads, one per model response, sequential steps 0 through ${goal - 1}. For step i call the EXACT advertised native tool nativeFixtureNames[i] with {step:i,operation:"read"}. These are native spellings, not raw gateway names. Use authentic recovery helpers only when an actual ruling offers them; helpers do not advance the fixture step.\nAfter exactly ${spawnAfter} confirmed parent fixture reads, use your actual native collaboration.spawn_agent ONCE to create one read-only child. Tell the child to include the benchmark namespace in its task context, call the exact native tool ${promptFixtureNames[127]} with {step:0,operation:"read"} exactly once, and return its exact result text with no commentary. Do not override models or permissions. If the actual schema requires a requested task name, supply it for the spawn, but use only the real native acknowledgment's identity afterward. Let your own native executor produce acknowledgments and mailbox messages; never fabricate acknowledgments, IDs, receipts, results, or completion states.\nUse your actual wait_agent until that child finishes. Do not continue parent fixture reads until the genuine child's final answer has arrived. Then finish the remaining parent reads and end.\nnativeFixtureNames=${JSON.stringify(promptFixtureNames)}\n`;
+        : `${prefixText}\nBenchmark namespace: ${namespace}.\nThis is a real native delegation qualification, not a simulation. Use only advertised tools. Never use shell, files, web search, or invented tool results.\nPerform exactly ${goal} parent fixture reads, one per model response, sequential steps 0 through ${goal - 1}. For step i call the EXACT advertised native tool nativeFixtureNames[i] with {step:i,operation:"read"}. These are native spellings, not raw gateway names. Use authentic recovery helpers only when an actual ruling offers them; helpers do not advance the fixture step.\nAfter exactly ${spawnAfter} confirmed parent fixture reads, use your actual native collaboration.spawn_agent ONCE to create one read-only child. Tell the child to include the benchmark namespace in its task context, call the exact native tool ${promptFixtureNames[127]} with {step:0,operation:"read"} exactly once, and return its exact result text with no commentary. Do not override models or permissions. If the actual schema requires a requested task name, supply it for the spawn, but use only the real native acknowledgment's identity afterward. Let your own native executor produce acknowledgments and mailbox messages; never fabricate acknowledgments, IDs, receipts, results, or completion states.\nUse your actual wait_agent until that child finishes. Do not continue parent fixture reads until the genuine child's final answer has arrived. Then finish the remaining parent reads and end.\nnativeFixtureNames=${JSON.stringify(promptFixtureNames)}\n`;
     outerStage = "native_run";
     if (measurements) {
       measurements.startTask();

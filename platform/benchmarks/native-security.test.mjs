@@ -42,7 +42,7 @@ test("generated checks embed hostile fixture text as data", () => {
     ],
   };
   const generated = renderSequentialChecks([hostile], 1);
-  assert.ok(generated.includes('\\"; require(\'child_process\')'));
+  assert.ok(generated.includes("\\\"; require('child_process')"));
   assert.equal(generated.split('\\"').length, 2);
   assert.match(generated, /safeName/);
 });

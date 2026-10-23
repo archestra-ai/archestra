@@ -466,7 +466,11 @@ export const SEQUENTIAL_APPLICATION_BYTES = Buffer.byteLength(
 );
 
 export function renderSequentialChecks(tasks, stageCount) {
-  assert.ok(Number.isInteger(stageCount) && stageCount >= 1 && stageCount <= tasks.length);
+  assert.ok(
+    Number.isInteger(stageCount) &&
+      stageCount >= 1 &&
+      stageCount <= tasks.length,
+  );
   return renderChecks(tasks.slice(0, stageCount));
 }
 
@@ -482,7 +486,9 @@ function renderChecks(tasks) {
       const binding = `feature${index}`;
       const cases = task.cases
         .map((entry, caseIndex) => {
-          const title = JSON.stringify(`${index + 1}:${task.name}:${caseIndex + 1}`);
+          const title = JSON.stringify(
+            `${index + 1}:${task.name}:${caseIndex + 1}`,
+          );
           const args = JSON.stringify(entry.args);
           const invocation = entry.throws
             ? `assert.throws(() => ${binding}(...args));`

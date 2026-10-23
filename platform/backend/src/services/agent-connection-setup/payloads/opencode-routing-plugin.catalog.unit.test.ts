@@ -499,7 +499,10 @@ describe("managed catalog plugin", () => {
       setup: "an older setup that stored the key beside OpenAI only",
       installed: {
         routeHeaders: {
-          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+          openai: {
+            "X-Archestra-Virtual-Key": "passthrough-secret",
+            "X-Route-Only": "openai",
+          },
         },
       },
       key: "passthrough-secret",
@@ -508,6 +511,14 @@ describe("managed catalog plugin", () => {
       setup: "a setup that knew no passthrough route",
       installed: {
         routeHeaders: {},
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup that left an empty entry for the route",
+      installed: {
+        routeHeaders: { xai: {} },
         passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
       },
       key: "passthrough-secret",
@@ -545,7 +556,9 @@ describe("managed catalog plugin", () => {
     await writeFile(
       path.join(root, "params.json"),
       JSON.stringify({
-        routes: {},
+        // A setup without any route leaves the proxy out, and the plugin
+        // does not load at all.
+        routes: { vendor: managedRoute },
         headers: { "X-Archestra-Agent-Id": "kilo" },
         ...installed,
         clientId: "kilo",

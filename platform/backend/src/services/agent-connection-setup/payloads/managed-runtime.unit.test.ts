@@ -165,9 +165,13 @@ describe("managed runtime trust boundary", () => {
     // the deployment's catalog lists later can carry it.
     const files = await fixture({
       proxy: {
+        baseUrl: "https://deployment.example.com/v1/proxy",
+        routingAgentId: "agent",
+        primaryProviders: [],
+        passthroughProviders: [],
         virtualKey: null,
         passthroughVirtualKey: "passthrough-secret",
-      } as SetupScriptProxySection,
+      } as unknown as SetupScriptProxySection,
     });
     const parameters = JSON.parse(
       await readFile(path.join(files.root, "params.json"), "utf8"),

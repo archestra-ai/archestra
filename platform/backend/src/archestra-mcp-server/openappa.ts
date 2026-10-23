@@ -709,7 +709,11 @@ const registry = defineArchestraTools([
       const allowedIds = organizationScope
         ? null
         : await inspectableToolIds({ ...context, agentId: agent.id });
-      const catalogTools = await ToolModel.findByCatalogId(catalog.id);
+      const catalogTools = await ToolModel.findByCatalogId(catalog.id, {
+        kind: "caller",
+        userId,
+        organizationId,
+      });
       const tools = catalogTools.filter(
         (tool) => allowedIds === null || allowedIds.has(tool.id),
       );

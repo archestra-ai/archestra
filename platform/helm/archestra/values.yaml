@@ -722,6 +722,22 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # SRE agent: a pre-installed, read-only Kubernetes MCP server and an "SRE"
+  # agent that investigates this installation's pods, logs, and events. It runs
+  # under a dedicated <fullname>-sre ServiceAccount bound to the read-only Role
+  # above (never to mcpServerRbac's additional bindings), so it needs
+  # orchestrator.kubernetes.mcpServerRbac.create. Turning it off removes what it
+  # seeded.
+  sre:
+    enabled: false
+    # Kubernetes API server endpoint CIDRs the SRE MCP server may reach. Its
+    # environment allows egress to these only. Use the endpoint IPs
+    # (`kubectl get endpoints kubernetes -n default`), not the Service IP.
+    # Example:
+    #   apiServerCidrs:
+    #     - 172.16.0.2/32
+    apiServerCidrs: []
+
   # Knowledge base configuration
   knowledgeBase:
     # Perforce permission sync

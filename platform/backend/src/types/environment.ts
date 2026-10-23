@@ -2,6 +2,7 @@ import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { isValidCidr } from "@/utils/network";
 import { LabelWithDetailsSchema } from "./label";
 import { RetiredSharingUpdateFieldSchema } from "./visibility";
 
@@ -335,54 +336,4 @@ function normalizeNetworkPolicy(value: {
       egressMode === "restricted" ? (value.allowedDomains ?? []) : [],
     allowedCidrs: egressMode === "off" ? [] : (value.allowedCidrs ?? []),
   };
-}
-
-function isValidCidr(value: string): boolean {
-  const [address, prefixRaw] = value.split("/");
-  if (!address || !prefixRaw || !/^\d+$/.test(prefixRaw)) {
-    return false;
-  }
-
-  const prefix = Number(prefixRaw);
-  if (address.includes(":")) {
-    return prefix >= 0 && prefix <= 128 && isValidIpv6(address);
-  }
-
-  return prefix >= 0 && prefix <= 32 && isValidIpv4(address);
-}
-
-function isValidIpv4(value: string): boolean {
-  const parts = value.split(".");
-  return (
-    parts.length === 4 &&
-    parts.every((part) => {
-      if (!/^\d+$/.test(part)) return false;
-      const number = Number(part);
-      return number >= 0 && number <= 255 && String(number) === part;
-    })
-  );
-}
-
-function isValidIpv6(value: string): boolean {
-  if (value === "::") {
-    return true;
-  }
-
-  if (!/^[0-9a-f:]+$/i.test(value) || value.includes(":::")) {
-    return false;
-  }
-
-  const doubleColonCount = value.split("::").length - 1;
-  if (doubleColonCount > 1) {
-    return false;
-  }
-
-  const groups = value
-    .split("::")
-    .flatMap((part) => (part.length === 0 ? [] : part.split(":")));
-  return (
-    groups.length <= (doubleColonCount === 1 ? 7 : 8) &&
-    groups.length >= (doubleColonCount === 1 ? 1 : 8) &&
-    groups.every((group) => /^[0-9a-f]{1,4}$/i.test(group))
-  );
 }

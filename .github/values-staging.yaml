@@ -102,6 +102,15 @@ archestra:
     # for a targeted investigation, with headroom to actually write the file.
     heapSnapshotsNearHeapLimit: 0
 
+  # Pre-installed read-only Kubernetes MCP server and the SRE agent using it.
+  # apiServerCidrs: the private control-plane endpoint of archestra-staging
+  # (`kubectl get endpoints kubernetes -n default`), which the MCP egress
+  # floor blocks otherwise.
+  sre:
+    enabled: true
+    apiServerCidrs:
+      - 10.0.0.2/32
+
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:

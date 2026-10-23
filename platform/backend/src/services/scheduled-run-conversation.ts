@@ -118,6 +118,7 @@ export async function createAndLinkRunConversation(params: {
     ? await ConversationModel.findByIdInOrganization({
         id: fresh.chatConversationId,
         organizationId,
+        viewer: { kind: "internal", purpose: "scheduled-run" },
       })
     : null;
   if (!existing) {

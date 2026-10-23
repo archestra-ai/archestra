@@ -566,6 +566,7 @@ test("recordRunConversationError records a failed run's error on its kept conver
     await ConversationModel.findByIdInOrganization({
       id: conversation.id,
       organizationId: org.id,
+      viewer: { kind: "internal", purpose: "scheduled-run" },
     }),
   ).not.toBeNull();
   const errors = await ConversationChatErrorModel.findByConversation(

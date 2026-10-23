@@ -44,6 +44,12 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import {
+  type GatedCaller,
+  gatedCatalogToolsFence,
+  hiddenAgentsAmong,
+  mayUseCatalog,
+} from "@/auth/permission-gated";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -520,10 +526,17 @@ class ToolModel {
 
   static async findAll(params: {
     userId?: string;
+    organizationId?: string;
     isAgentAdmin?: boolean;
     pagination: { limit: number; offset: number };
   }): Promise<PaginatedResult<ExtendedTool>> {
     const conditions = [
+      params.userId
+        ? await gatedCatalogToolsFence({
+            userId: params.userId,
+            organizationId: params.organizationId,
+          })
+        : undefined,
       eq(schema.toolsTable.clonedPendingDiscovery, false),
       // Outbound A2A tools are credential-bearing tenant resources exposed
       // only by their dedicated registry and assignment APIs.
@@ -2357,7 +2370,10 @@ class ToolModel {
    * Powers the server-scoped Apps run path: building `tools/list` and gating
    * `tools/call` on `_meta.ui.visibility`.
    */
-  static async findByCatalogIdWithMeta(catalogId: string): Promise<
+  static async findByCatalogIdWithMeta(
+    catalogId: string,
+    reader: GatedCaller,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -2366,6 +2382,7 @@ class ToolModel {
       meta: Record<string, unknown> | null;
     }>
   > {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     return db
       .select({
         id: schema.toolsTable.id,
@@ -2476,7 +2493,11 @@ class ToolModel {
   }
 
   /** Tool-picker metadata without parameter bodies or assignment fan-out. */
-  static async findPickerToolsByCatalogId(catalogId: string) {
+  static async findPickerToolsByCatalogId(
+    catalogId: string,
+    reader: GatedCaller,
+  ) {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     const tools = await db
       .select({
         id: schema.toolsTable.id,
@@ -2500,7 +2521,10 @@ class ToolModel {
     }));
   }
 
-  static async findByCatalogId(catalogId: string): Promise<
+  static async findByCatalogId(
+    catalogId: string,
+    reader: GatedCaller,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -2517,6 +2541,7 @@ class ToolModel {
       assignedAgents: Array<{ id: string; name: string }>;
     }>
   > {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     const allTools = await db
       .select({
         id: schema.toolsTable.id,
@@ -2569,7 +2594,12 @@ class ToolModel {
       assignmentsByTool.set(toolId, []);
     }
 
+    const hidden = await hiddenAgentsAmong(
+      assignments.map((assignment) => assignment.agentId),
+      reader,
+    );
     for (const assignment of assignments) {
+      if (hidden.has(assignment.agentId)) continue;
       const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
       toolAssignments.push({
         id: assignment.agentId,
@@ -3606,6 +3636,7 @@ class ToolModel {
     };
     filters?: ToolFilters;
     userId?: string;
+    organizationId?: string;
     isAgentAdmin?: boolean;
   }): Promise<PaginatedResult<ToolWithAssignments>> {
     const {
@@ -3618,6 +3649,13 @@ class ToolModel {
 
     // Build WHERE conditions for tools
     const toolWhereConditions: ReturnType<typeof sql>[] = [];
+    const gatedFence = userId
+      ? await gatedCatalogToolsFence({
+          userId,
+          organizationId: params.organizationId,
+        })
+      : undefined;
+    if (gatedFence) toolWhereConditions.push(gatedFence);
 
     // A soft-deleted catalog's tools are ghosts — keep them out of the listing.
     toolWhereConditions.push(notDeleted(schema.toolsTable));

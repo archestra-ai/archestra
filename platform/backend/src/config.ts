@@ -40,6 +40,7 @@ import {
 } from "@archestra/shared";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
+import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
@@ -47,7 +48,7 @@ import {
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
 import { parseUsageAccountingMode } from "@/utils/billable-usage";
-import packageJson from "../../package.json";
+import { isValidCidr } from "@/utils/network";
 
 type ProcessType = "web" | "worker" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
@@ -79,7 +80,7 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
-const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
+const appVersion = getAppVersion();
 
 /**
  * Developer-only convenience: when set (and NOT in production), the login screen
@@ -1815,6 +1816,26 @@ export const parseEngineDeniedCidrs = (
 };
 
 /**
+ * The Kubernetes API server CIDRs the SRE agent's MCP server may reach. Invalid
+ * entries are dropped loudly: one bad entry would otherwise make the API
+ * server reject the environment's whole egress policy.
+ *
+ * @public — exported for testability
+ */
+export const parseSreApiServerCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => !isValidCidr(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_SRE_APISERVER_CIDRS ignoring invalid CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return [...new Set(entries.filter(isValidCidr))];
+};
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
  * undefined when it is not one.
  *
@@ -3139,6 +3160,19 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
     },
+  },
+  /**
+   * The pre-installed read-only Kubernetes MCP server and the SRE agent that
+   * uses it (see services/sre-agent). Off by default; turning it off removes
+   * what it seeded.
+   */
+  sreAgent: {
+    enabled: process.env.ARCHESTRA_SRE_AGENT_ENABLED === "true",
+    k8sServiceAccount:
+      process.env.ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT?.trim() || undefined,
+    apiServerCidrs: parseSreApiServerCidrs(
+      process.env.ARCHESTRA_SRE_APISERVER_CIDRS,
+    ),
   },
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that

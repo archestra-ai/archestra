@@ -33,6 +33,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
+  sre: ["read"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -93,6 +94,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
+  sre: [],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -149,6 +151,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Members do not see the Guardrails pages or read the policy. Enforcement,
   // yells, and remedies do not depend on this permission.
   guardrailsPolicy: [],
+  sre: [],
 
   // LLM
   llmProxy: ["read"],
@@ -250,7 +253,8 @@ export const adminPermissions: Record<Resource, Action[]> = {
 
 /**
  * Platform Admin: runs the deployment — full user, role, and settings
- * management — while org-wide log visibility and impersonation stay withheld.
+ * management — while org-wide log visibility, impersonation, and the SRE
+ * agent (which reads pod specs that can carry credentials) stay withheld.
  * They keep log:read / auditLog:read, so their OWN activity stays visible to
  * them. Combined with the no-escalation rule (a role can only be granted by
  * someone holding every permission it carries), holders cannot hand
@@ -260,6 +264,7 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   log: ["read"],
   auditLog: ["read"],
+  sre: [],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
 };
 
@@ -431,6 +436,8 @@ export const permissionDescriptions: Record<string, string> = {
     "View every audit event in your organization (also requires Read)",
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
+  "sre:read":
+    "Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",

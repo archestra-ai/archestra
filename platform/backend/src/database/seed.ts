@@ -54,6 +54,7 @@ import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-gua
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import { DEFAULT_APPS, loadDefaultAppHtml } from "@/services/apps/default-apps";
 import { modelSyncService } from "@/services/model-sync";
+import { sreAgentService } from "@/services/sre-agent";
 import { migrateTeamTokensToServiceAccounts } from "@/services/team-token-migration";
 import {
   builtInSkillShippedWrite,
@@ -1194,6 +1195,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
+  await sreAgentService.seed();
   await PlaywrightRuntimeModel.reconcileAll();
   await seedTestMcpServer();
   await migrateTeamTokensToServiceAccounts();

@@ -787,10 +787,15 @@ async function handleGetMcpServerTools(
     ) {
       return errorResult("You do not have permission to view this MCP server.");
     }
+    const reader = {
+      kind: "caller",
+      userId: context.userId,
+      organizationId,
+    } as const;
     const tools =
       args.view === "picker"
-        ? await ToolModel.findPickerToolsByCatalogId(args.mcpServerId)
-        : await ToolModel.findByCatalogId(args.mcpServerId);
+        ? await ToolModel.findPickerToolsByCatalogId(args.mcpServerId, reader)
+        : await ToolModel.findByCatalogId(args.mcpServerId, reader);
     return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
   } catch (error) {
     return catchError(error, "getting MCP server tools");

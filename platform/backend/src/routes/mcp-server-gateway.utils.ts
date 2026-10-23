@@ -8,6 +8,7 @@ import {
   ReadResourceRequestSchema,
   type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { GatedCaller } from "@/auth/permission-gated";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { McpServerToolDescriptionModel, ToolModel } from "@/models";
@@ -31,8 +32,9 @@ type McpListTool = ListToolsResult["tools"][number];
 export function createServerScopedServer(params: {
   mcpServerId: string;
   catalogId: string;
+  caller: GatedCaller;
 }): { server: McpServer } {
-  const { mcpServerId, catalogId } = params;
+  const { mcpServerId, catalogId, caller } = params;
   const mcpServer = new McpServer(
     {
       name: `archestra-mcp-server-${mcpServerId}`,
@@ -49,7 +51,7 @@ export function createServerScopedServer(params: {
   const { server } = mcpServer;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await ToolModel.findByCatalogIdWithMeta(catalogId);
+    const tools = await ToolModel.findByCatalogIdWithMeta(catalogId, caller);
     // This connection runs every call through one installation, so describe
     // its tools the way that installation does.
     const ownDescriptions = (
@@ -94,6 +96,7 @@ export function createServerScopedServer(params: {
         };
       }
       return (await mcpClient.readResourceForServer({
+        caller,
         mcpServerId,
         uri,
       })) as ReadResourceResult;
@@ -104,6 +107,7 @@ export function createServerScopedServer(params: {
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) =>
       (await mcpClient.callToolForServer({
+        caller,
         mcpServerId,
         name,
         arguments: args,

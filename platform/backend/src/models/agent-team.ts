@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ScopedResource } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { canUseAgent } from "@/auth/permission-gated";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
@@ -100,6 +101,13 @@ class AgentTeamModel {
     if (!agent) {
       return false;
     }
+    if (
+      !(await canUseAgent(agentId, {
+        userId,
+        organizationId: agent.organizationId,
+      }))
+    )
+      return false;
     // Agents and MCP gateways are reached through grants alone. An LLM proxy
     // has no grant namespace of its own: the organization's proxy serves every
     // member, and an administrator reaches any proxy row.

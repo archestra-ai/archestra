@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import type { GatedCaller } from "@/auth/permission-gated";
 import { McpServerModel, ToolModel } from "@/models";
 import { ApiError, type McpServer, UuidIdSchema } from "@/types";
 import {
@@ -74,7 +75,11 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Gate tools/call on _meta.ui.visibility: model-only tools are not
       // app-callable. Fail-closed on unknown tools. Mirrors the agent proxy.
       if (body.method === "tools/call") {
-        const denied = await rejectDisallowedToolCall(catalogId, body, reply);
+        const denied = await rejectDisallowedToolCall(catalogId, body, reply, {
+          kind: "caller",
+          userId,
+          organizationId,
+        });
         if (denied) return denied;
       }
 
@@ -84,6 +89,7 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ({ server: mcp } = createServerScopedServer({
           mcpServerId,
           catalogId,
+          caller: { kind: "caller", userId, organizationId },
         }));
         const transport = createStatelessTransport(mcpServerId);
         await mcp.connect(transport);
@@ -146,6 +152,7 @@ async function rejectDisallowedToolCall(
   catalogId: string,
   body: Record<string, unknown>,
   reply: StatusReply,
+  caller: GatedCaller,
 ): Promise<object | null> {
   const callParams =
     body.params && typeof body.params === "object"
@@ -161,7 +168,7 @@ async function rejectDisallowedToolCall(
       "Invalid params: tools/call requires a string 'name' parameter",
     );
   }
-  const tools = await ToolModel.findByCatalogIdWithMeta(catalogId);
+  const tools = await ToolModel.findByCatalogIdWithMeta(catalogId, caller);
   // The app calls by the upstream's raw tool name; the DB stores the slugified
   // (prefixed) name. Match on the unslugified name (fall back to exact).
   const tool = tools.find(

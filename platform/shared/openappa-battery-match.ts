@@ -86,6 +86,15 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
     names: ["hugging face", "huggingface"],
   },
   {
+    battery: "kubernetes",
+    hosts: [],
+    images: [
+      "ghcr.io/containers/kubernetes-mcp-server",
+      "quay.io/containers/kubernetes_mcp_server",
+    ],
+    names: ["kubernetes", "openshift", "k8s"],
+  },
+  {
     battery: "launchdarkly",
     hosts: ["launchdarkly.com"],
     images: [],

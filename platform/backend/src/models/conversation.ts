@@ -14,6 +14,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias, union } from "drizzle-orm/pg-core";
+import { type GatedCaller, hiddenAgentsAmong } from "@/auth/permission-gated";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
@@ -266,6 +267,10 @@ class ConversationModel {
             ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT,
         );
 
+      const hidden = await hiddenAgentsAmong(
+        rows.map((row) => row.agent?.id),
+        { kind: "caller", userId, organizationId },
+      );
       // Group messages by conversation
       const conversationMap = new Map<string, Conversation>();
 
@@ -278,7 +283,7 @@ class ConversationModel {
             continue;
           }
           conversationMap.set(conversationId, {
-            ...withVisibleAgent(row.conversation, row.agent),
+            ...withVisibleAgent(row.conversation, row.agent, hidden),
             share: shareSummary(row.shareVisibility),
             projectName: row.projectName ?? null,
             projectIcon: listProjectIcon(row.projectIcon),
@@ -378,8 +383,12 @@ class ConversationModel {
           a.conversation.lastMessageAt.getTime(),
       );
 
+      const hidden = await hiddenAgentsAmong(
+        rows.map((row) => row.agent?.id),
+        { kind: "caller", userId, organizationId },
+      );
       return rows.map((row) => ({
-        ...withVisibleAgent(row.conversation, row.agent),
+        ...withVisibleAgent(row.conversation, row.agent, hidden),
         share: shareSummary(row.shareVisibility),
         projectName: row.projectName ?? null,
         projectIcon: listProjectIcon(row.projectIcon),
@@ -407,6 +416,7 @@ class ConversationModel {
     organizationId: string,
   ): Promise<Conversation[]> {
     return ConversationModel.selectListRows({
+      viewer: { kind: "caller", userId, organizationId },
       conditions: [
         isNotNull(schema.conversationsTable.deletedAt),
         eq(schema.conversationsTable.userId, userId),
@@ -439,6 +449,7 @@ class ConversationModel {
     return ConversationModel.loadWithMessages({
       id,
       tail,
+      viewer: { kind: "caller", userId, organizationId },
       where: and(
         notDeletedConversation,
         eq(schema.conversationsTable.id, id),
@@ -606,7 +617,11 @@ class ConversationModel {
     return ConversationModel.findForRead({
       ...params,
       loadOwned: () => ConversationModel.findById(params),
-      loadShared: () => ConversationModel.findByIdInOrganization(params),
+      loadShared: () =>
+        ConversationModel.findByIdInOrganization({
+          ...params,
+          viewer: { kind: "caller", ...params },
+        }),
     });
   }
 
@@ -660,10 +675,12 @@ class ConversationModel {
     id: string;
     organizationId: string;
     tail?: number;
+    viewer: GatedCaller;
   }): Promise<Conversation | null> {
     return ConversationModel.loadWithMessages({
       id: params.id,
       tail: params.tail,
+      viewer: params.viewer,
       where: and(
         notDeletedConversation,
         eq(schema.conversationsTable.id, params.id),
@@ -1049,6 +1066,7 @@ class ConversationModel {
     id: string;
     where: SQL | undefined;
     tail?: number;
+    viewer: GatedCaller;
   }): Promise<Conversation | null> {
     const [row] = await db
       .select({
@@ -1099,7 +1117,11 @@ class ConversationModel {
     }
 
     return {
-      ...withVisibleAgent(row.conversation, row.agent),
+      ...withVisibleAgent(
+        row.conversation,
+        row.agent,
+        await hiddenAgentsAmong([row.agent?.id], params.viewer),
+      ),
       share: shareSummary(row.shareVisibility),
       messages,
       ...(storedMessages.olderMessageCount === undefined
@@ -1193,6 +1215,7 @@ class ConversationModel {
   private static async selectListRows(params: {
     conditions: SQL[];
     orderBy: SQL;
+    viewer: GatedCaller;
   }): Promise<Conversation[]> {
     const rows = await db
       .select({
@@ -1222,8 +1245,12 @@ class ConversationModel {
       .where(and(...params.conditions))
       .orderBy(params.orderBy);
 
+    const hidden = await hiddenAgentsAmong(
+      rows.map((row) => row.agent?.id),
+      params.viewer,
+    );
     return rows.map((row) => ({
-      ...withVisibleAgent(row.conversation, row.agent),
+      ...withVisibleAgent(row.conversation, row.agent, hidden),
       share: shareSummary(row.shareVisibility),
       projectName: row.projectName ?? null,
       projectIcon: listProjectIcon(row.projectIcon),
@@ -1414,10 +1441,11 @@ function withVisibleAgent<
 >(
   conversation: T,
   agent: JoinedConversationAgent,
+  hidden: ReadonlySet<string>,
 ): T & {
   agent: Conversation["agent"];
 } {
-  if (!agent?.id || agent.deletedAt !== null) {
+  if (!agent?.id || agent.deletedAt !== null || hidden.has(agent.id)) {
     return {
       ...conversation,
       agentId: null,

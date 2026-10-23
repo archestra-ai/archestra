@@ -40,9 +40,10 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds every permission except `log:admin`, " +
-        "`auditLog:admin`, and `member:impersonate`. It manages users, " +
-        "roles, settings, and resources, but sees only its own logs and " +
-        "audit records, and cannot sign in as another member. Because of " +
+        "`auditLog:admin`, `member:impersonate`, and `sre:read`. It " +
+        "manages users, roles, settings, and resources, but sees only its " +
+        "own logs and audit records and cannot sign in as another member. " +
+        "Because of " +
         "[No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), " +
         "it cannot grant a role that holds the withheld permissions.\n";
     } else {

@@ -34,6 +34,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -308,6 +309,15 @@ export async function executeA2AMessage(
     throw new Error(
       `Agent ${agentId} is not an internal agent (A2A requires agents with agentType='agent')`,
     );
+  }
+
+  if (
+    !(await canUseAgent(agentId, {
+      userId,
+      organizationId: agent.organizationId,
+    }))
+  ) {
+    throw new Error(`Agent ${agentId} not found`);
   }
 
   // An agent set to block callers who cannot reach its MCP servers means it

@@ -87,8 +87,9 @@ def main() -> int:
                 failure = "archestra-task-submission-failure"
             else:
                 return child.wait()
-    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
-        pass
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
+        # The run fails through the startup-failure helper below; say why here.
+        print(f"archestra: Grok Build terminal start failed: {type(error).__name__}: {error}", file=sys.stderr)
     finally:
         if child and child.poll() is None:
             child.terminate()

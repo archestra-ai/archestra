@@ -10,6 +10,7 @@ import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
+import { toPdfJsBytes } from "@/knowledge-base/connectors/pdf-utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -1652,7 +1653,10 @@ let pdfParserCache: PdfParser | null = null;
 export function loadPdfParser(): PdfParser {
   if (!pdfParserCache) {
     const require = createRequire(import.meta.url);
-    pdfParserCache = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
+    const parse = require("pdf-parse/lib/pdf-parse.js") as (
+      data: Uint8Array,
+    ) => Promise<{ text: string }>;
+    pdfParserCache = (buffer) => parse(toPdfJsBytes(buffer));
   }
   return pdfParserCache;
 }

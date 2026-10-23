@@ -8,6 +8,8 @@ ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548
 # The Node.js runtime is copied from the official image (the same pin as
 # platform/Dockerfile) because Alpine's nodejs package can lag a security release
 # on one architecture: aarch64 kept 24.18.1-r0 after x86_64 received 24.22.1-r0.
+# The binary links against the runtime stage's musl and libstdc++, so the alpine3.x
+# release of this tag must not be newer than the Alpine release of PYTHON_IMAGE.
 ARG NODE_RUNTIME_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 
 FROM ${GOLANG_IMAGE} AS go-bin
@@ -206,8 +208,11 @@ ENV NODE_USE_SYSTEM_CA=1
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm
 COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+# Run node and npm once so a binary that cannot load fails the build on each architecture.
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    node --version && \
+    npm --version
 
 # Remove pip and setuptools from the system interpreter instead of chasing
 # their CVEs: the base image ships setuptools 70.3.0 (CVE-2025-47273) and a

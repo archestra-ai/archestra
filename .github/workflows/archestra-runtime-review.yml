@@ -1,0 +1,49 @@
+name: Archestra Runtime Review
+
+# Reviews each pull request on an Archestra Agent Runtime, beside the Claude
+# core-team review. The run acts as the pull request author with their
+# Archestra platform token (secret ARCHESTRA_TOKEN_<LOGIN>); without one, the
+# job skips with a notice. The shared workflow in archestra-ai/.github has the
+# setup.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+permissions: {}
+
+concurrency:
+  group: archestra-runtime-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actor:
+    name: Resolve the author
+    if: github.repository == 'archestra-ai/archestra'
+    uses: archestra-ai/code-review-action/.github/workflows/resolve-actor-token.yml@ff157bb7423cd32a9dbb15f879618dd06de79db7 # v0.2.0
+
+  review:
+    name: Archestra Review
+    needs: actor
+    if: >-
+      github.repository == 'archestra-ai/archestra' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      !contains(github.event.pull_request.title, '[WIP]')
+    permissions:
+      contents: read
+      pull-requests: write # Post the review comment and inline comments.
+      checks: read # Count the failing checks of the reviewed commit.
+      actions: read # The shared job asks for it (CI triage); unused by a review.
+    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@ed7c2e6f5204f3a68ea1e8954817705ec07d9bca # v1.2.0
+    with:
+      kind: review
+      gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}
+      agents: ${{ vars.ARCHESTRA_REVIEW_AGENTS }}
+      # No GitHub App for pushes yet: the comment offers no fix commands.
+      fix-commands: false
+      timeout-minutes: 90
+    # GitHub resolves this lookup before starting the called job; only the
+    # matching token is passed, not the caller's complete secrets context.
+    secrets:
+      ARCHESTRA_TOKEN: ${{ secrets[needs.actor.outputs.secret_name] }} # zizmor: ignore[overprovisioned-secrets,obfuscation]

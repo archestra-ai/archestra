@@ -6,6 +6,54 @@ const base = "https://archestra.example.com/v1";
 const key = "arch_test123";
 
 describe("buildCurlExample", () => {
+  it.each([
+    "standard",
+    "passthrough",
+    "token",
+  ] as const)("shows native Gemini image generation with %s authentication", (keyType) => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "gemini" },
+      keyType,
+      keyValue: key,
+      model: "gemini-nano-banana-2.1",
+      imageOperation: "generate",
+    });
+    expect(example).toContain(
+      `${base}/gemini/v1beta/models/gemini-nano-banana-2.1:generateContent`,
+    );
+    const credential = keyType === "passthrough" ? "$GEMINI_API_KEY" : key;
+    expect(example).toContain(
+      keyType === "token"
+        ? `Authorization: Bearer ${credential}`
+        : `x-goog-api-key: ${credential}`,
+    );
+    if (keyType === "passthrough")
+      expect(example).toContain(`X-Archestra-Virtual-Key: ${key}`);
+    const match = example?.match(/-d '([\s\S]*)'$/);
+    const body = JSON.parse(match?.[1] ?? "null");
+    expect(body.generationConfig).toEqual({
+      responseModalities: ["TEXT", "IMAGE"],
+    });
+    expect(body.contents[0].parts[0].text).toContain("Draw");
+    expect(body).not.toHaveProperty("messages");
+    expect(body).not.toHaveProperty("model");
+    expect(body.generationConfig).not.toHaveProperty("temperature");
+  });
+
+  it("does not offer an unimplemented Gemini edit example", () => {
+    expect(
+      buildCurlExample({
+        connectionBaseUrl: base,
+        target: { kind: "provider", provider: "gemini" },
+        keyType: "standard",
+        keyValue: key,
+        model: "gemini-nano-banana-2.1",
+        imageOperation: "edit",
+      }),
+    ).toBeNull();
+  });
+
   it("sends a standard key as the bearer token on the Model Router", () => {
     expect(
       buildCurlExample({

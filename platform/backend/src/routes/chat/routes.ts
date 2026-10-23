@@ -10,6 +10,7 @@ import {
   collapseWhitespace,
   getModelReadableMimeTypes,
   hasPersistableAssistantContent,
+  isGeminiImageGenerationModel,
   isModelSelectionComplete,
   isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
@@ -1073,22 +1074,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const normalizedMessagesForLLM =
               normalizeChatMessages(messagesForLLM);
 
-            // For Gemini image generation models, enable image output via responseModalities
-            // Known image-capable model patterns:
-            // - gemini-2.0-flash-exp-image-generation
-            // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-            // - gemini-2.5-flash-image
-            // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
-            // - Any model with "image" in the name (covers current and future image models)
-            //
-            // TODO: Use output modalities from the models DB table instead of hardcoded
-            // pattern matching. The `models` table has capability info that would be more
-            // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
-            // "capabilities unknown", so that needs to be fixed first.
+            // Image output needs explicit responseModalities, including named
+            // Nano Banana releases whose ids contain no "image" suffix.
             const modelLower = selectedModel.toLowerCase();
             const isGeminiImageModel =
               provider === "gemini" &&
-              (modelLower.includes("image") ||
+              (isGeminiImageGenerationModel(selectedModel) ||
                 modelLower.includes("native-audio-dialog"));
 
             // Persist user's new messages immediately so they're visible on page reload.

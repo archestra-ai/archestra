@@ -30,7 +30,8 @@ export function updateBenchmarkTable(markdown, summary) {
         [row.p50Ms, row.p95Ms, row.p99Ms].some((value) => value == null) ||
         (row.scenario === "stream"
           ? row.firstContentP50Ms == null
-          : !row.gatewayMs || !row.overheadMs),
+          : !row.gatewayMs ||
+            ["p50", "p95", "p99"].some((key) => row.overheadMs?.[key] == null)),
     )
   )
     throw new Error(
@@ -46,9 +47,9 @@ export function updateBenchmarkTable(markdown, summary) {
     throw new Error("Benchmark docs must contain exactly one results block");
   const request = summary.rows.find((row) => row.scenario === "chat");
   const table = [
-    "| Runner resources | Concurrent HTTP requests | Median added latency |",
-    "| --- | ---: | ---: |",
-    `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${request.concurrency} | ${request.overheadMs.p50.toFixed(2)} ms |`,
+    "| Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |",
+    "| --- | ---: | ---: | ---: | ---: |",
+    `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${request.concurrency} | ${["p50", "p95", "p99"].map((key) => `${request.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
   ].join("\n");
   return (
     markdown.slice(0, markdown.indexOf(start) + start.length) +

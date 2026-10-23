@@ -117,7 +117,10 @@ test("only the marked table changes; rendering is idempotent and has no dates or
   assert.ok(result.startsWith(markdown.split("old table")[0]));
   assert.ok(result.endsWith(markdown.split("old table")[1]));
   assert.match(result, /Concurrent HTTP requests \| Median added latency/);
-  assert.match(result, /\| 4 vCPU \/ ~16 GiB RAM \| 50 \| 5.00 ms \|/);
+  assert.match(
+    result,
+    /\| 4 vCPU \/ ~16 GiB RAM \| 50 \| 5.00 ms \| 10.00 ms \| 20.00 ms \|/,
+  );
   assert.doesNotMatch(result, /Chat|Streaming|Gateway|Client|Requests\/sec/);
   assert.equal(updateBenchmarkTable(result, f.summary), result);
   assert.doesNotMatch(
@@ -132,7 +135,10 @@ test("runner resources refresh from each measured host", () => {
   f.summary.logicalCpus = 8;
   f.summary.memoryGiB = 31.6;
   const updated = updateBenchmarkTable(previous, f.summary);
-  assert.match(updated, /\| 8 vCPU \/ ~32 GiB RAM \| 50 \| 5.00 ms \|/);
+  assert.match(
+    updated,
+    /\| 8 vCPU \/ ~32 GiB RAM \| 50 \| 5.00 ms \| 10.00 ms \| 20.00 ms \|/,
+  );
   assert.doesNotMatch(updated, /4 vCPU|16 GiB/);
 });
 
@@ -161,6 +167,9 @@ test("partial, unsuccessful, missing, duplicate or injected results cannot repla
     },
     (s) => {
       s.rows[0].gatewayMs = null;
+    },
+    (s) => {
+      s.rows[0].overheadMs.p95 = null;
     },
     (s) => {
       s.rows[0].succeeded = 1;

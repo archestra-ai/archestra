@@ -19,15 +19,15 @@ See how much latency Archestra adds to an external HTTP request. The benchmark c
 
 ## Results
 
-Median added latency is the time spent in Archestra, excluding that request's upstream provider call. The result pools successful requests at the stated concurrency after warmup.
+Added latency is the time spent in Archestra, excluding that request's upstream provider call. The median, P95 and P99 pool successful requests at the stated concurrency after warmup.
 
 <!-- proxy-benchmark-results:start -->
-| Runner resources | Concurrent HTTP requests | Median added latency |
-| --- | ---: | ---: |
-| 4 vCPU / ~16 GiB RAM | 50 | 275.59 ms |
+| Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |
+| --- | ---: | ---: | ---: | ---: |
+| 4 vCPU / ~16 GiB RAM | 50 | 261.97 ms | 286.35 ms | 297.13 ms |
 <!-- proxy-benchmark-results:end -->
 
-The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating the median; it does not subtract separate median values.
+The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating percentiles; it does not subtract separate percentile values.
 
 <span id="environment"></span>
 <span id="method"></span>

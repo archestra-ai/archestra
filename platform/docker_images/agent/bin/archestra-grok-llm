@@ -1,0 +1,443 @@
+#!/usr/bin/env python3
+"""Show the model the Agent's gateway tools as tools of their own.
+
+Grok Build reaches MCP tools only through its `search_tool` and `use_tool`
+pair, so its model requests declare those two functions and never a gateway
+tool. The LLM proxy rules on what a request declares: with no gateway tool
+declarations it cannot deliver a remedy, and every blocked call is refused.
+
+This adapter listens on loopback between Grok and the proxy:
+
+- a request drops `search_tool` and `use_tool`, declares the gateway tools the
+  bridge listed (names, descriptions and schemas as the gateway sent them), and
+  shows each `use_tool` call in the history as the gateway call it made;
+- a response turns a gateway tool call back into the `use_tool` call Grok runs,
+  streamed or not, so the tool still runs through the bridge.
+
+Headers, call ids, text and Grok's own tools pass through unchanged. The
+adapter exits when the launcher that started it is gone.
+"""
+
+import contextlib
+import http.client
+import json
+import os
+import sys
+import threading
+import time
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+UPSTREAM = urllib.parse.urlsplit(os.environ["ARCHESTRA_GROK_UPSTREAM_URL"])
+PORT_FILE = os.environ["ARCHESTRA_GROK_LLM_PORT_FILE"]
+CATALOG_FILE = os.environ["ARCHESTRA_GROK_GATEWAY_CATALOG"]
+# The MCP server name the launcher configures; Grok prefixes catalog keys with it.
+SERVER = "archestra"
+DISPATCHER_TOOLS = {"search_tool", "use_tool"}
+UPSTREAM_TIMEOUT_SECONDS = 600
+# Headers that describe one hop, never the message.
+HOP_HEADERS = {"host", "content-length", "accept-encoding", "connection", "transfer-encoding", "content-encoding", "keep-alive"}
+# Grok reads a response's media type and a 429's Retry-After. The adapter
+# writes these two under its own names and relays no other response header.
+FORWARDED_RESPONSE_HEADERS = ("Content-Type", "Retry-After")
+
+catalog_lock = threading.Lock()
+catalog_state: dict = {"mtime": None, "catalog": None}
+
+
+class Catalog:
+    """The gateway's tools as the bridge last listed them, with both names of each."""
+
+    def __init__(self, tools: list[dict], names: dict[str, str]):
+        self.tools = tools
+        # Grok's local name -> gateway name, and back.
+        self.gateway_by_local = names
+        self.local_by_gateway = {gateway: local for local, gateway in names.items()}
+
+    def gateway_name(self, key: str) -> str | None:
+        """The gateway tool behind a catalog key, or None for a tool not listed."""
+        prefix = f"{SERVER}__"
+        if not key.startswith(prefix):
+            return None
+        return self.gateway_by_local.get(key[len(prefix):])
+
+    def catalog_key(self, gateway_name: str) -> str | None:
+        """The name Grok lists a gateway tool under: its server, then the local name."""
+        local = self.local_by_gateway.get(gateway_name)
+        return None if local is None else f"{SERVER}__{local}"
+
+
+def catalog() -> Catalog | None:
+    """The published catalog, or None before the bridge listed the gateway."""
+    with catalog_lock:
+        try:
+            # The file read is the file whose time is kept: the bridge
+            # replaces the path atomically, so the two cannot drift apart.
+            with open(CATALOG_FILE, encoding="utf-8") as file:
+                mtime = os.fstat(file.fileno()).st_mtime_ns
+                if mtime == catalog_state["mtime"]:
+                    return catalog_state["catalog"]
+                published = json.load(file)
+        except OSError:
+            catalog_state.update(mtime=None, catalog=None)
+            return None
+        except ValueError:
+            catalog_state.update(mtime=mtime, catalog=None)
+            return None
+        loaded = None
+        tools, names = published.get("tools"), published.get("names")
+        if isinstance(tools, list) and isinstance(names, dict):
+            loaded = Catalog(
+                [tool for tool in tools if isinstance(tool, dict) and isinstance(tool.get("name"), str)],
+                {local: gateway for local, gateway in names.items() if isinstance(local, str) and isinstance(gateway, str)},
+            )
+        catalog_state.update(mtime=mtime, catalog=loaded)
+        return loaded
+
+
+class NotReady(Exception):
+    pass
+
+
+def adapt_request(body: dict, listed: Catalog | None) -> dict:
+    tools = body.get("tools")
+    if isinstance(tools, list) and any(function_name(tool) in DISPATCHER_TOOLS for tool in tools):
+        if listed is None:
+            raise NotReady()
+        kept = [tool for tool in tools if function_name(tool) not in DISPATCHER_TOOLS]
+        for tool in listed.tools:
+            function = {"name": tool["name"], "parameters": tool.get("inputSchema") or {"type": "object", "properties": {}}}
+            if isinstance(tool.get("description"), str):
+                function["description"] = tool["description"]
+            kept.append({"type": "function", "function": function})
+        body["tools"] = kept
+    if listed is None:
+        return body
+    for message in body.get("messages") or []:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(function, dict) or function.get("name") != "use_tool":
+                continue
+            try:
+                arguments = json.loads(function.get("arguments") or "{}")
+            except ValueError:
+                continue
+            if not isinstance(arguments, dict) or not isinstance(arguments.get("tool_name"), str):
+                continue
+            # A call to a tool the gateway no longer lists stays as Grok ran it.
+            target = listed.gateway_name(arguments["tool_name"])
+            if target is None:
+                continue
+            tool_input = arguments.get("tool_input")
+            function["name"] = target
+            function["arguments"] = json.dumps(tool_input if isinstance(tool_input, dict) else {}, ensure_ascii=False)
+    return body
+
+
+def function_name(tool) -> str | None:
+    if not isinstance(tool, dict):
+        return None
+    function = tool.get("function")
+    return function.get("name") if isinstance(function, dict) else tool.get("name")
+
+
+def wrapped_arguments(key: str, arguments: str) -> str:
+    """The `use_tool` arguments for a gateway call.
+
+    Only an absent argument text means an argument-less call. Text that is
+    not JSON stays as it is, so Grok refuses the call as it would any tool
+    call with unreadable arguments; a JSON value that is not an object is
+    wrapped as it is, so Grok's own schema check refuses it. Neither runs the
+    tool with arguments the model did not write.
+    """
+    if not arguments.strip():
+        tool_input: object = {}
+    else:
+        try:
+            tool_input = json.loads(arguments)
+        except ValueError:
+            print(f"archestra: the model's arguments for {key} are not JSON; Grok receives them as written", file=sys.stderr, flush=True)
+            return arguments
+        if not isinstance(tool_input, dict):
+            print(f"archestra: the model's arguments for {key} are not an object; Grok receives them as written", file=sys.stderr, flush=True)
+    return json.dumps({"tool_name": key, "tool_input": tool_input}, ensure_ascii=False)
+
+
+class Rewriter:
+    """Turns gateway tool calls in a response into `use_tool` calls.
+
+    A streamed gateway call is announced at once under `use_tool`; its
+    argument fragments are collected and sent as one fragment when the call
+    ends, because the wrapped object must be complete and valid.
+    """
+
+    def __init__(self, listed: Catalog, declared: set[str]):
+        self.keys = {name: listed.catalog_key(name) for name in declared if listed.catalog_key(name)}
+        # (choice index, tool index) -> catalog key and the fragments so far.
+        self.open: dict[tuple[int, int], tuple[str, list[str]]] = {}
+
+    def message(self, message: dict) -> None:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(function, dict) or function.get("name") not in self.keys:
+                continue
+            function["arguments"] = wrapped_arguments(self.keys[function["name"]], function.get("arguments") or "")
+            function["name"] = "use_tool"
+
+    def chunk(self, chunk: dict) -> list[dict]:
+        """The chunks to write for one streamed chunk."""
+        out: list[dict] = []
+        finishing: list[tuple[dict, str]] = []
+        for choice in chunk.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            choice_index = choice.get("index", 0)
+            delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+            kept_calls = []
+            for call in delta.get("tool_calls") or []:
+                function = call.get("function") if isinstance(call, dict) and isinstance(call.get("function"), dict) else None
+                if function is None:
+                    kept_calls.append(call)
+                    continue
+                key = (choice_index, call.get("index", 0))
+                name = function.get("name")
+                if isinstance(name, str) and name in self.keys:
+                    self.open[key] = (self.keys[name], [function.get("arguments") or ""])
+                    function["name"] = "use_tool"
+                    function["arguments"] = ""
+                    kept_calls.append(call)
+                elif key in self.open:
+                    if isinstance(function.get("arguments"), str):
+                        self.open[key][1].append(function["arguments"])
+                    # The fragment is sent whole when the call ends.
+                    if any(field not in ("index", "function") for field in call):
+                        kept_calls.append({field: value for field, value in call.items() if field != "function"})
+                else:
+                    kept_calls.append(call)
+            if "tool_calls" in delta:
+                if kept_calls:
+                    delta["tool_calls"] = kept_calls
+                else:
+                    del delta["tool_calls"]
+            finish = choice.get("finish_reason")
+            if finish and any(open_choice == choice_index for open_choice, _ in self.open):
+                # The wrapped calls close before the turn ends.
+                choice["finish_reason"] = None
+                finishing.append((choice, finish))
+        # A chunk that only carried collected fragments, or only the held
+        # finish, has nothing left to say; a usage chunk has no choices.
+        choices = [choice for choice in chunk.get("choices") or [] if isinstance(choice, dict)]
+        if not choices or any(choice.get("delta") or choice.get("finish_reason") for choice in choices):
+            out.append(chunk)
+        for choice, finish in finishing:
+            out.extend(self.closers(chunk, choice.get("index", 0)))
+            out.append({**self.envelope(chunk), "choices": [{"index": choice.get("index", 0), "delta": {}, "finish_reason": finish}]})
+        return out
+
+    def closers(self, template: dict, choice_index: int | None = None) -> list[dict]:
+        """Chunks that send the complete arguments of the wrapped calls still open."""
+        out: list[dict] = []
+        for (choice, index), (key, fragments) in list(self.open.items()):
+            if choice_index is not None and choice != choice_index:
+                continue
+            out.append(
+                {
+                    **self.envelope(template),
+                    "choices": [{"index": choice, "delta": {"tool_calls": [{"index": index, "function": {"arguments": wrapped_arguments(key, "".join(fragments))}}]}, "finish_reason": None}],
+                }
+            )
+            del self.open[(choice, index)]
+        return out
+
+    @staticmethod
+    def envelope(template: dict) -> dict:
+        return {field: template[field] for field in ("id", "object", "created", "model") if field in template}
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"
+
+    def log_message(self, *_):
+        pass
+
+    def do_GET(self):
+        self.forward(None)
+
+    def do_POST(self):
+        self.forward(self.read_body())
+
+    def read_body(self) -> bytes:
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            body = b""
+            while True:
+                size = int(self.rfile.readline().split(b";", 1)[0].strip() or b"0", 16)
+                if size == 0:
+                    while self.rfile.readline().strip():
+                        pass
+                    return body
+                body += self.rfile.read(size)
+                self.rfile.readline()
+        length = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(length) if length else b""
+
+    def forward(self, body: bytes | None) -> None:
+        rewriter = None
+        if body is not None and self.path.split("?", 1)[0].endswith("/chat/completions"):
+            try:
+                request = json.loads(body)
+            except ValueError:
+                request = None
+            if isinstance(request, dict):
+                listed = catalog()
+                try:
+                    request = adapt_request(request, listed)
+                except NotReady:
+                    print("archestra: a model request declared Grok's MCP tools before the gateway catalog was listed", file=sys.stderr, flush=True)
+                    self.reply(503, {"error": {"message": "The Agent's MCP gateway tools are not listed yet; retry once the gateway is connected.", "type": "archestra_gateway_not_ready"}})
+                    return
+                body = json.dumps(request, ensure_ascii=False).encode("utf-8")
+                if listed is not None:
+                    declared = {name for name in (function_name(tool) for tool in request.get("tools") or []) if isinstance(name, str)}
+                    rewriter = Rewriter(listed, declared)
+        headers = {name: value for name, value in self.headers.items() if name.lower() not in HOP_HEADERS}
+        if body is not None:
+            headers["Content-Length"] = str(len(body))
+        headers["Accept-Encoding"] = "identity"
+        # Grok appends its route to the adapter's origin; the proxy's base path
+        # (the Agent's model route) goes back in front of it.
+        path = UPSTREAM.path.rstrip("/") + self.path
+        connection_class = http.client.HTTPSConnection if UPSTREAM.scheme == "https" else http.client.HTTPConnection
+        try:
+            connection = connection_class(UPSTREAM.hostname, UPSTREAM.port, timeout=UPSTREAM_TIMEOUT_SECONDS)
+            connection.request(self.command, path, body=body, headers=headers)
+            response = connection.getresponse()
+        except (OSError, http.client.HTTPException) as error:
+            self.reply(502, {"error": {"message": f"The LLM proxy did not answer: {type(error).__name__}: {error}", "type": "archestra_upstream_unavailable"}})
+            return
+        try:
+            content_type = response.getheader("Content-Type") or "application/octet-stream"
+            streaming = rewriter is not None and "text/event-stream" in content_type
+            self.send_response(response.status)
+            for name in FORWARDED_RESPONSE_HEADERS:
+                value = response.getheader(name)
+                if value is not None:
+                    # A header value never starts a line of its own.
+                    self.send_header(name, value.replace("\r", "").replace("\n", ""))
+            self.end_headers()
+            if streaming:
+                self.stream(response, rewriter)
+                return
+            data = response.read()
+            if rewriter is not None and response.status == 200:
+                data = self.rewrite_body(data, rewriter)
+            self.wfile.write(data)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            connection.close()
+
+    def rewrite_body(self, data: bytes, rewriter: Rewriter) -> bytes:
+        try:
+            payload = json.loads(data)
+        except ValueError:
+            return data
+        if not isinstance(payload, dict):
+            return data
+        for choice in payload.get("choices") or []:
+            message = choice.get("message") if isinstance(choice, dict) else None
+            if isinstance(message, dict):
+                rewriter.message(message)
+        return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    def stream(self, response, rewriter: Rewriter) -> None:
+        """Relays the event stream, rewriting each event's data as one chunk."""
+        last_chunk: dict = {}
+        event: list[str] = []
+        while True:
+            line = response.readline()
+            text = line.decode("utf-8", errors="replace").rstrip("\r\n") if line else ""
+            if text:
+                event.append(text)
+                continue
+            if event:
+                last_chunk = self.write_sse_event(event, rewriter, last_chunk)
+                event = []
+            if not line:
+                break
+        # A stream that ends without [DONE] still closes what it opened.
+        for closer in rewriter.closers(last_chunk):
+            self.write_event(closer)
+
+    def write_sse_event(self, event: list[str], rewriter: Rewriter, last_chunk: dict) -> dict:
+        others = [line for line in event if not line.startswith("data:")]
+        data_lines = [line[5:].removeprefix(" ") for line in event if line.startswith("data:")]
+        data = "\n".join(data_lines)
+        if not data_lines:
+            self.write_lines(others)
+            return last_chunk
+        if data.strip() == "[DONE]":
+            for closer in rewriter.closers(last_chunk):
+                self.write_event(closer)
+            self.write_lines(others + ["data: [DONE]"])
+            return last_chunk
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            chunk = None
+        if not isinstance(chunk, dict):
+            self.write_lines(others + [f"data: {line}" for line in data_lines])
+            return last_chunk
+        for item in rewriter.chunk(chunk):
+            self.write_lines(others + ["data: " + json.dumps(item, ensure_ascii=False)])
+            others = []
+        return chunk
+
+    def write_event(self, chunk: dict) -> None:
+        self.write_lines(["data: " + json.dumps(chunk, ensure_ascii=False)])
+
+    def write_lines(self, lines: list[str]) -> None:
+        self.wfile.write(("\n".join(lines) + "\n\n").encode("utf-8"))
+        self.wfile.flush()
+
+    def reply(self, status: int, payload: dict) -> None:
+        data = json.dumps(payload).encode("utf-8")
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+def watch_parent(parent: int) -> None:
+    while os.getppid() == parent:
+        time.sleep(1)
+    # The adapter holds nothing worth flushing, and sys.exit would wait on a
+    # handler thread that may still be reading the proxy's stream.
+    os._exit(0)
+
+
+def main() -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    port = server.server_address[1]
+    temporary = f"{PORT_FILE}.tmp"
+    try:
+        with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+            file.write(f"{port}\n")
+        os.replace(temporary, PORT_FILE)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        raise
+    threading.Thread(target=watch_parent, args=(os.getppid(),), daemon=True).start()
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

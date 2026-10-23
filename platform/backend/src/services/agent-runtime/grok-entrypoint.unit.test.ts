@@ -68,9 +68,15 @@ describe("Grok Build image entrypoint", () => {
       expect(config).toContain('default = "archestra"');
       expect(config).toContain('session_summary = "archestra"');
       expect(config).toContain('model = "grok-4.7"');
-      expect(config).toContain(
-        'base_url = "http://platform:9000/v1/model-router/agent"',
-      );
+      // Grok talks to the wire adapter on loopback; the adapter alone knows
+      // the proxy URL, and it listens before the config names its port.
+      const port = (
+        await readFile(path.join(runtime, "grok-llm.port"), "utf8")
+      ).trim();
+      expect(port).toMatch(/^\d+$/);
+      expect(config).toContain(`base_url = "http://127.0.0.1:${port}"\n`);
+      expect(config).not.toContain("model-router");
+      expect(config).toContain("max_output_bytes = 200000");
       expect(config).toContain('env_key = "OPENAI_API_KEY"');
       expect(config).toContain('api_backend = "chat_completions"');
       expect(config).toContain("context_window = 2000000");
@@ -265,6 +271,10 @@ describe("Grok Build MCP gateway bridge", () => {
       body: Record<string, unknown>;
       headers: IncomingHttpHeaders;
     }[] = [];
+    const listedTools = [
+      { name: "archestra__get_remedy_plans", inputSchema: {} },
+      { name: "github__list_repos", inputSchema: {} },
+    ];
     const server = createServer((request, response) => {
       let data = "";
       request.on("data", (chunk) => {
@@ -275,12 +285,7 @@ describe("Grok Build MCP gateway bridge", () => {
         requests.push({ body, headers: request.headers });
         const result =
           body.method === "tools/list"
-            ? {
-                tools: [
-                  { name: "archestra__get_remedy_plans", inputSchema: {} },
-                  { name: "github__list_repos", inputSchema: {} },
-                ],
-              }
+            ? { tools: [...listedTools] }
             : {
                 content: [{ type: "text", text: `called ${body.params.name}` }],
               };
@@ -294,6 +299,8 @@ describe("Grok Build MCP gateway bridge", () => {
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
     const { port } = server.address() as AddressInfo;
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+    const catalog = path.join(root, "grok-gateway-tools.json");
     const bridge = spawn(
       "python3",
       [path.join(IMAGE_BIN, "archestra-grok-mcp")],
@@ -306,6 +313,7 @@ describe("Grok Build MCP gateway bridge", () => {
             SECRETS.ARCHESTRA_AGENT_RUNTIME_BINDING,
           ARCHESTRA_AGENT_RUNTIME_TASK_ID: "task-1",
           ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "workspace-1",
+          ARCHESTRA_GROK_GATEWAY_CATALOG: catalog,
         },
       },
     );
@@ -322,6 +330,20 @@ describe("Grok Build MCP gateway bridge", () => {
       expect(
         listed.result.tools.map((tool: { name: string }) => tool.name),
       ).toEqual(["archestra--get_remedy_plans", "github--list_repos"]);
+      // The wire adapter declares the gateway's own tools to the model from
+      // this file, written before Grok hears of the renamed list.
+      expect(JSON.parse(await readFile(catalog, "utf8"))).toEqual({
+        server: "archestra",
+        tools: [
+          { name: "archestra__get_remedy_plans", inputSchema: {} },
+          { name: "github__list_repos", inputSchema: {} },
+        ],
+        names: {
+          "archestra--get_remedy_plans": "archestra__get_remedy_plans",
+          "github--list_repos": "github__list_repos",
+        },
+      });
+      expect((await stat(catalog)).mode & 0o777).toBe(0o600);
 
       const called = await call({
         id: 2,
@@ -343,12 +365,704 @@ describe("Grok Build MCP gateway bridge", () => {
             SECRETS.ARCHESTRA_AGENT_RUNTIME_BINDING,
         });
       }
+      // A fresh list replaces the catalog: a tool the gateway dropped is gone.
+      listedTools.splice(1, 1);
+      await call({ id: 3, method: "tools/list", params: {} });
+      expect(JSON.parse(await readFile(catalog, "utf8"))).toEqual({
+        server: "archestra",
+        tools: [{ name: "archestra__get_remedy_plans", inputSchema: {} }],
+        names: { "archestra--get_remedy_plans": "archestra__get_remedy_plans" },
+      });
     } finally {
       bridge.kill();
       server.close();
+      await rm(root, { recursive: true, force: true });
     }
   });
 });
+
+describe("Grok Build LLM wire adapter", () => {
+  const GATEWAY_TOOLS = [
+    {
+      name: "archestra__get_remedy_plans",
+      description: "Read why a call was blocked. [marker:AAA]",
+      inputSchema: { type: "object", properties: { tool: { type: "string" } } },
+    },
+    {
+      name: "github__list_repos",
+      description: "List repositories.",
+      inputSchema: { type: "object", properties: { org: { type: "string" } } },
+    },
+  ];
+  const GROK_TOOLS = [
+    { type: "function", function: { name: "read_file", parameters: {} } },
+    { type: "function", function: { name: "search_tool", parameters: {} } },
+    { type: "function", function: { name: "use_tool", parameters: {} } },
+  ];
+  const chunk = (
+    delta: Record<string, unknown>,
+    finish: string | null = null,
+  ) =>
+    `data: ${JSON.stringify({
+      id: "chatcmpl-1",
+      object: "chat.completion.chunk",
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    })}\n\n`;
+
+  test("declares the gateway tools to the model and runs its calls through use_tool", async () => {
+    const upstream = await fakeUpstream(() => {
+      // The proxy streams a gateway call with its arguments in fragments,
+      // and a Grok tool call next to it.
+      const args = JSON.stringify({ org: "archestra-ai", limit: 2 });
+      return {
+        contentType: "text/event-stream",
+        body:
+          chunk({ role: "assistant", content: "Listing." }) +
+          chunk({
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "github__list_repos", arguments: "" },
+              },
+            ],
+          }) +
+          [args.slice(0, 9), args.slice(9, 20), args.slice(20)]
+            .map((part) =>
+              chunk({
+                tool_calls: [{ index: 0, function: { arguments: part } }],
+              }),
+            )
+            .join("") +
+          chunk({
+            tool_calls: [
+              {
+                index: 1,
+                id: "call_2",
+                type: "function",
+                function: { name: "read_file", arguments: '{"path":"a"}' },
+              },
+            ],
+          }) +
+          chunk({}, "tool_calls") +
+          "data: [DONE]\n\n",
+        headers: { "x-request-id": "req-1" },
+      };
+    });
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer synthetic-virtual-key",
+            "X-Archestra-Run-Id": "task-1",
+          },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            stream: true,
+            tools: GROK_TOOLS,
+            messages: [
+              { role: "user", content: "List the repos." },
+              {
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                  {
+                    id: "call_0",
+                    type: "function",
+                    function: {
+                      name: "use_tool",
+                      arguments: JSON.stringify({
+                        tool_name: "archestra__archestra--get_remedy_plans",
+                        tool_input: { tool: "read_file" },
+                      }),
+                    },
+                  },
+                ],
+              },
+              { role: "tool", tool_call_id: "call_0", content: "ruling" },
+            ],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      expect(response.headers.get("x-request-id")).toBeNull();
+      const events = (await response.text())
+        .split("\n\n")
+        .filter((event) => event.startsWith("data: "))
+        .map((event) => event.slice(6));
+      expect(events.at(-1)).toBe("[DONE]");
+      const calls = new Map<number, { name?: string; arguments: string }>();
+      for (const event of events.slice(0, -1)) {
+        for (const call of JSON.parse(event).choices[0].delta.tool_calls ??
+          []) {
+          const entry = calls.get(call.index) ?? { arguments: "" };
+          if (call.function.name) entry.name = call.function.name;
+          entry.arguments += call.function.arguments ?? "";
+          calls.set(call.index, entry);
+        }
+      }
+      // The gateway call reaches Grok as the use_tool call it knows how to run.
+      expect(calls.get(0)?.name).toBe("use_tool");
+      expect(JSON.parse(calls.get(0)?.arguments ?? "")).toEqual({
+        tool_name: "archestra__github--list_repos",
+        tool_input: { org: "archestra-ai", limit: 2 },
+      });
+      expect(calls.get(1)).toEqual({
+        name: "read_file",
+        arguments: '{"path":"a"}',
+      });
+
+      // The proxy saw the gateway tools declared as the gateway sent them,
+      // neither dispatcher, and the earlier use_tool call as the gateway call.
+      const [seen] = upstream.requests as {
+        url: string;
+        body: {
+          tools: unknown;
+          messages: {
+            tool_calls: { function: { name: string; arguments: string } }[];
+          }[];
+        };
+        headers: IncomingHttpHeaders;
+      }[];
+      // The proxy's own route (the Agent's model-router path) leads the way.
+      expect(seen.url).toBe("/v1/model-router/agent-1/chat/completions");
+      expect(seen.headers.authorization).toBe("Bearer synthetic-virtual-key");
+      expect(seen.headers["x-archestra-run-id"]).toBe("task-1");
+      expect(seen.headers["accept-encoding"]).toBe("identity");
+      expect(seen.body.tools).toEqual([
+        GROK_TOOLS[0],
+        ...GATEWAY_TOOLS.map((tool) => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+          },
+        })),
+      ]);
+      const [replayed] = seen.body.messages[1].tool_calls;
+      expect(replayed).toMatchObject({
+        id: "call_0",
+        type: "function",
+        function: { name: "archestra__get_remedy_plans" },
+      });
+      expect(JSON.parse(replayed.function.arguments)).toEqual({
+        tool: "read_file",
+      });
+      expect(seen.body.messages[2]).toEqual({
+        role: "tool",
+        tool_call_id: "call_0",
+        content: "ruling",
+      });
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
+  test("closes a wrapped call whose last fragment shares the finishing chunk", async () => {
+    const upstream = await fakeUpstream(() => ({
+      contentType: "text/event-stream",
+      // One event spread over two data lines, then a chunk that carries the
+      // final fragment and the finish reason together.
+      body:
+        `data: ${JSON.stringify({
+          id: "chatcmpl-1",
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: {
+                      name: "github__list_repos",
+                      arguments: '{"org":',
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        }).replace('"choices"', '\ndata: "choices"')}\n\n` +
+        `data: ${JSON.stringify({
+          id: "chatcmpl-1",
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [{ index: 0, function: { arguments: '"x"}' } }],
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+        })}\n\n` +
+        `data: ${JSON.stringify({ id: "chatcmpl-1", object: "chat.completion.chunk", choices: [], usage: { total_tokens: 3 } })}\n\n` +
+        "data: [DONE]\n\n",
+    }));
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            stream: true,
+            tools: GROK_TOOLS,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        },
+      );
+      const events = (await response.text())
+        .split("\n\n")
+        .filter((event) => event.startsWith("data: "))
+        .map((event) => event.slice(6));
+      expect(events.at(-1)).toBe("[DONE]");
+      const chunks = events.slice(0, -1).map((event) => JSON.parse(event));
+      // The arguments arrive whole, before the finish, and the usage chunk
+      // still follows.
+      expect(
+        chunks.map((chunk) => {
+          const call = chunk.choices[0]?.delta?.tool_calls?.[0]?.function;
+          return [
+            call?.name ?? null,
+            call?.arguments
+              ? JSON.parse(call.arguments)
+              : (call?.arguments ?? null),
+            chunk.choices[0]?.finish_reason ?? null,
+            chunk.usage ?? null,
+          ];
+        }),
+      ).toEqual([
+        ["use_tool", "", null, null],
+        [
+          null,
+          {
+            tool_name: "archestra__github--list_repos",
+            tool_input: { org: "x" },
+          },
+          null,
+          null,
+        ],
+        [null, null, "tool_calls", null],
+        [null, null, null, { total_tokens: 3 }],
+      ]);
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
+  test("wraps a complete reply and an argument-less call the same way", async () => {
+    const upstream = await fakeUpstream(() => ({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-1",
+        object: "chat.completion",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_1",
+                  type: "function",
+                  function: {
+                    name: "archestra__get_remedy_plans",
+                    arguments: "",
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      }),
+    }));
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      // A chunked request body is read whole too.
+      const body = JSON.stringify({
+        model: "grok-4.7",
+        tools: GROK_TOOLS,
+        messages: [{ role: "user", content: "hi" }],
+      });
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(body.slice(0, 20)));
+              controller.enqueue(new TextEncoder().encode(body.slice(20)));
+              controller.close();
+            },
+          }),
+          duplex: "half",
+        } as RequestInit,
+      );
+      expect(upstream.requests[0].headers["transfer-encoding"]).toBeUndefined();
+      expect(upstream.requests[0].body.messages).toEqual([
+        { role: "user", content: "hi" },
+      ]);
+      const call = (await response.json()).choices[0].message.tool_calls[0];
+      expect(call.function.name).toBe("use_tool");
+      expect(JSON.parse(call.function.arguments)).toEqual({
+        tool_name: "archestra__archestra--get_remedy_plans",
+        tool_input: {},
+      });
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
+  test.each([
+    {
+      case: "truncated JSON stays as written",
+      arguments: '{"dry_run":true,',
+      wrapped: '{"dry_run":true,',
+    },
+    {
+      case: "a value that is not an object is wrapped as it is",
+      arguments: "null",
+      wrapped: { tool_name: "archestra__github--list_repos", tool_input: null },
+    },
+  ])("never runs a gateway tool with arguments the model did not write ($case)", async ({
+    arguments: written,
+    wrapped,
+  }) => {
+    const call = (name: string, args: string) => ({
+      id: "call_1",
+      type: "function",
+      function: { name, arguments: args },
+    });
+    const upstream = await fakeUpstream((body) =>
+      body.stream
+        ? {
+            contentType: "text/event-stream",
+            body:
+              chunk({
+                tool_calls: [
+                  {
+                    index: 0,
+                    ...call("github__list_repos", written.slice(0, 5)),
+                  },
+                ],
+              }) +
+              chunk({
+                tool_calls: [
+                  { index: 0, function: { arguments: written.slice(5) } },
+                ],
+              }) +
+              chunk({}, "tool_calls") +
+              "data: [DONE]\n\n",
+          }
+        : {
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: "chatcmpl-1",
+              object: "chat.completion",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [call("github__list_repos", written)],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            }),
+          },
+    );
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const request = (stream: boolean) =>
+        fetch(`http://127.0.0.1:${adapter.port}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            stream,
+            tools: GROK_TOOLS,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        });
+      // Grok parses the arguments; their spelling is the adapter's own.
+      const received = (args: string) =>
+        typeof wrapped === "string" ? args : JSON.parse(args);
+      const complete = (await (await request(false)).json()).choices[0].message
+        .tool_calls[0];
+      expect(complete.function.name).toBe("use_tool");
+      expect(received(complete.function.arguments)).toEqual(wrapped);
+
+      const events = (await (await request(true)).text())
+        .split("\n\n")
+        .filter((event) => event.startsWith("data: {"))
+        .map((event) => JSON.parse(event.slice(6)));
+      const streamed = events
+        .flatMap((event) => event.choices[0].delta.tool_calls ?? [])
+        .reduce(
+          (entry, part) => ({
+            name: part.function.name ?? entry.name,
+            arguments: entry.arguments + (part.function.arguments ?? ""),
+          }),
+          { name: "", arguments: "" },
+        );
+      expect(streamed.name).toBe("use_tool");
+      expect(received(streamed.arguments)).toEqual(wrapped);
+    } finally {
+      await adapter.stop();
+      await upstream.close();
+    }
+  });
+
+  test("refuses a request that declares the dispatcher before the gateway is listed", async () => {
+    const upstream = await fakeUpstream(() => ({
+      contentType: "application/json",
+      body: "{}",
+    }));
+    const adapter = await startAdapter(upstream.url, undefined);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            tools: GROK_TOOLS,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(503);
+      expect((await response.json()).error.type).toBe(
+        "archestra_gateway_not_ready",
+      );
+      expect(upstream.requests).toHaveLength(0);
+
+      // A side call without the dispatcher needs no catalog.
+      const side = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            tools: [{ type: "function", function: { name: "session_title" } }],
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        },
+      );
+      expect(side.status).toBe(200);
+      expect(upstream.requests[0].body.tools).toEqual([
+        { type: "function", function: { name: "session_title" } },
+      ]);
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
+  test("relays the proxy's status and the headers Grok reads, no other", async () => {
+    const upstream = await fakeUpstream(() => ({
+      status: 429,
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({ error: { message: "quota", type: "rate_limit" } }),
+      headers: {
+        "retry-after": "7",
+        "x-request-id": "req-1",
+        "x-ratelimit-remaining-requests": "0",
+      },
+    }));
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            messages: [{ role: "user", content: "Hi" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("7");
+      expect(response.headers.get("content-type")).toBe(
+        "application/json; charset=utf-8",
+      );
+      expect(response.headers.get("x-request-id")).toBeNull();
+      expect(response.headers.get("x-ratelimit-remaining-requests")).toBeNull();
+      expect(await response.json()).toEqual({
+        error: { message: "quota", type: "rate_limit" },
+      });
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
+  test("exits with the launcher that started it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+    try {
+      const portFile = path.join(root, "port");
+      const pidFile = path.join(root, "pid");
+      // A launcher that backgrounds the adapter and then ends; the adapter
+      // notices its parent is gone.
+      const launcher = path.join(root, "launcher");
+      await writeFile(
+        launcher,
+        '#!/bin/sh\n"$1" & echo $! > "$2"\nfor _ in $(seq 50); do [ -s "$3" ] && exit 0; sleep 0.1; done\nexit 1\n',
+      );
+      await chmod(launcher, 0o755);
+      await exec(
+        launcher,
+        [path.join(IMAGE_BIN, "archestra-grok-llm"), pidFile, portFile],
+        {
+          env: {
+            PATH: process.env.PATH,
+            ARCHESTRA_GROK_UPSTREAM_URL: "http://127.0.0.1:9/v1",
+            ARCHESTRA_GROK_LLM_PORT_FILE: portFile,
+            ARCHESTRA_GROK_GATEWAY_CATALOG: path.join(root, "none.json"),
+          },
+        },
+      );
+      const pid = Number((await readFile(pidFile, "utf8")).trim());
+      let alive = true;
+      for (let attempt = 0; attempt < 40 && alive; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        try {
+          process.kill(pid, 0);
+        } catch {
+          alive = false;
+        }
+      }
+      expect(alive).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+async function fakeUpstream(
+  reply: (body: Record<string, unknown>) => {
+    status?: number;
+    contentType: string;
+    body: string;
+    headers?: Record<string, string>;
+  },
+) {
+  const requests: {
+    url: string;
+    body: Record<string, unknown>;
+    headers: IncomingHttpHeaders;
+  }[] = [];
+  const server = createServer((request, response) => {
+    let data = "";
+    request.on("data", (chunk) => {
+      data += chunk;
+    });
+    request.on("end", () => {
+      const body = JSON.parse(data);
+      requests.push({ url: request.url ?? "", body, headers: request.headers });
+      const answer = reply(body);
+      response.writeHead(answer.status ?? 200, {
+        "Content-Type": answer.contentType,
+        ...answer.headers,
+      });
+      response.end(answer.body);
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+  // The proxy URL the platform gives a run: the Agent's model-router route.
+  return {
+    url: `http://127.0.0.1:${port}/v1/model-router/agent-1`,
+    requests,
+    close: () => server.close(),
+  };
+}
+
+async function startAdapter(
+  upstreamUrl: string,
+  tools: Record<string, unknown>[] | undefined,
+) {
+  const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+  const catalog = path.join(root, "grok-gateway-tools.json");
+  if (tools) {
+    await writeFile(
+      catalog,
+      JSON.stringify({
+        server: "archestra",
+        tools,
+        names: Object.fromEntries(
+          tools.map((tool) => [
+            String(tool.name).replaceAll("__", "--"),
+            tool.name,
+          ]),
+        ),
+      }),
+    );
+  }
+  const portFile = path.join(root, "grok-llm.port");
+  const adapter = spawn(
+    "python3",
+    [path.join(IMAGE_BIN, "archestra-grok-llm")],
+    {
+      env: {
+        PATH: process.env.PATH,
+        ARCHESTRA_GROK_UPSTREAM_URL: upstreamUrl,
+        ARCHESTRA_GROK_LLM_PORT_FILE: portFile,
+        ARCHESTRA_GROK_GATEWAY_CATALOG: catalog,
+      },
+      stdio: ["ignore", "ignore", "inherit"],
+    },
+  );
+  let port = "";
+  for (let attempt = 0; attempt < 50 && !port; attempt++) {
+    port = await readFile(portFile, "utf8").then(
+      (text) => text.trim(),
+      () => "",
+    );
+    if (!port) await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (!port) {
+    adapter.kill();
+    await rm(root, { recursive: true, force: true });
+    throw new Error("the wire adapter did not start");
+  }
+  return {
+    port: Number(port),
+    stop: async () => {
+      adapter.kill();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
 
 describe("Grok Build MCP gateway bridge errors", () => {
   test("answers a request the gateway rejects without a JSON-RPC reply at once", async () => {
@@ -973,6 +1687,7 @@ async function prepare(root: string) {
   for (const script of [
     "archestra-grok",
     "archestra-grok-hook",
+    "archestra-grok-llm",
     "archestra-grok-mcp",
     "archestra-grok-turn-failure",
     "archestra-agent-failure",

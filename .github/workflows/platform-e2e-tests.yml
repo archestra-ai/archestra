@@ -142,7 +142,7 @@ jobs:
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           load: "true"
@@ -160,10 +160,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -231,7 +232,7 @@ jobs:
       # below reuses this builder's layers before the dependent test jobs start.
       - name: Build slim Platform image (lite/K8s jobs, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           # Keep BuildKit layers and cache mounts between trusted builds.
           builder-cache-key: ${{ github.repository }}-platform-e2e-linux-amd64-v1
@@ -276,7 +277,7 @@ jobs:
       # that stage is new.
       - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           # outputs= replaces the push:"true" shorthand to push with zstd-compressed
@@ -304,10 +305,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a
@@ -340,7 +342,7 @@ jobs:
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
@@ -372,7 +374,7 @@ jobs:
 
       - name: Upload Docker image artifact
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
           path: /tmp/${{ matrix.tarball-name }}
@@ -397,12 +399,12 @@ jobs:
           fetch-depth: 1
       - name: Load the queue's platform image
         id: platform-image
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         with:
           platform-image: ${{ steps.platform-image.outputs.image-tag }}
           # The embedded Kind cluster pulls this itself; a host-daemon pull
@@ -462,7 +464,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -472,7 +474,7 @@ jobs:
       # pulls from the registry itself, after the image-independent setup.
       - name: Load platform image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
@@ -480,7 +482,7 @@ jobs:
 
       - name: Load MCP server base image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-mcp-server-base-image
+        uses: $/.github/actions/load-mcp-server-base-image
         with:
           source: artifact
           image-tag: mcp-server-base:${{ github.sha }}
@@ -493,7 +495,7 @@ jobs:
 
       - name: Setup Archestra Platform
         id: setup-platform
-        uses: ./.github/actions/setup-archestra-platform
+        uses: $/.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
@@ -519,7 +521,7 @@ jobs:
       - name: Run K8s-bound E2E tests
         id: e2e
         continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: api-k8s --project=vault-k8s
           timeout: "20"
@@ -529,7 +531,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           # Suffixed so the report job's blob-report-* download glob (which
           # also matches the lite leg's artifact) picks it up.
@@ -647,13 +649,13 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Load platform image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
@@ -661,7 +663,7 @@ jobs:
 
       - name: Load MCP server base image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-mcp-server-base-image
+        uses: $/.github/actions/load-mcp-server-base-image
         with:
           source: artifact
           image-tag: mcp-server-base:${{ github.sha }}
@@ -669,7 +671,7 @@ jobs:
 
       - name: Setup Archestra Platform
         id: setup-platform
-        uses: ./.github/actions/setup-archestra-platform
+        uses: $/.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
@@ -692,7 +694,7 @@ jobs:
       - name: Run hibernation E2E tests
         id: e2e
         continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: api-k8s-hibernation
           extra_args: ${{ format('--workers=1 {0}', matrix.spec) }}
@@ -705,7 +707,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-k8s-hibernation-${{ matrix.name }}
           path: platform/e2e-tests/blob-report-hibernation-${{ matrix.name }}/
@@ -816,7 +818,7 @@ jobs:
           docker pull "mcr.microsoft.com/playwright:v${version}-noble" >"${RUNNER_TEMP}/lite-playwright-pull.log" 2>&1 &
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -827,7 +829,7 @@ jobs:
       # publication before allocating this runner; retry only transient errors.
       - name: Load platform image
         id: load-platform-image
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
@@ -868,7 +870,7 @@ jobs:
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache
-        uses: ./.github/actions/configure-kind-registry-cache
+        uses: $/.github/actions/configure-kind-registry-cache
         with:
           cluster-name: archestra-mcp
 
@@ -897,7 +899,7 @@ jobs:
 
       - name: Run lite E2E tests
         id: e2e
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           # Merge queue / on-demand label runs cover chromium only. The nightly
           # schedule (and manual workflow_dispatch) add firefox + webkit to the
@@ -912,7 +914,7 @@ jobs:
 
       - name: Run API and identity provider E2E tests on the same stack
         if: ${{ matrix.name == 'chromium-1of2' }}
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.secondary_projects_nightly || matrix.secondary_projects_default }}
           extra_args: "--grep-invert '@quickstart'"
@@ -925,7 +927,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
@@ -934,7 +936,7 @@ jobs:
       - name: Upload API and identity provider blob report
         if: ${{ !cancelled() && matrix.name == 'chromium-1of2' }}
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-api
           path: platform/e2e-tests/blob-report-api/
@@ -998,7 +1000,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
@@ -1007,7 +1009,7 @@ jobs:
       # the full one — which the quickstart half below then reuses.
       - name: Load OpenAPPA platform image
         id: load-openappa-image
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
@@ -1046,7 +1048,7 @@ jobs:
       - name: Configure embedded Kind registry cache (OpenAPPA)
         if: ${{ steps.openappa-stack.outcome == 'success' }}
         continue-on-error: true
-        uses: ./.github/actions/configure-kind-registry-cache
+        uses: $/.github/actions/configure-kind-registry-cache
         with:
           cluster-name: archestra-mcp
 
@@ -1067,7 +1069,7 @@ jobs:
         id: openappa-e2e
         if: ${{ steps.openappa-stack.outcome == 'success' }}
         continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: openappa
           extra_args: "--grep-invert '@quickstart'"
@@ -1081,7 +1083,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           # Name kept from the former standalone lite leg; the report job's
           # blob-report-* glob picks it up.
@@ -1117,7 +1119,7 @@ jobs:
       - name: Load platform image
         id: load-platform-image
         if: ${{ env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: registry
           image-tag: ${{ format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
@@ -1243,7 +1245,7 @@ jobs:
           echo "All services are ready!"
 
       - name: Configure embedded Kind registry cache
-        uses: ./.github/actions/configure-kind-registry-cache
+        uses: $/.github/actions/configure-kind-registry-cache
         with:
           cluster-name: archestra-mcp
 
@@ -1398,7 +1400,7 @@ jobs:
 
       - name: Run quickstart E2E tests
         id: e2e
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'quickstart --project=quickstart-recovery' || 'quickstart' }}
           # Run all tests tagged @quickstart: MCP install, auth origin, and first-time chat flow
@@ -1410,7 +1412,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-quickstart
           path: platform/e2e-tests/blob-report/
@@ -1468,12 +1470,12 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Setup Archestra Platform with Readonly Vault
-        uses: ./.github/actions/setup-archestra-platform
+        uses: $/.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
@@ -1491,7 +1493,7 @@ jobs:
           extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
 
       - name: Run Readonly Vault E2E tests
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: credentials-with-vault
           timeout: "20"
@@ -1501,7 +1503,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-vault
           path: platform/e2e-tests/blob-report/
@@ -1525,7 +1527,7 @@ jobs:
           fetch-depth: 1
 
       - name: Build and smoke musl NAPI addons
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ./platform
           target: rust-napi-musl-smoke
@@ -1633,12 +1635,12 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Download all blob reports
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           path: platform/e2e-tests/blob-reports
           pattern: blob-report-*
@@ -1659,7 +1661,7 @@ jobs:
 
       - name: Upload merged Playwright report
         if: always()
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/

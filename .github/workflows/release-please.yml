@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -228,7 +228,7 @@ jobs:
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    uses: $/.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -241,13 +241,13 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-agent-catalog-images.yml
+    uses: $/.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
     permissions:
@@ -260,15 +260,15 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-p4-shim-docker-image:
     name: Build and push p4 Shim Docker image
     # The backend defaults the Perforce permission-sync shim pod to
     # p4-shim:<appVersion>, so the image ships with every platform release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-p4-shim-docker-image.yml
+    uses: $/.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -281,15 +281,15 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
     # The sandbox base ships with every platform release: the engine pulls it as
     # the pre-baked code-runtime base, so it is published whenever the platform is.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-sandbox-base-docker-image.yml
+    uses: $/.github/workflows/build-sandbox-base-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -302,8 +302,8 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
@@ -313,7 +313,7 @@ jobs:
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-dockerhub-image.yml
+    uses: $/.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
     permissions:
@@ -339,7 +339,7 @@ jobs:
     # in parallel with Docker image builds. The publish-github-release job ensures all
     # artifacts are ready before the release is made visible.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/publish-platform-helm-chart.yml
+    uses: $/.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
     permissions:
@@ -351,8 +351,8 @@ jobs:
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
     name: Publish release
@@ -407,12 +407,12 @@ jobs:
           fi
 
       - name: Download saved chart
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: release-helm-chart
 
       - name: Download saved image references
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           pattern: release-image-*
           path: release-images
@@ -420,13 +420,14 @@ jobs:
 
       - name: Authenticate to artifact registry
         if: ${{ github.ref_name != 'main' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}

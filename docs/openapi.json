@@ -323269,6 +323269,10 @@
               "type": "string",
               "enum": [
                 "token_cost",
+                "requests",
+                "tokens",
+                "requests_per_minute",
+                "tokens_per_minute",
                 "mcp_server_calls",
                 "tool_calls"
               ]
@@ -323321,6 +323325,10 @@
                         "type": "string",
                         "enum": [
                           "token_cost",
+                          "requests",
+                          "tokens",
+                          "requests_per_minute",
+                          "tokens_per_minute",
                           "mcp_server_calls",
                           "tool_calls"
                         ]
@@ -323350,6 +323358,7 @@
                       "cleanupInterval": {
                         "type": "string",
                         "enum": [
+                          "minute",
                           "1h",
                           "12h",
                           "24h",
@@ -323373,6 +323382,24 @@
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "throughputUsage": {
+                        "type": "object",
+                        "properties": {
+                          "currentUsage": {
+                            "type": "number",
+                            "description": "Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap."
+                          },
+                          "resetsAt": {
+                            "type": "string",
+                            "description": "Minute: projected full allowance recovery without new traffic. Other intervals: next reset."
+                          }
+                        },
+                        "required": [
+                          "currentUsage",
+                          "resetsAt"
+                        ],
+                        "additionalProperties": false
                       },
                       "labels": {
                         "type": "array",
@@ -323724,6 +323751,10 @@
                     "type": "string",
                     "enum": [
                       "token_cost",
+                      "requests",
+                      "tokens",
+                      "requests_per_minute",
+                      "tokens_per_minute",
                       "mcp_server_calls",
                       "tool_calls"
                     ]
@@ -323753,6 +323784,7 @@
                   "cleanupInterval": {
                     "type": "string",
                     "enum": [
+                      "minute",
                       "1h",
                       "12h",
                       "24h",
@@ -323840,6 +323872,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -323869,6 +323905,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -324203,6 +324240,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -324232,6 +324273,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -324255,6 +324297,24 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "throughputUsage": {
+                      "type": "object",
+                      "properties": {
+                        "currentUsage": {
+                          "type": "number",
+                          "description": "Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap."
+                        },
+                        "resetsAt": {
+                          "type": "string",
+                          "description": "Minute: projected full allowance recovery without new traffic. Other intervals: next reset."
+                        }
+                      },
+                      "required": [
+                        "currentUsage",
+                        "resetsAt"
+                      ],
+                      "additionalProperties": false
                     },
                     "labels": {
                       "type": "array",
@@ -324590,6 +324650,10 @@
                     "type": "string",
                     "enum": [
                       "token_cost",
+                      "requests",
+                      "tokens",
+                      "requests_per_minute",
+                      "tokens_per_minute",
                       "mcp_server_calls",
                       "tool_calls"
                     ]
@@ -324619,6 +324683,7 @@
                   "cleanupInterval": {
                     "type": "string",
                     "enum": [
+                      "minute",
                       "1h",
                       "12h",
                       "24h",
@@ -324712,6 +324777,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -324741,6 +324810,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -404330,6 +404400,20 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "grok": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false
@@ -463566,6 +463650,12 @@
                         "cacheReadTokens": {
                           "type": "number"
                         },
+                        "cacheWriteTokens": {
+                          "type": "number"
+                        },
+                        "totalTokens": {
+                          "type": "number"
+                        },
                         "billedCost": {
                           "type": "number"
                         },
@@ -463578,6 +463668,8 @@
                         "inputTokens",
                         "outputTokens",
                         "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "totalTokens",
                         "billedCost",
                         "subscriptionCost"
                       ],
@@ -463600,6 +463692,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -463615,6 +463713,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "timestamp"
@@ -463637,6 +463737,12 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
                             "type": "number"
                           },
                           "billedCost": {
@@ -463665,6 +463771,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "authMethod"
@@ -463687,6 +463795,12 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
                             "type": "number"
                           },
                           "billedCost": {
@@ -463723,6 +463837,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "authMethod",
@@ -463781,6 +463897,12 @@
                               "cacheReadTokens": {
                                 "type": "number"
                               },
+                              "cacheWriteTokens": {
+                                "type": "number"
+                              },
+                              "totalTokens": {
+                                "type": "number"
+                              },
                               "billedCost": {
                                 "type": "number"
                               },
@@ -463797,6 +463919,8 @@
                               "inputTokens",
                               "outputTokens",
                               "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "totalTokens",
                               "billedCost",
                               "subscriptionCost",
                               "value"
@@ -464156,6 +464280,15 @@
                       "outputTokens": {
                         "type": "number"
                       },
+                      "cacheReadTokens": {
+                        "type": "number"
+                      },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464182,6 +464315,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464205,6 +464344,9 @@
                       "requests",
                       "inputTokens",
                       "outputTokens",
+                      "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "timeSeries"
                     ],
@@ -464529,6 +464671,12 @@
                       "cacheReadTokens": {
                         "type": "number"
                       },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464555,6 +464703,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464579,6 +464733,8 @@
                       "inputTokens",
                       "outputTokens",
                       "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "timeSeries"
                     ],
@@ -464894,6 +465050,12 @@
                       "cacheReadTokens": {
                         "type": "number"
                       },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464923,6 +465085,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464944,6 +465112,8 @@
                       "inputTokens",
                       "outputTokens",
                       "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "percentage",
                       "timeSeries"
@@ -465349,6 +465519,9 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
                           "totalTokens": {
                             "type": "number"
                           },
@@ -465383,6 +465556,9 @@
                                   "type": "number"
                                 },
                                 "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
                                   "type": "number"
                                 },
                                 "totalTokens": {
@@ -465420,6 +465596,12 @@
                                       "cacheReadTokens": {
                                         "type": "number"
                                       },
+                                      "cacheWriteTokens": {
+                                        "type": "number"
+                                      },
+                                      "totalTokens": {
+                                        "type": "number"
+                                      },
                                       "billedCost": {
                                         "type": "number"
                                       },
@@ -465441,6 +465623,7 @@
                                 "inputTokens",
                                 "outputTokens",
                                 "cacheReadTokens",
+                                "cacheWriteTokens",
                                 "totalTokens",
                                 "percentage",
                                 "billedCost",
@@ -465472,6 +465655,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -465495,6 +465684,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "billedCost",
                           "subscriptionCost",
@@ -465855,6 +466045,9 @@
                     "cacheReadTokens": {
                       "type": "number"
                     },
+                    "cacheWriteTokens": {
+                      "type": "number"
+                    },
                     "totalTokens": {
                       "type": "number"
                     },
@@ -465889,6 +466082,9 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
                             "type": "number"
                           },
                           "totalTokens": {
@@ -465926,6 +466122,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -465947,6 +466149,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "percentage",
                           "billedCost",
@@ -465978,6 +466181,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -465998,6 +466207,7 @@
                     "inputTokens",
                     "outputTokens",
                     "cacheReadTokens",
+                    "cacheWriteTokens",
                     "totalTokens",
                     "billedCost",
                     "subscriptionCost",
@@ -466351,6 +466561,9 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
                           "totalTokens": {
                             "type": "number"
                           },
@@ -466370,6 +466583,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "percentage",
                           "billedCost",
@@ -468044,6 +468258,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "cost": {
                             "type": "number"
                           },
@@ -468073,6 +468293,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -468094,6 +468320,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "cost",
                           "percentage",
                           "timeSeries"
@@ -469442,6 +469670,15 @@
                           "outputTokens": {
                             "type": "number"
                           },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -469455,6 +469692,9 @@
                           "llmRequests",
                           "inputTokens",
                           "outputTokens",
+                          "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost"
                         ],

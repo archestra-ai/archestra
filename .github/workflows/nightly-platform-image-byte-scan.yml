@@ -59,7 +59,7 @@ jobs:
           echo "value=${image_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Scan exact full and slim Platform image bytes
-        uses: ./.github/actions/scan-platform-image-bytes
+        uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ steps.image-sha.outputs.value }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}

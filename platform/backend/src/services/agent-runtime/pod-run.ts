@@ -38,7 +38,10 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
-import { resolveAgentRuntimeBackendDriver } from "./backends";
+import {
+  prepareAgentRuntimeBackendDriver,
+  resolveAgentRuntimeBackendDriver,
+} from "./backends";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
 import {
@@ -90,7 +93,9 @@ async function startAgentRunSession(params: {
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
 }): Promise<AgentRunRecord> {
-  const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
+  const backend = await prepareAgentRuntimeBackendDriver(
+    params.runtime.backend,
+  );
 
   const environment = params.runtime.environmentId
     ? await EnvironmentModel.findByIdForOrganization(

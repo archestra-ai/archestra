@@ -133,10 +133,11 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Verify source and reuse image
         id: reuse
@@ -173,14 +174,15 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Log in to Docker Hub
         if: ${{ inputs.push_image && inputs.auth_provider == 'dockerhub' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -211,7 +213,7 @@ jobs:
 
       - name: Build Docker image
         id: build
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ inputs.image_directory }}
           dockerfile: ${{ inputs.dockerfile }}
@@ -239,7 +241,7 @@ jobs:
 
       - name: Upload digest
         if: ${{ inputs.push_image }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ inputs.image_name }}-digests-${{ strategy.job-index }}
           path: /tmp/digests/*
@@ -266,7 +268,7 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: ${{ inputs.image_name }}-digests-*
@@ -276,14 +278,15 @@ jobs:
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Log in to Docker Hub
         if: ${{ inputs.auth_provider == 'dockerhub' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -301,7 +304,7 @@ jobs:
 
       - name: Scan release amd64 bytes before tagging
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/scan-docker-image
+        uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.release-scan.outputs.amd64 }}
           platform: linux/amd64
@@ -311,7 +314,7 @@ jobs:
 
       - name: Scan release arm64 bytes before tagging
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && !inputs.amd64_only }}
-        uses: ./.github/actions/scan-docker-image
+        uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.release-scan.outputs.arm64 }}
           platform: linux/arm64
@@ -361,7 +364,7 @@ jobs:
 
       - name: Upload release image reference
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-image-${{ inputs.image_name }}
           path: ${{ runner.temp }}/release-image/*

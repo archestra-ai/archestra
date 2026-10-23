@@ -21,6 +21,8 @@ import {
   ModelModel,
   ToolModel,
 } from "@/models";
+import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
@@ -2516,6 +2518,52 @@ describe("LLM proxy provider matrix", () => {
           }
         }
         expect(foundOriginalResult).toBe(true);
+      });
+
+      test("enforces shared throughput storage before native inference", async ({
+        makeAgent,
+        makeMember,
+        makeUser,
+      }) => {
+        const agent = await makeAgent({ name: "Throughput test" });
+        const owner = await makeUser();
+        await makeMember(owner.id, agent.organizationId);
+        await LimitModel.create({
+          entityType: "organization",
+          entityId: agent.organizationId,
+          limitType: "tokens_per_minute",
+          limitValue: 1,
+        });
+        const admitted = await LlmThroughputModel.admit({
+          entities: [
+            { entityType: "organization", entityId: agent.organizationId },
+          ],
+          model: config.model,
+        });
+        if (!("reservation" in admitted) || !admitted.reservation)
+          throw new Error("Expected token accounting receipt");
+        await LlmThroughputModel.reconcile({
+          reservation: admitted.reservation,
+          tokens: 10,
+        });
+        await setupRoute(agent);
+        const response = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: await providerHeaders(config, agent, owner.id),
+          payload: config.requestBuilder.buildTextRequest({
+            model: config.model,
+            content: "Quota test",
+          }),
+        });
+        expect(response.statusCode).toBe(429);
+        expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);
+        expect(response.json()).toMatchObject({
+          error: {
+            code: "archestra_quota_exceeded",
+            quota: { oversized: false, retryAfter: expect.any(Number) },
+          },
+        });
       });
 
       test("blocks requests when token cost limits are exceeded", async ({

@@ -147,7 +147,14 @@ test("configures popular agent templates and preserves the creation wizard", asy
     name: "Agent Runtimes",
     exact: true,
   });
-  const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
+  const names = [
+    "Claude Code",
+    "Codex",
+    "OpenCode",
+    "Hermes",
+    "OpenClaw",
+    "Grok Build",
+  ];
   const save = async () => {
     const response = page.waitForResponse(
       (r) =>
@@ -172,8 +179,8 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await goToPage(page, "/settings/agents");
     await expect(
       settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(5);
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    ).toHaveCount(6);
+    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
       await settings
         .getByRole("button", { name: `Remove ${name}`, exact: true })
         .click();
@@ -185,7 +192,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toHaveCount(2);
 
     await goToPage(page, "/agents/new");
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toHaveCount(0);

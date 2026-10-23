@@ -113,7 +113,7 @@ jobs:
             --output ../provider-update
       - name: Retain generated patch and test failures
         if: always()
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: terraform-provider-update
           path: provider-update/
@@ -133,7 +133,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Download this run's generated patch
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: terraform-provider-update
           path: provider-update
@@ -147,7 +147,7 @@ jobs:
           persist-credentials: false
       - name: Generate provider-scoped releaser token
         id: token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

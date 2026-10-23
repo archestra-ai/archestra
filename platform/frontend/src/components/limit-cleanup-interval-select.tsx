@@ -1,4 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
+import { useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -10,14 +11,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type LimitCleanupInterval = NonNullable<
-  archestraApiTypes.CreateLimitData["body"]["cleanupInterval"]
+export type LimitCleanupInterval = Exclude<
+  NonNullable<archestraApiTypes.CreateLimitData["body"]["cleanupInterval"]>,
+  "minute"
 >;
 
 export const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval =
   "calendar_month";
 
-export const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
+export const CLEANUP_INTERVAL_LABELS: Record<
+  LimitCleanupInterval | "minute",
+  string
+> = {
+  minute: "Per minute",
   calendar_day: "Calendar day",
   calendar_week_sunday: "Calendar week (Sun-Sat)",
   calendar_week_monday: "Calendar week (Mon-Sun)",
@@ -34,6 +40,10 @@ const CLEANUP_INTERVAL_GROUPS: Array<{
   options: LimitCleanupInterval[];
 }> = [
   {
+    label: "Rolling",
+    options: ["1h", "12h", "24h", "1w", "1m"],
+  },
+  {
     label: "Calendar",
     options: [
       "calendar_day",
@@ -42,34 +52,105 @@ const CLEANUP_INTERVAL_GROUPS: Array<{
       "calendar_month",
     ],
   },
-  {
-    label: "Rolling",
-    options: ["1h", "12h", "24h", "1w", "1m"],
-  },
 ];
 
 type LimitCleanupIntervalSelectProps = {
-  value: LimitCleanupInterval;
-  onValueChange: (value: LimitCleanupInterval) => void;
+  id?: string;
+  ariaLabel?: string;
   disabled?: boolean;
-};
+  minuteDisabled?: boolean;
+  onExplicitSelection?: () => void;
+} & (
+  | {
+      includeMinute: true;
+      value: LimitCleanupInterval | "minute";
+      onValueChange: (value: LimitCleanupInterval | "minute") => void;
+    }
+  | {
+      includeMinute?: false;
+      value: LimitCleanupInterval;
+      onValueChange: (value: LimitCleanupInterval) => void;
+    }
+);
 
-export function LimitCleanupIntervalSelect({
-  value,
-  onValueChange,
-  disabled,
-}: LimitCleanupIntervalSelectProps) {
+export function LimitCleanupIntervalSelect(
+  props: LimitCleanupIntervalSelectProps,
+) {
+  const { id, value, disabled, ariaLabel = "Reset period" } = props;
+  const pressedOption = useRef<string | null>(null);
+  const finishPointerSelection = (value: string) => {
+    if (pressedOption.current === value) props.onExplicitSelection?.();
+    pressedOption.current = null;
+  };
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-      <SelectTrigger className="w-full">
+    <Select
+      value={value}
+      onValueChange={(value) => {
+        if (value === "minute") {
+          if (props.includeMinute) props.onValueChange(value);
+        } else {
+          props.onValueChange(value as LimitCleanupInterval);
+        }
+      }}
+      disabled={disabled}
+    >
+      <SelectTrigger id={id} aria-label={ariaLabel} className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
+        {props.includeMinute && (
+          <>
+            <SelectGroup>
+              <SelectLabel>Rate</SelectLabel>
+              <SelectItem
+                value="minute"
+                disabled={props.minuteDisabled}
+                onPointerDown={() => {
+                  if (!props.minuteDisabled) pressedOption.current = "minute";
+                }}
+                onPointerUp={() => finishPointerSelection("minute")}
+                onPointerCancel={() => {
+                  pressedOption.current = null;
+                }}
+                onClick={
+                  props.minuteDisabled ? undefined : props.onExplicitSelection
+                }
+                onKeyDown={(event) => {
+                  if (
+                    !props.minuteDisabled &&
+                    (event.key === "Enter" || event.key === " ")
+                  ) {
+                    props.onExplicitSelection?.();
+                  }
+                }}
+              >
+                Per minute
+              </SelectItem>
+            </SelectGroup>
+            <SelectSeparator />
+          </>
+        )}
         {CLEANUP_INTERVAL_GROUPS.map((group, index) => (
           <SelectGroup key={group.label}>
             <SelectLabel>{group.label}</SelectLabel>
             {group.options.map((value) => (
-              <SelectItem key={value} value={value}>
+              <SelectItem
+                key={value}
+                value={value}
+                onPointerDown={() => {
+                  pressedOption.current = value;
+                }}
+                onPointerUp={() => finishPointerSelection(value)}
+                onPointerCancel={() => {
+                  pressedOption.current = null;
+                }}
+                onClick={props.onExplicitSelection}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    props.onExplicitSelection?.();
+                  }
+                }}
+              >
                 {CLEANUP_INTERVAL_LABELS[value]}
               </SelectItem>
             ))}

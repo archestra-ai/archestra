@@ -27,10 +27,7 @@ const BACKENDS: Record<AgentRuntimeBackendName, AgentRuntimeBackendDriver> = {
 export function resolveAgentRuntimeBackendDriver(
   name: AgentRuntimeBackendName,
 ): AgentRuntimeBackendDriver {
-  const backend = BACKENDS[name];
-  if (!backend) {
-    throw new ApiError(400, `Unknown Agent Runtime backend "${name}"`);
-  }
+  const backend = getAgentRuntimeBackendDriver(name);
   if (!backend.isEnabled) {
     throw new ApiError(
       503,
@@ -40,7 +37,26 @@ export function resolveAgentRuntimeBackendDriver(
   return backend;
 }
 
+/** New launches must await discovery, rather than treating a cold cache as unavailable. */
+export async function prepareAgentRuntimeBackendDriver(
+  name: AgentRuntimeBackendName,
+): Promise<AgentRuntimeBackendDriver> {
+  const backend = getAgentRuntimeBackendDriver(name);
+  await backend.assertReady();
+  return backend;
+}
+
 /** Whether this installation has at least one usable Agent Runtime backend. */
 export function isAnyAgentRuntimeBackendDriverEnabled(): boolean {
   return Object.values(BACKENDS).some((backend) => backend.isEnabled);
+}
+
+function getAgentRuntimeBackendDriver(
+  name: AgentRuntimeBackendName,
+): AgentRuntimeBackendDriver {
+  const backend = BACKENDS[name];
+  if (!backend) {
+    throw new ApiError(400, `Unknown Agent Runtime backend "${name}"`);
+  }
+  return backend;
 }

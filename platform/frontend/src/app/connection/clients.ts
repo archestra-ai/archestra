@@ -12,6 +12,7 @@ import {
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   CLAUDE_MARK,
+  GROK_MARK,
   HERMES_AGENT_MARK,
   OPENAI_MARK,
   OPENCLAW_MARK,
@@ -277,6 +278,12 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     svgViewBox: "84 84 340 340",
     iconColor: "#020202",
     tileBg: "#f6f6f6",
+  },
+  {
+    id: "grok-build",
+    label: "Grok Build",
+    sub: "xAI coding agent",
+    ...markFields(GROK_MARK),
   },
   {
     id: "hermes-agent",

@@ -43,9 +43,7 @@ export function usageSeries(
         ? point.subscriptionCost
         : metric === "requests"
           ? point.requests
-          : point.inputTokens !== undefined && point.outputTokens !== undefined
-            ? point.inputTokens + point.outputTokens
-            : undefined,
+          : point.totalTokens,
   );
   return values.length > 0 &&
     values.every((value) => value !== undefined && Number.isFinite(value))
@@ -80,7 +78,7 @@ export function usageCube(
   });
   let rows: CubeRow[] = [];
   let notice =
-    "Personal activity only. Tokens are input + output; cache reads are shown separately.";
+    "Personal activity only. Token totals include reported input, output, cache reads and cache writes.";
   let extraCols: Cube["extraCols"] = [];
   const buckets =
     group === "time" ? statistics.timeSeries.map((p) => p.timestamp) : [];
@@ -97,9 +95,16 @@ export function usageCube(
       ...base(item.key, item.label, item[field]),
       extras: {
         requests: item.requests,
-        input: item.inputTokens,
+        input: Math.max(
+          0,
+          item.totalTokens -
+            item.outputTokens -
+            item.cacheReadTokens -
+            item.cacheWriteTokens,
+        ),
         output: item.outputTokens,
         cache: item.cacheReadTokens,
+        cacheWrite: item.cacheWriteTokens,
         billed: item.billedCost,
         subscription: item.subscriptionCost,
       },
@@ -108,13 +113,31 @@ export function usageCube(
             {
               key: "input",
               label: "Input",
-              total: item.inputTokens,
+              total: Math.max(
+                0,
+                item.totalTokens -
+                  item.outputTokens -
+                  item.cacheReadTokens -
+                  item.cacheWriteTokens,
+              ),
               series: [],
             },
             {
               key: "output",
               label: "Output",
               total: item.outputTokens,
+              series: [],
+            },
+            {
+              key: "cacheRead",
+              label: "Cache reads",
+              total: item.cacheReadTokens,
+              series: [],
+            },
+            {
+              key: "cacheWrite",
+              label: "Cache writes",
+              total: item.cacheWriteTokens,
               series: [],
             },
           ]
@@ -125,6 +148,7 @@ export function usageCube(
       { id: "input", label: "Input", format },
       { id: "output", label: "Output", format },
       { id: "cache", label: "Cache reads", format },
+      { id: "cacheWrite", label: "Cache writes", format },
       { id: "billed", label: "Billed spend", format: money },
       { id: "subscription", label: "Subscription estimate", format: money },
     ].filter((c) => c.id !== metric);
@@ -151,7 +175,7 @@ export function usageCube(
       ] as const
     ).map(([key, label]) => base(key, label, breakdown.tokenMix[key]));
     notice =
-      "Recorded token mix includes cache reads and writes, so this total differs from the input + output Tokens tile. Cache savings are an estimate against full input pricing, not a bill credit.";
+      "Recorded token mix includes cache reads and writes. Cache savings are an estimate against full input pricing, not a bill credit.";
   } else if (group === "context") {
     const labels = {
       under32k: "Under 32K",
@@ -208,6 +232,16 @@ export function usageCube(
             key: "output",
             label: "Output",
             total: rows.reduce((n, r) => n + (r.children[1]?.total ?? 0), 0),
+          },
+          {
+            key: "cacheRead",
+            label: "Cache reads",
+            total: rows.reduce((n, r) => n + (r.children[2]?.total ?? 0), 0),
+          },
+          {
+            key: "cacheWrite",
+            label: "Cache writes",
+            total: rows.reduce((n, r) => n + (r.children[3]?.total ?? 0), 0),
           },
         ]
       : [],

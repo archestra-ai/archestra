@@ -10,7 +10,9 @@
 name: Claude Core Team Mentions
 
 on:
-  issue_comment:
+  # Comment-triggered on purpose: every job below runs only for a named core
+  # team member, and permissions start empty.
+  issue_comment: # zizmor: ignore[dangerous-triggers]
     types: [created]
   pull_request_review_comment:
     types: [created]

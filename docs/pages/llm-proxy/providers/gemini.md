@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +34,19 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
 Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
+
+### Missing Models and Nano Banana
+
+Vertex AI's model list depends on your configured location and project access. For global-only models, including Gemini 3 image models and Nano Banana 2.1, enable [`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT=true`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT), restart Archestra, then click **Refresh Models** on **Models**. These models use Google's global endpoint; other models keep using your configured region. Leave this disabled if requests must stay in that region.
+
+Search **Models** by name or API model ID:
+
+| Name | API Model ID |
+| --- | --- |
+| Nano Banana | `gemini-2.5-flash-image` |
+| Nano Banana 2.1 | `gemini-nano-banana-2.1` |
+
+Enabling the global endpoint does not grant access to a model. If a model is still missing, check the provider and access filters, and confirm that your Google Cloud project can use it.
 
 ### GKE with Workload Identity (Recommended)
 

@@ -1,6 +1,9 @@
 // @vitest-environment node
 import type { UIMessage } from "@ai-sdk/react";
-import { getArchestraToolShortName } from "@archestra/shared";
+import {
+  getArchestraToolShortName,
+  type McpHumanRuling,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   getRemedyChainStatus,
@@ -82,6 +85,27 @@ describe("identifyRemedyChains", () => {
     expect(getRemedyChainStatus(chain)).toEqual({
       state: "denied",
       label: "Denied by you",
+    });
+  });
+
+  it("keeps a review a policy change superseded in the chain of the call proposed again", () => {
+    const parts = [
+      notice({ id: "c1", tool: "fs__read", args: { p: 1 } }),
+      remedy({ id: "c2", offerId: offerFor("c1"), humanRuling: "superseded" }),
+      call({ id: "c3", toolName: "fs__read", input: { p: 1 } }),
+    ];
+
+    const [chain, ...rest] = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(rest).toEqual([]);
+    expect(chain.steps.map((step) => step.part.toolCallId)).toEqual([
+      "c1",
+      "c2",
+    ]);
+    expect(chain.finalAttempt?.part.toolCallId).toBe("c3");
+    expect(getRemedyChainStatus(chain)).toEqual({
+      state: "completed",
+      label: undefined,
     });
   });
 
@@ -311,6 +335,10 @@ describe("getRemedyChainStatus while the turn is active", () => {
     ...blockedOnly,
     remedy({ id: "c2", offerId: offerFor("c1"), humanRuling: "deny" }),
   ];
+  const superseded = [
+    ...blockedOnly,
+    remedy({ id: "c2", offerId: offerFor("c1"), humanRuling: "superseded" }),
+  ];
   const chainOf = (parts: unknown[]) =>
     identifyRemedyChains(parts, { getToolShortName })[0];
 
@@ -329,6 +357,11 @@ describe("getRemedyChainStatus while the turn is active", () => {
       name: "a remedy the user denied",
       parts: denied,
       after: { state: "denied", label: "Denied by you" },
+    },
+    {
+      name: "a review a policy change superseded, not proposed again",
+      parts: superseded,
+      after: { state: "denied", label: "Blocked" },
     },
   ])("reads $name as running until the turn ends", ({ parts, after }) => {
     const chain = chainOf(parts);
@@ -413,7 +446,7 @@ function notice(params: {
 function remedy(params: {
   id: string;
   offerId: string;
-  humanRuling?: "approve" | "deny";
+  humanRuling?: McpHumanRuling;
 }): UIMessage["parts"][number] {
   return {
     type: `tool-${REMEDY}`,

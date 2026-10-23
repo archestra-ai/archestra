@@ -25,7 +25,7 @@ catalog:
   # cannot both install a `tsc` bin.
   typescript: "npm:@typescript/typescript6@^6.0.0"
   typescript-7: "npm:typescript@7.0.1-rc"
-  zod: ^4.3.4
+  zod: ^4.6.6
 overrides:
   # iconv-lite 0.6.x publishes a .idea/ folder, which sandboxed agents can't
   # write, so installs fail there. 0.7 keeps the same API and ships without it.
@@ -230,7 +230,7 @@ overrides:
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
-      zod: ^4.3.4
+      zod: ^4.6.6
 
 patchedDependencies:
   # Preserve function-call IDs across SDK responses and request history.

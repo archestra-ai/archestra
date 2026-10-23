@@ -17,14 +17,16 @@ import type { MswControl } from "./helpers/msw-control";
  * reachable and named, each row lights only for its own page (a prefix match
  * on `/llm/proxy` would light three rows at once), the one shared row opens
  * the page its reader may actually see, a group disappears with its heading
- * when the reader may open none of it, and Plugins stays out of the list
- * until the deployment turns plugins on.
+ * when the reader may open none of it, and Plugins remains available
+ * independently of the deployment beta flag.
  */
 
 /** Rows of the studio nav, in order, as a reader sees them. */
 const STUDIO_NAV = [
   "Agents",
+  "Guardrails",
   "Skills",
+  "Plugins",
   "MCP Registry",
   "MCP Gateways",
   "LLM Proxy",
@@ -37,10 +39,6 @@ const STUDIO_NAV = [
   "Connectors",
   "Files",
   "Knowledge Bases",
-  // Guardrails closes the list with the other rows that span every group
-  // above it, rather than sitting under MCP: its tools come from MCP servers,
-  // from agents and apps, and from traffic between agents and LLMs.
-  "Guardrails",
   "Logs",
   "Settings",
 ];
@@ -92,7 +90,7 @@ async function setPermissions(
   });
 }
 
-async function enablePlugins({
+async function disableBeta({
   mswControl,
   request,
 }: {
@@ -105,7 +103,10 @@ async function enablePlugins({
   await mswControl.use({
     method: "get",
     url: "/api/config",
-    body: { ...config, features: { ...config.features, plugins: true } },
+    body: {
+      ...config,
+      features: { ...config.features, betaEnabled: false, plugins: false },
+    },
   });
 }
 
@@ -119,8 +120,8 @@ test.describe("studio sidebar navigation", () => {
     expect(await rowNames(page)).toEqual(STUDIO_NAV);
     // Title case, not caps: set in caps these read as peers of the rows under
     // them, which made "AGENTS" above a row called Agents the same word twice.
-    // Guardrails, Logs and Settings close the list with no heading — they
-    // belong to no one section.
+    // Logs and Settings close the list with no heading — they belong to no
+    // one section.
     expect(await sectionHeadings(page).allInnerTexts()).toEqual([
       "Agents",
       "MCP",
@@ -188,21 +189,15 @@ test.describe("studio sidebar navigation", () => {
     );
   });
 
-  test("offers Plugins where the deployment enables plugins", async ({
+  test("offers Plugins with beta disabled", async ({
     page,
     mswControl,
     request,
   }) => {
-    // The default deployment has them off, which is what the full-list
-    // assertion above is standing on.
-    await enablePlugins({ mswControl, request });
+    await disableBeta({ mswControl, request });
     await page.goto("/agents");
 
     await expect(page.getByRole("link", { name: /^Plugins/ })).toBeVisible();
-    expect(await rowNames(page)).toEqual([
-      ...STUDIO_NAV.slice(0, 2),
-      "Plugins",
-      ...STUDIO_NAV.slice(2),
-    ]);
+    expect(await rowNames(page)).toEqual(STUDIO_NAV);
   });
 });

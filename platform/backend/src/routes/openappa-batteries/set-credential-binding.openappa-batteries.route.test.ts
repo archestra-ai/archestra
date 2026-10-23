@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { authPlugin } from "@/auth/fastify-plugin";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -8,12 +10,15 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import ServiceAccountModel from "@/models/service-account";
 import ToolModel from "@/models/tool";
 import { openappaDeclarations } from "@/openappa/declarations";
 import helperRoutes from "@/routes/openappa-helpers/openappa-helpers.routes";
@@ -48,14 +53,19 @@ describe("binding a battery credential", () => {
     registerRoutePermissions(app);
     await app.register(routes);
   });
+  const sandbox = config.daggerRuntime.enabled;
   afterEach(async () => {
     await app.close();
     vi.restoreAllMocks();
+    config.daggerRuntime.enabled = sandbox;
   });
 
   /** An organization credential with a value, which a binding may name. */
   const connectGithubToken = async () => {
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: admin.id,
       definition: {
@@ -117,24 +127,19 @@ describe("binding a battery credential", () => {
     return created;
   };
 
-  test("takes both policy update and credential update", async ({
+  test("takes both policy update and use on the credential", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     await connectGithubToken();
     const policyOnly = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read", "update"] },
-    });
-    const policyAndCredential = await makeCustomRole(organizationId, {
-      permission: {
-        openappaPolicy: ["read", "update"],
-        credential: ["update"],
-      },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     actor = await makeUser();
     await makeMember(actor.id, organizationId, { role: policyOnly.role });
-    expect((await bind("github-token")).statusCode).toBe(403);
+    // Without a grant the credential is not even visible to them.
+    expect((await bind("github-token")).statusCode).toBe(404);
     expect(
       await OpenAppaCredentialBindingModel.find({
         organizationId,
@@ -143,8 +148,11 @@ describe("binding a battery credential", () => {
     ).toBeNull();
 
     actor = await makeUser();
-    await makeMember(actor.id, organizationId, {
-      role: policyAndCredential.role,
+    await makeMember(actor.id, organizationId, { role: policyOnly.role });
+    await grantCredentialUse({
+      organizationId,
+      key: "github-token",
+      userId: actor.id,
     });
     const bound = await bind("github-token");
     expect(bound.statusCode, bound.body).toBe(200);
@@ -154,6 +162,8 @@ describe("binding a battery credential", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
+    // Helpers run in the sandbox; only there does github deploy its multi-user target.
+    config.daggerRuntime.enabled = true;
     const created = await includeGithub(makeInternalMcpCatalog, makeTool);
     expect(created.json()).toMatchObject({ status: "missing_credentials" });
     await connectGithubToken();
@@ -287,17 +297,20 @@ describe("binding a battery credential", () => {
     });
   });
 
-  test("a variable the policy text binds is the text's to change", async ({
+  test("a variable a stored policy text binds is the text's to change", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
     await includeGithub(makeInternalMcpCatalog, makeTool);
     await connectGithubToken();
     const latest = await guardrailsPolicyService.get(organizationId);
-    await guardrailsPolicyService.update({
+    // A revision saved before validation refused `[credentials]` lines.
+    const content = `${latest.content}\n[credentials]\n${GITHUB_TOKEN} = "github-token"\n`;
+    await GuardrailsPolicyModel.save({
       organizationId,
-      userId: admin.id,
-      content: `${latest.content}\n[credentials]\n${GITHUB_TOKEN} = "github-token"\n`,
+      updatedBy: admin.id,
+      content,
+      contentHash: createHash("sha256").update(content).digest("hex"),
       expectedRevision: latest.revision,
     });
 
@@ -331,3 +344,95 @@ describe("binding a battery credential", () => {
     );
   });
 });
+
+/** Grant one person `use` on a credential, the way its Permissions tab would. */
+describe("binding a battery credential as a service account", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  beforeEach(async ({ makeOrganization }) => {
+    organizationId = (await makeOrganization()).id;
+    config.openappa.enabled = true;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    app = createFastifyInstance();
+    await app.register(authPlugin);
+    await app.register(routes);
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("stores the binding with no user attribution", async ({ makeUser }) => {
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      name: "Terraform",
+      role: ADMIN_ROLE_NAME,
+      createdBy: null,
+    });
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId,
+      name: "terraform",
+    });
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: (await makeUser()).id,
+      definition: {
+        key: "github-token",
+        name: "GitHub token",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "github-token",
+      value: TOKEN_VALUE,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/openappa/credential-bindings/${GITHUB_TOKEN}`,
+      headers: { authorization: token },
+      payload: { key: "github-token" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      await OpenAppaCredentialBindingModel.find({
+        organizationId,
+        variable: GITHUB_TOKEN,
+      }),
+    ).toMatchObject({ credentialKey: "github-token", updatedBy: null });
+  });
+});
+
+async function grantCredentialUse(params: {
+  organizationId: string;
+  key: string;
+  userId: string;
+}) {
+  const definition = await RuntimeCredentialDefinitionModel.find(params);
+  if (!definition) throw new Error(`No credential ${params.key}`);
+  const scope = {
+    organizationId: params.organizationId,
+    resource: "credential" as const,
+    scope: definition.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(scope);
+  await ResourcePermissionPolicyModel.replace({
+    ...scope,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      {
+        subject: { type: "user", id: params.userId },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+}

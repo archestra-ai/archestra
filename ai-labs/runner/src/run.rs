@@ -1007,10 +1007,11 @@ fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<
 /// the leading section of its assembled system prompt, so the line prepends and displaces nothing.
 fn rollout_prompt(base: &str) -> String {
     let nonce = &uuid::Uuid::new_v4().simple().to_string()[..12];
+    let line = format!("Cache nonce {nonce}: an opaque marker, not an id of any session, sandbox, or file.");
     if base.trim().is_empty() {
-        return format!("Session: {nonce}");
+        return line;
     }
-    format!("Session: {nonce}\n\n{base}")
+    format!("{line}\n\n{base}")
 }
 
 async fn ensure_agent(
@@ -2806,6 +2807,7 @@ async fn write_run_config(
         "backend_branch": backend_branch,
         "backend_commit": backend_commit,
         "temperature": crate::client::BENCH_TEMPERATURE,
+        "max_steps": crate::client::BENCH_MAX_STEPS,
         "pricing": {
             "source": "openrouter",
             "fetched_at": timestamp(),
@@ -2846,10 +2848,8 @@ mod tests {
         let a = rollout_prompt("be helpful");
         let b = rollout_prompt("be helpful");
         assert!(a.ends_with("\n\nbe helpful"), "{a:?}");
-        assert!(a.starts_with("Session: "), "{a:?}");
         // Distinct rollouts must never share a cacheable prefix.
-        assert_ne!(a, b);
-        assert_eq!(a.lines().next().unwrap().len(), "Session: ".len() + 12);
+        assert_ne!(a.lines().next(), b.lines().next());
     }
 
     #[test]
@@ -2857,7 +2857,7 @@ mod tests {
         // Most envs set no agent prompt; the session line alone must still be installed so those
         // rollouts get cache isolation too.
         let p = rollout_prompt("");
-        assert!(p.starts_with("Session: "), "{p:?}");
+        assert_ne!(p, rollout_prompt(""));
         assert_eq!(p.lines().count(), 1);
         assert_eq!(rollout_prompt("  \n").lines().count(), 1);
     }

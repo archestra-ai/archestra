@@ -2,8 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
-  Bot,
+  CircleDashed,
   KeyRound,
   ListFilter,
   Loader2,
@@ -15,6 +14,7 @@ import {
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -27,13 +27,12 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
-import {
-  AccountHealthBadge,
-  KeyStatusBadge,
-} from "@/components/service-account-status-badge";
+import { KeyStatusBadge } from "@/components/service-account-status-badge";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -48,11 +47,15 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -80,8 +83,15 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
+import { formatRoleName } from "@/lib/utils/role";
+import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
-type ServiceAccountFormValues = { name: string; role: string };
+type ServiceAccountFormValues = {
+  name: string;
+  role: string;
+  icon: string | null;
+  teamId: string | null;
+};
 
 type TokenFormValues = {
   name: string;
@@ -101,11 +111,10 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
  */
 const EXAMPLE_KEY = "<YOUR_KEY>";
 
-type DetailTab = "general" | "keys" | "permissions";
+type DetailTab = "general" | "keys";
 const NAV_ITEMS = [
   { id: "general" as const, label: "General" },
   { id: "keys" as const, label: "API keys" },
-  { id: "permissions" as const, label: "Permissions" },
 ];
 
 /** Sentinel for "no filter", matching the service accounts list beside it. */
@@ -157,8 +166,23 @@ export function ServiceAccountDialog({
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [labels, setLabels] = useState<ProfileLabel[]>(account.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. For someone who
+  // may edit the account, Save is the only Save on screen, so it commits them.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editForm = useForm<ServiceAccountFormValues>({
-    defaultValues: { name: account.name, role: account.role },
+    defaultValues: {
+      name: account.name,
+      role: account.role,
+      icon: account.icon ?? null,
+      teamId: account.teamId,
+    },
   });
 
   const apiDocsUrl = getFrontendDocsUrl("reference/api");
@@ -371,14 +395,25 @@ export function ServiceAccountDialog({
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-    await updateMutation.mutateAsync({
-      id: serviceAccountId,
-      body: {
-        name: values.name.trim(),
-        role: values.role,
-        labels: finalLabels,
-      },
-    });
+    await permissionsSave.current?.();
+    const saved = await updateMutation
+      .mutateAsync({
+        id: serviceAccountId,
+        body: {
+          name: values.name.trim(),
+          icon: values.icon,
+          role: values.role,
+          // Only when changed: linking is checked against team admin rights,
+          // which someone editing just the name may not hold.
+          ...(values.teamId !== account.teamId
+            ? { teamId: values.teamId }
+            : {}),
+          labels: finalLabels,
+        },
+      })
+      // A refused role stays open with a notice; other errors were toasted.
+      .catch(() => null);
+    if (!saved) return;
     onOpenChange(false);
   });
 
@@ -401,30 +436,32 @@ export function ServiceAccountDialog({
       onOpenChange={onOpenChange}
       title="Edit service account"
       description={`Manage ${account.name} and its API keys and permissions.`}
-      headerDescription={
-        activeTab === "keys" ? (
-          <>
-            Keys that let scripts and integrations call the{" "}
-            {apiDocsUrl ? (
-              <ExternalDocsLink
-                href={apiDocsUrl}
-                className="text-inherit underline underline-offset-4"
-                showIcon={false}
-              >
-                platform API
-              </ExternalDocsLink>
-            ) : (
-              <span>platform API</span>
-            )}{" "}
-            as this service account.
-          </>
-        ) : undefined
-      }
       sidebarLabel={editForm.watch("name") || account.name}
       sidebarDescription="Service account"
-      sidebarIcon={<Bot className="h-4 w-4" />}
+      sidebarIcon={<AgentIcon icon={editForm.watch("icon")} />}
       activeSection={activeTab}
-      navItems={NAV_ITEMS}
+      navItems={NAV_ITEMS.map((item) => ({
+        ...item,
+        indicator:
+          item.id === "keys" && healthExplanation ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus exposes the same status tooltip as hover
+                  tabIndex={0}
+                  aria-label="API key status"
+                  className="ml-auto inline-flex shrink-0 cursor-help text-muted-foreground"
+                >
+                  <CircleDashed aria-hidden className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-64">
+                {healthExplanation}
+              </TooltipContent>
+            </Tooltip>
+          ) : undefined,
+      }))}
       onActiveSectionChange={setActiveTab}
       onSubmit={(event) => {
         if (activeTab !== "general" || !canUpdateServiceAccounts) {
@@ -435,11 +472,11 @@ export function ServiceAccountDialog({
       }}
       isDirty={
         editForm.formState.isDirty ||
+        permissionsDirty ||
         JSON.stringify(labels) !== JSON.stringify(account.labels)
       }
       className="max-w-5xl h-[80vh]"
-      contentClassName="px-4"
-      headerExtra={health && <AccountHealthBadge health={health} />}
+      contentClassName="px-4 py-4"
       footer={
         activeTab === "general" && canUpdateServiceAccounts ? (
           <>
@@ -505,36 +542,39 @@ export function ServiceAccountDialog({
         </Alert>
       ) : (
         <div className="space-y-6">
-          {healthExplanation && (
-            <InlineNotice variant="error">
-              <AlertTriangle />
-              <span className="font-medium">
-                This service account cannot authenticate
-              </span>
-              <InlineNoticeText>{healthExplanation}</InlineNoticeText>
-            </InlineNotice>
-          )}
           {activeTab === "general" ? (
             <fieldset
               disabled={!canUpdateServiceAccounts}
               className="space-y-4"
             >
-              <div className="space-y-2">
-                <Label htmlFor="edit-service-account-name">Display name</Label>
+              <IdentityFields
+                icon={editForm.watch("icon")}
+                onIconChange={(icon) =>
+                  editForm.setValue("icon", icon, { shouldDirty: true })
+                }
+                showLogos
+                disabled={!canUpdateServiceAccounts}
+                label={
+                  <Label htmlFor="edit-service-account-name">
+                    Display name
+                  </Label>
+                }
+              >
                 <Input
                   id="edit-service-account-name"
                   {...editForm.register("name", { required: true })}
                 />
-              </div>
+              </IdentityFields>
               <div className="space-y-2">
                 <Label htmlFor="edit-service-account-role">Roles</Label>
                 <RoleSelect
                   multiple
                   id="edit-service-account-role"
                   value={editForm.watch("role")}
-                  onValueChange={(role) =>
-                    editForm.setValue("role", role, { shouldDirty: true })
-                  }
+                  onValueChange={(role) => {
+                    editForm.setValue("role", role, { shouldDirty: true });
+                    updateMutation.reset();
+                  }}
                   placeholder="Select a role"
                   className="w-full"
                 />
@@ -543,10 +583,16 @@ export function ServiceAccountDialog({
                   account&apos;s keys.
                 </FieldDescription>
               </div>
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
+              <RoleAssignmentBlockedNotice
+                error={updateMutation.error}
+                name={formatRoleName(editForm.watch("role"))}
+              />
+              <ServiceAccountTeamSelect
+                id="edit-service-account-team"
+                value={editForm.watch("teamId")}
+                onChange={(teamId) =>
+                  editForm.setValue("teamId", teamId, { shouldDirty: true })
+                }
               />
             </fieldset>
           ) : activeTab === "keys" ? (
@@ -672,6 +718,21 @@ export function ServiceAccountDialog({
                   ]}
                   flexibleColumnIds={["name"]}
                 />
+                <p className="text-sm text-muted-foreground">
+                  Keys let scripts and integrations call the{" "}
+                  {apiDocsUrl ? (
+                    <ExternalDocsLink
+                      href={apiDocsUrl}
+                      className="text-inherit underline underline-offset-4"
+                      showIcon={false}
+                    >
+                      platform API
+                    </ExternalDocsLink>
+                  ) : (
+                    <span>platform API</span>
+                  )}{" "}
+                  as this service account.
+                </p>
                 {canAuthenticate(health) && (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">
@@ -686,16 +747,32 @@ export function ServiceAccountDialog({
                 )}
               </div>
             </BulkActionsScope>
-          ) : (
-            /* SPDX-SnippetBegin
-               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+          ) : null}
+          {/* Kept mounted on every tab, so Save commits its edits. Someone who
+              may manage access but not edit the account saves it on its own. */}
+          <div hidden={activeTab !== "general"}>
+            {/* SPDX-SnippetBegin
+                SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
             <ResourceAccessSection
               resource="serviceAccount"
               id={serviceAccountId}
+              onDirtyChange={setPermissionsDirty}
+              registerSave={
+                canUpdateServiceAccounts ? registerPermissionsSave : undefined
+              }
             />
-            /* SPDX-SnippetEnd */
-          )}
+            {/* SPDX-SnippetEnd */}
+          </div>
+          <fieldset hidden={activeTab !== "general"} className="pt-4">
+            <AdvancedLabelsSection
+              collapsible
+              disabled={!canUpdateServiceAccounts}
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
+          </fieldset>
 
           <CreateTokenDialog
             open={isTokenDialogOpen}

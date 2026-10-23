@@ -4,15 +4,13 @@ import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import Fastify from "fastify";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
+  connectionSetupReference,
   issueConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
   rewriteConnectionProxySetupUrl,
-  verifyConnectionProxySetupContext,
 } from "./connection-proxy-setup-context";
-import {
-  issueConnectionSetupContext,
-  verifyConnectionSetupContext,
-} from "./connection-setup-context";
 
 const PREFIX = "cps1_";
 const DOMAIN = "archestra-connection-proxy-setup-v1:";
@@ -30,47 +28,28 @@ test("the capability is bound to org, presented key, and proxy", () => {
   const token = issueConnectionProxySetupContext(scope);
   expect(token).toMatch(/^cps1_[A-Za-z0-9_.-]+$/);
   expect(decode(token)).not.toHaveProperty("userId");
-  expect(verifyConnectionProxySetupContext({ ...scope, token })).toBe(true);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeDefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       virtualApiKeyId: "other-key",
       token,
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       organizationId: "other-org",
       token,
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       proxyAgentId: "other-proxy",
       token,
     }),
-  ).toBe(false);
-  const mcp = issueConnectionSetupContext({
-    userId: "user-1",
-    organizationId: scope.organizationId,
-    gatewayId: scope.proxyAgentId,
-    setupId: scope.setupId,
-    secret: scope.secret,
-  });
-  expect(verifyConnectionProxySetupContext({ ...scope, token: mcp })).toBe(
-    false,
-  );
-  expect(
-    verifyConnectionSetupContext({
-      token,
-      userId: "user-1",
-      organizationId: scope.organizationId,
-      gatewayId: scope.proxyAgentId,
-      secret: scope.secret,
-    }),
-  ).toBe(false);
+  ).toBeUndefined();
 });
 
 test("empty, missing, and null keys are rejected", () => {
@@ -85,12 +64,12 @@ test("empty, missing, and null keys are rejected", () => {
     }),
   ).toThrow("Connection proxy setup scope is incomplete");
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       virtualApiKeyId: "",
       token,
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   const now = Date.now();
   const withoutKey = signed({
     aud: "connection-proxy-setup",
@@ -101,14 +80,14 @@ test("empty, missing, and null keys are rejected", () => {
     expiresAt: now + CONNECTION_SETUP_WINDOW_MS,
   });
   expect(
-    verifyConnectionProxySetupContext({ ...scope, token: withoutKey }),
-  ).toBe(false);
+    readVerifiedConnectionProxySetup({ ...scope, token: withoutKey }),
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       token: signed({ ...issuedClaims(now), virtualApiKeyId: null }),
     }),
-  ).toBe(false);
+  ).toBeUndefined();
 });
 
 test("tamper, malformed claims, and a drifted window fail", () => {
@@ -118,38 +97,51 @@ test("tamper, malformed claims, and a drifted window fail", () => {
   const token = issueConnectionProxySetupContext(scope);
   const [payload, signature] = token.slice(PREFIX.length).split(".");
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       token: `${PREFIX}${payload}A.${signature}`,
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       token: `${PREFIX}${payload}.${nonCanonical(signature ?? "")}`,
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       token: signed({ ...issuedClaims(start), aud: "connection-mcp-setup" }),
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   expect(
-    verifyConnectionProxySetupContext({
+    readVerifiedConnectionProxySetup({
       ...scope,
       token: signed({
         ...issuedClaims(start),
         expiresAt: start + CONNECTION_SETUP_WINDOW_MS + 1,
       }),
     }),
-  ).toBe(false);
+  ).toBeUndefined();
   vi.setSystemTime(start - 1);
-  expect(verifyConnectionProxySetupContext({ ...scope, token })).toBe(false);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeUndefined();
   vi.setSystemTime(start + CONNECTION_SETUP_WINDOW_MS - 1);
-  expect(verifyConnectionProxySetupContext({ ...scope, token })).toBe(true);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeDefined();
   vi.setSystemTime(start + CONNECTION_SETUP_WINDOW_MS);
-  expect(verifyConnectionProxySetupContext({ ...scope, token })).toBe(false);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeUndefined();
+});
+
+test("verified scope exposes setup id and expiry only inside the window", () => {
+  const start = 1_700_000_000_000;
+  vi.setSystemTime(start);
+  const token = issueConnectionProxySetupContext(scope);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toEqual({
+    setupId: scope.setupId,
+    organizationId: scope.organizationId,
+    expiresAt: start + CONNECTION_SETUP_WINDOW_MS,
+  });
+  vi.setSystemTime(start + CONNECTION_SETUP_WINDOW_MS);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeUndefined();
 });
 
 test("a missing signing secret fails closed", () => {
@@ -158,8 +150,8 @@ test("a missing signing secret fails closed", () => {
   ).toThrow("Connection proxy setup signing key is missing");
   const token = issueConnectionProxySetupContext(scope);
   expect(
-    verifyConnectionProxySetupContext({ ...scope, secret: undefined, token }),
-  ).toBe(false);
+    readVerifiedConnectionProxySetup({ ...scope, secret: undefined, token }),
+  ).toBeUndefined();
 });
 
 test("a setup URL rewrites to the provider path and preserves the query", () => {
@@ -271,7 +263,7 @@ test("an expired capability still rewrites and does not authorize", () => {
     "/v1/chat/completions?x=1",
   );
   expect(connectionProxySetupContext(request)).toBe(token);
-  expect(verifyConnectionProxySetupContext({ ...scope, token })).toBe(false);
+  expect(readVerifiedConnectionProxySetup({ ...scope, token })).toBeUndefined();
   expect(rewriteConnectionProxySetupUrl({} as IncomingMessage)).toBe("");
 });
 
@@ -304,6 +296,45 @@ function signed(claims: unknown): string {
     .digest("base64url");
   return `${PREFIX}${payload}.${mac}`;
 }
+
+test("only the installer's printed reference marks its conversation", () => {
+  const token = issueConnectionProxySetupContext(scope);
+  const reference = connectionSetupReference(scope);
+  const carries = (requestBody: unknown) =>
+    carriesConnectionSetupReference({
+      token,
+      requestBody,
+      secret: scope.secret,
+    });
+
+  expect(
+    carries({ messages: [{ role: "user", content: `done ${reference}` }] }),
+  ).toBe(true);
+  // A session that read the client's settings has the setup URL and the
+  // setup id, but no way to the reference without the server secret.
+  expect(
+    carries({
+      messages: [
+        {
+          role: "user",
+          content: `ANTHROPIC_BASE_URL=https://a.example/v1/connection-setup/${token}/anthropic ${scope.setupId}`,
+        },
+      ],
+    }),
+  ).toBe(false);
+  expect(
+    carries({
+      content: connectionSetupReference({ ...scope, setupId: "setup-2" }),
+    }),
+  ).toBe(false);
+  expect(
+    carriesConnectionSetupReference({
+      token,
+      requestBody: { content: reference },
+      secret: undefined,
+    }),
+  ).toBe(false);
+});
 
 function decode(token: string): Record<string, unknown> {
   const payload = token.slice(PREFIX.length).split(".")[0] ?? "";

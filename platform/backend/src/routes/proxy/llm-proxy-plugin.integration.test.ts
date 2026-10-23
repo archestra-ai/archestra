@@ -10,11 +10,13 @@ import {
   getLlmProxyPluginRegistry,
   registerLlmProxyPlugin,
 } from "@/proxy/plugins/registry";
+import { handleServerError } from "@/server/error-handler";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import {
   anthropicAdapterFactory,
   openAiResponsesAdapterFactory,
@@ -36,6 +38,7 @@ describe("LLM proxy plugin lifecycle", () => {
     }).withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient({}) as never,
     );
@@ -59,6 +62,7 @@ describe("LLM proxy plugin lifecycle", () => {
 
   async function assertBaselineProxyResponse(params: {
     agentId: string;
+    passthroughToken: string;
     stream: boolean;
   }) {
     const response = await app.inject({
@@ -66,6 +70,7 @@ describe("LLM proxy plugin lifecycle", () => {
       url: `/v1/openai/${params.agentId}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": params.passthroughToken,
         "content-type": "application/json",
       },
       payload: {
@@ -80,40 +85,73 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("preserves the non-streaming proxy flow with no configured plugins", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
     const agent = await makeAgent({
       agentType: "llm_proxy",
       isDefault: true,
     });
-    await assertBaselineProxyResponse({ agentId: agent.id, stream: false });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    await assertBaselineProxyResponse({
+      agentId: agent.id,
+      passthroughToken,
+      stream: false,
+    });
   });
 
   test("preserves the streaming proxy flow with no configured plugins", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
     const agent = await makeAgent({
       agentType: "llm_proxy",
       isDefault: true,
     });
-    await assertBaselineProxyResponse({ agentId: agent.id, stream: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    await assertBaselineProxyResponse({
+      agentId: agent.id,
+      passthroughToken,
+      stream: true,
+    });
   });
 
   test("preserves proxy error handling with no configured plugins", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
       throw new Error("provider unavailable");
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": passthroughToken,
         "content-type": "application/json",
       },
       payload: {
@@ -131,6 +169,8 @@ describe("LLM proxy plugin lifecycle", () => {
     true,
   ])("buffers and replaces a routed Anthropic Responses answer in its native adapter domain (stream=%s)", async (stream, {
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const rawText = "RAW WRAPPED ANSWER";
     const admittedText = "ADMITTED WRAPPED ANSWER";
@@ -167,6 +207,12 @@ describe("LLM proxy plugin lifecycle", () => {
       ),
     );
     const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     await ModelModel.upsert({
       externalId: "anthropic/claude-wrapped",
       provider: "anthropic",
@@ -182,6 +228,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/test/wrapped/${agent.id}`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -210,7 +257,7 @@ describe("LLM proxy plugin lifecycle", () => {
   ])("gates an Anthropic message_start carrying content behind buffered admission ($decision)", async ({
     decision,
     leakVisible,
-  }, { makeAgent }) => {
+  }, { makeAgent, makeMember, makeUser }) => {
     const leakedText = "PREAMBLE LEAK TEXT";
     const rawText = "RAW ANSWER";
     const admittedText = "ADMITTED ANSWER";
@@ -279,6 +326,12 @@ describe("LLM proxy plugin lifecycle", () => {
       ),
     );
     const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     await ModelModel.upsert({
       externalId: "anthropic/claude-wrapped",
       provider: "anthropic",
@@ -294,6 +347,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/test/anthropic/${agent.id}`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -326,7 +380,7 @@ describe("LLM proxy plugin lifecycle", () => {
   ])("gates a Responses response.in_progress carrying output behind buffered admission ($decision)", async ({
     decision,
     leakVisible,
-  }, { makeAgent }) => {
+  }, { makeAgent, makeMember, makeUser }) => {
     const leakedText = "PREAMBLE LEAK TEXT";
     const rawText = "RAW ANSWER";
     const admittedText = "ADMITTED ANSWER";
@@ -452,6 +506,12 @@ describe("LLM proxy plugin lifecycle", () => {
       ),
     );
     const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       const response = await app.inject({
@@ -459,6 +519,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/test/responses/${agent.id}`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -484,6 +545,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("runs generic request and response hooks for a non-APPA request", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const events: string[] = [];
     const unregister = registerLlmProxyPlugin({
@@ -511,6 +574,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       const response = await app.inject({
@@ -518,6 +587,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -544,6 +614,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("fails closed for invalid plugin response values and releases the request id", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const invalidResponseCases = [
       { label: "null", response: null, rawContent: "null" },
@@ -589,6 +661,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       for (const invalidCase of invalidResponseCases) {
@@ -600,6 +678,7 @@ describe("LLM proxy plugin lifecycle", () => {
           url: `/v1/openai/${agent.id}/chat/completions`,
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": passthroughToken,
             "content-type": "application/json",
           },
           payload: {
@@ -622,6 +701,7 @@ describe("LLM proxy plugin lifecycle", () => {
           url: `/v1/openai/${agent.id}/chat/completions`,
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": passthroughToken,
             "content-type": "application/json",
           },
           payload: {
@@ -650,6 +730,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("streaming hooks observe the same completed response snapshot", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const responses: unknown[] = [];
     const unregister = registerLlmProxyPlugin({
@@ -663,9 +745,19 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
-      await assertBaselineProxyResponse({ agentId: agent.id, stream: true });
+      await assertBaselineProxyResponse({
+        agentId: agent.id,
+        passthroughToken,
+        stream: true,
+      });
       expect(responses).toHaveLength(2);
       expect(responses[0]).toMatchObject({ model: "gpt-4o" });
       expect(responses[1]).toBe(responses[0]);
@@ -676,6 +768,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("fails a streaming request closed and cleans plugins after a hook error", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const events: string[] = [];
     const unregister = registerLlmProxyPlugin({
@@ -692,6 +786,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       const response = await app.inject({
@@ -699,6 +799,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -718,6 +819,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("preserves a provider error when plugin error cleanup also fails", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const events: string[] = [];
     const unregister = registerLlmProxyPlugin({
@@ -734,6 +837,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const client = createOpenAiTestClient({});
     client.chat.completions.create = async () => {
       throw new Error("provider unavailable");
@@ -750,6 +859,7 @@ describe("LLM proxy plugin lifecycle", () => {
           url: `/v1/openai/${agent.id}/chat/completions`,
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": passthroughToken,
             "content-type": "application/json",
           },
           payload: {
@@ -771,6 +881,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("cleans an initialized tool-result hook failure before invoking the provider", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const events: string[] = [];
     let failOnce = true;
@@ -794,6 +906,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       const failed = await app.inject({
@@ -801,6 +919,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -818,6 +937,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -844,6 +964,8 @@ describe("LLM proxy plugin lifecycle", () => {
 
   test("uses the final plugin's rich refusal after an earlier rewrite", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -924,6 +1046,12 @@ describe("LLM proxy plugin lifecycle", () => {
       },
     });
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     try {
       const response = await app.inject({
@@ -931,6 +1059,7 @@ describe("LLM proxy plugin lifecycle", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -964,6 +1093,92 @@ describe("LLM proxy plugin lifecycle", () => {
     } finally {
       unregisterSecond();
       unregisterFirst();
+    }
+  });
+
+  test.for([
+    {
+      stream: false,
+      tool: "read_file",
+      client: {
+        nonStreamingToolCalls: [
+          { id: "call-1", name: "read_file", arguments: "{}" },
+        ],
+      },
+    },
+    {
+      // The stream ends before the usage chunk, so the turn is recorded
+      // without usage.
+      stream: true,
+      tool: "get_weather",
+      client: { includeToolCalls: true, interruptAtChunk: 2 },
+    },
+  ])("records calls an allowing plugin replaced with denial notices (stream: $stream)", async ({
+    stream,
+    tool,
+    client,
+  }, { makeAgent, makeMember, makeUser }) => {
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(client) as never,
+    );
+    const unregister = registerLlmProxyPlugin({
+      id: `test-notice-${crypto.randomUUID()}`,
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls,
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "policy denied the call",
+          })),
+        };
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          stream,
+          messages: [{ role: "user", content: "use the tool" }],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: tool,
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "policy denied the call",
+        blockedToolCallCount: 1,
+      });
+    } finally {
+      unregister();
     }
   });
 });

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
+  readRunToolArgs,
   resolveRunToolDispatch,
   resolveRunToolTarget,
-  resolveUnprovenRunToolTarget,
 } from "./run-tool-target";
 
 describe("resolveRunToolDispatch", () => {
@@ -86,6 +86,29 @@ describe("resolveRunToolDispatch", () => {
     ).toEqual({ kind: "unresolved" });
   });
 
+  // Policies rule on the arguments run_tool will run, and some models send
+  // tool_args as JSON text that run_tool reads as an object.
+  test("reads the target's arguments as run_tool does", () => {
+    const target = { path: "notes.md", content: '{"a": 1}' };
+    const toolInputOf = (toolArgs: unknown) =>
+      resolveRunToolTarget({
+        toolName: "archestra__run_tool",
+        args: { tool_name: "archestra__save_file", tool_args: toolArgs },
+      }).toolInput;
+    for (const toolArgs of [target, JSON.stringify(target)]) {
+      expect(readRunToolArgs(toolArgs)).toEqual(target);
+      expect(toolInputOf(toolArgs)).toEqual(target);
+    }
+    // run_tool runs a call without tool_args with no arguments.
+    expect(readRunToolArgs(undefined)).toEqual({});
+    expect(toolInputOf(undefined)).toEqual({});
+    // run_tool refuses these, so the target has no arguments to rule on.
+    for (const toolArgs of ["not json", "[1]", '"{}"', null]) {
+      expect(readRunToolArgs(toolArgs)).toBeUndefined();
+      expect(toolInputOf(toolArgs)).toEqual({});
+    }
+  });
+
   test("does not mistake a third-party tool named run_tool for the wrapper", () => {
     for (const toolName of [
       "run_tool",
@@ -97,62 +120,6 @@ describe("resolveRunToolDispatch", () => {
           kind: "not_dispatch",
         });
       }
-    }
-  });
-});
-
-describe("resolveUnprovenRunToolTarget", () => {
-  // A wrapper whose declaration carries no effective attestation: the gateway
-  // registered twice, a replayed marker, or a lookalike. Its target is ruled
-  // on too, taken as written.
-  test("names the target of a run_tool-shaped call in every client form", () => {
-    for (const toolName of [
-      "mcp__gw__archestra__run_tool",
-      "gw_archestra__run_tool",
-      "mcp__archestra__archestra__run_tool",
-      // Bare, or a Codex member joined to its namespace.
-      "archestra__run_tool",
-    ]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName,
-          args: {
-            tool_name: "github__issue_write",
-            tool_args: { title: "hello" },
-          },
-        }),
-      ).toEqual({
-        toolName: "github__issue_write",
-        toolInput: { title: "hello" },
-      });
-    }
-  });
-
-  test("never names a built-in, and needs a usable target", () => {
-    for (const args of [
-      { tool_name: "whoami" },
-      { tool_name: "archestra__whoami" },
-      { tool_name: "" },
-      { tool_args: {} },
-      "not an object",
-    ]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName: "mcp__gw__archestra__run_tool",
-          args,
-        }),
-      ).toBeUndefined();
-    }
-  });
-
-  test("does not read a third-party tool named run_tool as the wrapper", () => {
-    for (const toolName of ["run_tool", "mcp__gw__github__run_tool"]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName,
-          args: { tool_name: "github__issue_write" },
-        }),
-      ).toBeUndefined();
     }
   });
 });

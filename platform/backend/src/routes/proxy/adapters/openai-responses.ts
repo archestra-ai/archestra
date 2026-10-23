@@ -47,11 +47,16 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
+import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
 } from "./openai-codex-responses-client";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import {
   customToolInput,
   firstHostedOutputIndex,
@@ -110,6 +115,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   // The Responses parser drops a chat-completions-shaped error frame as an
   // unknown chunk, turning an upstream failure into a blank turn.
   formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+  carriesStreamTerminal: carriesResponsesTerminal,
 
   createRequestAdapter(
     request: OpenAiResponsesRequest,
@@ -339,10 +345,9 @@ class OpenAiResponsesRequestAdapter
     }
 
     // Pair function_call_output items with their function_call by call_id so
-    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
-    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
-    // conversations look tool-free to the evaluator and sanitization is
-    // silently bypassed.
+    // tool results surface as CommonMessage.toolCalls. Without the pairing,
+    // Responses-routed conversations look tool-free to anything that reads
+    // the common format.
     const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) =>
@@ -370,6 +375,7 @@ class OpenAiResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           // Compatible clients may extend tool outputs with a boolean status;
           // native Responses has no is_error field. Do not infer it from output.
           isError: "is_error" in item && item.is_error === true,
@@ -439,24 +445,33 @@ class OpenAiResponsesRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      input: this.request.input.map((item) => {
-        if (!isFunctionCallOutputItem(item)) {
-          return item;
-        }
+      input: this.request.input
+        .map((item) => {
+          if (!isFunctionCallOutputItem(item)) {
+            return item;
+          }
 
-        // Presence, not truthiness: a sanitizer that reduces sensitive output
-        // to nothing has replaced it, and forwarding the original instead would
-        // hand the model exactly what was withheld.
-        const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (updatedOutput === undefined) {
-          return item;
-        }
+          // Presence, not truthiness: a sanitizer that reduces sensitive output
+          // to nothing has replaced it, and forwarding the original instead would
+          // hand the model exactly what was withheld.
+          const updatedOutput = this.toolResultUpdates[item.call_id];
+          if (updatedOutput === undefined) {
+            return item;
+          }
+          // Kept as sent: the output's parts (input_image, input_text) stay.
+          if (
+            isApprovedAsSent({ sent: item.output, approved: updatedOutput })
+          ) {
+            return item;
+          }
 
-        return {
-          ...item,
-          output: updatedOutput,
-        };
-      }) as unknown as ResponseInput,
+          return {
+            ...item,
+            output: updatedOutput,
+          };
+        })
+        // After the result updates above, which look up the client's call ids.
+        .map(withOpenAiResponsesToolCallIds) as unknown as ResponseInput,
     };
   }
 }
@@ -786,6 +801,46 @@ export function discardUnadmittedResponsesOutput(
       ? { output_text: responseOutputText(retained) }
       : {}),
   } as OpenAiResponsesResponse;
+}
+
+/**
+ * The client copy of a buffered generation that failed before admission.
+ * Every output item type (message, reasoning, tool call) can carry model text,
+ * so none is released; the failure status, details, ids and usage remain.
+ */
+export function withoutResponsesModelOutput(
+  response: OpenAiResponsesResponse,
+): OpenAiResponsesResponse {
+  return {
+    ...response,
+    output: [],
+    ...("output_text" in response ? { output_text: "" } : {}),
+  } as OpenAiResponsesResponse;
+}
+
+/** Applies `withoutResponsesModelOutput` to every response envelope in SSE frames. */
+export function withoutResponsesModelOutputSSE(
+  frames: readonly (string | Uint8Array)[],
+): string[] {
+  return frames.map((frame) =>
+    (typeof frame === "string" ? frame : Buffer.from(frame).toString("utf8"))
+      .split("\n")
+      .map((line) => {
+        if (!line.startsWith("data: ")) return line;
+        const payload = tryParseJsonObject(line.slice("data: ".length));
+        const response = payload.response;
+        if (!isRecord(response) || !Array.isArray(response.output)) {
+          return line;
+        }
+        return `data: ${JSON.stringify({
+          ...payload,
+          response: withoutResponsesModelOutput(
+            response as unknown as OpenAiResponsesResponse,
+          ),
+        })}`;
+      })
+      .join("\n"),
+  );
 }
 
 class OpenAiResponsesStreamAdapter
@@ -2038,8 +2093,8 @@ function toCommonMessages(
 ): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
-  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
-  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  // getMessages() drops the user's prompt and every common-format reader
+  // silently sees an empty conversation.
   if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
@@ -2062,9 +2117,9 @@ function toCommonMessages(
       {
         role: "tool",
         content,
-        // An output whose function_call was pruned from the input still
-        // carries untrusted data — surface it under the "unknown" name so
-        // default trusted-data policies apply rather than nothing.
+        // An output whose function_call was pruned from the input is still a
+        // tool result — surface it under the "unknown" name rather than drop
+        // it.
         toolCalls: [
           {
             id: item.call_id,

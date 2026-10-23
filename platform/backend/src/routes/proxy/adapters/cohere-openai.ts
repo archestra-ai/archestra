@@ -94,6 +94,17 @@ class CohereOpenaiResponseAdapter
     return cohereResponseToOpenai(inner, this.ctx) as unknown as CohereResponse;
   }
 
+  withReplacedText(text: string): CohereResponse {
+    // Replaced in the inner wire shape (which is what gets logged), then
+    // translated for the client as getOriginalResponse does.
+    const inner = this.inner.withReplacedText?.(text);
+    if (!inner) {
+      throw new Error("Wrapped response adapter cannot replace response text");
+    }
+    this.rewrittenInner = inner;
+    return cohereResponseToOpenai(inner, this.ctx) as unknown as CohereResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,
@@ -265,6 +276,7 @@ export function makeCohereOpenaiAdapterFactory(
 > {
   return {
     ...cohereAdapterFactory,
+    translatesWireFormat: true,
     extractApiKey(headers) {
       const authorization = (headers as Record<string, unknown>).authorization;
       if (typeof authorization === "string") {

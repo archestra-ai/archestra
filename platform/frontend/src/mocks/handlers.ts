@@ -2,13 +2,19 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
   clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
-import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
+import {
+  agentsSeed,
+  builtInAgentsSeed,
+  makeAgent,
+  makeAgentCatalog,
+} from "./data/agents";
 import {
   adminPermissionsSeed,
   adminScopedCapabilitiesSeed,
@@ -61,6 +67,22 @@ import {
   skillCatalogSearchSeed,
   skillsListSeed,
 } from "./data/skills";
+import {
+  agentStatisticsFor,
+  appStatisticsFor,
+  appUsageFor,
+  costStatisticsFor,
+  myStatisticsFor,
+  myUsageBreakdownFor,
+  proxyCostStatisticsFor,
+  skillStatisticsFor,
+  skillUsageFor,
+  teamStatisticsFor,
+  toolCallUsageFor,
+  userStatisticsFor,
+} from "./data/statistics";
+
+import { registryHandlers } from "./registry";
 
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
@@ -74,6 +96,29 @@ function paths(path: string): [string] {
 
 function getJson(path: string, body: JsonBodyType): HttpHandler[] {
   return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
+}
+
+function notFound(path: string): HttpHandler[] {
+  return paths(path).map((url) => http.get(url, () => notFoundResponse()));
+}
+
+/** The backend's 404 body for a missing item. */
+function notFoundResponse(message = "Not found") {
+  return HttpResponse.json(
+    { error: { message, type: "api_not_found_error" } },
+    { status: 404 },
+  );
+}
+
+function statisticsJson(
+  path: string,
+  build: (query: URLSearchParams) => JsonBodyType,
+): HttpHandler[] {
+  return paths(path).map((url) =>
+    http.get(url, ({ request }) =>
+      HttpResponse.json(build(new URL(request.url).searchParams)),
+    ),
+  );
 }
 
 function postJson(path: string, body: JsonBodyType): HttpHandler[] {
@@ -128,6 +173,51 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  http.get("/api/skill-sandbox/artifacts/preview-fixture-wide.csv", () => {
+    const headers = [
+      "Team",
+      "Region",
+      "Owner",
+      "Status",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "Notes",
+    ];
+    const rows = Array.from({ length: 150 }, (_, i) =>
+      [
+        `Example team ${i + 1}`,
+        "North America",
+        `Owner ${i + 1}`,
+        i % 2 ? "Pending" : "Ready",
+        ...Array.from({ length: 8 }, (_, m) => String((i + 1) * (m + 3))),
+        `Synthetic comparison row ${i + 1}: a longer note that keeps its full text`,
+      ].join(","),
+    );
+    return HttpResponse.text([headers.join(","), ...rows].join("\n"), {
+      headers: { "Content-Type": "text/csv" },
+    });
+  }),
+  // Byte-response fixture for the real project file preview (JSON overrides
+  // cannot represent a raw CSV response with quoted commas and newlines).
+  http.get("/api/skill-sandbox/artifacts/preview-fixture-report.csv", () =>
+    HttpResponse.text(
+      'Team,Total,Status\n"Example, Alpha",42,Ready\n"Example\nBeta",18,Pending',
+      {
+        headers: { "Content-Type": "text/csv" },
+      },
+    ),
+  ),
+  // Read-back routes for API clients such as Terraform; no install or binding
+  // is seeded, so single reads answer as the backend does for an unknown id.
+  ...getJson("/api/openappa/credential-bindings", []),
+  ...notFound("/api/openappa/credential-bindings/:variable"),
+  ...notFound("/api/openappa/battery-installs/:id"),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [
@@ -165,28 +255,52 @@ export const handlers: HttpHandler[] = [
         lastConsult: null,
       },
     ],
-    blocks: ["trust", "audience", "effects", "approvals"].map((kind) => ({
-      kind,
-      rules: 0,
-      approvers: 0,
-      cleaners: 0,
-      unservedMarks: [],
-      covered: true,
-    })),
+    blocks: [
+      {
+        kind: "trust",
+        level: "suspicious",
+        approvers: [],
+        cleaners: ["attest-schema"],
+        unservedMarks: [],
+        covered: true,
+      },
+      {
+        kind: "audience",
+        level: "internal",
+        approvers: [],
+        cleaners: [],
+        unservedMarks: [],
+        covered: false,
+      },
+      {
+        kind: "audience",
+        level: "self",
+        approvers: [],
+        cleaners: [],
+        unservedMarks: [],
+        covered: false,
+      },
+    ],
   }),
   ...getJson("/api/openappa/remedies/activity", {
     timeZone: "UTC",
     days: [
-      { date: "2026-10-02", blocked: 3, remedied: 1 },
-      { date: "2026-10-03", blocked: 0, remedied: 0 },
-      { date: "2026-10-04", blocked: 5, remedied: 4 },
-      { date: "2026-10-05", blocked: 2, remedied: 0 },
-      { date: "2026-10-06", blocked: 4, remedied: 2 },
-      { date: "2026-10-07", blocked: 1, remedied: 1 },
-      { date: "2026-10-08", blocked: 2, remedied: 1 },
+      { date: "2026-10-02", blocked: 1, approved: 3, cleaned: 2 },
+      { date: "2026-10-03", blocked: 0, approved: 0, cleaned: 0 },
+      { date: "2026-10-04", blocked: 2, approved: 5, cleaned: 6 },
+      { date: "2026-10-05", blocked: 3, approved: 2, cleaned: 1 },
+      { date: "2026-10-06", blocked: 0, approved: 4, cleaned: 3 },
+      { date: "2026-10-07", blocked: 1, approved: 1, cleaned: 5 },
+      { date: "2026-10-08", blocked: 1, approved: 2, cleaned: 2 },
     ],
   }),
   ...getJson("/api/openappa/policy-tests/runs", []),
+  // A session trace reads its guardrail checks and label history; none by default.
+  ...getJson("/api/openappa/external-consults", {
+    data: [],
+    pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],
@@ -209,8 +323,31 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/organization/get-active-member-role", {
     role: sessionSeed.user.role,
   }),
+  // Unavailable by default, so the shell falls back to the individual reads
+  // below and per-test overrides of those endpoints keep taking effect.
+  ...paths("/api/bootstrap").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // The new-chat composer's bundle: unavailable by default for the same
+  // reason, so the composer loads from the individual reads.
+  ...paths("/api/bootstrap/new-chat").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // A conversation's first screen: unavailable by default, so the page loads
+  // the conversation and composer from the individual reads.
+  ...paths("/api/bootstrap/conversation/:id").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
+  // Recipients for an object not created yet: the admin may share with
+  // everyone. Registered before the per-object route, which would match it.
+  ...getJson("/api/resource-permissions/:resource/creation-subjects", [
+    {
+      subject: { type: "organization", id: "*" },
+      name: "Everyone in the organization",
+    },
+  ]),
   // An object's own permissions: none beyond the admin's, who may edit them.
   ...paths("/api/resource-permissions/:resource/:scope").map((url) =>
     http.get(url, ({ params }) =>
@@ -219,6 +356,8 @@ export const handlers: HttpHandler[] = [
         scope: params.scope,
         name: "",
         revision: 0,
+        actorSubjects: [],
+        canShareOrganizationWide: true,
         grants: [],
         inheritedGrants: [],
         effectiveActions: [
@@ -240,6 +379,10 @@ export const handlers: HttpHandler[] = [
     },
   ]),
   ...getJson("/api/credentials", []),
+  // GitHub Apps and GitLab tokens offered by the Git setup steps.
+  ...getJson("/api/git-credentials", []),
+  ...getJson("/api/git-credentials/:id/repositories", []),
+  ...getJson("/api/git-credentials/:id/namespaces", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/api/guardrails-deployment", {
@@ -254,15 +397,6 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
-  // The roster behind owner pickers and the scope filter's "member" facet —
-  // the seeded admin, mirroring the session identity.
-  ...getJson("/api/organization/members", [
-    {
-      id: sessionSeed.user.id,
-      name: sessionSeed.user.name,
-      email: sessionSeed.user.email,
-    },
-  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.
@@ -273,20 +407,22 @@ export const handlers: HttpHandler[] = [
       "nav:connect",
       "nav:model-providers",
       "nav:mcp-registry",
-      "feedback:popup",
+      "nav:guardrails",
     ],
   }),
   ...postJson("/api/onboarding/seen-nav-items", { items: [] }),
   ...getJson("/api/onboarding/survey-eligibility", { eligible: false }),
   ...postJson("/api/onboarding/survey", { ok: true }),
-  ...getJson("/api/onboarding/feedback-popup-activation", {
-    activatedAt: null,
-  }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
-  // The Connect page reads the gateway's tool list for its token estimate.
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
-  ...getJson("/api/projects", []),
+  // Connect reads the gateway's served tool list and initial context cost.
+  ...getJson("/api/agents/:id/mcp-tool-preview", {
+    toolExposureMode: "full",
+    tools: [],
+    tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
+  }),
+  ...getJson("/api/projects", paginated([], { limit: 20 })),
   ...getJson("/api/apps", {
     data: [],
     pagination: {
@@ -298,6 +434,10 @@ export const handlers: HttpHandler[] = [
       hasPrev: false,
     },
   }),
+  // The Audit Logs page's resource picker searches this when it opens, and
+  // reads one entry to label a resource filter carried in the URL. No
+  // matches keeps the strict unhandled-request guard satisfied.
+  ...getJson("/api/audit-logs/resources", { data: [] }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {
@@ -310,6 +450,37 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  ...getJson("/api/chatops/config/slack", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    connectionMode: "socket",
+  }),
+  ...getJson("/api/chatops/config/ms-teams", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+    appId: null,
+    tenantId: null,
+    groupChatFileSignIn: false,
+    signInRedirectUri:
+      "http://localhost:3000/api/webhooks/chatops/ms-teams/sign-in/callback",
+  }),
+  ...getJson("/api/chatops/config/telegram", {
+    configured: false,
+    updatedAt: null,
+    enabled: false,
+  }),
+  // The record's Slack bot section: no bots, Slack not connected. The agent
+  // edit page mounts it on every step, so it is read whichever step opens.
+  ...getJson("/api/chatops/config/slack/agents", {
+    bots: [],
+    canCreateApps: false,
+    oneClickInstall: false,
+    unassignedApp: null,
+    workspaceName: null,
+  }),
   ...getJson("/api/chatops/bindings", {
     data: [],
     pagination: {
@@ -341,13 +512,44 @@ export const handlers: HttpHandler[] = [
   // "tools" segment can never be read as a catalog id.
   ...getJson("/api/internal_mcp_catalog/tools", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
+  // Paged search, issue index and by-id reads, derived from the lists above.
+  ...registryHandlers,
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.
+  ...getJson("/api/mcp_server/auto_mode_agents/page", {
+    data: [],
+    totalAutoCount: 0,
+    organizationId: organizationSeed.id,
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
+  // One install with its agents, which the list leaves out. The uninstall
+  // confirmation reads it to name the agents that lose access. After the
+  // literal `auto_mode_agents` paths so they are never read as an id.
+  ...paths("/api/mcp_server/:id").map((url) =>
+    http.get(url, ({ params }) => {
+      const server = installedServersSeed.find(
+        (candidate) => candidate.id === params.id,
+      );
+      return server
+        ? HttpResponse.json(server)
+        : notFoundResponse("MCP server not found");
+    }),
+  ),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {
+    agentSandbox: {
+      installed: false,
+      missingResources: [
+        "sandboxes.agents.x-k8s.io",
+        "sandboxclaims.extensions.agents.x-k8s.io",
+        "sandboxtemplates.extensions.agents.x-k8s.io",
+        "sandboxwarmpools.extensions.agents.x-k8s.io",
+      ],
+      message: "The Agent Sandbox controller is not installed.",
+    },
     networkPolicy: {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
@@ -364,13 +566,7 @@ export const handlers: HttpHandler[] = [
     },
   }),
 
-  // Gateway tokens, read by the agent detail page's connect panel. No tokens
-  // issued and no org/team token access, which is the quiet default: the panel
-  // renders its empty state instead of a roster.
-  ...getJson("/api/tokens", {
-    tokens: [],
-    permissions: { canAccessOrgToken: false, canAccessTeamTokens: false },
-  }),
+  // The caller's personal gateway token, read by the connect panels.
   ...getJson("/api/user-tokens/me", {
     id: "test-user-token",
     name: "Test Admin's token",
@@ -381,8 +577,34 @@ export const handlers: HttpHandler[] = [
 
   // Agents
   ...getJson("/api/agents", agentsSeed),
-  ...getJson("/api/agent-catalog", makeAgentCatalog()),
-  ...getJson("/api/agents/all", []),
+  ...paths("/api/agent-catalog").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const includeBuiltIn =
+        params.get("includeBuiltIn") === "true" ||
+        params.get("scope") === "built_in";
+      const agents =
+        includeBuiltIn && params.get("pinned") !== "true"
+          ? builtInAgentsSeed.filter((agent) =>
+              agent.name
+                .toLowerCase()
+                .includes((params.get("name") ?? "").toLowerCase()),
+            )
+          : [];
+      return HttpResponse.json(makeAgentCatalog({ agents }));
+    }),
+  ),
+  ...getJson("/api/agents/chat-roster", []),
+  ...getJson("/api/agents/credential-readiness", []),
+  ...getJson("/api/agents/options/page", {
+    data: [],
+    pagination: { limit: 20, nextCursor: null, hasNext: false },
+  }),
+  ...getJson("/api/agents/options/ids", []),
+  ...getJson("/api/agents/options", {
+    data: [],
+    pagination: { limit: 100, nextCursor: null, hasNext: false },
+  }),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {
@@ -400,6 +622,18 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agent-tools", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 1,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
+  ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
   ...getJson("/api/a2a/remote-agents", []),
@@ -407,6 +641,12 @@ export const handlers: HttpHandler[] = [
   // The agents list asks which of the caller's agents is their personal
   // default; unmocked, it reaches the real backend and trips the leak guard.
   ...getJson("/api/members/default-agent", { defaultAgentId: null }),
+  // The new-chat page asks for the member's saved model too; unmocked, the
+  // request escapes to the real backend and trips the leak guard.
+  ...getJson("/api/members/default-model", {
+    modelId: null,
+    chatApiKeyId: null,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",
@@ -422,14 +662,6 @@ export const handlers: HttpHandler[] = [
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
   ...getJson("/api/chat/conversations/:id/openappa-status", null),
-  ...getJson("/api/agent-runs/:taskId/openappa-review", {
-    status: "none",
-    canDecide: false,
-    offerId: null,
-    text: null,
-    tool: null,
-    arguments: null,
-  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {
@@ -457,9 +689,22 @@ export const handlers: HttpHandler[] = [
   // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
   // unified OAuth Clients page reads both.
   ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page
-  // and the LLM keys delete dialog as a blocking-deps probe.
+  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
   ...getJson("/api/llm-oauth-clients", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
+  // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
+  // lists the clients that map the key from here, because this list carries
+  // the current-and-future-providers flag the dialog needs.
+  ...getJson("/api/oauth-clients", {
     data: [],
     pagination: {
       currentPage: 1,
@@ -479,6 +724,8 @@ export const handlers: HttpHandler[] = [
 
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
+  ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>
       HttpResponse.json(makeSkillDetail(String(params.id))),
@@ -510,8 +757,10 @@ export const handlers: HttpHandler[] = [
         repoUrl?: string;
         skillPaths?: string[];
       };
+      // The dialog sends the repository's full address.
       const isExpectedPayload =
-        body.repoUrl === catalogSkillSeed.repo &&
+        body.repoUrl?.replace(/^https:\/\/github\.com\//, "") ===
+          catalogSkillSeed.repo &&
         body.skillPaths?.length === 1 &&
         body.skillPaths[0] === catalogSkillSeed.skillPath;
       return HttpResponse.json(
@@ -522,7 +771,12 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
-  // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  // LLM proxy logs (/llm/logs list and the session detail page).
+  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+    forkedFrom: null,
+    forks: [],
+    forksTruncated: false,
+  }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting
@@ -558,6 +812,30 @@ export const handlers: HttpHandler[] = [
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
   ...getJson("/api/llm-proxy", makeAgent()),
+
+  // The connection approval page an installer opens (/connection with a
+  // connectRequest): its request, the skill names it lists, and the setup it
+  // prepares (on the server with the document, else in the browser).
+  ...getJson("/api/client-connections/:id", {
+    clientId: "opencode",
+    platform: "linux",
+    exclude: [],
+    gateway: null,
+    plugins: null,
+    deviceName: "test-laptop",
+    userCode: "ABCD-1234",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
+  ...getJson("/api/skills/names", { data: [], total: 0 }),
+  ...postJson("/api/connection-setups", {
+    id: "setup-1",
+    // A mock of the setup command, on the loopback address the platform
+    // dials itself by (see shared/loopback-dial.test.ts).
+    command: `curl -fsSL '${DEFAULT_INTERNAL_API_BASE_URL}/api/connection-setups/tok' | bash`,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    tokenStart: "tok",
+    plugins: [],
+  }),
 
   // The static marketplace (the primary install path in the /connection step).
   ...getJson("/api/skill-marketplace", skillMarketplaceSeed),
@@ -606,6 +884,8 @@ export const handlers: HttpHandler[] = [
   // empty so the strict-mode unhandled-request guard doesn't fire on
   // background fetches we don't actually care about for these tests.
   ...getJson("/api/llm-models", []),
+  ...getJson("/api/llm-models/key-model-ids", []),
+  ...getJson("/api/llm-models/options", []),
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),
@@ -628,6 +908,20 @@ export const handlers: HttpHandler[] = [
     ),
   ),
   ...getJson("/api/identity-providers", []),
+  // Costs and My Usage: generated from one seeded activity curve so the
+  // endpoints reconcile and honour timeframe, groupBy, filters and paging.
+  ...statisticsJson("/api/statistics/costs", costStatisticsFor),
+  ...statisticsJson("/api/statistics/llm-proxy", proxyCostStatisticsFor),
+  ...statisticsJson("/api/statistics/users", userStatisticsFor),
+  ...statisticsJson("/api/statistics/teams", teamStatisticsFor),
+  ...statisticsJson("/api/statistics/agents", agentStatisticsFor),
+  ...statisticsJson("/api/statistics/app-usage", appUsageFor),
+  ...statisticsJson("/api/statistics/skill-usage", skillUsageFor),
+  ...statisticsJson("/api/statistics/mcp-tool-calls", toolCallUsageFor),
+  ...statisticsJson("/api/statistics/apps", appStatisticsFor),
+  ...statisticsJson("/api/statistics/skills", skillStatisticsFor),
+  ...statisticsJson("/api/statistics/me", myStatisticsFor),
+  ...statisticsJson("/api/statistics/me/breakdown", myUsageBreakdownFor),
 ];
 
 const USAGE_STATISTICS_BY_SKILL: Record<

@@ -1,4 +1,5 @@
 import { HttpResponse, http } from "msw";
+import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import config from "@/config";
 import {
   A2AContextModel,
@@ -40,6 +41,7 @@ test.for([
 }) => {
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
   const org = await makeOrganization();
   const user = await makeAdmin();
   await makeMember(user.id, org.id, { role: "admin" });
@@ -148,6 +150,10 @@ test.for([
       ...(mode === "initial" ? {} : { resumeFromTaskId: previousTask.id }),
     }),
   ).rejects.toThrow("publication connection lost");
+  expect((await A2ATaskModel.findById(task.id))?.failure).toEqual({
+    code: "run.unknown",
+    retriable: false,
+  });
   const run = await AgentRunModel.findByTaskId(task.id);
   if (!run) throw new Error("Expected persisted run");
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
@@ -164,4 +170,110 @@ test.for([
   expect(stop).toHaveBeenCalledTimes(mode === "initial" ? 0 : 1);
   expect(release).toHaveBeenCalledTimes(mode === "continuation" ? 1 : 0);
   if (mode === "stop-failure") expect(workspace?.activeTaskId).toBe(task.id);
+});
+
+test("a throttled launch settles the task as failed before its workspace cleanup is visible", async ({
+  makeOrganization,
+  makeAdmin,
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+  makeAgent,
+}) => {
+  config.agentRuntime.platformBaseUrl = "https://platform.example.test";
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
+  const org = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const secret = await makeSecret({ secret: { apiKey: "test-upstream-key" } });
+  const key = await makeLlmProviderApiKey(org.id, secret.id, {
+    provider: "openai",
+  });
+  const model = await ModelModel.create({
+    externalId: "openai/test-throttle-model",
+    provider: "openai",
+    modelId: "test-throttle-model",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+    lastSyncedAt: new Date(),
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
+  const agent = await makeAgent({
+    organizationId: org.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: key.id,
+  });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.createForRun({
+    contextId: context.id,
+    agentId: agent.id,
+  });
+  // The shape the Kubernetes client throws when the API server sheds load.
+  vi.spyOn(backend, "launch").mockRejectedValue(
+    Object.assign(new Error("HTTP-Code: 500"), {
+      code: 500,
+      body: JSON.stringify({
+        kind: "Status",
+        status: "Failure",
+        message:
+          "rpc error: code = ResourceExhausted desc = stream terminated by RST_STREAM with error code: ENHANCE_YOUR_CALM",
+        code: 500,
+      }),
+    }),
+  );
+  let taskDuringCleanup:
+    | Awaited<ReturnType<typeof A2ATaskModel.findById>>
+    | undefined;
+  vi.spyOn(backend, "teardown").mockImplementation(async () => {
+    // The workspace is "deleting" now, which is what the reconciler acts on.
+    taskDuringCleanup = await A2ATaskModel.findById(task.id);
+  });
+
+  await expect(
+    runTaskInAgentRuntime({
+      runtime: {
+        agentId: agent.id,
+        organizationId: org.id,
+        environmentId: null,
+        secretId: null,
+        image: "test-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_chat",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+      taskId: task.id,
+      agentId: agent.id,
+      actor: { kind: "user", id: user.id, organizationId: org.id },
+      organizationId: org.id,
+      runMode: "one_shot",
+      task: "Test throttled launch",
+      modelId: null,
+      llmApiKeyId: null,
+    }),
+  ).rejects.toThrow("Kubernetes API was overloaded or unavailable");
+
+  expect(taskDuringCleanup?.state).toBe(A2AProtocolTaskState.Failed);
+  expect(taskDuringCleanup?.statusReason).toContain(
+    "Start the run again in a minute",
+  );
+  expect(taskDuringCleanup?.statusReason).toContain("ENHANCE_YOUR_CALM");
+  expect(taskDuringCleanup?.failure).toEqual({
+    code: "launch.kubernetes_unavailable",
+    retriable: true,
+  });
 });

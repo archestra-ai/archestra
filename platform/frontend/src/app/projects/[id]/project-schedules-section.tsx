@@ -9,11 +9,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
@@ -34,7 +33,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -75,29 +73,10 @@ export function ProjectSchedulesSection({
   canCreate?: boolean;
   defaultAgentId?: string | null;
 }) {
-  // The schedule query requires the role action and polls, so never mount it
-  // for a caller with only a scoped wildcard grant. That grant still reaches
-  // the organization-level permissions editor through the section header.
   const { data: canReadSchedules } = useHasPermissions({
-    scheduledTask: ["read"],
+    project: ["read"],
   });
-  const { data: capabilities } = useScopedCapabilities();
-  const canReadAllPermissions = capabilities?.some(
-    (grant) =>
-      grant.resource === "scheduledTask" &&
-      grant.scope === "*" &&
-      grant.action === "read",
-  );
-  if (canReadSchedules !== true) {
-    return canReadAllPermissions ? (
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Schedules</h2>
-          <ResourceListActions resource="scheduledTask" />
-        </div>
-      </section>
-    ) : null;
-  }
+  if (canReadSchedules !== true) return null;
 
   return (
     <ProjectSchedulesSectionContent
@@ -122,8 +101,17 @@ function ProjectSchedulesSectionContent({
     refetchInterval: 10000,
   });
   const { data: canCreateSchedules } = useHasPermissions({
-    scheduledTask: ["create"],
+    project: ["create"],
   });
+  const { data: session } = useSession();
+  const { data: capabilities } = useScopedCapabilities();
+  const hasOversight = (action: "update" | "delete" | "use") =>
+    capabilities?.some(
+      (grant) =>
+        grant.resource === "project" &&
+        grant.scope === "*" &&
+        grant.action === action,
+    ) === true;
   const [createOpen, setCreateOpen] = useState(false);
   const searchParams = useSearchParams();
   const scheduleId = searchParams.get("schedule");
@@ -138,10 +126,10 @@ function ProjectSchedulesSectionContent({
   });
   const schedules = data?.data ?? [];
   const { data: canUpdateSchedules } = useHasPermissions({
-    scheduledTask: ["update"],
+    project: ["update"],
   });
   const { data: canDeleteSchedules } = useHasPermissions({
-    scheduledTask: ["delete"],
+    project: ["delete"],
   });
 
   return (
@@ -166,7 +154,6 @@ function ProjectSchedulesSectionContent({
               <span>New schedule</span>
             </Button>
           )}
-          <ResourceListActions resource="scheduledTask" />
         </div>
       </div>
 
@@ -211,8 +198,24 @@ function ProjectSchedulesSectionContent({
               projectId={projectId}
               schedule={schedule}
               onEdit={openEditDialog}
-              canEdit={canUpdateSchedules === true}
-              canDelete={canDeleteSchedules === true}
+              canEdit={
+                canUpdateSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("update"))
+              }
+              canDelete={
+                canDeleteSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("delete"))
+              }
+              runBlockedReason={
+                canCreateSchedules !== true
+                  ? "You can't run schedules. Ask an admin if you need to."
+                  : schedule.actorUserId === session?.user.id ||
+                      hasOversight("use")
+                    ? null
+                    : `Set up by ${schedule.actor?.name ?? "someone else"}. Only they or an admin can run it.`
+              }
             />
           ))}
         </div>
@@ -229,12 +232,15 @@ function ScheduleRow({
   onEdit,
   canEdit,
   canDelete,
+  runBlockedReason,
 }: {
   projectId: string;
   schedule: ScheduleTrigger;
   onEdit: (schedule: ScheduleTrigger) => void;
   canEdit: boolean;
   canDelete: boolean;
+  /** Why this person may not start the schedule now, or null when they may. */
+  runBlockedReason: string | null;
 }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
@@ -345,11 +351,20 @@ function ScheduleRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={runNow.isPending}
+              disabled={runBlockedReason !== null || runNow.isPending}
               onSelect={runNow.start}
             >
               <Play className="h-4 w-4" />
-              Run now
+              {runBlockedReason ? (
+                <span className="flex flex-col items-start gap-0.5">
+                  <span>Run now</span>
+                  <span className="text-xs text-muted-foreground">
+                    {runBlockedReason}
+                  </span>
+                </span>
+              ) : (
+                <span>Run now</span>
+              )}
             </DropdownMenuItem>
             {canDelete && (
               <DropdownMenuItem
@@ -403,12 +418,6 @@ function ScheduleDialog({
   // The agent picker is a management capability; without `agent:read` the
   // dropdown is hidden and the run implicitly uses the org's default agent.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  const { data: agents = [] } = useProfiles({
-    filters: { agentType: "agent" },
-    enabled: canReadAgents === true,
-  });
   const createSchedule = useCreateScheduleTrigger();
   const updateSchedule = useUpdateScheduleTrigger();
   const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
@@ -422,16 +431,6 @@ function ScheduleDialog({
           messageTemplate: schedule.messageTemplate,
         }
       : { ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" },
-  );
-
-  // Hide other people's personal agents, like the standalone scheduled page.
-  const selectableAgents = useMemo(
-    () =>
-      agents.filter(
-        (agent) =>
-          agent.scope !== "personal" || agent.authorId === currentUserId,
-      ),
-    [agents, currentUserId],
   );
 
   const update = (patch: Partial<ScheduleTriggerFormState>) =>
@@ -496,9 +495,12 @@ function ScheduleDialog({
       }
     >
       <div className="space-y-1.5">
-        <Label htmlFor="schedule-name">Name</Label>
+        <Label htmlFor="schedule-name">
+          Name <RequiredMark />
+        </Label>
         <Input
           id="schedule-name"
+          aria-required
           value={form.name}
           onChange={(e) => update({ name: e.target.value })}
           placeholder="Weekly summary"
@@ -508,11 +510,15 @@ function ScheduleDialog({
 
       {canReadAgents === true && (
         <div className="space-y-1.5">
-          <Label>Agent</Label>
+          <Label>
+            Agent <RequiredMark />
+          </Label>
           <AgentSelector
             mode="single"
             flat
-            agents={selectableAgents}
+            remote={{
+              filters: { agentType: "agent", onlyOwnPersonalAgents: true },
+            }}
             value={form.agentId}
             onValueChange={(value) => update({ agentId: value })}
             placeholder="Select an agent"
@@ -522,9 +528,12 @@ function ScheduleDialog({
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="schedule-prompt">Task prompt</Label>
+        <Label htmlFor="schedule-prompt">
+          Task prompt <RequiredMark />
+        </Label>
         <Textarea
           id="schedule-prompt"
+          aria-required
           value={form.messageTemplate}
           onChange={(e) => update({ messageTemplate: e.target.value })}
           placeholder="What should the agent do on each run?"
@@ -549,5 +558,13 @@ function ScheduleDialog({
         />
       </div>
     </StandardFormDialog>
+  );
+}
+
+function RequiredMark() {
+  return (
+    <span className="text-destructive" aria-hidden="true">
+      *
+    </span>
   );
 }

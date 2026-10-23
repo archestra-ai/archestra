@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -12,6 +15,8 @@ import {
   McpOauthClientModel,
   OauthClientLabelModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { validateOauthServiceAccountBinding } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -39,6 +44,14 @@ import { registerEntityLabelRoutes } from "./entity-labels";
 const McpOauthClientFields = z
   .object({
     name: z.string().min(1).max(256),
+    serviceAccountId: z
+      .string()
+      .uuid()
+      .nullable()
+      .optional()
+      .describe(
+        "Service account this client_credentials client acts as. Changing it revokes issued access tokens.",
+      ),
     grantType: McpOauthClientGrantTypeSchema.default("client_credentials"),
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     redirectUris: z.array(z.string().url()).optional(),
@@ -57,6 +70,12 @@ const validateMcpOauthClientBody = (
   ctx: z.RefinementCtx,
 ) => {
   if (value.grantType === "authorization_code") {
+    if (value.serviceAccountId)
+      ctx.addIssue({
+        code: "custom",
+        path: ["serviceAccountId"],
+        message: "Only client_credentials clients can act as a service account",
+      });
     if (!value.redirectUris || value.redirectUris.length === 0) {
       ctx.addIssue({
         code: "custom",
@@ -117,6 +136,9 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(z.array(McpOauthClientSchema)),
       },
@@ -127,6 +149,13 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         labels: parseLabelsParam(query.labels),
         viewer: { userId: user.id },
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations: query.access,
+          sharedWith: query.sharedWith,
+          ownerIds: query.owner,
+        }),
       });
       return reply.send(oauthClients);
     },
@@ -152,7 +181,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ResourcePermissions.validateInitialGrants({
           organizationId,
           userId: user.id,
-          resource: "mcpOauthClient",
+          resource: "oauthClient",
           grants: body.initialGrants,
           target: {
             id: randomUUID(),
@@ -169,10 +198,17 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
+      const serviceAccountId = await validateOauthServiceAccountBinding({
+        ...body,
+        organizationId,
+        userId: user.id,
+        creating: true,
+      });
       const { oauthClient, clientSecret } = await McpOauthClientModel.create({
         organizationId,
         name: body.name,
         grantType: body.grantType,
+        serviceAccountId,
         allowedGatewayIds: body.allowedGatewayIds,
         redirectUris: body.redirectUris,
         authorId: user.id,
@@ -205,7 +241,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -216,10 +252,22 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
+      const existing = await McpOauthClientModel.findById({
+        id: params.id,
+        organizationId,
+      });
+      if (!existing) throw new ApiError(404, "OAuth client not found");
+      const serviceAccountId = await validateOauthServiceAccountBinding({
+        serviceAccountId: body.serviceAccountId,
+        grantType: existing.grantType,
+        organizationId,
+        userId: user.id,
+      });
       const oauthClient = await McpOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
+        serviceAccountId,
         allowedGatewayIds: body.allowedGatewayIds,
         redirectUris: body.redirectUris,
       });
@@ -254,7 +302,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -287,7 +335,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "delete",
       });

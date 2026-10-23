@@ -6,11 +6,12 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
-  RESOURCE_ACCESS_RELATIONS,
 } from "@archestra/shared";
-import { CheckCircle2, Route, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
+import { AlertTriangle, CheckCircle2, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -27,11 +28,11 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import {
-  OAuthConfirmationDialog,
-  type OAuthInstallResult,
-} from "@/components/oauth-confirmation-dialog";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -45,6 +46,7 @@ import {
   BulkActions,
   type SelectAllMatching,
 } from "@/components/ui/bulk-actions-bar";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -52,6 +54,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -68,52 +71,54 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
-  countInternalMcpCatalog,
-  useInternalMcpCatalog,
-  useInternalMcpCatalogAccessIds,
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  fetchInternalMcpCatalogItem,
+  type McpRegistryListQuery,
+  useInternalMcpCatalogItem,
+  useMcpRegistryIssueIndex,
+  useMcpRegistryMatchingIds,
+  useMcpRegistryPage,
+  useMcpServersForCatalogs,
+} from "@/lib/mcp/mcp-registry.query";
+import {
   type McpDeploymentFeedState,
   useBulkUninstallMcpServers,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
-  useMcpServers,
   useReauthenticateMcpServer,
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
 import {
   attentionCatalogIds,
-  attentionSortRank,
-  facetIssues,
+  attentionRankTiers,
   type McpServerAttentionFacet,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
+import { useCanReauthenticateInputsReady } from "@/lib/mcp/use-can-reauthenticate";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
-
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
-import {
-  hasMcpRegistryInstallForViewer,
-  matchesMcpRegistryOwnershipFilters,
-  mcpRegistryInstallPriority,
-} from "./mcp-registry-visibility";
+import { mcpRegistryInstallPriority } from "./mcp-registry-visibility";
 import { McpServerAttentionList } from "./mcp-server-attention-list";
 import {
   type CatalogItem,
   type InstalledServer,
   McpServerCard,
+  type RegistryListItem,
 } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 import {
@@ -136,6 +141,18 @@ import {
   selectedAttentionFacet,
   withAttentionFacet,
 } from "./registry-list-controls";
+import { MCP_REGISTRY_VIEW_STORAGE_KEY } from "./registry-list-params";
+import {
+  buildRegistryListQuery,
+  MAX_REGISTRY_SEARCH_LENGTH,
+  registryPageFromParams,
+  registryQueryInputs,
+  sameRankTiers,
+  sortKeyFromParams,
+  sortParamsForKey,
+  withoutOrder,
+} from "./registry-list-query";
+import { RegistryPageServersProvider } from "./registry-page-servers";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { decideReinstallDialog } from "./reinstall-dialog-decision";
 import {
@@ -145,36 +162,42 @@ import {
 import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 import { useCatalogInstall } from "./use-catalog-install";
 
-export function InternalMCPCatalog({
-  initialData,
-  installedServers: initialInstalledServers,
-}: {
-  initialData?: CatalogItem[];
-  installedServers?: InstalledServer[];
-}) {
+/** The pause in typing after which the registry asks the server. */
+const REGISTRY_SEARCH_DEBOUNCE_MS = 300;
+
+export function InternalMCPCatalog() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const ownershipFilters = useScopeFilterParams();
 
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
-
-  const {
-    data: catalogItems,
-    isPending: isCatalogPending,
-    isFetching: isCatalogFetching,
-  } = useInternalMcpCatalog({
-    initialData,
-  });
-  const { data: accessIds } = useInternalMcpCatalogAccessIds(
-    ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
-      ? ownershipFilters.access
-      : undefined,
+  // The box writes every keystroke to the URL, as it always did, so the rows
+  // on screen narrow at once (below). The server is asked once typing pauses.
+  const requestSearch = useDebouncedValue(
+    searchQueryFromUrl,
+    REGISTRY_SEARCH_DEBOUNCE_MS,
   );
-  const { data: installedServers } = useMcpServers({
-    initialData: initialInstalledServers,
-  });
+  const listSearchParams = useMemo(() => {
+    if (requestSearch === searchQueryFromUrl) return searchParams;
+    const params = new URLSearchParams(searchParams.toString());
+    if (requestSearch.trim()) {
+      params.set("search", requestSearch);
+    } else {
+      params.delete("search");
+    }
+    return params;
+  }, [searchParams, requestSearch, searchQueryFromUrl]);
+  const { pageIndex, pageSize } = registryPageFromParams(searchParams);
+  const sort = sortKeyFromParams(searchParams);
+
+  // Every visible item and install, reduced to what the issue rule, the
+  // facet counts and the Environment/Author options read.
+  const { data: issueIndex, isError: isIssueIndexError } =
+    useMcpRegistryIssueIndex();
+  const indexServers = issueIndex?.servers;
   useMcpInstallationStatusCacheSync();
 
   // Shared install flow (install / add-personal / add-shared / add-org,
@@ -205,7 +228,19 @@ export function InternalMCPCatalog({
   const { data: environmentList } = useEnvironments();
   const byosEnabled = Boolean(useFeature("byosEnabled"));
 
-  const [sort, setSort] = useState<SortKey>("attention");
+  // The order lives in the URL with the filters, as the API's sortBy and
+  // sortDirection, so a shared link reopens the same page.
+  const setSort = useCallback(
+    (key: SortKey) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const { sortBy, sortDirection } = sortParamsForKey(key);
+      params.set("sortBy", sortBy);
+      params.set("sortDirection", sortDirection);
+      params.delete("page");
+      replaceRegistryListUrl(`${pathname}?${params.toString()}`);
+    },
+    [searchParams, pathname],
+  );
   const sortOptions = SORT_OPTIONS;
   // The filters live in the URL, not in component state: the sidebar badge
   // and the retired `?tab=attention` links both have to be able to point at a
@@ -226,6 +261,7 @@ export function InternalMCPCatalog({
         params.delete(group);
         for (const value of next[group]) params.append(group, value);
       }
+      params.delete("page");
       const qs = params.toString();
       replaceRegistryListUrl(qs ? `${pathname}?${qs}` : pathname);
     },
@@ -277,12 +313,10 @@ export function InternalMCPCatalog({
   >();
 
   // Deep-link manage connections dialog state
+  // The item may sit on any page, so it is loaded by id.
   const manageUsersIdFromUrl = searchParams.get("manageUsers");
-  const manageCatalogItemFromUrl = useMemo(
-    () =>
-      catalogItems?.find((item) => item.id === manageUsersIdFromUrl) ?? null,
-    [catalogItems, manageUsersIdFromUrl],
-  );
+  const { data: manageCatalogItemFromUrl = null } =
+    useInternalMcpCatalogItem(manageUsersIdFromUrl);
   const { entity: manageCatalogItem, close: closeManageDialog } =
     useDialogUrlParam({
       paramName: "manageUsers",
@@ -298,6 +332,7 @@ export function InternalMCPCatalog({
       } else {
         params.delete("search");
       }
+      params.delete("page");
       replaceRegistryListUrl(`${pathname}?${params.toString()}`);
     },
     [searchParams, pathname],
@@ -338,10 +373,10 @@ export function InternalMCPCatalog({
   // Optional &scope=personal|team|org (and &team={teamId} for team scope)
   // pre-target the connection — used by the item detail page's add-connection
   // actions. Owned by the shared install hook.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams/catalogItems changes, installFromSearchParams is a stable callback
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams changes, installFromSearchParams is a stable callback
   useEffect(() => {
     install.installFromSearchParams();
-  }, [searchParams, catalogItems]);
+  }, [searchParams]);
 
   // Deep-link: handle ?reauth={catalogId} with optional ?server={serverId}.
   // With a server, go straight to re-authentication (preserves tool
@@ -351,7 +386,7 @@ export function InternalMCPCatalog({
   // (Next integrates history updates with the router), so the hook sees the
   // param; deleting the reauth param first makes the re-fired effect
   // early-return instead of looping.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams changes; router/pathname are stable and handleDeepLinkReauth is a stable closure
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams and issue-index changes; router/pathname are stable, and handleDeepLinkReauth is recreated each render but only called inline here, so it is not a dependency
   useEffect(() => {
     const reauthCatalogIdParam = searchParams.get(
       MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -360,6 +395,9 @@ export function InternalMCPCatalog({
 
     // Extract highlight param before clearing URL
     const serverIdParam = searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM);
+    // The highlighted connection's scope and team come from the issue index;
+    // resolving before it loads would open a team connection as Personal.
+    if (serverIdParam && !issueIndex && !isIssueIndexError) return;
 
     // Drop the reauth/highlight params (and, when unhandled, hand off to the
     // manage dialog) before writing the URL back.
@@ -378,17 +416,25 @@ export function InternalMCPCatalog({
 
     // When highlight param is present, skip manage dialog and go straight to reauth
     if (serverIdParam) {
-      handleDeepLinkReauth(reauthCatalogIdParam, serverIdParam);
+      void handleDeepLinkReauth(
+        reauthCatalogIdParam,
+        serverIdParam,
+        issueIndex?.servers.find((server) => server.id === serverIdParam),
+      );
     }
-  }, [searchParams]);
+  }, [searchParams, issueIndex, isIssueIndexError]);
 
   // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
-  const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
-    const catalogItem = catalogItems?.find((item) => item.id === catalogId);
-    if (!catalogItem) return;
-    const targetServer = installedServers?.find(
-      (server) => server.id === serverId,
+  const handleDeepLinkReauth = async (
+    catalogId: string,
+    serverId: string,
+    targetServer: { teamId: string | null; scope: string } | undefined,
+  ) => {
+    const catalogItem = await fetchInternalMcpCatalogItem(
+      queryClient,
+      catalogId,
     );
+    if (!catalogItem) return;
 
     setReauthServerId(serverId);
     setTargetServerTeamId(targetServer?.teamId ?? null);
@@ -429,19 +475,22 @@ export function InternalMCPCatalog({
   };
 
   // OAuth confirm for re-authentication (install OAuth lives in useCatalogInstall).
-  const handleReauthOAuthConfirm = async (result: OAuthInstallResult) => {
+  const handleReauthOAuthConfirm = async () => {
     if (!selectedCatalogItem) return;
 
     try {
       const { authorizationUrl, state } =
         await initiateOAuthMutation.mutateAsync({
           catalogId: selectedCatalogItem.id,
+          ...(reauthServerId && { serverId: reauthServerId }),
         });
 
       setOAuthState(state);
       setOAuthCatalogId(selectedCatalogItem.id);
-      setOAuthTeamId(result.scope === "team" ? (result.teamId ?? null) : null);
-      setOAuthScope(result.scope);
+      const scope =
+        targetServerScope ?? (targetServerTeamId ? "team" : "personal");
+      setOAuthTeamId(scope === "team" ? targetServerTeamId : null);
+      setOAuthScope(scope);
 
       if (reauthServerId) {
         setOAuthMcpServerId(reauthServerId);
@@ -490,13 +539,12 @@ export function InternalMCPCatalog({
     // list). Same env/userConfig bag is applied to each — operators can edit
     // per-install secrets afterwards from Manage credentials.
     if (reinstallServerId) {
-      const targetIds =
+      // The ids and names captured when the reinstall started: the row may
+      // have moved off this page (a live re-rank) since.
+      const targets =
         reinstallFlaggedTargets.length > 0
-          ? reinstallFlaggedTargets.map((t) => t.id)
-          : [reinstallServerId];
-      const targets = (installedServers ?? []).filter((s) =>
-        targetIds.includes(s.id),
-      );
+          ? reinstallFlaggedTargets
+          : [{ id: reinstallServerId, name: localServerCatalogItem.name }];
 
       setInstallingItemId(localServerCatalogItem.id);
       setInstallingServerIds((prev) => {
@@ -567,8 +615,8 @@ export function InternalMCPCatalog({
     // Reinstall mode. Scope and team are fixed on the existing row, so
     // result.scope / result.teamId from the dialog are dropped here.
     if (reinstallServerId) {
-      const target = (installedServers ?? []).find(
-        (s) => s.id === reinstallServerId,
+      const target = reinstallFlaggedTargets.find(
+        (t) => t.id === reinstallServerId,
       );
       const targetId = reinstallServerId;
       setInstallingItemId(catalogItem.id);
@@ -739,11 +787,9 @@ export function InternalMCPCatalog({
 
     // Resolve targets. If the card passed flagged ids, reinstall every one of
     // them; otherwise fall back to the parent install only.
-    const targets =
+    const targets: Array<{ id: string; name: string }> =
       reinstallFlaggedTargets.length > 0
-        ? (installedServers ?? []).filter((s) =>
-            reinstallFlaggedTargets.some((t) => t.id === s.id),
-          )
+        ? reinstallFlaggedTargets
         : (() => {
             const fallback =
               catalogItemForReinstall.serverType === "local" && currentUserId
@@ -800,104 +846,12 @@ export function InternalMCPCatalog({
     }
   };
 
-  const filterCatalogItems = (items: CatalogItem[], query: string) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return items;
-
-    return items.filter((item) =>
-      item.name.toLowerCase().includes(normalizedQuery),
-    );
-  };
-
   const labelsParam = searchParams.get("labels");
   const parsedLabels = useMemo(
     () => parseLabelsParam(labelsParam),
     [labelsParam],
   );
 
-  const filterByLabels = (
-    items: CatalogItem[],
-    labels: Record<string, string[]> | null,
-  ) => {
-    if (!labels || Object.keys(labels).length === 0) return items;
-    return items.filter((item) =>
-      Object.entries(labels).every(([key, values]) =>
-        item.labels.some((l) => l.key === key && values.includes(l.value)),
-      ),
-    );
-  };
-
-  // Live connection status (vs the stable snapshot used for the default sort).
-  const connectedCatalogIds = useMemo(
-    () =>
-      new Set(
-        (installedServers ?? [])
-          .map((s) => s.catalogId)
-          .filter(Boolean) as string[],
-      ),
-    [installedServers],
-  );
-  const serversByCatalog = useMemo(() => {
-    const map = new Map<string, InstalledServer[]>();
-    for (const server of installedServers ?? []) {
-      if (!server.catalogId) continue;
-      map.set(server.catalogId, [...(map.get(server.catalogId) ?? []), server]);
-    }
-    return map;
-  }, [installedServers]);
-  const aggregatedInstallationsByCatalog = useMemo(
-    () =>
-      new Map(
-        [...serversByCatalog].map(([catalogId, servers]) => [
-          catalogId,
-          aggregateInstallations(servers, currentUserId),
-        ]),
-      ),
-    [serversByCatalog, currentUserId],
-  );
-  const installedForViewerCatalogIds = useMemo(
-    () =>
-      new Set(
-        (installedServers ?? [])
-          .filter((server) =>
-            hasMcpRegistryInstallForViewer([server], currentUserId),
-          )
-          .map((server) => server.catalogId)
-          .filter(Boolean) as string[],
-      ),
-    [installedServers, currentUserId],
-  );
-  const envLabelByCatalog = useMemo(() => {
-    const envs = environmentList?.environments ?? [];
-    const map = new Map<string, string | null>();
-    for (const it of catalogItems ?? []) {
-      map.set(
-        it.id,
-        it.serverType === "builtin"
-          ? null
-          : (resolveCatalogEnvironmentLabel({
-              environmentId: it.environmentId,
-              environments: envs,
-            }) ?? null),
-      );
-    }
-    return map;
-  }, [catalogItems, environmentList]);
-
-  const environmentOptions: FilterOption[] = useMemo(() => {
-    const set = new Set<string>();
-    envLabelByCatalog.forEach((label) => {
-      if (label) set.add(label);
-    });
-    return [...set].sort().map((value) => ({ value, label: value }));
-  }, [envLabelByCatalog]);
-  const authorOptions: FilterOption[] = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of catalogItems ?? []) {
-      if (it.authorName) set.add(it.authorName);
-    }
-    return [...set].sort().map((value) => ({ value, label: value }));
-  }, [catalogItems]);
   // Outstanding issues per catalog item, from the same signals every registry
   // surface renders. This feeds the audience facets, Issue filter and table.
   const { issuesByCatalog, facetCounts } =
@@ -919,99 +873,215 @@ export function InternalMCPCatalog({
         : null,
     [issuesByCatalog, selectedFacet],
   );
-  const matchesAdvancedFilters = (item: CatalogItem) => {
-    if (
-      !matchesMcpRegistryOwnershipFilters({
-        item,
-        servers: serversByCatalog.get(item.id) ?? [],
-        filters: ownershipFilters,
-        currentUserId,
-      })
-    ) {
-      return false;
-    }
-    if (accessIds && !accessIds.has(item.id)) return false;
-    if (facetCatalogIds && !facetCatalogIds.has(item.id)) return false;
-    if (filters.issue.size > 0) {
-      const itemIssues = issuesByCatalog.get(item.id) ?? [];
-      const visibleIssues = selectedFacet
-        ? facetIssues(itemIssues, selectedFacet)
-        : itemIssues;
-      if (!visibleIssues.some((issue) => filters.issue.has(issue.kind))) {
-        return false;
-      }
-    }
-    const wantsInstalled = filters.status.has(INSTALLED_STATUS_VALUE);
-    const wantsNotInstalled = filters.status.has(NOT_INSTALLED_STATUS_VALUE);
-    if (wantsInstalled || wantsNotInstalled) {
-      const installed = connectedCatalogIds.has(item.id);
-      if (!((installed && wantsInstalled) || (!installed && wantsNotInstalled)))
-        return false;
-    }
-    if (filters.environment.size > 0) {
-      const env = envLabelByCatalog.get(item.id);
-      if (!env || !filters.environment.has(env)) return false;
-    }
-    if (
-      filters.author.size > 0 &&
-      (!item.authorName || !filters.author.has(item.authorName))
-    ) {
-      return false;
-    }
-    return true;
-  };
 
-  const sortItems = (list: CatalogItem[]) => {
-    switch (sort) {
-      case "attention":
-        return [...list].sort(
-          (a, b) =>
-            attentionSortRank(issuesByCatalog.get(a.id)) -
-              attentionSortRank(issuesByCatalog.get(b.id)) ||
-            Number(installedForViewerCatalogIds.has(b.id)) -
-              Number(installedForViewerCatalogIds.has(a.id)) ||
-            a.name.localeCompare(b.name),
-        );
-      case "name-desc":
-        return [...list].sort((a, b) => b.name.localeCompare(a.name));
-      case "newest":
-        return [...list].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-      case "oldest":
-        return [...list].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-      case "most-tools":
-        return [...list].sort(
-          (a, b) => (b.toolCount ?? 0) - (a.toolCount ?? 0),
-        );
-      case "issue-age":
-        // Oldest outstanding issue first. Items whose issues carry no start
-        // time (only re-authentication records one) sort after the dated ones
-        // rather than pretending to be brand new.
-        return [...list].sort(
-          (a, b) =>
-            (oldestIssueTime(issuesByCatalog.get(a.id)) ?? Number.MAX_VALUE) -
-            (oldestIssueTime(issuesByCatalog.get(b.id)) ?? Number.MAX_VALUE),
-        );
-      default:
-        return [...list].sort((a, b) => a.name.localeCompare(b.name));
-    }
-  };
-
-  const allFilteredItems = sortItems(
-    filterByLabels(
-      filterCatalogItems(catalogItems || [], searchQueryFromUrl),
-      parsedLabels,
-    )
-      .filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID)
-      .filter(matchesAdvancedFilters),
+  // The server ranks the attention order itself, from the same rule over the
+  // same signals, so the first page does not wait for the issue index. Once
+  // the browser holds the index and the live feed, it checks the server's
+  // ranking against its own and, if they ever disagree (a feed push the
+  // server's copy had not seen), sends its live tiers from then on.
+  const liveAttentionTiers = useMemo(
+    () => attentionRankTiers(issuesByCatalog),
+    [issuesByCatalog],
   );
+  // Comparable only once every input of the live rule is real: the index,
+  // a connected feed (a disabled or dropped one holds no statuses, so its
+  // tiers would lack every runtime fault), and the viewer's teams and rights.
+  const reauthInputsReady = useCanReauthenticateInputsReady();
+  const liveTiersReady =
+    !!issueIndex && deploymentFeedState === "ready" && reauthInputsReady;
+  const [sendLiveAttentionTiers, setSendLiveAttentionTiers] = useState(false);
 
-  function getInstalledServerInfo(item: CatalogItem) {
+  // Everything that narrows and orders the list, with the page left out: the
+  // visible page and "every matching row" differ only by limit and offset.
+  const environments = environmentList?.environments;
+  const listQuery = useMemo(
+    () =>
+      buildRegistryListQuery({
+        searchParams: listSearchParams,
+        access: {
+          access: ownershipFilters.access,
+          sharedWith: ownershipFilters.sharedWith,
+          owner: ownershipFilters.owner,
+        },
+        environments: environments ?? [],
+        authors: issueIndex?.catalogItems ?? [],
+        issuesByCatalog,
+        attentionTiers: sendLiveAttentionTiers ? liveAttentionTiers : undefined,
+      }),
+    [
+      listSearchParams,
+      ownershipFilters.access,
+      ownershipFilters.sharedWith,
+      ownershipFilters.owner,
+      environments,
+      issueIndex,
+      issuesByCatalog,
+      sendLiveAttentionTiers,
+      liveAttentionTiers,
+    ],
+  );
+  // Hold the request until everything the URL's names and facets map
+  // through has loaded: an environment filter sent before the environments
+  // arrive, or a facet before the first deployment-feed push, would ask for
+  // the wrong rows (and the page clamp below would act on them).
+  const { needsEnvironments, needsIssueIndex, needsIssues } =
+    registryQueryInputs(searchParams);
+  const queryInputsReady =
+    (!needsIssueIndex || !!issueIndex || isIssueIndexError) &&
+    (!needsEnvironments || environmentList !== undefined) &&
+    (!needsIssues || deploymentFeedState !== "loading");
+  const {
+    data: registryPage,
+    isPlaceholderData: isPagePlaceholder,
+    isError: isPageError,
+    isFetching: isPageFetching,
+    refetch: refetchPage,
+  } = useMcpRegistryPage(
+    { ...listQuery, limit: pageSize, offset: pageIndex * pageSize },
+    {
+      enabled: queryInputsReady,
+      placeholderScope: selectedFacet ?? "all",
+    },
+  );
+  const serverAttentionTiers = registryPage?.attentionTiers;
+  useEffect(() => {
+    if (
+      !sendLiveAttentionTiers &&
+      liveTiersReady &&
+      serverAttentionTiers &&
+      !sameRankTiers(serverAttentionTiers, liveAttentionTiers)
+    ) {
+      setSendLiveAttentionTiers(true);
+    }
+  }, [
+    sendLiveAttentionTiers,
+    liveTiersReady,
+    serverAttentionTiers,
+    liveAttentionTiers,
+  ]);
+  const pageItems = registryPage?.data ?? [];
+  // While a search settles (the pause before the request, then the request
+  // itself), the rows already on screen narrow by name at once, with the
+  // same match the server applies; the server's page replaces them when it
+  // answers. Only what is drawn narrows: installs and labels still follow
+  // the page, so a keystroke sends nothing.
+  const typedSearch = searchQueryFromUrl.trim().toLowerCase();
+  const searchSettling =
+    requestSearch !== searchQueryFromUrl || isPagePlaceholder;
+  const visibleItems = useMemo(
+    () =>
+      searchSettling && typedSearch
+        ? pageItems.filter((item) =>
+            item.name.toLowerCase().includes(typedSearch),
+          )
+        : pageItems,
+    [pageItems, searchSettling, typedSearch],
+  );
+  const totalItems = registryPage?.pagination.total ?? 0;
+
+  const handlePaginationChange = useCallback(
+    (next: { pageIndex: number; pageSize: number }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(next.pageIndex + 1));
+      params.set("pageSize", String(next.pageSize));
+      replaceRegistryListUrl(`${pathname}?${params.toString()}`);
+    },
+    [searchParams, pathname],
+  );
+  // A filter, an uninstall or another session can shrink the list under a
+  // later page; land on the last page that still exists.
+  // Only from a result for exactly this request: a placeholder still holds
+  // the previous request's total.
+  useEffect(() => {
+    if (!registryPage || isPagePlaceholder || !queryInputsReady) return;
+    const lastPageIndex = Math.max(0, Math.ceil(totalItems / pageSize) - 1);
+    if (pageIndex > lastPageIndex) {
+      handlePaginationChange({ pageIndex: lastPageIndex, pageSize });
+    }
+  }, [
+    registryPage,
+    isPagePlaceholder,
+    queryInputsReady,
+    totalItems,
+    pageSize,
+    pageIndex,
+    handlePaginationChange,
+  ]);
+
+  // The installs of the items on this page, and nothing else.
+  const { data: installedServers } = useMcpServersForCatalogs(
+    pageItems.map((item) => item.id),
+  );
+  const serversByCatalog = useMemo(() => {
+    const map = new Map<string, InstalledServer[]>();
+    for (const server of installedServers ?? []) {
+      if (!server.catalogId) continue;
+      map.set(server.catalogId, [...(map.get(server.catalogId) ?? []), server]);
+    }
+    return map;
+  }, [installedServers]);
+  const aggregatedInstallationsByCatalog = useMemo(
+    () =>
+      new Map(
+        [...serversByCatalog].map(([catalogId, servers]) => [
+          catalogId,
+          aggregateInstallations(servers, currentUserId),
+        ]),
+      ),
+    [serversByCatalog, currentUserId],
+  );
+  const envLabelByCatalog = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const it of pageItems) {
+      map.set(
+        it.id,
+        it.serverType === "builtin"
+          ? null
+          : (resolveCatalogEnvironmentLabel({
+              environmentId: it.environmentId,
+              environments: environments ?? [],
+            }) ?? null),
+      );
+    }
+    return map;
+  }, [pageItems, environments]);
+
+  // Filter options span every visible item, not just this page, so they come
+  // from the issue index. Values stay names, as links have always used them.
+  const environmentOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of issueIndex?.catalogItems ?? []) {
+      if (it.serverType === "builtin" || it.id === ARCHESTRA_MCP_CATALOG_ID)
+        continue;
+      const label = resolveCatalogEnvironmentLabel({
+        environmentId: it.environmentId,
+        environments: environments ?? [],
+      });
+      if (label) set.add(label);
+    }
+    return [...set].sort().map((value) => ({ value, label: value }));
+  }, [issueIndex, environments]);
+  const authorOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of issueIndex?.catalogItems ?? []) {
+      if (it.id === ARCHESTRA_MCP_CATALOG_ID) continue;
+      if (it.authorName) set.add(it.authorName);
+    }
+    return [...set].sort().map((value) => ({ value, label: value }));
+  }, [issueIndex]);
+
+  // Load the full item (configuration included) for a flow the row starts.
+  const withFullItem =
+    <Args extends unknown[]>(
+      action: (item: CatalogItem, ...args: Args) => unknown,
+    ) =>
+    async (row: RegistryListItem, ...args: Args) => {
+      const item = await fetchInternalMcpCatalogItem(queryClient, row.id);
+      if (item) await action(item, ...args);
+    };
+  const handleRowReinstall = withFullItem(handleReinstall);
+
+  function getInstalledServerInfo(item: RegistryListItem) {
     const installedServer = getAggregatedInstallation(item.id);
     const isInstallInProgress =
       installedServer && installingServerIds.has(installedServer.id);
@@ -1044,11 +1114,11 @@ export function InternalMCPCatalog({
 
   // Install entry point for the table view, which has no per-variant card
   // buttons: route to the same flows the cards use.
-  const handleTableInstall = (item: CatalogItem) => {
+  const handleTableInstall = withFullItem((item: CatalogItem) => {
     if (item.serverType === "remote") return install.installRemote(item);
     if (isPlaywrightCatalogItem(item.id)) return;
     return install.installLocal(item);
-  };
+  });
 
   const handleRemoveLabel = useCallback(
     (key: string, value: string) => {
@@ -1065,6 +1135,7 @@ export function InternalMCPCatalog({
       } else {
         params.delete("labels");
       }
+      params.delete("page");
       replaceRegistryListUrl(`${pathname}?${params.toString()}`);
     },
     [parsedLabels, searchParams, pathname],
@@ -1074,6 +1145,7 @@ export function InternalMCPCatalog({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
     params.delete("labels");
+    params.delete("page");
     replaceRegistryListUrl(`${pathname}?${params.toString()}`);
   }, [searchParams, pathname]);
 
@@ -1084,6 +1156,7 @@ export function InternalMCPCatalog({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
     params.delete("labels");
+    params.delete("page");
     for (const group of FILTER_GROUPS) params.delete(group);
     for (const value of withAttentionFacet(
       new Set(),
@@ -1115,13 +1188,14 @@ export function InternalMCPCatalog({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
     params.delete("labels");
+    params.delete("page");
     for (const group of FILTER_GROUPS) params.delete(group);
     for (const group of [
       "scope",
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
     ]) {
       params.delete(group);
     }
@@ -1136,315 +1210,371 @@ export function InternalMCPCatalog({
   // the catalog it read "All 40 MCP servers are healthy" on a deployment with
   // three connections and thirty-seven entries nobody had ever touched.
   const installedCatalogCount = new Set(
-    (installedServers ?? [])
+    (indexServers ?? [])
       .map((server) => server.catalogId)
       .filter((id): id is string => !!id && id !== ARCHESTRA_MCP_CATALOG_ID),
   ).size;
 
-  if (
-    (isCatalogPending || isCatalogFetching) &&
-    (catalogItems?.length ?? 0) === 0
-  ) {
-    return null;
-  }
-
   return (
-    <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
-      <div>
-        <CollectionFilters>
-          <FilterBar
-            leading
-            onClearFilters={
-              hasAppliedBarFilters ? handleClearBarFilters : undefined
-            }
-            actions={
-              <>
-                <RegistrySortMenu
-                  value={sort}
-                  onChange={setSort}
-                  options={sortOptions}
+    <TableCardView
+      storageKey={MCP_REGISTRY_VIEW_STORAGE_KEY}
+      defaultMode="table"
+    >
+      <RegistryPageServersProvider servers={installedServers}>
+        <div>
+          <CollectionFilters>
+            <FilterBar
+              leading
+              onClearFilters={
+                hasAppliedBarFilters ? handleClearBarFilters : undefined
+              }
+              actions={
+                <>
+                  <RegistrySortMenu
+                    value={sort}
+                    onChange={setSort}
+                    options={sortOptions}
+                  />
+                  {!selectedFacet && <TableCardViewToggle />}
+                </>
+              }
+              search={
+                <SearchInput
+                  objectNamePlural="MCP servers"
+                  searchFields={["name"]}
+                  value={searchQueryFromUrl}
+                  onSearchChange={handleSearchChange}
+                  syncQueryParams={false}
+                  debounceMs={0}
+                  maxLength={MAX_REGISTRY_SEARCH_LENGTH}
+                  isLoading={isPageFetching}
+                  className={filterSearchClass}
+                  inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
                 />
-                {!selectedFacet && <TableCardViewToggle />}
-              </>
-            }
-            search={
-              <SearchInput
-                objectNamePlural="MCP servers"
-                searchFields={["name"]}
-                value={searchQueryFromUrl}
-                onSearchChange={handleSearchChange}
-                syncQueryParams={false}
-                debounceMs={0}
-                className={filterSearchClass}
-                inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+              }
+            >
+              <ResourceAccessFilter
+                resource="mcpRegistry"
+                noun="MCP servers"
+                navigate={replaceRegistryListUrl}
               />
-            }
-          >
-            <ResourceAccessFilter
-              resource="mcpRegistry"
-              noun="MCP servers"
-              countItems={countInternalMcpCatalog}
-              navigate={replaceRegistryListUrl}
-            />
-            <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
+              <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
 
-            {selectedFacet ? (
-              <RegistryFilterDropdown
-                label="Issue"
-                options={ISSUE_OPTIONS}
-                selected={filters.issue}
-                onToggle={(value) => toggleFilter("issue", value)}
-              />
-            ) : (
-              <RegistryFilterDropdown
-                label="Status"
-                options={STATUS_OPTIONS}
-                selected={filters.status}
-                onToggle={(value) => toggleFilter("status", value)}
-              />
-            )}
-            {/* Dismissed alerts are the same question with the silenced ones
+              {selectedFacet ? (
+                <RegistryFilterDropdown
+                  label="Issue"
+                  options={ISSUE_OPTIONS}
+                  selected={filters.issue}
+                  onToggle={(value) => toggleFilter("issue", value)}
+                />
+              ) : (
+                <RegistryFilterDropdown
+                  label="Status"
+                  options={STATUS_OPTIONS}
+                  selected={filters.status}
+                  onToggle={(value) => toggleFilter("status", value)}
+                />
+              )}
+              {/* Dismissed alerts are the same question with the silenced ones
                 instead of without them, so they narrow this list rather than
                 occupying a tab of their own. Offered while there is something
                 to see and while the reader is looking at it, so the way back
                 off never disappears under them. */}
-            {(selectedFacet === "you" || selectedFacet === "muted") &&
-              (facetCounts.muted > 0 || selectedFacet === "muted") && (
-                <RegistryDismissedFilter
-                  count={facetCounts.muted}
-                  pressed={selectedFacet === "muted"}
-                  onToggle={() =>
-                    selectFacet(selectedFacet === "muted" ? "you" : "muted")
+              {(selectedFacet === "you" || selectedFacet === "muted") &&
+                (facetCounts.muted > 0 || selectedFacet === "muted") && (
+                  <RegistryDismissedFilter
+                    count={facetCounts.muted}
+                    pressed={selectedFacet === "muted"}
+                    onToggle={() =>
+                      selectFacet(selectedFacet === "muted" ? "you" : "muted")
+                    }
+                  />
+                )}
+              {environmentOptions.length > 0 && (
+                <RegistryFilterDropdown
+                  label="Environment"
+                  options={environmentOptions}
+                  selected={filters.environment}
+                  onToggle={(value) => toggleFilter("environment", value)}
+                />
+              )}
+              {authorOptions.length > 0 && (
+                <RegistryFilterDropdown
+                  label="Author"
+                  options={authorOptions}
+                  selected={filters.author}
+                  onToggle={(value) => toggleFilter("author", value)}
+                />
+              )}
+            </FilterBar>
+            {hasLabelFilters && (
+              <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+            )}
+            <RegistryFilterChips
+              selected={filters}
+              onRemove={removeFilter}
+              onClearAll={clearAdvancedFilters}
+            />
+          </CollectionFilters>
+          {!registryPage ? (
+            // The shell stays: a refused or failed request must not take the
+            // search box and filters with it, or nobody could undo it.
+            isPageError ? (
+              <InlineNotice variant="error">
+                <AlertTriangle />
+                <span className="font-medium">
+                  MCP servers could not be loaded
+                </span>
+                <InlineNoticeText>
+                  Change the filters or try again.
+                </InlineNoticeText>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => void refetchPage()}
+                >
+                  Try again
+                </Button>
+              </InlineNotice>
+            ) : null
+          ) : selectedFacet ? (
+            visibleItems.length === 0 ? (
+              // A clean fleet is only claimable when the facet itself is empty.
+              // With rows in the facet and a search or a chip that matched none of
+              // them, the count on the button above is right and the list is
+              // right; what is missing is the reason they disagree.
+              facetCatalogIds?.size === 0 ? (
+                <div className="py-8" data-testid="mcp-registry-attention-list">
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <CheckCircle2 className="text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>
+                        {selectedFacet === "muted"
+                          ? "You have not dismissed any alerts"
+                          : selectedFacet === "others"
+                            ? "No alerts need action by another user"
+                            : installedCatalogCount === 1
+                              ? "Your installed MCP server is healthy"
+                              : `All ${installedCatalogCount} installed MCP servers are healthy`}
+                      </EmptyTitle>
+                      <EmptyDescription>
+                        {selectedFacet === "muted"
+                          ? "Alerts you dismiss stay listed here, so a dismissed problem is never invisible."
+                          : selectedFacet === "others"
+                            ? "This view contains unresolved issues owned by someone you can identify only when your role permits it."
+                            : "Servers that fail to start, stop running, or need re-authentication show up here."}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </div>
+              ) : (
+                <div data-testid="mcp-registry-attention-list">
+                  <EmptyState
+                    icon={Route}
+                    title="No MCP servers match your filters"
+                    onClearFilters={clearFiltersKeepingFacet}
+                  />
+                </div>
+              )
+            ) : (
+              <McpServerAttentionList
+                // Match Guardrails: changing URL-owned filters clears selection.
+                // Live issue refetches keep the component mounted so failed
+                // targets survive a partial bulk action.
+                key={attentionListKey(listSearchParams)}
+                items={visibleItems}
+                issuesByCatalog={issuesByCatalog}
+                servers={installedServers ?? []}
+                facet={selectedFacet}
+                pagination={{ pageIndex, pageSize, total: totalItems }}
+                onPaginationChange={handlePaginationChange}
+                tableContext={{
+                  getServerInfo: getInstalledServerInfo,
+                  envLabelByCatalog,
+                  deploymentFeedState,
+                  deploymentStatuses,
+                  installingItemId,
+                  onInstall: handleTableInstall,
+                  onCancelInstallation: install.cancelInstallation,
+                }}
+                onReinstall={handleRowReinstall}
+              />
+            )
+          ) : (
+            <div className="space-y-6">
+              {visibleItems.length > 0 ? (
+                <McpServerCatalogSection
+                  items={visibleItems}
+                  listQuery={listQuery}
+                  selectableTotal={registryPage.selectableTotal}
+                  pagination={{ pageIndex, pageSize, total: totalItems }}
+                  onPaginationChange={handlePaginationChange}
+                  getServerInfo={getInstalledServerInfo}
+                  envLabelByCatalog={envLabelByCatalog}
+                  issuesByCatalog={issuesByCatalog}
+                  deploymentFeedState={deploymentFeedState}
+                  deploymentStatuses={deploymentStatuses}
+                  installingItemId={installingItemId}
+                  onInstall={handleTableInstall}
+                  onReinstall={handleRowReinstall}
+                  onCancelInstallation={install.cancelInstallation}
+                  isBuiltInPlaywright={isPlaywrightCatalogItem}
+                />
+              ) : (
+                <EmptyState
+                  icon={Route}
+                  title={
+                    hasActiveFilters
+                      ? "No MCP servers match your filters"
+                      : "No MCP servers found"
+                  }
+                  onClearFilters={
+                    hasActiveFilters ? handleClearFilters : undefined
                   }
                 />
               )}
-            {environmentOptions.length > 0 && (
-              <RegistryFilterDropdown
-                label="Environment"
-                options={environmentOptions}
-                selected={filters.environment}
-                onToggle={(value) => toggleFilter("environment", value)}
-              />
-            )}
-            {authorOptions.length > 0 && (
-              <RegistryFilterDropdown
-                label="Author"
-                options={authorOptions}
-                selected={filters.author}
-                onToggle={(value) => toggleFilter("author", value)}
-              />
-            )}
-          </FilterBar>
-          {hasLabelFilters && (
-            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+            </div>
           )}
-          <RegistryFilterChips
-            selected={filters}
-            onRemove={removeFilter}
-            onClearAll={clearAdvancedFilters}
-          />
-        </CollectionFilters>
-        {selectedFacet ? (
-          allFilteredItems.length === 0 ? (
-            // A clean fleet is only claimable when the facet itself is empty.
-            // With rows in the facet and a search or a chip that matched none of
-            // them, the count on the button above is right and the list is
-            // right; what is missing is the reason they disagree.
-            facetCatalogIds?.size === 0 ? (
-              <div className="py-8" data-testid="mcp-registry-attention-list">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <CheckCircle2 className="text-muted-foreground" />
-                    </EmptyMedia>
-                    <EmptyTitle>
-                      {selectedFacet === "muted"
-                        ? "You have not dismissed any alerts"
-                        : selectedFacet === "others"
-                          ? "No alerts need action by another user"
-                          : installedCatalogCount === 1
-                            ? "Your installed MCP server is healthy"
-                            : `All ${installedCatalogCount} installed MCP servers are healthy`}
-                    </EmptyTitle>
-                    <EmptyDescription>
-                      {selectedFacet === "muted"
-                        ? "Alerts you dismiss stay listed here, so a dismissed problem is never invisible."
-                        : selectedFacet === "others"
-                          ? "This view contains unresolved issues owned by someone you can identify only when your role permits it."
-                          : "Servers that fail to start, stop running, or need re-authentication show up here."}
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </div>
-            ) : (
-              <div data-testid="mcp-registry-attention-list">
-                <EmptyState
-                  icon={Route}
-                  title="No MCP servers match your filters"
-                  onClearFilters={clearFiltersKeepingFacet}
-                />
-              </div>
-            )
-          ) : (
-            <McpServerAttentionList
-              // Match Guardrails: changing URL-owned filters clears selection.
-              // Live issue refetches keep the component mounted so failed
-              // targets survive a partial bulk action.
-              key={searchParams.toString()}
-              items={allFilteredItems}
-              issuesByCatalog={issuesByCatalog}
-              servers={installedServers ?? []}
-              facet={selectedFacet}
-              tableContext={{
-                getServerInfo: getInstalledServerInfo,
-                envLabelByCatalog,
-                deploymentFeedState,
-                deploymentStatuses,
-                installingItemId,
-                onInstall: handleTableInstall,
-                onCancelInstallation: install.cancelInstallation,
-              }}
-              onReinstall={handleReinstall}
-            />
-          )
-        ) : (
-          <div className="space-y-6">
-            {allFilteredItems.length > 0 ? (
-              <McpServerCatalogSection
-                items={allFilteredItems}
-                getServerInfo={getInstalledServerInfo}
-                envLabelByCatalog={envLabelByCatalog}
-                issuesByCatalog={issuesByCatalog}
-                deploymentFeedState={deploymentFeedState}
-                deploymentStatuses={deploymentStatuses}
-                installingItemId={installingItemId}
-                onInstall={handleTableInstall}
-                onReinstall={handleReinstall}
-                onCancelInstallation={install.cancelInstallation}
-                isBuiltInPlaywright={isPlaywrightCatalogItem}
-              />
-            ) : (
-              <EmptyState
-                icon={Route}
-                title={
-                  hasActiveFilters
-                    ? "No MCP servers match your filters"
-                    : "No MCP servers found"
-                }
-                onClearFilters={
-                  hasActiveFilters ? handleClearFilters : undefined
-                }
-              />
-            )}
-          </div>
-        )}
 
-        {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
-        {install.dialogs}
+          {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
+          {install.dialogs}
 
-        {/* Reinstall + reauth reuse the install dialog components but keep their
+          {/* Reinstall + reauth reuse the install dialog components but keep their
           own instances/state so they stay independent of the install flow. */}
-        <RemoteServerInstallDialog
-          isOpen={isDialogOpened("remote-install")}
-          onClose={() => {
-            closeDialog("remote-install");
-            setSelectedCatalogItem(null);
-            setReauthServerId(null);
-            setReinstallServerId(null);
-            setTargetServerTeamId(null);
-            setTargetServerScope(undefined);
-          }}
-          onConfirm={handleRemoteServerReauthOrReinstallConfirm}
-          catalogItem={selectedCatalogItem}
-          isInstalling={reauthMutation.isPending || reinstallMutation.isPending}
-          isReauth={!!reauthServerId}
-          isReinstall={!!reinstallServerId && !reauthServerId}
-          existingTeamId={targetServerTeamId}
-          existingScope={targetServerScope}
-        />
-
-        <OAuthConfirmationDialog
-          open={isDialogOpened("oauth")}
-          onOpenChange={(open) => {
-            if (!open) {
-              closeDialog("oauth");
-            }
-          }}
-          serverName={selectedCatalogItem?.name || ""}
-          onConfirm={handleReauthOAuthConfirm}
-          onCancel={() => {
-            closeDialog("oauth");
-            setSelectedCatalogItem(null);
-            setReauthServerId(null);
-          }}
-          catalogId={selectedCatalogItem?.id}
-        />
-
-        <ReinstallConfirmationDialog
-          isOpen={isDialogOpened("reinstall")}
-          onClose={() => {
-            closeDialog("reinstall");
-            setCatalogItemForReinstall(null);
-            setReinstallFlaggedTargets([]);
-          }}
-          onConfirm={handleReinstallConfirm}
-          serverName={catalogItemForReinstall?.name || ""}
-          isReinstalling={
-            reinstallMutation.isPending || reinstallCatalogMutation.isPending
-          }
-          targets={reinstallFlaggedTargets}
-        />
-
-        {localServerCatalogItem && (
-          <LocalServerInstallDialog
-            isOpen={isDialogOpened("local-install")}
+          <RemoteServerInstallDialog
+            isOpen={isDialogOpened("remote-install")}
             onClose={() => {
-              closeDialog("local-install");
-              setLocalServerCatalogItem(null);
+              closeDialog("remote-install");
+              setSelectedCatalogItem(null);
+              setReauthServerId(null);
               setReinstallServerId(null);
               setTargetServerTeamId(null);
               setTargetServerScope(undefined);
-              setReauthServerId(null);
             }}
-            onConfirm={handleLocalServerReauthOrReinstallConfirm}
-            catalogItem={localServerCatalogItem}
+            onConfirm={handleRemoteServerReauthOrReinstallConfirm}
+            catalogItem={selectedCatalogItem}
             isInstalling={
-              reinstallMutation.isPending || reauthMutation.isPending
+              reauthMutation.isPending || reinstallMutation.isPending
             }
-            isReinstall={!!reinstallServerId}
+            isReauth={!!reauthServerId}
+            isReinstall={!!reinstallServerId && !reauthServerId}
             existingTeamId={targetServerTeamId}
             existingScope={targetServerScope}
-            isReauth={!!reauthServerId}
           />
-        )}
 
-        {manageCatalogItem && (
-          <ManageUsersDialog
-            isOpen={!!manageCatalogItem}
-            onClose={closeManageDialog}
-            catalogId={manageCatalogItem.id}
-            onAddPersonalConnection={() => {
-              install.addPersonalConnection(manageCatalogItem);
+          <OAuthConfirmationDialog
+            open={isDialogOpened("oauth")}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeDialog("oauth");
+              }
             }}
-            onAddSharedConnection={(teamId) => {
-              install.addSharedConnection(manageCatalogItem, teamId);
+            serverName={selectedCatalogItem?.name || ""}
+            isReauth
+            onConfirm={handleReauthOAuthConfirm}
+            onCancel={() => {
+              closeDialog("oauth");
+              setSelectedCatalogItem(null);
+              setReauthServerId(null);
             }}
-            onAddOrgConnection={() => {
-              install.addOrgConnection(manageCatalogItem);
-            }}
+            catalogId={selectedCatalogItem?.id}
           />
-        )}
-      </div>
+
+          <ReinstallConfirmationDialog
+            isOpen={isDialogOpened("reinstall")}
+            onClose={() => {
+              closeDialog("reinstall");
+              setCatalogItemForReinstall(null);
+              setReinstallFlaggedTargets([]);
+            }}
+            onConfirm={handleReinstallConfirm}
+            serverName={catalogItemForReinstall?.name || ""}
+            isReinstalling={
+              reinstallMutation.isPending || reinstallCatalogMutation.isPending
+            }
+            targets={reinstallFlaggedTargets}
+          />
+
+          {localServerCatalogItem && (
+            <LocalServerInstallDialog
+              isOpen={isDialogOpened("local-install")}
+              onClose={() => {
+                closeDialog("local-install");
+                setLocalServerCatalogItem(null);
+                setReinstallServerId(null);
+                setTargetServerTeamId(null);
+                setTargetServerScope(undefined);
+                setReauthServerId(null);
+              }}
+              onConfirm={handleLocalServerReauthOrReinstallConfirm}
+              catalogItem={localServerCatalogItem}
+              isInstalling={
+                reinstallMutation.isPending || reauthMutation.isPending
+              }
+              isReinstall={!!reinstallServerId}
+              existingTeamId={targetServerTeamId}
+              existingScope={targetServerScope}
+              isReauth={!!reauthServerId}
+            />
+          )}
+
+          {manageCatalogItem && (
+            <ManageUsersDialog
+              isOpen={!!manageCatalogItem}
+              onClose={closeManageDialog}
+              catalogId={manageCatalogItem.id}
+              onAddPersonalConnection={() => {
+                install.addPersonalConnection(manageCatalogItem);
+              }}
+              onAddSharedConnection={(teamId) => {
+                install.addSharedConnection(manageCatalogItem, teamId);
+              }}
+              onAddOrgConnection={() => {
+                install.addOrgConnection(manageCatalogItem);
+              }}
+            />
+          )}
+        </div>
+      </RegistryPageServersProvider>
     </TableCardView>
   );
 }
 
+/**
+ * Changing a URL-owned filter remounts the attention list and clears its
+ * selection; paging does not remount it (it clears its own selection then).
+ */
+function attentionListKey(
+  searchParams: URLSearchParams | { toString(): string },
+) {
+  const params = new URLSearchParams(searchParams.toString());
+  params.delete("page");
+  params.delete("pageSize");
+  return params.toString();
+}
+
+/** The page's own selection state already knows which rows are on screen. */
+function noopPageRowIds(_ids: string[]) {}
+
+/**
+ * Writes the list's URL state with the browser's own history call. Next keeps
+ * `useSearchParams` in step with it, so the list re-reads the URL at once.
+ * `router.replace` would also ask the server for the route's payload on every
+ * filter, sort or page change.
+ */
 function replaceRegistryListUrl(url: string) {
   window.history.replaceState(null, "", url);
 }
 
 function McpServerCatalogSection({
   items,
+  listQuery,
+  selectableTotal,
+  pagination,
+  onPaginationChange,
   getServerInfo,
   envLabelByCatalog,
   issuesByCatalog,
@@ -1456,8 +1586,14 @@ function McpServerCatalogSection({
   onCancelInstallation,
   isBuiltInPlaywright,
 }: {
-  items: CatalogItem[];
-  getServerInfo: (item: CatalogItem) => {
+  /** The current page. */
+  items: RegistryListItem[];
+  /** The list's filters and order, for selecting every matching row. */
+  listQuery: McpRegistryListQuery;
+  selectableTotal: number;
+  pagination: { pageIndex: number; pageSize: number; total: number };
+  onPaginationChange: (next: { pageIndex: number; pageSize: number }) => void;
+  getServerInfo: (item: RegistryListItem) => {
     installedServer?: InstalledServer;
     isInstallInProgress?: boolean;
     currentUserHasPersonalInstallation: boolean;
@@ -1467,96 +1603,132 @@ function McpServerCatalogSection({
   deploymentFeedState: McpDeploymentFeedState;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   installingItemId: string | null;
-  onInstall: (item: CatalogItem) => void;
+  onInstall: (item: RegistryListItem) => void;
   onReinstall: (
-    item: CatalogItem,
+    item: RegistryListItem,
     flaggedInstalls?: Array<{ id: string; name: string }>,
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
   onCancelInstallation: (serverId: string) => void;
   isBuiltInPlaywright: (catalogId: string) => boolean;
 }) {
-  const canSelect = (item: CatalogItem) => {
+  const canSelect = (item: RegistryListItem) => {
     if (isBuiltInPlaywright(item.id)) return false;
     const serverInfo = getServerInfo(item);
     return (
-      !!serverInfo.installedServer &&
+      item.install.visibleCount > 0 &&
       installingItemId !== item.id &&
       !serverInfo.isInstallInProgress
     );
   };
-  const filterSignature = `mcp-registry:${items
-    .map((item) => item.id)
-    .join(",")}`;
+  /**
+   * Selections are remembered for the filters they were made under, so a
+   * filter change drops them rather than re-pointing "all 40" at a different
+   * 40. The order is left out: a live re-rank must not cancel a selection.
+   */
+  const matchQuery = withoutOrder(listQuery);
+  const filterSignature = `mcp-registry:${JSON.stringify(matchQuery)}`;
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
   const {
-    rowSelection,
-    setRowSelection,
-    onPageRowIdsChange,
-    clearSelection,
-    selected,
-    selectAllMatching,
-    rangeSelection,
-  } = useBulkSelection({
-    rows: items,
-    getId: (item) => item.id,
-    canSelect,
-    filterSignature,
-    matchDescription: "match the current filters",
-  });
-  const selectedToUninstall = selected
-    .filter((item) => !isBuiltInPlaywright(item.id))
-    .map((item) => ({ item, server: getServerInfo(item).installedServer }))
-    .filter((entry) => entry.server)
-    .map(({ item, server }) => ({
-      id: server?.id ?? item.id,
-      name: item.name,
-    }));
+    data: allMatching,
+    isFetching: isAllMatchingFetching,
+    isError: isAllMatchingError,
+  } = useMcpRegistryMatchingIds(matchQuery, { enabled: allMatchingSelected });
 
-  // Table and cards consume the same filtered and sorted sequence. Do not add
-  // a card-only priority bucket: it would override the user's active sort.
-  const orderedCardItems = items;
-  const [cardPagination, setCardPagination] = useState({
-    pageIndex: 0,
-    pageSize: 10,
-  });
-  const maxCardPageIndex = Math.max(
-    0,
-    Math.ceil(orderedCardItems.length / cardPagination.pageSize) - 1,
+  // Rows ticked on one page stay selected, and counted, on the next. Each
+  // keeps the name and install it was selected with, so the action does not
+  // depend on the page it was ticked on still being loaded.
+  const [selectedRows, setSelectedRows] = useState<
+    ReadonlyMap<string, { id: string; name: string; serverId: string | null }>
+  >(new Map());
+  const [selectionSignature, setSelectionSignature] = useState(filterSignature);
+  if (selectionSignature !== filterSignature) {
+    setSelectionSignature(filterSignature);
+    setSelectedRows(new Map());
+  }
+  const storedRowSelection: RowSelectionState = Object.fromEntries(
+    [...selectedRows.keys()].map((id) => [id, true]),
   );
-  const cardPageIndex = Math.min(cardPagination.pageIndex, maxCardPageIndex);
-  const cardPageItems = orderedCardItems.slice(
-    cardPageIndex * cardPagination.pageSize,
-    (cardPageIndex + 1) * cardPagination.pageSize,
-  );
-  const cardSelection = useBulkCardSelection({
-    rows: cardPageItems,
-    getRowId: (item) => item.id,
-    rowSelection,
-    setRowSelection,
-    canSelect,
-    rangeSelection,
-  });
-  const tablePageRowIds = useRef<string[]>([]);
-  const cardPageRowIds = useRef<string[]>([]);
-  const recordTablePageRowIds = useCallback((ids: string[]) => {
-    tablePageRowIds.current = ids;
-  }, []);
-  const recordCardPageRowIds = useCallback((ids: string[]) => {
-    cardPageRowIds.current = ids;
-  }, []);
-  const syncVisiblePageSelection = useCallback(
-    (mode: "cards" | "table") => {
-      // With no selection there is no page-selection affordance to update.
-      // Skipping this state write keeps the view toggle a CSS-only operation.
-      if (selected.length === 0) return;
-      onPageRowIdsChange(
-        mode === "cards" ? cardPageRowIds.current : tablePageRowIds.current,
+  const setStoredRowSelection: OnChangeFn<RowSelectionState> = (updater) => {
+    setSelectedRows((current) => {
+      const currentSelection = Object.fromEntries(
+        [...current.keys()].map((id) => [id, true]),
       );
-    },
-    [onPageRowIdsChange, selected.length],
-  );
+      const nextSelection =
+        typeof updater === "function" ? updater(currentSelection) : updater;
+      const next = new Map<
+        string,
+        { id: string; name: string; serverId: string | null }
+      >();
+      for (const [id, isSelected] of Object.entries(nextSelection)) {
+        if (!isSelected) continue;
+        const kept = current.get(id);
+        if (kept) {
+          next.set(id, kept);
+          continue;
+        }
+        const item = items.find((row) => row.id === id);
+        if (!item || !canSelect(item)) continue;
+        next.set(id, {
+          id,
+          name: item.name,
+          serverId:
+            getServerInfo(item).installedServer?.id ??
+            item.install.primaryServerId,
+        });
+      }
+      return next;
+    });
+  };
+  const clearEscalation = useCallback(() => setEscalatedFor(null), []);
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
+    useControlledRowSelection({
+      rowSelection: storedRowSelection,
+      setRowSelection: setStoredRowSelection,
+      rows: items,
+      getRowId: (item) => item.id,
+      canSelect,
+      allMatchingSelected,
+      clearEscalation,
+    });
+  const clearSelection = () => {
+    setSelectedRows(new Map());
+    setEscalatedFor(null);
+  };
+  const selectedToUninstall = allMatchingSelected
+    ? (allMatching?.data ?? [])
+        .filter((row) => !isBuiltInPlaywright(row.id))
+        .map((row) => ({ id: row.primaryServerId, name: row.name }))
+    : [...selectedRows.values()].flatMap((row) =>
+        row.serverId && !isBuiltInPlaywright(row.id)
+          ? [{ id: row.serverId, name: row.name }]
+          : [],
+      );
+  const selectedCount = allMatchingSelected
+    ? (allMatching?.data.length ?? selectableTotal)
+    : selectedRows.size;
+  const pageSelectableIds = items.filter(canSelect).map((item) => item.id);
+  const selectAllMatching: SelectAllMatching = {
+    total: selectableTotal,
+    pageFullySelected:
+      pageSelectableIds.length > 0 &&
+      pageSelectableIds.every((id) => effectiveRowSelection[id]),
+    active: allMatchingSelected,
+    onSelectAll: () => setEscalatedFor(filterSignature),
+    matchDescription: "match the current filters",
+  };
 
-  const renderCard = (item: CatalogItem) => {
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (item) => item.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+    canSelect,
+    rangeSelection,
+  });
+
+  const renderCard = (item: RegistryListItem) => {
     const serverInfo = getServerInfo(item);
     return (
       <McpServerCard
@@ -1585,9 +1757,10 @@ function McpServerCatalogSection({
         selection={{
           ...cardSelection(item),
           disabled: !canSelect(item),
-          disabledTooltip: !serverInfo.installedServer
-            ? "Install this server before selecting it"
-            : "Wait for installation to finish",
+          disabledTooltip:
+            item.install.visibleCount === 0
+              ? "Install this server before selecting it"
+              : "Wait for installation to finish",
         }}
       />
     );
@@ -1596,13 +1769,15 @@ function McpServerCatalogSection({
   return (
     <div className="space-y-3">
       <McpServerBulkActions
-        selected={selected}
+        count={selectedCount}
         selectedToUninstall={selectedToUninstall}
         clearSelection={clearSelection}
+        busy={
+          allMatchingSelected && (isAllMatchingFetching || isAllMatchingError)
+        }
         selectAllMatching={selectAllMatching}
       />
       <TableCardViewContent
-        onModeChange={syncVisiblePageSelection}
         table={
           <McpServerTable
             items={items}
@@ -1615,27 +1790,29 @@ function McpServerCatalogSection({
             onInstall={onInstall}
             onReinstall={onReinstall}
             onCancelInstallation={onCancelInstallation}
+            pagination={pagination}
+            onPaginationChange={onPaginationChange}
             selection={{
-              rowSelection,
-              onRowSelectionChange: setRowSelection,
-              onPageRowIdsChange: recordTablePageRowIds,
+              rowSelection: effectiveRowSelection,
+              onRowSelectionChange,
+              onPageRowIdsChange: noopPageRowIds,
               rangeSelection,
             }}
           />
         }
         cards={
           <TableCardSelectionScope
-            rowIds={cardPageItems.filter(canSelect).map((item) => item.id)}
-            onVisibleRowIdsChange={recordCardPageRowIds}
+            rowIds={pageSelectableIds}
+            onVisibleRowIdsChange={noopPageRowIds}
           >
             <div className="space-y-4">
-              <TableCardGrid>{cardPageItems.map(renderCard)}</TableCardGrid>
-              {orderedCardItems.length > cardPagination.pageSize ? (
+              <TableCardGrid>{items.map(renderCard)}</TableCardGrid>
+              {pagination.total > pagination.pageSize ? (
                 <TablePagination
-                  pageIndex={cardPageIndex}
-                  pageSize={cardPagination.pageSize}
-                  total={orderedCardItems.length}
-                  onPaginationChange={setCardPagination}
+                  pageIndex={pagination.pageIndex}
+                  pageSize={pagination.pageSize}
+                  total={pagination.total}
+                  onPaginationChange={onPaginationChange}
                 />
               ) : null}
             </div>
@@ -1647,14 +1824,16 @@ function McpServerCatalogSection({
 }
 
 function McpServerBulkActions({
-  selected,
+  count,
   selectedToUninstall,
   clearSelection,
+  busy,
   selectAllMatching,
 }: {
-  selected: readonly CatalogItem[];
+  count: number;
   selectedToUninstall: Array<{ id: string; name: string }>;
   clearSelection: () => void;
+  busy: boolean;
   selectAllMatching: SelectAllMatching;
 }) {
   const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
@@ -1663,10 +1842,10 @@ function McpServerBulkActions({
   return (
     <>
       <BulkActions
-        count={selected.length}
+        count={count}
         noun="server"
         onClear={clearSelection}
-        busy={bulkUninstall.isPending}
+        busy={busy || bulkUninstall.isPending}
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
@@ -1684,7 +1863,7 @@ function McpServerBulkActions({
           <Trash2 className="h-4 w-4" />
           <span>
             Uninstall
-            {countSuffix(selectedToUninstall.length, selected.length)}
+            {countSuffix(selectedToUninstall.length, count)}
           </span>
         </PermissionButton>
       </BulkActions>
@@ -1718,21 +1897,6 @@ function McpServerBulkActions({
       )}
     </>
   );
-}
-
-/**
- * The start of the oldest issue on an item, or null when none of them records
- * one. Only re-authentication failures carry a timestamp today.
- */
-function oldestIssueTime(issues: McpServerIssue[] | undefined): number | null {
-  let oldest: number | null = null;
-  for (const issue of issues ?? []) {
-    if (!issue.since) continue;
-    const at = new Date(issue.since).getTime();
-    if (Number.isNaN(at)) continue;
-    if (oldest === null || at < oldest) oldest = at;
-  }
-  return oldest;
 }
 
 function McpCatalogLabelFilter({ active }: { active: boolean }) {

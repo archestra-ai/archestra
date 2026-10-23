@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.4.0-rc.34" # x-release-please-version
+  imageTag: "1.5.0-rc.6" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -19,6 +19,10 @@ archestra:
   # Note: This value is ignored when horizontalPodAutoscaler.enabled is true,
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
+
+  # Covers frontend stop, backend's 60s proxy drain / 80s shutdown deadline,
+  # and supervisord's 90s backend stop budget. Keep at least 120 seconds.
+  terminationGracePeriodSeconds: 120
 
   # Optional database connection budgeting across all backend pods.
   # When configured, Helm divides the budget across peak web and worker pods,
@@ -41,7 +45,8 @@ archestra:
     # connectionBudget is set.
     poolMaxFromEnvFrom: null
 
-  # Annotations to add to pods created by the Deployment
+  # Annotations to add to the web and worker pods (the worker always points
+  # prometheus.io/port and prometheus.io/path at its own metrics endpoint)
   # This is useful for integrations that require pod-level annotations, such as:
   # - Service mesh sidecars (Istio, Linkerd)
   # - Prometheus scraping
@@ -63,7 +68,12 @@ archestra:
   #     azure.workload.identity/use: "true"
   podLabels: {}
 
-  # Node selector for scheduling pods on specific nodes
+  # Shared scheduling defaults for web and worker pods.
+  # Each field can be overridden independently in archestra.web / archestra.worker.
+  # Missing or null overrides inherit; {} (nodeSelector/affinity) or [] (tolerations)
+  # clears the corresponding shared value. Overrides replace the whole field.
+  #
+  # Node selector for scheduling the web and worker pods on specific nodes
   # This is useful for targeting specific node pools or nodes with particular labels
   # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
   # Example:
@@ -73,7 +83,7 @@ archestra:
   #     node.kubernetes.io/instance-type: m5.large
   nodeSelector: {}
 
-  # Tolerations for scheduling pods on nodes with specific taints
+  # Tolerations for scheduling the web and worker pods on nodes with specific taints
   # This is useful for running pods on dedicated or specialized nodes (e.g., GPU nodes, spot instances)
   # See: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   # Example:
@@ -87,6 +97,66 @@ archestra:
   #       effect: "NoExecute"
   #       tolerationSeconds: 300
   tolerations: []
+
+  # Affinity rules for the web and worker pods
+  # Use this for node affinity or pod (anti-)affinity
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+  #
+  # Web and worker pods share app.kubernetes.io/instance (the release name) and
+  # differ by app.kubernetes.io/component (web or worker). matchLabelKeys makes a
+  # pod (anti-)affinity term match only pods of the same component (Kubernetes
+  # 1.31+). Replace "archestra" with your release name.
+  # Example (prefer one pod per node, counted separately for web and worker):
+  #   affinity:
+  #     podAntiAffinity:
+  #       preferredDuringSchedulingIgnoredDuringExecution:
+  #         - weight: 100
+  #           podAffinityTerm:
+  #             topologyKey: kubernetes.io/hostname
+  #             labelSelector:
+  #               matchLabels:
+  #                 app.kubernetes.io/instance: archestra
+  #             matchLabelKeys:
+  #               - app.kubernetes.io/component
+  affinity: {}
+
+  # Separate node pool example (under archestra; use your cluster's labels/taints):
+  #   web:
+  #     nodeSelector:
+  #       nodepool: general-purpose
+  #     tolerations: []
+  #   worker:
+  #     enabled: true
+  #     nodeSelector:
+  #       nodepool: memory-optimized
+  #     tolerations:
+  #       - key: dedicated
+  #         operator: Equal
+  #         value: workers
+  #         effect: NoSchedule
+  # A toleration permits placement on tainted nodes; the selector constrains it.
+  # Required node affinity and nodeSelector must both match the target nodes.
+  # Topology spread remains shared; omitted selectors default to each Deployment.
+  # Migration Jobs and network policy probes keep the shared selector/tolerations.
+  #
+  # Scheduling for the main platform Deployment (also when worker.enabled=false).
+  # null inherits the corresponding shared value above; {} / [] clears it.
+  web:
+    nodeSelector: null
+    tolerations: null
+    affinity: null
+
+  # Topology spread constraints for the web and worker pods
+  # Use this to spread replicas across availability zones or nodes
+  # A constraint without a labelSelector gets each Deployment's own pod
+  # selector, so web pods and worker pods each spread on their own.
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  # Example (spread web pods and worker pods evenly across zones):
+  #   topologySpreadConstraints:
+  #     - maxSkew: 1
+  #       topologyKey: topology.kubernetes.io/zone
+  #       whenUnsatisfiable: DoNotSchedule
+  topologySpreadConstraints: []
 
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
@@ -204,8 +274,11 @@ archestra:
     # archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the
     # platform ServiceAccount pods/exec in that engine's namespace.
 
-  # Additional volumes to mount into the platform and worker pods
+  # Additional volumes to mount into the platform and worker pods, and into the
+  # migration Job (except persistentVolumeClaim volumes, which the Job skips
+  # because it runs while web/worker pods still hold their claims).
   # Useful for mounting credential files such as a Vertex AI service account key
+  # or a database CA bundle
   # Example:
   #   extraVolumes:
   #     - name: vertex-ai-credentials
@@ -216,7 +289,8 @@ archestra:
   #             path: vertex-ai-key.json
   extraVolumes: []
 
-  # Additional volume mounts for the platform and worker containers
+  # Additional volume mounts for the platform and worker containers, and the
+  # migration Job (mounts of skipped persistentVolumeClaim volumes are dropped)
   # Example:
   #   extraVolumeMounts:
   #     - name: vertex-ai-credentials
@@ -417,7 +491,7 @@ archestra:
   #
   # Sized from a measured Next.js server (~150 MiB resident) plus headroom for
   # growth under load and for supervisord. Only the web container sets this — the
-  # worker and renderer run a single Node process and reserve nothing.
+  # workers run a single Node process and reserve nothing.
   webContainerReservedMemoryMib: 384
 
   # Kubernetes probe configuration for the platform and worker containers.
@@ -448,7 +522,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.4.0-rc.34" # x-release-please-version
+    # Default: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.5.0-rc.6" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -671,6 +745,12 @@ archestra:
     # Number of worker pod replicas
     replicaCount: 1
 
+    # Scheduling for the separate worker Deployment only.
+    # null inherits the corresponding shared archestra.* value; {} / [] clears it.
+    nodeSelector: null
+    tolerations: null
+    affinity: null
+
     # Resource requests and limits for worker pods
     # If not set, inherits from archestra.resources
     # Workers typically need less memory than the web server
@@ -690,58 +770,6 @@ archestra:
       rollingUpdate:
         maxUnavailable: "25%"
         maxSurge: "25%"
-
-    # Pod annotations for worker pods
-    # If not set, inherits from archestra.podAnnotations
-    podAnnotations: {}
-
-    # Node selector for worker pods
-    # If not set, inherits from archestra.nodeSelector
-    nodeSelector: {}
-
-    # Tolerations for worker pods
-    # If not set, inherits from archestra.tolerations
-    tolerations: []
-
-  # Dedicated app-recording video render service (ARCHESTRA_PROCESS_TYPE=renderer).
-  renderer:
-    # Enable the dedicated render Deployment. Turn it on where the Apps Hackathon
-    # recorder is enabled AND the web tier runs more than one replica: render
-    # jobs live in one process's memory, so a single-process deployment renders
-    # in-process and needs neither this Deployment nor
-    # ARCHESTRA_APP_RECORDING_RENDERER_URL. Always a single replica when on.
-    enabled: false
-
-    # Resource requests and limits for the render pod. Rendering drives a
-    # headless Chromium (memory) and encodes H.264 (CPU). The memory limit is
-    # sized for the largest accepted bundle: the pod buffers the whole posted
-    # body, parses it, and hands it to the browser (see RENDER_BUNDLE_BODY_LIMIT_BYTES).
-    # If not set, inherits from archestra.resources.
-    resources:
-      requests:
-        cpu: "1"
-        memory: "2Gi"
-      limits:
-        memory: "8Gi"
-
-    # Recreate, not RollingUpdate: two render pods would answer polls for renders
-    # the other ran, so the old pod is torn down before the new one starts. A
-    # render in flight across a deploy is lost either way (in-memory), which the
-    # client surfaces as "start the download again".
-    deploymentStrategy:
-      type: Recreate
-
-    # Pod annotations for the render pod. If not set, inherits from
-    # archestra.podAnnotations.
-    podAnnotations: {}
-
-    # Node selector for the render pod. If not set, inherits from
-    # archestra.nodeSelector.
-    nodeSelector: {}
-
-    # Tolerations for the render pod. If not set, inherits from
-    # archestra.tolerations.
-    tolerations: []
 
   # Optional dedicated listener that aliases the publicly-exposable endpoints
   # — currently the MS Teams incoming webhook (/api/webhooks/chatops/ms-teams)

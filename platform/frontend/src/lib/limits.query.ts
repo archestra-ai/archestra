@@ -28,11 +28,17 @@ export const limitKeys = {
   detail: (id: string | undefined) => [...limitKeys.details(), id] as const,
 };
 
-export function useLimits() {
+export function useLimits(params?: {
+  enabled?: boolean;
+  /** Narrow the list server-side, e.g. to one team's limits. */
+  filters?: NonNullable<archestraApiTypes.GetLimitsData["query"]>;
+}) {
+  const filters = params?.filters;
   return useQuery({
-    queryKey: limitKeys.lists(),
+    queryKey: filters ? [...limitKeys.lists(), filters] : limitKeys.lists(),
+    enabled: params?.enabled,
     queryFn: async () => {
-      const { data, error } = await getLimits();
+      const { data, error } = await getLimits({ query: filters });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },

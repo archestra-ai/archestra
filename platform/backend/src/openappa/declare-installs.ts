@@ -74,7 +74,7 @@ export async function declareExistingInstalls(): Promise<DeclareInstallsSummary>
     }
     logger.error(
       { organizationId, err: outcome.reason },
-      "Declaring an organization's OpenAPPA battery installs failed; its rows are still the only record of them",
+      "OpenAPPA could not declare an organization's battery installs; its rows are still the only record of them",
     );
     summary.failed.push(organizationId);
   });
@@ -129,7 +129,7 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
     if (content === null) {
       logger.error(
         { organizationId, edits: planned.edits, errors: edited.errors },
-        "The declarations of an organization's OpenAPPA battery installs were refused by the editor",
+        "OpenAPPA battery install declarations of an organization were refused by the editor",
       );
       return "failed";
     }
@@ -140,7 +140,7 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
     if (parsed.errors.length > 0) {
       logger.error(
         { organizationId, errors: parsed.errors },
-        "The declarations authored for an organization's OpenAPPA battery installs do not parse; not saving them",
+        "OpenAPPA battery install declarations authored for an organization do not parse; not saving them",
       );
       return "failed";
     }
@@ -157,13 +157,13 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
         revision: saved.revision,
         batteries: planned.batteries,
       },
-      "Declared the OpenAPPA battery installs of an organization in its policy",
+      "OpenAPPA declared the battery installs of an organization in its policy",
     );
     return "declared";
   }
   logger.error(
     { organizationId, edits: planned.edits },
-    "The policy kept changing under the OpenAPPA battery install declarations; its rows are still the only record of them",
+    "OpenAPPA battery install declarations lost to a policy that kept changing; its rows are still the only record of them",
   );
   return "failed";
 }
@@ -239,7 +239,7 @@ async function planFor(params: {
         if (log)
           logger.warn(
             { organizationId, battery: name, catalogId: row.catalogId },
-            "An OpenAPPA battery install names a catalog carrying no tool prefix; the battery is declared with no alias for it",
+            "OpenAPPA battery install names a catalog carrying no tool prefix; the battery is declared with no alias for it",
           );
         continue;
       }
@@ -291,7 +291,7 @@ export async function seedCredentialBindings(): Promise<void> {
     if (inserted > 0)
       logger.info(
         { organizationId, inserted },
-        "Seeded OpenAPPA credential bindings from the policy's [credentials] table",
+        "OpenAPPA seeded credential bindings from the policy's [credentials] table",
       );
   }
 }
@@ -322,7 +322,7 @@ function agreedBindings(params: {
       if (log)
         logger.warn(
           { organizationId, variable, keys: [...keys.keys()] },
-          "An OpenAPPA battery install binds a variable no credentials table admits; leaving it unbound",
+          "OpenAPPA battery install binds a variable no credentials table admits; leaving it unbound",
         );
       continue;
     }
@@ -421,7 +421,7 @@ function drop(params: {
       // Store keys, never values: the value never appears in the policy either.
       bindings: params.row.credentialBindings,
     },
-    "An OpenAPPA battery install is not carried into the policy declarations",
+    "OpenAPPA battery install is not carried into the policy declarations",
   );
 }
 

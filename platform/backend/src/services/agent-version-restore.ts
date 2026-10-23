@@ -42,6 +42,7 @@ import {
 import type { AgentConfigSnapshot } from "@/types/agent-version";
 import type { InsertHookFile } from "@/types/hook";
 import { InsertHookFileSchema } from "@/types/hook";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 /**
  * Restore an agent's config to an earlier version by replaying its immutable
@@ -414,7 +415,6 @@ async function planScalars(params: {
     description: snapshot.description,
     icon: snapshot.icon,
     systemPrompt: snapshot.systemPrompt,
-    considerContextUntrusted: snapshot.considerContextUntrusted,
     accessAllTools: snapshot.accessAllTools,
     accessAllSubagents: snapshot.accessAllSubagents,
     incomingEmailEnabled: snapshot.incomingEmailEnabled,
@@ -517,6 +517,31 @@ async function planScalars(params: {
     }
     scalars.modelId = snapshotModelId;
     scalars.llmApiKeyId = snapshotKeyId;
+  }
+
+  // Tiers ride on the key, so they are re-checked against the key being
+  // restored whenever either changes, and refuse the restore like the pair.
+  const fastModelId = snapshot.fastModel?.id ?? null;
+  const smartModelId = snapshot.smartModel?.id ?? null;
+  if (
+    "llmApiKeyId" in scalars ||
+    fastModelId !== (current.fastModelId ?? null) ||
+    smartModelId !== (current.smartModelId ?? null)
+  ) {
+    try {
+      await assertModelTrioTiers({
+        apiKeyId: snapshotKeyId,
+        fastModelId,
+        smartModelId,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 400) {
+        throw unrestorable(`its fast or smart model (${error.message})`);
+      }
+      throw error;
+    }
+    scalars.fastModelId = fastModelId;
+    scalars.smartModelId = smartModelId;
   }
 
   // identityProviderId is captured but deliberately not replayed: migration

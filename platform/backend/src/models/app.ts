@@ -32,6 +32,7 @@ import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -876,6 +877,7 @@ class AppModel {
    */
   static async purge(id: string): Promise<void> {
     await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       await tx
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
@@ -893,6 +895,24 @@ class AppModel {
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
+  /** App names by id, within one organization; missing ids are absent. */
+  static async getNamesByIds(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<Map<string, string>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.appsTable.id, name: schema.appsTable.name })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, params.organizationId),
+          inArray(schema.appsTable.id, params.ids),
+        ),
+      );
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   /**
    * Ids, names, visibility and deletion state for a bulk route's audit record,
    * used on both sides of the write. Deliberately much narrower than

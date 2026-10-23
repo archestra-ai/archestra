@@ -29,12 +29,30 @@ function setup(availableWidth: number) {
   const available = { clientWidth: availableWidth };
   const content = { scrollWidth: TOOLS_WIDTH };
   const trailing = { offsetWidth: TRAILING_WIDTH };
+  const reads = { count: 0 };
+  Object.defineProperty(available, "clientWidth", {
+    get: () => {
+      reads.count += 1;
+      return availableWidth;
+    },
+    set: (width: number) => {
+      availableWidth = width;
+    },
+  });
   const refs = {
     availableRef: { current: available as unknown as HTMLElement },
     contentRef: { current: content as unknown as HTMLElement },
     trailingRef: { current: trailing as unknown as HTMLElement },
   };
   const { result } = renderHook(() => useToolbarCollapse(refs));
+  const readsBeforeObserver = reads.count;
+  // The observer's initial notification, delivered after layout.
+  act(() => {
+    observerCallback?.(
+      [] as unknown as ResizeObserverEntry[],
+      {} as ResizeObserver,
+    );
+  });
   const resize = (width: number) => {
     available.clientWidth = width;
     act(() => {
@@ -44,10 +62,16 @@ function setup(availableWidth: number) {
       );
     });
   };
-  return { result, resize };
+  return { result, resize, readsBeforeObserver };
 }
 
 describe("useToolbarCollapse", () => {
+  it("does not read layout while mounting, only from the observer", () => {
+    const { result, readsBeforeObserver } = setup(460);
+    expect(readsBeforeObserver).toBe(0);
+    expect(result.current).toBe(true);
+  });
+
   it("stays expanded when the inline controls fit", () => {
     const { result } = setup(900);
     expect(result.current).toBe(false);

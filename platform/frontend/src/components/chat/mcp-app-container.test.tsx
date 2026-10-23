@@ -87,18 +87,6 @@ vi.mock("@/lib/apps/use-app-access", () => ({
     access.canEdit ? undefined : "Only an admin can change this org-wide app",
 }));
 
-// Session-recording hooks pull TanStack Query mutations; this suite renders
-// without a QueryClient, so stub the module (recording flows have their own
-// coverage).
-vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
-  useAppRecording: vi.fn(() => ({ data: null })),
-  useInvalidateAppRecording: vi.fn(() => vi.fn()),
-  useDownloadAppRecordingBundle: vi.fn(() => ({
-    mutate: vi.fn(),
-    isPending: false,
-  })),
-}));
-
 // Stub the inline settings form: it pulls the environment/teams/auth query
 // chains, which aren't this suite's concern (covered by their own tests). Here
 // we only assert the panel chrome toggles it from the gear. The form owns the

@@ -45,6 +45,36 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
+  test("reports empty when a text part opens and closes with no text", async () => {
+    // OpenAI-compatible streams open with `content: ""`; the AI SDK opens a
+    // text part for it and drops the empty delta.
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start" },
+      { type: "text-end" },
+      { type: "finish-step" },
+      { type: "finish", finishReason: "length" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "empty",
+      finishReason: "length",
+    });
+  });
+
+  test("returns renderable on the first text after a text part opens", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "text-start" },
+      // the AI SDK forwards a text delta only when it has text
+      { type: "text-delta" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "renderable",
+    });
+  });
+
   test("treats a tool-only turn as renderable, not empty", async () => {
     const events: StreamProbeEvent[] = [
       { type: "start" },
@@ -287,6 +317,18 @@ function emptyChunks(): ModelStreamPart[] {
   ];
 }
 
+// The shape an OpenAI-compatible stream takes when it ends at the output cap
+// before any text: an opening empty content delta, then `length`.
+function emptyTextLengthChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "1" },
+    { type: "text-delta", id: "1", delta: "" },
+    { type: "text-end", id: "1" },
+    { type: "finish", finishReason: finished("length"), usage },
+  ];
+}
+
 function abortiveChunks(): ModelStreamPart[] {
   return [
     { type: "stream-start", warnings: [] },
@@ -320,6 +362,14 @@ function errorChunks(error: Error): ModelStreamPart[] {
 function reasoningSummaryVerificationError(): Error {
   return new Error(
     "Your organization must be verified to generate reasoning summaries. Please go to: https://platform.openai.com/settings/organization/general and click on Verify Organization.",
+  );
+}
+
+// Bedrock's rejection of a replayed Anthropic thinking block whose signature
+// was produced under a different system prompt.
+function thinkingSignatureRejection(): Error {
+  return new Error(
+    "Bedrock API error (400): The model returned the following errors: messages.1.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation. The `system` prompt differs from the one this block was created with.",
   );
 }
 
@@ -371,6 +421,22 @@ describe("runAgentStream", () => {
 
     expect(model.doStreamCalls).toHaveLength(3);
     expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retries a turn with only empty text to the cap, then throws EmptyModelResponseError", async () => {
+    const model = modelFor(
+      emptyTextLengthChunks(),
+      emptyTextLengthChunks(),
+      emptyTextLengthChunks(),
+    );
+
+    const error = await runAgentStream({
+      config: { model, prompt: "hello" },
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(EmptyModelResponseError);
+    expect(error).toMatchObject({ finishReason: "length", attempts: 3 });
+    expect(model.doStreamCalls).toHaveLength(3);
   });
 
   test("retries an empty response, then commits the renderable retry", async () => {
@@ -555,6 +621,56 @@ describe("runAgentStream", () => {
 
     expect(model.doStreamCalls).toHaveLength(1);
     expect(onReasoningSummaryUnsupported).not.toHaveBeenCalled();
+  });
+
+  test("drops replayed reasoning and retries when the provider rejects a thinking signature", async () => {
+    const model = modelFor(
+      errorChunks(thinkingSignatureRejection()),
+      renderableChunks(),
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: "first" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: { bedrock: { signature: "sig" } },
+          },
+          { type: "text", text: "answer" },
+        ],
+      },
+      { role: "user", content: "second" },
+    ];
+
+    const { result } = await runAgentStream({ config: { model, messages } });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    const partTypes = (call: (typeof model.doStreamCalls)[number]) =>
+      call.prompt.flatMap((message) =>
+        typeof message.content === "string"
+          ? []
+          : message.content.map((part) => part.type),
+      );
+    expect(partTypes(model.doStreamCalls[0])).toContain("reasoning");
+    expect(partTypes(model.doStreamCalls[1])).toEqual(["text", "text", "text"]);
+    expect(await result.text).toBe("hi");
+  });
+
+  test("does not retry a thinking-signature rejection when there is no reasoning to drop", async () => {
+    const model = modelFor(
+      errorChunks(thinkingSignatureRejection()),
+      renderableChunks(),
+    );
+
+    const { result } = await runAgentStream({
+      config: { model, messages: [{ role: "user", content: "hello" }] },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
   });
 
   test("does not strip-retry an unrelated provider error even with reasoningSummary set", async () => {

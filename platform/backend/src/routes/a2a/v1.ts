@@ -3,6 +3,7 @@ import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
@@ -12,6 +13,7 @@ import {
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
 import { ApiError, UuidIdSchema } from "@/types";
+import { clientErrorMessage } from "@/utils/db";
 
 /**
  * A2A (Agent-to-Agent) Protocol routes
@@ -130,7 +132,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         throw new ApiError(401, "Invalid or unauthorized token");
       }
@@ -241,7 +243,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         return reply.send({
           jsonrpc: "2.0" as const,
@@ -253,7 +255,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Get user info - for user tokens we have userId, for team tokens we use system context
+      // Who the turn runs as: the token's user, or the service account
       let userId: string;
       const organizationId = tokenAuth.organizationId;
 
@@ -271,6 +273,10 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+      } else if (tokenAuth.serviceAccountId) {
+        // A service account key (or an OAuth app bound to one) runs as that
+        // account, never with the organization's reach.
+        userId = serviceAccountUserId(tokenAuth.serviceAccountId);
       } else {
         // Team/org token - we don't have a specific user, use a system context
         // The LLM client will work without user-specific API key resolution
@@ -343,7 +349,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
               message: userMessage,
               organizationId,
               userId,
-              actorTeamId: tokenAuth.teamId ?? undefined,
               sessionId,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             });
@@ -367,7 +372,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id,
           error: {
             code: -32603,
-            message: error instanceof Error ? error.message : "Internal error",
+            message: clientErrorMessage(error, "Internal error"),
             data: chatError,
           },
         });

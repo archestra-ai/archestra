@@ -1,3 +1,4 @@
+import { azureModelEvidence } from "@archestra/shared/azure-models";
 import { describe, expect, test } from "@/test";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
@@ -1104,6 +1105,51 @@ describe("ModelModel", () => {
       expect(capabilities.supportsToolCalling).toBe(true);
       expect(capabilities.pricePerMillionInput).toBe("5");
       expect(capabilities.pricePerMillionOutput).toBe("15");
+    });
+  });
+
+  describe.each([
+    {
+      modelId: "gpt-image-1",
+      input: ["text"] as const,
+      output: ["image"] as const,
+    },
+    {
+      modelId: "gpt-realtime-translate",
+      input: ["audio"] as const,
+      output: ["text", "audio"] as const,
+    },
+    {
+      modelId: "gpt-audio",
+      input: ["text", "audio"] as const,
+      output: ["text", "audio"] as const,
+    },
+  ])("Azure media Chat capabilities: $modelId", ({
+    modelId,
+    input,
+    output,
+  }) => {
+    test("offers the media model in Chat without advertising agent tools", async () => {
+      const model = await ModelModel.create({
+        externalId: `azure/${modelId}`,
+        provider: "azure",
+        modelId,
+        inputModalities: [...input],
+        outputModalities: [...output],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      const scopedModel = {
+        ...model,
+        azureCapabilities: azureModelEvidence({
+          underlyingModelName: modelId,
+          source: "deployment",
+        }),
+      };
+      expect(ModelModel.supportsTextChat(scopedModel)).toBe(true);
+      expect(ModelModel.toCapabilities(scopedModel).supportsToolCalling).toBe(
+        false,
+      );
     });
   });
 

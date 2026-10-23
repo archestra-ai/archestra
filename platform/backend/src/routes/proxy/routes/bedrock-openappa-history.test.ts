@@ -17,6 +17,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import { getLlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { afterEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
@@ -43,6 +44,8 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
 
   test("forwards a Converse history without the notice's signed offers or the remedy call's receipt", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     // The registry is process-wide: no session path may touch this history.
     expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
@@ -70,6 +73,12 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
     const app = createFastifyInstance();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openappa-history-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     // Leftover offer material from persisted history. Not minted, and not a route.
     const offer = {
       protected: "eyJhbGciOiJIUzI1NiJ9",
@@ -87,7 +96,7 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/converse`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         modelId: MODEL_ID,
         // Converse requires toolConfig whenever the history holds tool blocks.

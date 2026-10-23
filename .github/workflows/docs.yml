@@ -4,7 +4,8 @@ name: Docs
 # request, and the screenshot capture that re-renders every docs screenshot of
 # the app in light and dark mode.
 #
-# Screenshots are captured when docs get published: on release-please pull
+# Merge groups validate every screenshot without publication. Screenshots are
+# also captured when docs get published: on release-please pull
 # requests (the capture commits changed images back to the release branch) and
 # on a manual run (which opens a pull request with the changes). Locally the
 # same capture runs with `pnpm docs:screenshots` (see
@@ -18,8 +19,13 @@ on:
       - reopened
   # Required checks must also run on merge_group when merge queue is enabled.
   merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
+      validation_only:
+        description: Validate all screenshots without publishing images or opening a PR
+        type: boolean
+        default: false
       only:
         description: Comma-separated screenshot ids (or prefixes) to capture; empty captures all
         required: false
@@ -85,13 +91,54 @@ jobs:
       - name: Run docs check regression tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
 
+  # Standalone manual validation retains the local build fallback. Queue/PR
+  # validation is owned by platform-e2e-tests.yml, where capture can depend
+  # directly on the exact image build. Manual check names stay distinct so a
+  # skipped job here cannot mask a failed required queue check.
+  docs-screenshot-validation:
+    name: Manual Docs Screenshot Validation
+    needs: [docs-screenshot-capture]
+    # Merge-queue validation lives beside its image producer in platform-e2e-tests.yml.
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report screenshot validation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATION_ONLY: ${{ inputs.validation_only }}
+          CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
+        run: python3 .github/scripts/check-docs-screenshot-result.py
+
+  docs-screenshot-capture:
+    name: Capture Docs Screenshots (manual validation)
+    if: github.event_name == 'workflow_dispatch' && inputs.validation_only
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Standalone validation checks the selected manual ref.
+          fetch-depth: 1
+      - uses: $/.github/actions/capture-docs-screenshots
+        # No filter: every queue commit must exercise the entire manifest.
+
   docs-screenshots:
     name: Docs Screenshots
     # Release-please PRs come from this repository's own branch, so the capture
     # can push to it; manual runs open a pull request instead.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && !inputs.validation_only) ||
       (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login == 'archestra-ci[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.event.pull_request.head.ref, 'release-please--'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
@@ -109,7 +156,7 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -118,36 +165,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           token: ${{ steps.generate-token.outputs.token }}
-          fetch-depth: 1
+          fetch-depth: 2
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
+      - uses: $/.github/actions/capture-docs-screenshots
         with:
-          working-directory: ./platform
-
-      - name: Install Chromium
-        working-directory: ./platform
-        run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
-
-      # Reuses the platform image CI built for this tree when there is one,
-      # otherwise builds it. The docs show beta features (Plugins, OpenAPPA),
-      # whose routes 404 unless the beta master switch is on.
-      - name: Start Archestra (e2e-lite stack)
-        env:
-          ARCHESTRA_BETA: "true"
-        run: ./platform/scripts/e2e-lite.sh up
-
-      - name: Seed demo data and capture screenshots
-        working-directory: ./platform
-        env:
-          ARCHESTRA_URL: http://localhost:3000
-          DOCS_SCREENSHOTS_ONLY: ${{ inputs.only }}
-        run: pnpm docs:screenshots
-
-      - name: Docs image policy
-        run: python3 .github/scripts/check-docs-image-policy.py
+          only: ${{ inputs.only }}
 
       - name: Commit updated screenshots
         env:
@@ -155,7 +179,14 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_BRANCH: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
+          HEAD_BRANCH: ${{ github.head_ref }}
         run: |
+          # Validate image-only capture commits without publishing another batch
+          # of volatile values (keys, approval codes, relative timestamps).
+          if [ "$(python3 .github/scripts/should-commit-docs-screenshots.py "$EVENT_NAME")" = "false" ]; then
+            echo "Screenshot commit validated; retaining its captured images."
+            exit 0
+          fi
           if [ -z "$(git status --porcelain -- docs/assets)" ]; then
             echo "Screenshots are up to date."
             exit 0
@@ -166,7 +197,8 @@ jobs:
           git diff --cached --stat
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git commit -m "docs: update screenshots"
-            git push
+            # Reject a concurrent release update rather than publishing stale captures.
+            git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
           else
             branch="docs/screenshots-${RUN_ID}"
             git switch -c "$branch"
@@ -178,7 +210,3 @@ jobs:
               --title "docs: update screenshots" \
               --body "Re-captured every docs screenshot of the app in light and dark mode (workflow run ${RUN_ID})."
           fi
-
-      - name: Stop Archestra
-        if: always()
-        run: ./platform/scripts/e2e-lite.sh down

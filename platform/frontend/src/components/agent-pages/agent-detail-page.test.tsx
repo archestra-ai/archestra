@@ -69,6 +69,24 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
+vi.mock("./agent-work-sources", () => ({
+  AgentWorkSources: ({
+    hasRuntime,
+    onShowA2a,
+  }: {
+    hasRuntime: boolean;
+    onShowA2a?: () => void;
+  }) => (
+    <div>
+      <span>{hasRuntime ? "give it work" : "where people use it"}</span>
+      {onShowA2a && (
+        <button type="button" onClick={onShowA2a}>
+          Show A2A details
+        </button>
+      )}
+    </div>
+  ),
+}));
 vi.mock("@/components/agent-saved-setup-banner", () => ({
   AgentSavedSetupBanner: () => null,
 }));
@@ -90,6 +108,19 @@ let access = {
   isPending: false,
 };
 vi.mock("./use-agent-access", () => ({ useAgentAccess: () => access }));
+let savedGrants: Array<{
+  subject: { type: string; id: string };
+  name: string;
+  actions: string[];
+}> = [];
+vi.mock("@/lib/resource-permissions.query", () => ({
+  useResourcePermissions: () => ({ data: { grants: savedGrants } }),
+}));
+// The editor has its own tests; here it only needs to be on the right tab.
+vi.mock("@/components/resource-permissions", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ResourcePermissions: () => <div data-testid="resource-permissions" />,
+}));
 
 const baseAgent = {
   id: "a1",
@@ -112,12 +143,12 @@ function mockAgent(agent: unknown) {
   } as unknown as ReturnType<typeof useProfile>);
 }
 
-function mockSection(section?: string) {
+function mockSection(section?: string, basePath = "/agents/a1") {
   const search = section ? `section=${section}` : "";
   window.history.replaceState(
     {},
     "",
-    `/agents/a1${search ? `?${search}` : ""}`,
+    `${basePath}${search ? `?${search}` : ""}`,
   );
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(search) as unknown as ReturnType<
@@ -163,30 +194,29 @@ describe("AgentDetailPage", () => {
       mutate: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useExportAgent>);
+    savedGrants = [];
     mockAgent(baseAgent);
   });
 
-  it.each([
-    "personal",
-    "team",
-    "org",
-  ])("omits legacy %s visibility from agent and gateway headers", (scope) => {
-    mockAgent({ ...baseAgent, scope });
+  it("reads the header's audience from the saved grants, not the legacy visibility field", () => {
+    // The legacy field says organization; the grants say only the owner.
+    mockAgent({ ...baseAgent, scope: "org" });
     const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
-    for (const label of ["Personal", "Team", "Organization"]) {
-      expect(
-        screen.queryByText(label, { exact: true }),
-      ).not.toBeInTheDocument();
-    }
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal",
+    );
     unmount();
-    mockAgent({ ...baseAgent, scope, agentType: "mcp_gateway" });
+    savedGrants = [
+      {
+        subject: { type: "team", id: "t1" },
+        name: "Support",
+        actions: ["read", "use"],
+      },
+    ];
+    mockAgent({ ...baseAgent, scope: "personal", agentType: "mcp_gateway" });
     render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
     expect(screen.getByText(baseAgent.name)).toBeVisible();
-    for (const label of ["Personal", "Team", "Organization"]) {
-      expect(
-        screen.queryByText(label, { exact: true }),
-      ).not.toBeInTheDocument();
-    }
+    expect(screen.getByTestId("audience-chip")).toHaveTextContent("Team-wide");
   });
 
   it("shows the not-found state for a trashed id, which the API no longer returns", () => {
@@ -237,52 +267,84 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText(/is in the trash/i)).toBeNull();
   });
 
-  it("opens on the editable configuration instead of a read-only summary", () => {
-    // The Edit button and the wizard route it opened are gone: the record's
-    // settings are the page.
+  it("opens an agent on its overview, with its instructions read-only and Edit leading to its edit page", () => {
+    mockAgent({ ...baseAgent, systemPrompt: "Answer support tickets." });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("form section: configuration")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.getByText("Answer support tickets.")).toBeVisible();
+    expect(screen.queryByText(/form section/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    // Who can use it is a setting, so it lives on the edit page.
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    for (const link of screen.getAllByRole("link", { name: "Edit" })) {
+      expect(link).toHaveAttribute("href", "/agents/a1/edit");
+    }
   });
 
-  it("puts every section of the record on a tab of the same page", () => {
+  it("offers a reader who cannot change the agent its settings to view instead", () => {
+    access = { ...access, canEdit: false, canModify: false };
     render(<AgentDetailPage kind="agent" id="a1" />);
 
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(
-      // Connect is named for the protocol on the agents family: A2A.
-      [
-        "General",
-        "Tools, Skills & Knowledge",
-        "Messaging Channels",
-        "Advanced",
-        "A2A",
-      ].map(
+      screen.getAllByRole("link", { name: "View settings" })[0],
+    ).toHaveAttribute("href", "/agents/a1/edit");
+  });
+
+  it("opens an agent's A2A details in a dialog from the overview, not a tab", async () => {
+    const user = userEvent.setup();
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByRole("link", { name: "A2A" })).toBeNull();
+    expect(screen.queryByText("connect content")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show A2A details" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("connect content");
+  });
+
+  it("sends an agent's old settings links to the matching step of its edit page", () => {
+    for (const [section, href] of [
+      ["tools", "/agents/a1/edit?step=tools"],
+      ["messaging", "/agents/a1/edit?step=messaging"],
+      ["advanced", "/agents/a1/edit?step=advanced"],
+      ["runtime", "/agents/a1/edit"],
+      ["permissions", "/agents/a1/edit"],
+    ]) {
+      replace.mockClear();
+      mockSection(section);
+      const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
+      expect(replace).toHaveBeenCalledWith(href);
+      unmount();
+    }
+  });
+
+  it("puts every section of a gateway on a tab of the same page", () => {
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
+
+    expect(
+      ["Connect", "Settings"].map(
         (name) =>
           screen.getAllByRole("link", { name })[0]?.getAttribute("href") ??
           null,
       ),
-    ).toEqual([
-      "/agents/a1",
-      "/agents/a1?section=tools",
-      "/agents/a1?section=messaging",
-      "/agents/a1?section=advanced",
-      "/agents/a1?section=connect",
-    ]);
+    ).toEqual(["/mcp/gateways/a1", "/mcp/gateways/a1?section=settings"]);
   });
 
-  it("mounts only the form group the current section names", () => {
-    mockSection("tools");
-    render(<AgentDetailPage kind="agent" id="a1" />);
+  it("mounts the gateway's settings groups on its Settings tab", () => {
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection("settings", "/mcp/gateways/a1");
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
-    expect(screen.getByText("form section: tools")).toBeVisible();
+    expect(
+      screen.getByText("form section: configuration,tools,advanced"),
+    ).toBeVisible();
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("shows the connection instructions in their own section, with no form", () => {
-    mockSection("connect");
-    render(<AgentDetailPage kind="agent" id="a1" />);
+  it("shows a gateway's connection instructions in their own section, with no form", () => {
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection(undefined, "/mcp/gateways/a1");
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     expect(screen.getByText("connect content")).toBeVisible();
     expect(screen.queryByText(/form section/)).toBeNull();
@@ -293,19 +355,23 @@ describe("AgentDetailPage", () => {
     // Runs is an agent-with-runtime tab; asking for it on a
     // record without one renders Configuration, and the URL is put right so a
     // reload does not keep asking.
+    mockAgent({ ...baseAgent, systemPrompt: "Answer support tickets." });
     mockSection("runs");
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(screen.getByText("Answer support tickets.")).toBeVisible();
     expect(replace).toHaveBeenCalledWith("/agents/a1", { scroll: false });
   });
 
-  it("guards a tab change while the configuration holds unsaved edits", async () => {
+  it("guards a tab change while a gateway's settings hold unsaved edits", async () => {
     const user = userEvent.setup();
-    render(<AgentDetailPage kind="agent" id="a1" />);
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection("settings", "/mcp/gateways/a1");
+    vi.mocked(usePathname).mockReturnValue("/mcp/gateways/a1");
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     await user.click(screen.getByRole("button", { name: "make dirty" }));
-    await user.click(screen.getAllByRole("link", { name: "Advanced" })[0]);
+    await user.click(screen.getAllByRole("link", { name: "Connect" })[0]);
 
     expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
     // Nothing has navigated yet: the answer decides.
@@ -316,11 +382,14 @@ describe("AgentDetailPage", () => {
     // The form is the page, so a link the page does not own — the sidebar,
     // anything else on screen — must not discard edits silently either.
     const user = userEvent.setup();
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection("settings", "/mcp/gateways/a1");
+    vi.mocked(usePathname).mockReturnValue("/mcp/gateways/a1");
     render(
       <>
         {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
         <a href="/skills">Somewhere else</a>
-        <AgentDetailPage kind="agent" id="a1" />
+        <AgentDetailPage kind="mcp_gateway" id="a1" />
       </>,
     );
 
@@ -332,10 +401,13 @@ describe("AgentDetailPage", () => {
 
   it("does not ask about leaving the section already on screen", async () => {
     const user = userEvent.setup();
-    render(<AgentDetailPage kind="agent" id="a1" />);
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection("settings", "/mcp/gateways/a1");
+    vi.mocked(usePathname).mockReturnValue("/mcp/gateways/a1");
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     await user.click(screen.getByRole("button", { name: "make dirty" }));
-    await user.click(screen.getAllByRole("link", { name: "General" })[0]);
+    await user.click(screen.getAllByRole("link", { name: "Settings" })[0]);
 
     expect(screen.queryByText(/discard unsaved changes\?/i)).toBeNull();
   });
@@ -345,11 +417,13 @@ describe("AgentDetailPage", () => {
     // open. It is the page now, so the refusal is stated over the read-only
     // form instead.
     access = { ...access, canEdit: false, canModify: false };
-    render(<AgentDetailPage kind="agent" id="a1" />);
+    mockAgent({ ...baseAgent, agentType: "mcp_gateway" });
+    mockSection("settings", "/mcp/gateways/a1");
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     expect(screen.getByText("form is read-only")).toBeVisible();
     expect(
-      screen.getByText(/you can view this agent's configuration/i),
+      screen.getByText(/you can view this mcp gateway's configuration/i),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
@@ -367,10 +441,10 @@ describe("AgentDetailPage", () => {
 
   it("renders no tab bar for a built-in record, which has one section", () => {
     access = { ...access, isBuiltIn: true };
-    mockAgent({ ...baseAgent, builtIn: true });
+    mockAgent({ ...baseAgent, builtIn: true, systemPrompt: "Find files." });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(screen.getByText("Find files.")).toBeVisible();
     expect(screen.getByText("Built-in")).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Tools, Skills & Knowledge" }),
@@ -378,15 +452,25 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("states the owner in the header", () => {
+  it("reveals audience and owner on keyboard focus without crowding the header", async () => {
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("Owner")).toBeVisible();
-    expect(screen.getByText("Ada Lovelace")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Audience: Personal, Owner: Ada Lovelace",
+      }),
+    ).toBeVisible();
+    // Only the owner's avatar sits in the header; the words wait for focus.
+    expect(screen.getByTestId("audience-chip")).not.toHaveTextContent(
+      /Personal|Ada Lovelace/,
+    );
+    screen.getByTestId("audience-chip").focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Personal");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Ada Lovelace");
   });
 
   it("keeps stating the owner on every section, being a fact of the record", () => {
@@ -400,17 +484,25 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByText("Owner")).toBeVisible();
-    expect(screen.getByText("Ada Lovelace")).toBeVisible();
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal, Owner: Ada Lovelace",
+    );
   });
 
   it("omits the owner for a built-in record, which belongs to nobody", () => {
     // Absent rather than present-but-empty, which would read as missing data.
     access = { ...access, isBuiltIn: true };
-    mockAgent({ ...baseAgent, builtIn: true });
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByText("Owner")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Audience: Personal" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
   });
 
   it("omits the owner when the record has none recorded", () => {
@@ -422,7 +514,12 @@ describe("AgentDetailPage", () => {
     mockAgent({ ...baseAgent, createdBy: null });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByText("Owner")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Audience: Personal" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal",
+    );
     expect(screen.queryByText("—")).toBeNull();
   });
 
@@ -438,21 +535,6 @@ describe("AgentDetailPage", () => {
           (link) => link.getAttribute("href") === "/agents/a1?section=runs",
         ),
     ).toBe(true);
-  });
-
-  it("opens runtime settings in their own tab after tools, even before a runtime is enabled", () => {
-    vi.mocked(useFeature).mockReturnValue(true);
-    mockSection("runtime");
-    render(<AgentDetailPage kind="agent" id="a1" />);
-    const runtimeLink = screen.getAllByRole("link", {
-      name: "Agent Runtime",
-    })[0];
-    expect(runtimeLink).toHaveAttribute("href", "/agents/a1?section=runtime");
-    const links = screen.getAllByRole("link");
-    expect(links[links.indexOf(runtimeLink) - 1]).toHaveTextContent(
-      "Tools, Skills & Knowledge",
-    );
-    expect(screen.getByText("form section: runtime")).toBeVisible();
   });
 
   it("keeps run UI invisible when its feature flag is disabled", () => {

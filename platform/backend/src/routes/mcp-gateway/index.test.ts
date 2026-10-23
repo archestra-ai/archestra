@@ -1,29 +1,21 @@
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_ASK_USER_FULL_NAME,
-  TOOL_CANCEL_RUN_FULL_NAME,
-  TOOL_DELETE_FILE_FULL_NAME,
-  TOOL_DOWNLOAD_FILE_FULL_NAME,
-  TOOL_EDIT_FILE_FULL_NAME,
-  TOOL_GET_RUN_FULL_NAME,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-  TOOL_LIST_RUNS_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
-  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -31,14 +23,19 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentExcludedSubagentModel,
+  AgentExcludedToolModel,
   AgentModel,
   AppModel,
   McpServerModel,
   McpToolCallModel,
-  TeamTokenModel,
+  ProjectModel,
+  ServiceAccountModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
@@ -112,25 +109,28 @@ async function callMcpTool(params: {
   });
 }
 
-function getPolicyBlockedText(response: {
+type ToolErrorResult = {
+  isError?: boolean;
+  content: Array<{ type: string; text?: string }>;
+  structuredContent?: { archestraError?: unknown };
+};
+
+function getToolErrorResult(response: {
   statusCode: number;
-  json(): {
-    result: {
-      isError?: boolean;
-      content: Array<{ type: string; text?: string }>;
-    };
-  };
-}): string {
+  json(): { result: ToolErrorResult };
+}): ToolErrorResult {
   expect(response.statusCode).toBe(200);
   const body = response.json();
   expect(body.result.isError).toBe(true);
-  return body.result.content.map((item) => item.text ?? "").join("\n");
+  return body.result;
 }
 
 describe("MCP Gateway (stateless mode)", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    // These tool-list contracts exclude implicit OpenAPPA tools.
+    config.openappa.enabled = false;
     // Create a test Fastify app
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -146,17 +146,13 @@ describe("MCP Gateway (stateless mode)", () => {
   test("handles initialize request successfully (stateless)", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
 
-    // Create an org token for authentication
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    // Create a service account token for authentication
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     // Pin the skills flag rather than inherit it from the developer's .env:
     // this test asserts the flag-off extension set, and the flag-on
@@ -201,14 +197,12 @@ describe("MCP Gateway (stateless mode)", () => {
   test("records the Agent Runtime id on gateway audit rows", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organization = await makeOrganization();
     const agent = await makeAgent({ organizationId: organization.id });
-    const token = await TeamTokenModel.create({
+    const token = await makeServiceAccountToken({
       organizationId: organization.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     const runId = crypto.randomUUID();
 
@@ -248,9 +242,57 @@ describe("MCP Gateway (stateless mode)", () => {
     ]);
   });
 
+  test("records a service account key's call as that account, not a team token", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const account = await makeServiceAccount(organization.id);
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: organization.id,
+      name: "test key",
+    });
+    const runId = crypto.randomUUID();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...makeMcpHeaders(token), "x-archestra-run-id": runId },
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "automation", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await McpToolCallModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { search: runId },
+    );
+    expect(rows.data).toEqual([
+      expect.objectContaining({
+        method: "initialize",
+        authMethod: "service_account_token",
+      }),
+    ]);
+  });
+
   test("reserves the skill://archestra namespace while the skills surface is off", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The skills surface is off here (the deployment flag is off), which is
     // exactly the window where falling through would let an upstream server
@@ -258,12 +300,7 @@ describe("MCP Gateway (stateless mode)", () => {
     // back not-found — never be proxied upstream.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     // A well-formed URI, an unknown scope, and malformed percent-encoding all
     // stay inside the reserved authority.
@@ -296,6 +333,7 @@ describe("MCP Gateway (stateless mode)", () => {
   test("dispatches skills/list only while the skills surface is enabled", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // Everything else about the skills surface is tested by calling its
     // handlers directly. This is the one test that proves the handlers are
@@ -305,12 +343,7 @@ describe("MCP Gateway (stateless mode)", () => {
     // suite still green.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const listSkills = async () =>
       await app.inject({
@@ -346,6 +379,7 @@ describe("MCP Gateway (stateless mode)", () => {
   test("a skills notification gets 202 and no JSON-RPC response", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // A notification — same method, no id — must never be answered. The skill
     // dispatch refuses bodies without an id, so the spelling falls through to
@@ -353,12 +387,7 @@ describe("MCP Gateway (stateless mode)", () => {
     // empty body — never a JSON-RPC response with `id: null`.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const original = config.mcpGateway.skillsEnabled;
     try {
@@ -380,6 +409,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
     makeSkill,
+    makeServiceAccountToken,
   }) => {
     // The read half of the reachability check above. `resources/read` is an
     // ordinary SDK request whose handler branches on the flag, so an inverted
@@ -390,12 +420,7 @@ describe("MCP Gateway (stateless mode)", () => {
       organizationId: org.id,
       accessAllSkills: true,
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await makeSkill(org.id, {
       name: "reachable-skill",
       description: "Served over the gateway",
@@ -439,16 +464,12 @@ describe("MCP Gateway (stateless mode)", () => {
   test("handles tools/list request successfully (stateless)", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     // Send tools/list request directly without prior initialize
     // In stateless mode, each request creates a fresh server
@@ -619,6 +640,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -660,12 +682,7 @@ describe("MCP Gateway (stateless mode)", () => {
       credentialResolutionMode: "dynamic",
     });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     await initializeMcpSession({ app, agentId: agent.id, token: token.value });
     const response = await app.inject({
@@ -690,12 +707,104 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(remote?.title).toBe("linear_search_issues");
   });
 
+  for (const scenario of [
+    "auto",
+    "custom compact",
+    "custom empty",
+    "excluded tool",
+    "no create permission",
+  ] as const) {
+    test(`scheduling discovery guidance: ${scenario}`, async ({
+      makeAgent,
+      makeAgentTool,
+      makeCustomRole,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const restrictedRole =
+        scenario === "no create permission"
+          ? await makeCustomRole(org.id, {
+              permission: { agent: ["read"], project: ["read"] },
+            })
+          : null;
+      await makeMember(user.id, org.id, {
+        role: restrictedRole?.role ?? "admin",
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: user.id,
+        agentType: "agent",
+        accessAllTools: !scenario.startsWith("custom"),
+        toolExposureMode: "search_and_run_only",
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const schedulingToolName = archestraMcpBranding.getToolName(
+        "create_schedule_trigger",
+      );
+      const scheduleTool = mustExist(
+        await ToolModel.findByName(schedulingToolName),
+      );
+      if (scenario === "custom compact") {
+        await makeAgentTool(agent.id, scheduleTool.id);
+      }
+      if (scenario === "excluded tool") {
+        await AgentExcludedToolModel.replaceForAgent(agent.id, [
+          scheduleTool.id,
+        ]);
+      }
+      const token = await UserTokenModel.create(user.id, org.id);
+      await initializeMcpSession({
+        app,
+        agentId: agent.id,
+        token: token.value,
+      });
+      const listing = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(listing.statusCode).toBe(200);
+      const listedTools: Array<{ name: string; description?: string }> =
+        listing.json().result.tools;
+      const searchDescription = mustExist(
+        listedTools.find((tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME),
+      ).description;
+      const available = scenario === "auto" || scenario === "custom compact";
+      expect(searchDescription?.includes("schedule this agent")).toBe(
+        available,
+      );
+      expect(searchDescription?.includes("project_id is omitted")).toBe(
+        available,
+      );
+
+      const search = await callMcpTool({
+        app,
+        agentId: agent.id,
+        token: token.value,
+        name: TOOL_SEARCH_TOOLS_FULL_NAME,
+        arguments: { query: "schedule agent" },
+      });
+      expect(search.statusCode).toBe(200);
+      expect(search.json().result.isError).not.toBe(true);
+      const matches: Array<{ toolName: string }> =
+        search.json().result.structuredContent.tools;
+      expect(matches.some((tool) => tool.toolName === schedulingToolName)).toBe(
+        available,
+      );
+    });
+  }
+
   test("Auto-tool mode exclusions: tools/list drops excluded assigned tools and their catalog from the search_tools description", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeOrganization,
     makeTool,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     // accessAllTools forces search_and_run_only, so tools/list advertises the
@@ -735,12 +844,7 @@ describe("MCP Gateway (stateless mode)", () => {
       excludedToolIds: [excludedTool.id],
     });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     await initializeMcpSession({ app, agentId: agent.id, token: token.value });
     const response = await app.inject({
@@ -768,13 +872,14 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     // accessAllTools forces search_and_run_only, where always-exposed
     // built-ins like load_skill normally stay top-level in tools/list.
     const agent = await makeAgent({
       organizationId: org.id,
-      agentType: "mcp_gateway",
+      agentType: "agent",
       accessAllTools: true,
     });
     await seedAndAssignArchestraTools(agent.id);
@@ -793,12 +898,7 @@ describe("MCP Gateway (stateless mode)", () => {
       excludedToolIds: [loadSkill.id],
     });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     await initializeMcpSession({ app, agentId: agent.id, token: token.value });
     const response = await app.inject({
@@ -900,6 +1000,8 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeUser,
   }) => {
+    // Without the Agent Sandbox controller no run-control tools are implied.
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
     const org = await makeOrganization();
     const author = await makeUser();
     await makeMember(author.id, org.id, { role: "admin" });
@@ -1194,6 +1296,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -1202,12 +1305,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
     await seedAndAssignArchestraTools(agent.id);
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const initResponse = await app.inject({
       method: "POST",
@@ -1252,341 +1350,189 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
-  test("direct tools/call applies target input-based invocation policies", async ({
+  test("links a tool call to the LLM session and model call the client names, and to nothing otherwise", async ({
     makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
     makeOrganization,
-    makeTool,
-    makeToolPolicy,
+    seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: `policy_target_${crypto.randomUUID().slice(0, 8)}`,
-    });
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      reason: "Blocked recipient",
-      conditions: [{ key: "recipient", operator: "equal", value: "external" }],
-    });
-
-    const { value: token } = await TeamTokenModel.create({
+    await seedAndAssignArchestraTools(agent.id);
+    const { value: token } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
-    await initializeMcpSession({ app, agentId: agent.id, token });
+    const callWhoami = (params: {
+      headers?: Record<string, string>;
+      meta?: Record<string, string>;
+    }) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: { ...makeMcpHeaders(token), ...params.headers },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__whoami",
+            arguments: {},
+            ...(params.meta && { _meta: params.meta }),
+          },
+          id: 2,
+        },
+      });
+    const seen = new Set<string>();
+    const newRow = async () => {
+      const page = await McpToolCallModel.findAllCursorPaginated(
+        { limit: 10 },
+        undefined,
+        undefined,
+        { agentId: agent.id },
+      );
+      const row = mustExist(page.data.find((r) => !seen.has(r.id)));
+      seen.add(row.id);
+      return row;
+    };
 
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: tool.name,
-      arguments: { recipient: "external" },
+    // The proxy files Claude Code's turns under its session header; the
+    // explicit Archestra header outranks it on both sides.
+    expect(
+      (
+        await callWhoami({
+          headers: {
+            "x-claude-code-session-id": "claude-session",
+            "x-archestra-session-id": "named-session",
+          },
+          meta: {
+            "claudecode/toolUseId": "toolu_01",
+            "com.archestra/logicalToolCallId": "logical-1",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await newRow()).toMatchObject({
+      method: "tools/call",
+      sessionId: "named-session",
+      llmToolCallId: "toolu_01",
     });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain("Blocked recipient");
+
+    // A generic `session-id` header is only a session for a client the proxy
+    // identified from its request body, which an MCP request does not carry.
+    expect(
+      (await callWhoami({ headers: { "session-id": "codex-thread" } }))
+        .statusCode,
+    ).toBe(200);
+    expect(await newRow()).toMatchObject({
+      sessionId: null,
+      llmToolCallId: null,
+    });
   });
 
-  test("run_tool applies target input-based invocation policies", async ({
+  test("refuses a direct call to a tool the gateway does not have, without running it", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeOrganization,
     makeTool,
-    makeToolPolicy,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
+    const assigned = await makeTool({
       catalogId: catalog.id,
-      name: `run_policy_target_${crypto.randomUUID().slice(0, 8)}`,
+      name: `assigned_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const unassigned = await makeTool({
+      catalogId: catalog.id,
+      name: `unassigned_${crypto.randomUUID().slice(0, 8)}`,
     });
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
-      toolExposureMode: "search_and_run_only",
+      accessAllTools: false,
     });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      reason: "Blocked transfer",
-      conditions: [{ key: "action", operator: "equal", value: "wire" }],
-    });
+    await makeAgentTool(agent.id, assigned.id);
 
-    const { value: token } = await TeamTokenModel.create({
+    const { value: token } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     await initializeMcpSession({ app, agentId: agent.id, token });
 
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: TOOL_RUN_TOOL_FULL_NAME,
-      arguments: {
-        tool_name: tool.name,
-        tool_args: { action: "wire" },
-      },
+    const result = getToolErrorResult(
+      await callMcpTool({
+        app,
+        agentId: agent.id,
+        token,
+        name: unassigned.name,
+        arguments: {},
+      }),
+    );
+    expect(result.content[0].text).toContain(unassigned.name);
+    expect(result.content[0].text).toContain("not run");
+    expect(result.structuredContent?.archestraError).toMatchObject({
+      type: "tool_state",
+      code: "tool_not_enabled",
+      toolName: unassigned.name,
     });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain("Blocked transfer");
   });
 
-  test("direct tools/call blocks target tools that require approval", async ({
+  test("steers a direct call to an unlisted tool through run_tool when the gateway advertises the dispatch pair", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeOrganization,
     makeTool,
-    makeToolPolicy,
+    seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
+    const assigned = await makeTool({
       catalogId: catalog.id,
-      name: `approval_direct_${crypto.randomUUID().slice(0, 8)}`,
+      name: `assigned_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const unassigned = await makeTool({
+      catalogId: catalog.id,
+      name: `unassigned_${crypto.randomUUID().slice(0, 8)}`,
     });
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
+      accessAllTools: false,
     });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
+    await seedAndAssignArchestraTools(agent.id);
+    await makeAgentTool(agent.id, assigned.id);
 
-    const { value: token } = await TeamTokenModel.create({
+    const { value: token } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     await initializeMcpSession({ app, agentId: agent.id, token });
 
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: tool.name,
-      arguments: {},
+    const result = getToolErrorResult(
+      await callMcpTool({
+        app,
+        agentId: agent.id,
+        token,
+        name: unassigned.name,
+        arguments: {},
+      }),
+    );
+    expect(result.content[0].text).toContain("archestra__run_tool");
+    expect(result.content[0].text).toContain(unassigned.name);
+    expect(result.structuredContent?.archestraError).toMatchObject({
+      type: "tool_state",
+      code: "tool_not_directly_callable",
     });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("run_tool blocks target tools that require approval", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const org = await makeOrganization();
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: `approval_run_${crypto.randomUUID().slice(0, 8)}`,
-    });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      agentType: "mcp_gateway",
-      toolExposureMode: "search_and_run_only",
-    });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-
-    const { value: token } = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    await initializeMcpSession({ app, agentId: agent.id, token });
-
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: TOOL_RUN_TOOL_FULL_NAME,
-      arguments: {
-        tool_name: tool.name,
-        tool_args: {},
-      },
-    });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("direct tools/call applies untrusted-context invocation policies", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeOrganization,
-    makeTool,
-  }) => {
-    const org = await makeOrganization();
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: `untrusted_direct_${crypto.randomUUID().slice(0, 8)}`,
-    });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      agentType: "mcp_gateway",
-      considerContextUntrusted: true,
-    });
-    await makeAgentTool(agent.id, tool.id);
-
-    const { value: token } = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    await initializeMcpSession({ app, agentId: agent.id, token });
-
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: tool.name,
-      arguments: {},
-    });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain("untrusted");
-  });
-
-  test("run_tool applies untrusted-context invocation policies to the target tool", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeOrganization,
-    makeTool,
-  }) => {
-    const org = await makeOrganization();
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: `untrusted_run_${crypto.randomUUID().slice(0, 8)}`,
-    });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      agentType: "mcp_gateway",
-      toolExposureMode: "search_and_run_only",
-      considerContextUntrusted: true,
-    });
-    await makeAgentTool(agent.id, tool.id);
-
-    const { value: token } = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    await initializeMcpSession({ app, agentId: agent.id, token });
-
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: TOOL_RUN_TOOL_FULL_NAME,
-      arguments: {
-        tool_name: tool.name,
-        tool_args: {},
-      },
-    });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain("untrusted");
-  });
-
-  test("run_tool applies target context-condition invocation policies", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeMember,
-    makeOrganization,
-    makeTeam,
-    makeTool,
-    makeToolPolicy,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id);
-    const team = await makeTeam(org.id, user.id);
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const tool = await makeTool({
-      catalogId: catalog.id,
-      name: `team_policy_target_${crypto.randomUUID().slice(0, 8)}`,
-    });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      agentType: "mcp_gateway",
-      access: { teams: [team.id] },
-      // Tool-policy context reads the agent's team rows (agent_team), which
-      // creation no longer writes; seed them as a pre-upgrade agent had them.
-      legacy: { scope: "team", teams: [team.id] },
-      toolExposureMode: "search_and_run_only",
-    });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      reason: "Blocked for this team",
-      conditions: [
-        { key: "context.teamIds", operator: "contains", value: team.id },
-      ],
-    });
-
-    const { value: token } = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Team Token",
-      teamId: team.id,
-      isOrganizationToken: false,
-    });
-    await initializeMcpSession({ app, agentId: agent.id, token });
-
-    const response = await callMcpTool({
-      app,
-      agentId: agent.id,
-      token,
-      name: TOOL_RUN_TOOL_FULL_NAME,
-      arguments: {
-        tool_name: tool.name,
-        tool_args: {},
-      },
-    });
-    const text = getPolicyBlockedText(response);
-    expect(text).toContain(tool.name);
-    expect(text).toContain("Blocked for this team");
   });
 
   test("new Manual gateways default to only meta and always-exposed tools in tools/list", async ({
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -1595,12 +1541,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
     await seedAndAssignArchestraTools(agent.id);
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const initResponse = await app.inject({
       method: "POST",
@@ -1638,8 +1579,6 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames.sort()).toEqual(
       [
         TOOL_ASK_USER_FULL_NAME,
-        TOOL_LIST_SKILLS_FULL_NAME,
-        TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
@@ -1647,7 +1586,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
-  test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
+  test("defers runtime tools while preserving file and skill workflows through search/run", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1706,30 +1645,92 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
-      // App tools are deliberately absent: in search_and_run_only mode the
-      // whole app surface is reached through search_tools/run_tool. Task
-      // lifecycle controls stay top-level because delegated work is durable.
+      // Questions stay direct; capability and run controls use search/run.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_ASK_USER_FULL_NAME,
-          TOOL_CANCEL_RUN_FULL_NAME,
-          TOOL_DELETE_FILE_FULL_NAME,
-          TOOL_DOWNLOAD_FILE_FULL_NAME,
-          TOOL_EDIT_FILE_FULL_NAME,
-          TOOL_GET_RUN_FULL_NAME,
-          TOOL_LIST_SKILLS_FULL_NAME,
-          TOOL_LIST_RUNS_FULL_NAME,
-          TOOL_LOAD_SKILL_FULL_NAME,
-          TOOL_READ_FILE_FULL_NAME,
-          TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
-          TOOL_SAVE_FILE_FULL_NAME,
-          TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
-          TOOL_STEER_RUN_FULL_NAME,
-          TOOL_UPLOAD_FILE_FULL_NAME,
         ].sort(),
       );
+
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await callMcpTool({
+          app,
+          agentId: agent.id,
+          token: token.value,
+          name,
+          arguments: args,
+        });
+        expect(result.statusCode).toBe(200);
+        expect(result.json().result.isError).not.toBe(true);
+        return result.json().result;
+      };
+      const discovery = await call(TOOL_SEARCH_TOOLS_FULL_NAME, {
+        query:
+          "^archestra__(list_skills|save_file|read_file|run_command|get_agent_run|list_agent_runs|steer_agent_run|cancel_agent_run)$",
+        limit: 20,
+        mode: "regex",
+      });
+      expect(
+        discovery.structuredContent.tools.map(
+          (tool: { toolName: string }) => tool.toolName,
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          TOOL_LIST_SKILLS_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
+          TOOL_READ_FILE_FULL_NAME,
+          TOOL_RUN_COMMAND_FULL_NAME,
+          "archestra__get_agent_run",
+          TOOL_LIST_AGENT_RUNS_FULL_NAME,
+          "archestra__steer_agent_run",
+          "archestra__cancel_agent_run",
+        ]),
+      );
+      await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_SKILLS_FULL_NAME,
+      });
+      const runs = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        tool_args: { agent_ids: [agent.id], mine_only: true },
+      });
+      expect(runs.structuredContent).toMatchObject({
+        runs: [],
+        summary: { total: 0 },
+      });
+      const searchDescription = response
+        .json()
+        .result.tools.find(
+          (tool: { name: string }) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+        ).description;
+      expect(searchDescription).toContain("Files");
+      expect(searchDescription).toContain("Skills");
+      expect(searchDescription).toContain("Code Sandbox");
+      expect(searchDescription).toContain("Agent Runtime");
+      expect(searchDescription).toContain("'read file'");
+      const project = await ProjectModel.create({
+        organizationId: org.id,
+        userId: adminUser.id,
+        name: "Gateway workflow",
+        description: null,
+      });
+      const saved = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_SAVE_FILE_FULL_NAME,
+        tool_args: {
+          filename: "note.txt",
+          content: "Gateway file round trip",
+          project_id: project.id,
+        },
+      });
+      const read = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_READ_FILE_FULL_NAME,
+        tool_args: {
+          id: saved.structuredContent.fileId,
+          project_id: project.id,
+        },
+      });
+      expect(JSON.stringify(read.content)).toContain("Gateway file round trip");
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
@@ -1739,6 +1740,7 @@ describe("MCP Gateway (stateless mode)", () => {
   test("exposes implicit search_tools and run_tool without manual assignment when toolExposureMode is search_and_run_only", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -1747,12 +1749,7 @@ describe("MCP Gateway (stateless mode)", () => {
       toolExposureMode: "search_and_run_only",
     });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const initResponse = await app.inject({
       method: "POST",
@@ -1799,6 +1796,7 @@ describe("MCP Gateway (stateless mode)", () => {
   test("POST endpoint resolves agent by slug", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -1807,12 +1805,7 @@ describe("MCP Gateway (stateless mode)", () => {
       agentType: "mcp_gateway",
     });
 
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     const initResponse = await app.inject({
       method: "POST",

@@ -49,11 +49,10 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   mcp_servers: 11,
   mcp_gateways: 12,
   tool_assignment: 13,
-  policies: 14,
-  openappa: 15,
-  limits: 16,
-  teams: 17,
-  plugins: 18,
+  openappa: 14,
+  limits: 15,
+  teams: 16,
+  plugins: 17,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",
@@ -84,22 +83,24 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
   remove_team_member:
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  create_schedule_trigger:
+    "Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   list_schedule_trigger_runs:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   get_schedule_trigger_run:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   update_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   delete_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Full access** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   enable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   disable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   run_schedule_trigger_now:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
     "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
@@ -123,14 +124,10 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  * these tools are absent from their `tools/list`.
  */
 const CODE_RUNTIME_PREREQUISITE =
-  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
-  // Same gate as the sandbox, since these tools ship from the same module —
-  // but they read and write saved files rather than entering a container, so
-  // the note says what they are instead of pointing at the runtime page.
-  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
 };
 
 const HOOK_RUNTIME_NOTE =
@@ -198,7 +195,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Archestra MCP Server"
-description: "Built-in MCP server providing tools for managing Archestra platform resources"
+description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
 order: 4
 lastUpdated: ${lastUpdated}
 ---`;
@@ -275,7 +272,7 @@ function generateMarkdownBody(): string {
     if (groupAvailabilityNote) {
       section += `${groupAvailabilityNote}\n\n`;
     }
-    section += "| Tool | Description | Required RBAC Permission |\n";
+    section += "| Tool | Description | Permission |\n";
     section += "|------|-------------|--------------------------|\n";
 
     for (const tool of groupTools) {
@@ -321,16 +318,22 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-The Archestra MCP Server is built into every deployment and needs no installation. Its tools let an agent manage agents, MCP servers, policies, and knowledge, build apps, and run code in the sandbox. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
+Let an agent run Archestra for you: ask it to create an agent, install an MCP server, or build an app, and it calls these tools. The Archestra MCP Server is built into every deployment and acts as the person using the agent, with their permissions. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
 
-## Access
+<span id="access"></span>
 
-In Custom tool mode, assign the tools to the agent or MCP Gateway the client connects through. Auto mode uses [tool discovery](/docs/mcp/gateway#load-tools-when-needed) to reach tools the user can access. New agents include ${preInstalledList}; enabled features add their own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has at least one [knowledge base or connector](/docs/knowledge) attached.
+## Give an Agent These Tools
 
-Two checks apply to every call:
+Pick these tools like any other MCP server's tools, on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings:
 
-- **Permissions.** Each tool requires the RBAC permission in the last column of its table. \`tools/list\` shows a user only the tools their role allows; a user without \`knowledgeSource:create\`, for example, does not see ${formatToolLink("create_knowledge_base")}. A tool marked † has an extra condition, described in its entry.
-- **Guardrails.** Built-in tools are trusted: [tool invocation and trusted data policies](/docs/agents/guardrails) do not evaluate them. ${formatToolLink("query_knowledge_sources")} is the exception: invocation policies evaluate the call, and trusted data policies evaluate its results as sensitive data.
+- **Manual:** assign the tools you want.
+- **All:** the agent gets every tool the person can use, but built-in tools start out excluded. Remove a tool from the exclusions to allow it.
+
+New agents include ${preInstalledList}. Turning on a feature adds its own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has a [knowledge base or connector](/docs/knowledge) attached.
+
+## Permissions
+
+Each tool needs the permission in the last column of its table. A person sees only the tools their permissions allow: without \`knowledgeSource:create\`, for example, ${formatToolLink("create_knowledge_base")} is hidden. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
 
 ## Tools Reference
 
@@ -423,7 +426,7 @@ export function formatToolPermission(
 ): ToolPermissionDisplay {
   const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
-    return "None (no additional RBAC permission required)";
+    return "None";
   }
 
   // No role holds this action: it is granted on the individual item.

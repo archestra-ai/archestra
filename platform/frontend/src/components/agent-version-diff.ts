@@ -627,6 +627,16 @@ const CONFIGURATION_FIELDS: {
     identity: (s) => s.model?.id ?? null,
   },
   {
+    label: "Fast model",
+    render: (s) => s.fastModel?.externalId ?? null,
+    identity: (s) => s.fastModel?.id ?? null,
+  },
+  {
+    label: "Smart model",
+    render: (s) => s.smartModel?.externalId ?? null,
+    identity: (s) => s.smartModel?.id ?? null,
+  },
+  {
     label: "LLM API key",
     render: (s) =>
       s.llmApiKey ? `${s.llmApiKey.name} (${s.llmApiKey.provider})` : null,
@@ -653,10 +663,6 @@ const CONFIGURATION_FIELDS: {
     render: (s) =>
       `${s.activationSkillRuleCounts.allowed} allowed, ${s.activationSkillRuleCounts.excluded} excluded`,
     identity: (s) => s.activationSkillRuleDigest,
-  },
-  {
-    label: "Treat context as untrusted",
-    render: (s) => renderBoolean(s.considerContextUntrusted),
   },
   {
     label: "Passthrough headers",

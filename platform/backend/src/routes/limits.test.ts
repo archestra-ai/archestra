@@ -1,10 +1,15 @@
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { EnvironmentModel, LimitModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import type { User } from "@/types";
+import { LimitCleanupIntervalSchema } from "@/types/limit";
 
 describe("limits routes", () => {
   let app: FastifyInstanceWithZod;
@@ -27,6 +32,7 @@ describe("limits routes", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
+    registerAuditLogHook(app);
     const { default: limitsRoutes } = await import("./limits");
     await app.register(limitsRoutes);
   });
@@ -37,6 +43,63 @@ describe("limits routes", () => {
   });
 
   describe("GET /api/limits", () => {
+    test("creates, updates, reads and audits every unit/interval combination", async () => {
+      for (const limitType of ["token_cost", "requests", "tokens"]) {
+        for (const cleanupInterval of LimitCleanupIntervalSchema.options) {
+          const response = await app.inject({
+            method: "POST",
+            url: "/api/limits",
+            payload: {
+              entityType: "organization",
+              entityId: organizationId,
+              limitType,
+              cleanupInterval,
+              limitValue: 10,
+              model: [`${limitType}-${cleanupInterval}`],
+            },
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          const id = response.json().id;
+          const edit = await app.inject({
+            method: "PATCH",
+            url: `/api/limits/${id}`,
+            payload: { limitValue: 11 },
+          });
+          expect(edit.statusCode, edit.body).toBe(200);
+          const read = await app.inject({
+            method: "GET",
+            url: `/api/limits/${id}`,
+          });
+          expect(read.json()).toMatchObject({
+            id,
+            limitType,
+            cleanupInterval,
+            limitValue: 11,
+          });
+          if (limitType !== "token_cost" || cleanupInterval === "minute")
+            expect(read.json().throughputUsage.currentUsage).toBe(0);
+          const logs = await db
+            .select()
+            .from(schema.auditLogsTable)
+            .where(eq(schema.auditLogsTable.resourceId, id));
+          expect(logs.length).toBeGreaterThanOrEqual(2);
+        }
+      }
+      for (const limitValue of [-1, 1.5, 2147483648]) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/limits",
+          payload: {
+            entityType: "organization",
+            entityId: organizationId,
+            limitType: "token_cost",
+            cleanupInterval: "minute",
+            limitValue,
+          },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    });
     test("calls cleanupLimitsIfNeeded with allForOrganizationId before returning limits", async ({
       makeAgent,
     }) => {
@@ -334,9 +397,223 @@ describe("limits routes", () => {
 
       cleanupSpy.mockRestore();
     });
+
+    test("reads every token_cost limit's usage in one statement", async ({
+      makeAgent,
+    }) => {
+      const createWithUsage = async (model: string, tokens: number) => {
+        const agent = await makeAgent({ organizationId });
+        const limit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1000000,
+          model: [model],
+        });
+        await LimitModel.updateTokenLimitUsage(
+          "agent",
+          agent.id,
+          model,
+          tokens,
+          tokens,
+        );
+        // Not due for a reset, so the read only reports usage.
+        await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+        return limit;
+      };
+      const limits = [
+        await createWithUsage("gpt-4o", 100),
+        await createWithUsage("claude-sonnet-4", 200),
+        await createWithUsage("gemini-2.5-pro", 300),
+      ];
+
+      const { result: response, statements } = await recordQueries(() =>
+        app.inject({ method: "GET", url: "/api/limits" }),
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        statements.filter((statement) =>
+          statement.includes('from "limit_model_usage"'),
+        ),
+      ).toHaveLength(1);
+      const body: Array<{
+        id: string;
+        modelUsage?: Array<{ model: string; tokensIn: number }>;
+      }> = response.json();
+      expect(
+        limits.map(
+          (limit) => body.find((row) => row.id === limit.id)?.modelUsage,
+        ),
+      ).toEqual([
+        [expect.objectContaining({ model: "gpt-4o", tokensIn: 100 })],
+        [expect.objectContaining({ model: "claude-sonnet-4", tokensIn: 200 })],
+        [expect.objectContaining({ model: "gemini-2.5-pro", tokensIn: 300 })],
+      ]);
+    });
+
+    test("checks for elapsed windows at most once per 30 seconds per selection", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const cleanupSpy = vi.spyOn(LimitModel, "cleanupLimitsIfNeeded");
+        const read = (url: string) => app.inject({ method: "GET", url });
+        const teamUrl = `/api/limits?entityType=team&entityId=${crypto.randomUUID()}&limitType=token_cost`;
+
+        await read("/api/limits");
+        await read("/api/limits");
+        await read(teamUrl);
+        await read(teamUrl);
+        expect(cleanupSpy).toHaveBeenCalledTimes(2);
+
+        vi.setSystemTime(Date.now() + 31_000);
+        await read("/api/limits");
+        expect(cleanupSpy).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("tries the cleanup again on the next read after it fails", async () => {
+      const cleanupSpy = vi
+        .spyOn(LimitModel, "cleanupLimitsIfNeeded")
+        .mockRejectedValueOnce(new Error("cleanup failed"));
+      const url = `/api/limits?entityType=team&entityId=${crypto.randomUUID()}`;
+
+      const failed = await app.inject({ method: "GET", url });
+      expect(failed.statusCode).toBeGreaterThanOrEqual(500);
+      const retried = await app.inject({ method: "GET", url });
+      expect(retried.statusCode).toBe(200);
+      expect(cleanupSpy).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("POST /api/limits", () => {
+    test("creates audited throughput rules, reports usage, and rejects invalid merged updates", async () => {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "organization",
+          entityId: organizationId,
+          limitType: "requests_per_minute",
+          limitValue: 5,
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toMatchObject({
+        limitType: "requests_per_minute",
+        cleanupInterval: "minute",
+      });
+      const id = created.json().id;
+      const listed = await app.inject({
+        method: "GET",
+        url: `/api/limits/${id}`,
+      });
+      expect(listed.json()).toMatchObject({
+        throughputUsage: { currentUsage: 0 },
+      });
+      const invalid = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${id}`,
+        payload: { cleanupInterval: "1m" },
+      });
+      expect(invalid.statusCode).toBe(400);
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${id}`,
+        payload: { limitValue: 8, model: ["model-a"] },
+      });
+      expect(updated.statusCode).toBe(200);
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, id));
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "limit.created",
+            outcome: "success",
+            after: expect.objectContaining({
+              limitType: "requests_per_minute",
+              limitValue: 5,
+            }),
+          }),
+          expect.objectContaining({
+            action: "limit.updated",
+            outcome: "success",
+            before: expect.objectContaining({ limitValue: 5 }),
+            after: expect.objectContaining({ limitValue: 8 }),
+          }),
+        ]),
+      );
+    });
+
+    test("rejects proxy cost limits while allowing ordinary agent budgets", async ({
+      makeAgent,
+    }) => {
+      const proxy = await makeAgent({
+        organizationId,
+        agentType: "llm_proxy",
+      });
+      const agent = await makeAgent({ organizationId });
+      const payload = {
+        entityType: "agent",
+        entityId: proxy.id,
+        limitType: "token_cost",
+        limitValue: 1000,
+      };
+
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().error.message).toContain(
+        "Use an organization limit instead",
+      );
+      expect(await LimitModel.findAll("agent", proxy.id)).toEqual([]);
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: { ...payload, entityId: agent.id },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toMatchObject({ entityId: agent.id });
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.organizationId, organizationId),
+            eq(schema.auditLogsTable.httpRoute, "/api/limits"),
+          ),
+        );
+      expect(records).toHaveLength(2);
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "limit.created",
+            outcome: "success",
+            resourceType: "limit",
+            resourceId: created.json().id,
+            before: null,
+            after: expect.objectContaining({
+              entityId: agent.id,
+              limitValue: 1000,
+            }),
+          }),
+          expect.objectContaining({
+            action: "limit.created",
+            outcome: "failure",
+            httpStatus: 400,
+            after: null,
+          }),
+        ]),
+      );
+    });
+
     test("defaults new limits to calendar-month cleanup", async () => {
       const response = await app.inject({
         method: "POST",

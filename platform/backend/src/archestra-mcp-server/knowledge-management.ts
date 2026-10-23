@@ -34,6 +34,7 @@ import {
 } from "@/knowledge-base";
 import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
 import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
+import { getConnector } from "@/knowledge-base/connectors/registry";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
   deleteConnector,
@@ -43,6 +44,7 @@ import {
   mfilesAuthMethodGateViolation,
   mfilesConnectorGateViolation,
 } from "@/knowledge-base/mfiles-gates";
+import { salesforceAuthPolicyViolation } from "@/knowledge-base/salesforce-auth-policy";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -83,7 +85,12 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -283,6 +290,8 @@ const QueryKnowledgeSourcesToolArgsSchema = z
 const GetKnowledgeBasesToolArgsSchema = z
   .object({
     access: resourceAccessToolArg({ examplePlural: "knowledge bases" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
@@ -909,7 +918,7 @@ async function handleGetKnowledgeBases(params: {
       viewerTeamIds: access?.teamIds ?? [],
       viewerUserId: context.userId,
       organizationId: context.organizationId,
-      access: args.access,
+      access: toolAccessSelection(args),
     });
     if (kbs.length === 0) {
       return structuredSuccessResult(
@@ -1078,6 +1087,22 @@ async function handleCreateKnowledgeConnector(params: {
     });
     if (hiddenTypeViolation) {
       return errorResult(hiddenTypeViolation);
+    }
+
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: args.connector_type,
+      nextConfig: { type: args.connector_type, ...args.config },
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (args.connector_type === "salesforce") {
+      const validation = await getConnector("salesforce").validateConfig({
+        type: args.connector_type,
+        ...args.config,
+      });
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
     }
 
     // Environment isolation: a connector created through a gateway belongs to the
@@ -1313,6 +1338,22 @@ async function handleUpdateKnowledgeConnector(params: {
     });
     if (mfilesAuthViolation) {
       return errorResult(mfilesAuthViolation);
+    }
+
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: existingConnector.connectorType,
+      nextConfig: updates.config,
+      existingConfig: existingConnector.config,
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (existingConnector.connectorType === "salesforce" && updates.config) {
+      const validation = await getConnector("salesforce").validateConfig(
+        updates.config,
+      );
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
     }
 
     const connector = await KnowledgeBaseConnectorModel.update(

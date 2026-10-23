@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +19,10 @@ const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
 const mockChatSession = vi.hoisted(() => ({
   current: null as MockChatSession | null,
 }));
+const mockIconSources = vi.hoisted(() => ({
+  agentTools: [] as { name: string; catalogId: string | null }[],
+  catalogItems: [] as { id: string; name: string; icon: string | null }[],
+}));
 
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
@@ -33,7 +37,9 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
+    scrollRef: { current: null },
     scrollToBottom: vi.fn(),
+    stopScroll: vi.fn(),
   }),
 }));
 
@@ -91,6 +97,9 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolErrorDetails: ({ errorText }: { errorText: string }) => (
     <div>{errorText}</div>
   ),
+  SectionLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
@@ -146,10 +155,6 @@ vi.mock("@/components/chat/inline-chat-error", () => ({
 
 vi.mock("@/components/chat/mcp-install-dialogs", () => ({
   McpInstallDialogs: () => null,
-}));
-
-vi.mock("@/components/chat/policy-denied-tool", () => ({
-  PolicyDeniedTool: () => null,
 }));
 
 vi.mock("@/components/chat/auth-error-tool", () => ({
@@ -252,8 +257,11 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({ data: { tools: mockIconSources.agentTools } }),
+}));
+
 vi.mock("@/lib/chat/chat.query", () => ({
-  useProfileToolsWithIds: () => ({ data: [] }),
   useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
   // Read once for the whole transcript, to decide whether an attachment chip
   // offers "Save to knowledge". An ordinary (unencrypted) chat here.
@@ -267,15 +275,23 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useInternalMcpCatalog: () => ({ data: [] }),
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
-  useMcpInstallOrchestrator: () => ({
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: () => ({ data: mockIconSources.catalogItems }),
+}));
+
+const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({
+  mockUseMcpInstallOrchestrator: vi.fn((_options?: { enabled?: boolean }) => ({
     triggerInstallByCatalogId: vi.fn(),
     triggerReauthByCatalogIdAndServerId: vi.fn(),
     connectedCatalogIds: new Set<string>(),
-  }),
+  })),
+}));
+
+vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+  useMcpInstallOrchestrator: mockUseMcpInstallOrchestrator,
 }));
 
 vi.mock("@/lib/organization.query");
@@ -283,9 +299,7 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
-  useGlobalChat: () => ({
-    getSession: () => mockChatSession.current,
-  }),
+  useChatSessionSnapshot: () => mockChatSession.current,
 }));
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
@@ -318,6 +332,161 @@ describe("ChatMessages", () => {
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
     mockHasKnowledgeBaseToolCall.mockReturnValue(false);
     mockChatSession.current = null;
+    mockIconSources.agentTools = [];
+    mockIconSources.catalogItems = [];
+  });
+
+  it("shows an assigned tool's catalog icon from the agent's tool list", () => {
+    // The tool's name prefix does not match its catalog's name, so only the
+    // agent's own tool list can link the call to the catalog.
+    mockIconSources.agentTools = [
+      { name: "ledger_tools__sum_rows", catalogId: "catalog-finance" },
+    ];
+    mockIconSources.catalogItems = [
+      { id: "catalog-finance", name: "Finance", icon: "🧾" },
+    ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-ledger_tools__sum_rows",
+                  toolCallId: "call-1",
+                  state: "output-available",
+                  input: {},
+                  output: { total: 3 },
+                },
+              ],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("🧾")).toBeInTheDocument();
+  });
+
+  it("mounts only the end of a long transcript, and earlier messages on request", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+    expect(screen.getByText("Turn 70")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show earlier messages (70 not shown)",
+      }),
+    );
+    expect(await screen.findByText("Turn 40")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 39")).not.toBeInTheDocument();
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+  });
+
+  it("opens the window around a deep-linked message", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState({}, "", "/chat/conv-1#message-m-20");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(await screen.findByText("Turn 20")).toBeInTheDocument();
+      // Ten items of context above it.
+      expect(screen.getByText("Turn 10")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 9")).not.toBeInTheDocument();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("ignores a malformed message fragment without losing the transcript", () => {
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${index}` }],
+    })) as UIMessage[];
+    window.history.replaceState({}, "", "/chat/conv-1#message-%");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(screen.getByText("Turn 99")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Show earlier messages (70 not shown)",
+        }),
+      ).toBeVisible();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("keeps the window's start when new messages arrive", () => {
+    const messages = Array.from({ length: 50 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    const more = [
+      ...messages,
+      {
+        id: "m-50",
+        role: "user",
+        parts: [{ type: "text", text: "Turn 50" }],
+      } as UIMessage,
+    ];
+    rerender(
+      <ChatMessages conversationId="conv-1" messages={more} status="ready" />,
+    );
+
+    expect(screen.getByText("Turn 50")).toBeInTheDocument();
+    // Still mounted: appending does not push the oldest rendered one out.
+    expect(screen.getByText("Turn 20")).toBeInTheDocument();
   });
 
   it("renders external MCP Skill attribution from message metadata", () => {
@@ -959,407 +1128,6 @@ describe("ChatMessages", () => {
     );
   });
 
-  it("renders the unsafe-context divider when a tool result marks the context unsafe", () => {
-    const messages = [
-      {
-        id: "assistant-unsafe",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-read_email",
-            toolCallId: "call-unsafe",
-            state: "output-available",
-            input: { folder: "inbox" },
-            output: { emails: [{ from: "ceo@external.com" }] },
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "call-unsafe",
-          toolName: "read_email",
-        }}
-      />,
-    );
-
-    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
-  });
-
-  it("subscribes the sticky-boundary listeners once and does not re-subscribe on an unrelated re-render", () => {
-    // The boundary element only mounts inside a scrollable ancestor; make every
-    // element report as scrollable so findScrollContainer resolves a container.
-    const realGetComputedStyle = window.getComputedStyle.bind(window);
-    const getComputedStyleSpy = vi
-      .spyOn(window, "getComputedStyle")
-      .mockImplementation((element: Element, pseudoElt?: string | null) => {
-        const style = realGetComputedStyle(element, pseudoElt);
-        Object.defineProperty(style, "overflowY", {
-          configurable: true,
-          get: () => "scroll",
-        });
-        return style;
-      });
-
-    const addSpy = vi.spyOn(HTMLElement.prototype, "addEventListener");
-
-    const messages = [
-      {
-        id: "assistant-unsafe",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-read_email",
-            toolCallId: "call-unsafe",
-            state: "output-available",
-            input: { folder: "inbox" },
-            output: { emails: [{ from: "ceo@external.com" }] },
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    const boundary = {
-      kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
-      toolCallId: "call-unsafe",
-      toolName: "read_email",
-    } as const;
-
-    const { rerender } = render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        unsafeContextBoundary={boundary}
-      />,
-    );
-
-    const scrollSubscriptionsAfterMount = addSpy.mock.calls.filter(
-      ([eventName]) => eventName === "scroll",
-    ).length;
-    expect(scrollSubscriptionsAfterMount).toBeGreaterThanOrEqual(1);
-
-    addSpy.mockClear();
-
-    // Re-rendering without changing the boundary element must not re-subscribe the scroll listener.
-    rerender(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="streaming"
-        unsafeContextBoundary={boundary}
-      />,
-    );
-
-    const scrollResubscriptions = addSpy.mock.calls.filter(
-      ([eventName]) => eventName === "scroll",
-    ).length;
-    expect(scrollResubscriptions).toBe(0);
-
-    addSpy.mockRestore();
-    getComputedStyleSpy.mockRestore();
-  });
-
-  it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
-    const messages = [
-      {
-        id: "assistant-live-unsafe",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-read_email",
-            toolCallId: "call-live-unsafe",
-            state: "output-available",
-            input: { folder: "inbox" },
-            output: {
-              content: "ARCH_TEST = secret-value",
-              unsafeContextBoundary: {
-                kind: "tool_result",
-                reason: "tool_result_marked_untrusted",
-                toolCallId: "call-live-unsafe",
-                toolName: "read_email",
-              },
-            },
-          },
-          {
-            type: "text",
-            text: "Done.",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    const divider = screen.getByText("Sensitive context below");
-    const assistantText = screen.getByText("Done.");
-
-    expect(divider).toBeInTheDocument();
-    expect(
-      divider.compareDocumentPosition(assistantText) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("matches persisted unsafe boundaries by tool name when tool call ids differ", () => {
-    const messages = [
-      {
-        id: "assistant-persisted-unsafe",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
-          },
-          {
-            type: "text",
-            text: "Done.",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "mcp-tool-call-id",
-          toolName: "internal-dev-test-server__print_archestra_test",
-        }}
-      />,
-    );
-
-    const divider = screen.getByText("Sensitive context below");
-    const assistantText = screen.getByText("Done.");
-
-    expect(
-      divider.compareDocumentPosition(assistantText) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("renders the preexisting unsafe-context divider when the request starts unsafe", () => {
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={
-          [
-            {
-              id: "assistant-1",
-              role: "assistant",
-              parts: [{ type: "text", text: "Continuing the workflow." }],
-            },
-          ] as UIMessage[]
-        }
-        status="ready"
-        unsafeContextBoundary={{
-          kind: "preexisting_untrusted",
-          reason: "inherited_from_parent",
-        }}
-      />,
-    );
-
-    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
-  });
-
-  it("renders the preexisting unsafe-context divider for policy-denied text caused by sensitive context", () => {
-    const messages = [
-      {
-        id: "assistant-denied",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
-  });
-
-  it("infers the sensitive-context boundary before the first assistant text after an unsafe tool result", () => {
-    const messages = [
-      {
-        id: "assistant-sensitive",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "call-1",
-            state: "output-available",
-            output: "ARCHESTRA_TEST = asdfasdfadsf",
-          },
-          {
-            type: "text",
-            text: "Done.",
-          },
-        ],
-      },
-      {
-        id: "assistant-denied",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    const dividers = screen.getAllByText("Sensitive context below");
-    const firstDivider = dividers[0];
-    const assistantText = screen.getByText("Done.");
-
-    expect(dividers).toHaveLength(1);
-    expect(
-      firstDivider.compareDocumentPosition(assistantText) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("renders the sensitive-context divider only once after the thread becomes unsafe", () => {
-    const messages = [
-      {
-        id: "assistant-sensitive",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
-          },
-          {
-            type: "text",
-            text: '"ARCHESTRA_TEST = asdfasdfadsf"',
-          },
-        ],
-      },
-      {
-        id: "assistant-denied",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "mcp-tool-call-id",
-          toolName: "internal-dev-test-server__print_archestra_test",
-        }}
-      />,
-    );
-
-    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
-  });
-
-  it("renders the sensitive-context divider only once across multiple turns calling the same tool", () => {
-    const messages = [
-      {
-        id: "assistant-sensitive",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id-1",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = first-value" },
-          },
-          {
-            type: "text",
-            text: "First result processed.",
-          },
-        ],
-      },
-      {
-        id: "assistant-sensitive-repeat",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id-2",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = second-value" },
-          },
-          {
-            type: "text",
-            text: "Second result processed.",
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "mcp-tool-call-id",
-          toolName: "internal-dev-test-server__print_archestra_test",
-        }}
-      />,
-    );
-
-    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
-  });
-
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {
@@ -1775,6 +1543,171 @@ describe("ChatMessages", () => {
     }
   });
 
+  it("renders a guarded call as one circle whose card shows the negotiation in order", () => {
+    const blocked = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__show_board",
+      args: { board: "roadmap" },
+    });
+    const other = remedyChainParts({
+      prefix: "b",
+      tool: "sparky__list_skills",
+      args: {},
+      viaRunTool: true,
+    });
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          blocked.notice,
+          other.notice,
+          {
+            type: "tool-workspace__clock",
+            toolCallId: "call-clock",
+            state: "output-available",
+            input: {},
+            output: "noon",
+          },
+          other.remedy,
+          blocked.remedy,
+          other.retry,
+          blocked.retry,
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("button", { expanded: false })
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["show board", "list skills", "clock"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "show board" }));
+
+    const card = screen.getByText("tool-workspace__show_board").parentElement;
+    expect(card).not.toBeNull();
+    const text = card?.textContent ?? "";
+    const order = [
+      '{"board":"roadmap"}',
+      "Guardrails",
+      "tool-sparky__get_remedy_plans",
+      "tool-sparky__execute_remedy_plan",
+      '"a: board shown"',
+    ].map((needle) => text.indexOf(needle));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((x, y) => x - y));
+    // The other guarded call's negotiation stays in its own card.
+    expect(text).not.toContain("b: skills listed");
+  });
+
+  it("keeps a guarded call running until its turn ends, only in the active turn", () => {
+    const earlier = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__show_board",
+      args: {},
+    });
+    const current = remedyChainParts({
+      prefix: "b",
+      tool: "workspace__close_task",
+      args: { id: 7 },
+    });
+    // Both calls were blocked and remedied, and neither was retried yet.
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [earlier.notice, earlier.remedy],
+      },
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "Go on" }] },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [current.notice, current.remedy],
+      },
+    ] as unknown as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    // The finished turn shows its final state; the active one stays running.
+    expect(
+      screen.getByRole("button", { name: "show board (blocked)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "close task (running)" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "close task (blocked)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a guarded call's approval prompt visible in one full card", () => {
+    const onToolApprovalResponse = vi.fn();
+    const chain = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__export_records",
+      args: { destination: "external" },
+    });
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          chain.notice,
+          chain.remedy,
+          {
+            ...chain.retry,
+            state: "approval-requested",
+            output: undefined,
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={onToolApprovalResponse}
+      />,
+    );
+
+    expect(screen.getAllByText("tool-workspace__export_records")).toHaveLength(
+      1,
+    );
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval-1",
+      approved: true,
+    });
+  });
+
   it("renders approval controls for a direct tool call that requires approval", () => {
     const onToolApprovalResponse = vi.fn();
     const messages = [
@@ -1924,6 +1857,46 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText(/To re-authenticate, visit this URL:/),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads the MCP install helper only once the transcript shows an auth prompt", () => {
+    const plain = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Here is the summary you asked for." }],
+      },
+    ] as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages conversationId="conv-1" messages={plain} status="ready" />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+
+    const withPrompt = [
+      ...plain,
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+          },
+        ],
+      },
+    ] as UIMessage[];
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={withPrompt}
+        status="ready"
+      />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
   });
 
   it("renders assistant auth-required text as the inline install tool UI", () => {
@@ -2425,3 +2398,51 @@ describe("owned-app inline rendering", () => {
     );
   });
 });
+
+/** One guarded call as Chat receives it: notice, remedy, released retry. */
+function remedyChainParts(params: {
+  prefix: string;
+  tool: string;
+  args: Record<string, unknown>;
+  viaRunTool?: boolean;
+}) {
+  const { prefix, tool, args } = params;
+  const offerId = `${prefix.charCodeAt(0).toString(16)}0000000000000a`;
+  const ruling = `[appa] Blocked: ${tool} cannot run yet.\n  - sparky__execute_remedy_plan(offer_id: "${offerId}", plan: "Accept")`;
+  return {
+    notice: {
+      type: "tool-sparky__get_remedy_plans",
+      toolCallId: `${prefix}-notice`,
+      state: "output-available",
+      input: {
+        tool,
+        arguments: JSON.stringify(args),
+        ruling,
+        notice: { v: 1, call_id: `${prefix}-notice` },
+      },
+      output: ruling,
+    },
+    remedy: {
+      type: "tool-sparky__execute_remedy_plan",
+      toolCallId: `${prefix}-remedy`,
+      state: "output-available",
+      input: { offer_id: offerId, plan: "Accept" },
+      output: "[appa] Authorized.",
+    },
+    retry: params.viaRunTool
+      ? {
+          type: "tool-sparky__run_tool",
+          toolCallId: `${prefix}-retry`,
+          state: "output-available",
+          input: { tool_name: tool, tool_args: args },
+          output: `${prefix}: skills listed`,
+        }
+      : {
+          type: `tool-${tool}`,
+          toolCallId: `${prefix}-retry`,
+          state: "output-available",
+          input: args,
+          output: `${prefix}: board shown`,
+        },
+  };
+}

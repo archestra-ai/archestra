@@ -1,12 +1,20 @@
 import {
+  calculatePaginationMeta,
   classifyMcpRuntimeAlert,
   createMcpServerAlertFingerprint,
+  createPaginatedResponseSchema,
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
+  isPermissionActionGranted,
+  MAX_BULK_IDS,
   mcpRuntimeAlertSource,
+  PaginationQuerySchema,
+  type Permissions,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -20,6 +28,7 @@ import {
   isMcpInstallationAdmin,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
+import { RequestLookups } from "@/auth/request-lookups";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 // SPDX-SnippetBegin
@@ -48,10 +57,20 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import type {
+  RegistryListFilters,
+  RegistryListOptions,
+  RegistrySorting,
+} from "@/models/internal-mcp-catalog";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import type { RegistryInstallRow } from "@/models/mcp-server";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
+import { CredentialAccess } from "@/services/credential-access";
+import { preflightMcpCredentials } from "@/services/credentials";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -59,48 +78,66 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import {
+  assertCanChangeMcpRuntimeConfig,
   assertCanManageMcpDeployment,
   assertCanWriteMcpDeploymentYaml,
 } from "@/services/mcp-advanced-settings";
 import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
+import { refreshCatalogImage } from "@/services/mcp-image-refresh";
 import {
   flagImageApprovalRequired,
   holdInstallIfImageGated,
 } from "@/services/mcp-install-policy";
 import {
+  computeRegistryAttentionTiers,
+  loadRegistryIssueIndex,
+} from "@/services/mcp-registry-attention";
+import {
   autoReinstallServer,
+  clearSatisfiedNewInputFlags,
   manualReinstallReason,
   multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
 } from "@/services/mcp-reinstall";
+import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   CreateInternalMcpCatalogBodySchema,
   constructResponseSchema,
+  createSortingQuerySchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  McpCredentialBlockerSchema,
   type McpServer,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
   McpServerDismissibleAlertKindSchema,
+  McpServerListEntrySchema,
   MuteMcpServerAlertBodySchema,
   PartialUpdateInternalMcpCatalogSchema,
   RetiredSharingUpdateFieldSchema,
   SelectInternalMcpCatalogSchema,
+  SelectMcpServerSchema,
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  catalogIconUrl,
+  replyWithIconImage,
+  splitListIcon,
+} from "@/utils/servable-icon";
 import {
   broadcastMcpInstallationStatus,
   broadcastMcpServersChanged,
@@ -135,6 +172,195 @@ const CatalogToolReferenceSchema = z.object({
   id: z.string(),
   name: z.string(),
   catalogId: z.string(),
+});
+
+const MCP_REGISTRY_SORT_KEYS = [
+  "name",
+  "createdAt",
+  "toolCount",
+  "attention",
+  "issueAge",
+] as const;
+
+/** Label keys one registry list request may filter by. */
+const MAX_REGISTRY_LABEL_KEYS = 50;
+
+/**
+ * Filters and order of the registry list. A POST body rather than a query
+ * string: the attention orders carry the browser's ranked catalog ids, which
+ * can outgrow a URL on a large registry.
+ */
+const McpRegistryQueryBodySchema = createSortingQuerySchema(
+  MCP_REGISTRY_SORT_KEYS,
+).extend({
+  search: z.string().trim().max(256).optional(),
+  searchDescriptions: z
+    .boolean()
+    .optional()
+    .describe("Match the search against descriptions too, not only names."),
+  // Each key is one more EXISTS in the query.
+  labels: z
+    .record(z.string().max(256), z.array(z.string().max(256)).max(100))
+    .refine((labels) => Object.keys(labels).length <= MAX_REGISTRY_LABEL_KEYS, {
+      message: `At most ${MAX_REGISTRY_LABEL_KEYS} label keys`,
+    })
+    .optional(),
+  access: ResourceAccessQuerySchema,
+  sharedWith: ResourceSharedWithQuerySchema,
+  owner: ResourceOwnerQuerySchema,
+  environmentIds: z
+    .array(z.string().uuid())
+    .max(500)
+    .optional()
+    .describe(
+      "Items in these environments. An empty list matches nothing; omit it for every environment.",
+    ),
+  // User ids are not UUIDs (the auth library makes its own), so only a length.
+  authorIds: z.array(z.string().min(1).max(256)).max(500).optional(),
+  authorServiceAccountIds: z
+    .array(z.string().uuid())
+    .max(500)
+    .optional()
+    .describe(
+      "Items created by these service accounts. With authorIds, either matches.",
+    ),
+  installState: z
+    .enum(["installed", "not-installed"])
+    .optional()
+    .describe(
+      "Installed: the caller can see and use an install of the item. Omit for both.",
+    ),
+  catalogIds: z
+    .array(z.string().uuid())
+    .max(10_000)
+    .optional()
+    .describe(
+      "Only these items. An empty list matches nothing; omit it for every item.",
+    ),
+  includeBuiltIn: z
+    .boolean()
+    .optional()
+    .describe("Also list the built-in MCP server entry."),
+  includeDefaultEnvironment: z
+    .boolean()
+    .optional()
+    .describe(
+      "With environmentIds: also match items in the Default environment (no environment).",
+    ),
+  includeApps: z
+    .boolean()
+    .optional()
+    .describe(
+      "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+    ),
+  rankTiers: z
+    .array(z.array(z.string().uuid()).max(10_000))
+    .max(1_000)
+    .optional()
+    .describe(
+      "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
+    ),
+});
+
+/**
+ * One registry list row: only what the list's table and cards read. The
+ * install and edit flows load the full item by id when they open.
+ */
+const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
+  id: true,
+  name: true,
+  serverType: true,
+  multitenant: true,
+  scope: true,
+  authorId: true,
+  authorName: true,
+  description: true,
+  labels: true,
+  teams: true,
+  environmentId: true,
+  toolCount: true,
+  skillCount: true,
+  providesUi: true,
+  providesSkills: true,
+  catalogReinstallRequired: true,
+  dynamicConnectionMcpServerId: true,
+  appId: true,
+  appEnabled: true,
+  docsUrl: true,
+}).extend({
+  /** An emoji icon; image icons are served from `iconUrl` instead. */
+  icon: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  alertMutes: z.array(McpServerAlertMuteSchema),
+  effectiveActions: z.array(ResourcePermissionActionSchema),
+  imageApprovalRequired: z.boolean(),
+  /** An environment variable is bound to a stored credential. */
+  bindsCredential: z.boolean(),
+  enterpriseManaged: z.boolean(),
+  /**
+   * What connecting this item asks of the person: an account sign-in, or a
+   * number of settings to fill in. Lets a picker say so without loading the
+   * item's full configuration.
+   */
+  setupNeeds: z.object({
+    signIn: z.boolean(),
+    settings: z.number().int(),
+  }),
+  install: z.object({
+    /** Installs of this item the caller can see. */
+    visibleCount: z.number().int(),
+    /** One of them is usable by the caller. */
+    installedForViewer: z.boolean(),
+    /** The install that stands in for the item in list actions. */
+    primaryServerId: z.string().nullable(),
+  }),
+});
+
+/**
+ * Loaded on every page for the sidebar count, so fields that are null (or an
+ * empty list) for nearly every row are left out rather than sent as null.
+ */
+const McpRegistryIssueIndexSchema = z.object({
+  catalogItems: z.array(
+    ListInternalMcpCatalogSchema.pick({
+      id: true,
+      name: true,
+      serverType: true,
+      multitenant: true,
+    }).extend({
+      dynamicConnectionMcpServerId: z.string().optional(),
+      environmentId: z.string().optional(),
+      authorId: z.string().optional(),
+      createdByServiceAccountId: z.string().optional(),
+      authorName: z.string().optional(),
+      /** An emoji icon; image icons are linked through `iconUrl`. */
+      icon: z.string().optional(),
+      iconUrl: z.string().optional(),
+      alertMutes: z.array(McpServerAlertMuteSchema).optional(),
+    }),
+  ),
+  servers: z.array(
+    SelectMcpServerSchema.pick({
+      id: true,
+      name: true,
+      catalogId: true,
+      scope: true,
+      localInstallationStatus: true,
+      updatedAt: true,
+    }).extend({
+      ownerId: z.string().optional(),
+      teamId: z.string().optional(),
+      localInstallationError: z.string().optional(),
+      oauthRefreshError: SelectMcpServerSchema.shape.oauthRefreshError
+        .unwrap()
+        .optional(),
+      oauthRefreshErrorMessage: z.string().optional(),
+      oauthRefreshErrorDescription: z.string().optional(),
+      oauthRefreshFailedAt: z.coerce.date().optional(),
+      canUseCredential: z.boolean(),
+      alertMutes: z.array(McpServerAlertMuteSchema).optional(),
+    }),
+  ),
 });
 
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -180,6 +406,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -230,7 +458,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
-        access: request.query.access,
+        access: resourceAccessSelection(request.query),
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,
@@ -324,6 +552,311 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : {}),
         })),
       );
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/registry/search",
+    {
+      // A page's filters and rank tiers are ids, at most a few hundred KB.
+      bodyLimit: REGISTRY_QUERY_BODY_LIMIT_BYTES,
+      schema: {
+        operationId: RouteId.SearchMcpRegistry,
+        description:
+          "One page of the MCP registry list, filtered, ordered and counted on the server",
+        tags: ["MCP Catalog"],
+        body: PaginationQuerySchema.merge(McpRegistryQueryBodySchema),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(McpRegistryRowSchema).extend({
+            /** Matching items with an install the caller can see: what a bulk action can select. */
+            selectableTotal: z.number().int(),
+            /**
+             * The installs of this page's items, as `GET /api/mcp_server`
+             * returns them (without agents), so the page needs no second
+             * request for them.
+             */
+            installs: z.array(McpServerListEntrySchema),
+            /**
+             * The "attention" order's rank tiers when the server computed them
+             * (attention order requested without `rankTiers`). The browser
+             * compares them with its live issue rule and sends its own tiers
+             * only when they differ.
+             */
+            attentionTiers: z.array(z.array(z.string())).optional(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { limit, offset } = request.body;
+      const { lookups, permissions, options, filters, sorting } =
+        await resolveRegistryQuery(request, request.body);
+      // The default order no longer waits for the browser to rank it: without
+      // tiers from the caller, rank with the same issue rule here.
+      const attentionTiers =
+        sorting.sortBy === "attention" && !sorting.rankTiers
+          ? await computeRegistryAttentionTiers({
+              options: {
+                ...options,
+                userId: request.user.id,
+                organizationId: request.organizationId,
+              },
+              permissions,
+            })
+          : undefined;
+      const { items, total, selectableTotal } =
+        await InternalMcpCatalogModel.findRegistryPage({
+          options,
+          filters,
+          sorting: attentionTiers
+            ? { ...sorting, rankTiers: attentionTiers }
+            : sorting,
+          pagination: { limit, offset },
+        });
+      const ids = items.map((item) => item.id);
+      // App backings carry their app's id and state, as on the full list.
+      const appCatalogIds = items
+        .filter((item) => item.serverType === "app")
+        .map((item) => item.id);
+      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
+        AppModel.getAppIdsByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+      ]);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const [effectiveActions, approvalRequired, alertMutes, pageServers] =
+        await Promise.all([
+          ResourcePermissions.getCatalogActions({
+            organizationId: request.organizationId,
+            userId: request.user.id,
+            targets: items,
+            lookups,
+          }),
+          flagImageApprovalRequired(items, request.organizationId),
+          McpServerAlertMuteModel.findForViewer({
+            userId: request.user.id,
+            catalogIds: ids,
+          }),
+          options.installViewer.canReadInstalls
+            ? McpServerModel.findAll(
+                request.user.id,
+                options.installViewer.isMcpServerAdmin,
+                request.organizationId,
+                undefined,
+                options.installViewer.isPredefinedAdmin,
+                {
+                  catalogIds: ids,
+                  includeAssignedAgents: false,
+                  excludeServerTypes: ["app"],
+                },
+              )
+            : Promise.resolve([]),
+        ]);
+      // SPDX-SnippetEnd
+      const pageInstalls = await decorateMcpServerListEntries({
+        servers: pageServers,
+        userId: request.user.id,
+      });
+      const installs = summarizeRegistryInstalls(
+        pageInstalls
+          .map((server) => ({
+            id: server.id,
+            name: server.name,
+            catalogId: server.catalogId,
+            scope: server.scope,
+            ownerId: server.ownerId,
+            createdAt: server.createdAt,
+            usable: server.canUseCredential,
+          }))
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              a.id.localeCompare(b.id),
+          ),
+        request.user.id,
+      );
+      return reply.send({
+        data: items.map((item) => {
+          return {
+            id: item.id,
+            name: item.name,
+            serverType: item.serverType,
+            multitenant: item.multitenant,
+            scope: item.scope,
+            authorId: item.authorId,
+            authorName: item.authorName,
+            description: item.description,
+            labels: item.labels,
+            teams: item.teams,
+            environmentId: item.environmentId,
+            toolCount: item.toolCount,
+            skillCount: item.skillCount,
+            providesUi: item.providesUi,
+            providesSkills: item.providesSkills,
+            catalogReinstallRequired: item.catalogReinstallRequired,
+            dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
+            docsUrl: item.docsUrl,
+            appId:
+              item.serverType === "app"
+                ? (appIdByCatalog.get(item.id) ?? null)
+                : null,
+            appEnabled:
+              item.serverType === "app"
+                ? (appEnabledByCatalog.get(item.id) ?? null)
+                : null,
+            ...splitListIcon(item.icon ?? null, (version) =>
+              catalogIconUrl(item.id, version),
+            ),
+            alertMutes: (alertMutes.get(item.id) ?? []).filter(
+              (mute) => mute.mcpServerId === null,
+            ),
+            effectiveActions: effectiveActions.get(item.id) ?? [],
+            imageApprovalRequired: approvalRequired.has(item.id),
+            bindsCredential: !!item.localConfig?.environment?.some(
+              (env) => env.credentialId,
+            ),
+            enterpriseManaged: !!item.enterpriseManagedConfig,
+            setupNeeds: {
+              signIn: !!item.oauthConfig,
+              settings:
+                (item.localConfig?.environment?.filter(
+                  (env) => env.promptOnInstallation,
+                ).length ?? 0) + Object.keys(item.userConfig ?? {}).length,
+            },
+            install: installs.get(item.id) ?? {
+              visibleCount: 0,
+              installedForViewer: false,
+              primaryServerId: null,
+            },
+          };
+        }),
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+        selectableTotal,
+        installs: pageInstalls,
+        ...(attentionTiers ? { attentionTiers } : {}),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/registry/search/ids",
+    {
+      // A page's filters and rank tiers are ids, at most a few hundred KB.
+      bodyLimit: REGISTRY_QUERY_BODY_LIMIT_BYTES,
+      schema: {
+        operationId: RouteId.SearchMcpRegistryIds,
+        description:
+          "Every registry item matching the filters that has an install the caller can see, with the install that stands in for it. Backs selecting every matching row.",
+        tags: ["MCP Catalog"],
+        body: McpRegistryQueryBodySchema,
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(
+              z.object({
+                id: z.string(),
+                name: z.string(),
+                primaryServerId: z.string(),
+              }),
+            ),
+            /** More rows matched than a bulk action accepts. */
+            truncated: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { options, filters, sorting } = await resolveRegistryQuery(
+        request,
+        request.body,
+      );
+      // One past the cap, so the answer can say it was cut.
+      const matching = await InternalMcpCatalogModel.findRegistryMatchingIds({
+        options,
+        filters,
+        sorting,
+        limit: MAX_BULK_IDS + 1,
+        withVisibleInstall: true,
+      });
+      const installs = summarizeRegistryInstalls(
+        await McpServerModel.findRegistryInstallRows({
+          viewer: options.installViewer,
+          catalogIds: matching.map((item) => item.id),
+        }),
+        request.user.id,
+      );
+      const selectable = matching.flatMap((item) => {
+        const primaryServerId = installs.get(item.id)?.primaryServerId;
+        return primaryServerId ? [{ ...item, primaryServerId }] : [];
+      });
+      return reply.send({
+        data: selectable.slice(0, MAX_BULK_IDS),
+        truncated: selectable.length > MAX_BULK_IDS,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/registry/issue-index",
+    {
+      schema: {
+        operationId: RouteId.GetMcpRegistryIssueIndex,
+        description:
+          "Every catalog item and install the caller can see, reduced to what the registry's issue rule and filter options read",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(McpRegistryIssueIndexSchema),
+      },
+    },
+    async (request, reply) => {
+      const { options } = await resolveRegistryQuery(request, {});
+      const { catalogItems, servers } = await loadRegistryIssueIndex({
+        options: {
+          ...options,
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        },
+      });
+      return reply.send({
+        catalogItems: catalogItems.map(
+          ({ emojiIcon, hasImageIcon, updatedAt, ...item }) =>
+            withoutEmptyFields({
+              ...item,
+              icon: emojiIcon,
+              iconUrl: hasImageIcon
+                ? catalogIconUrl(item.id, `u${updatedAt.getTime()}`)
+                : null,
+            }),
+        ),
+        servers: servers.map(withoutEmptyFields),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/icon",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogIcon,
+        description:
+          "The image icon of a catalog item, for list views that do not carry icon data inline",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          v: z.string().optional().describe("Content version; any value."),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { options } = await resolveRegistryQuery(request, {});
+      const found = await InternalMcpCatalogModel.findIconForViewer({
+        id: request.params.id,
+        options,
+      });
+      return replyWithIconImage({
+        request,
+        reply,
+        icon: found?.icon ?? null,
+      });
     },
   );
 
@@ -465,6 +998,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await CredentialAccess.requireUseOfNewKeys({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        previous: [],
+        next: boundCredentialKeys(restBody.localConfig),
+      });
+      // SPDX-SnippetEnd
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -727,7 +1270,90 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
+        querystring: z.object({
+          listedOnly: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false.",
+            ),
+        }),
+        response: constructResponseSchema(
+          SelectInternalMcpCatalogSchema.extend({
+            // The list figures a detail page or install dialog shows, so
+            // opening one item needs no full registry list.
+            toolCount: z.number().int().optional(),
+            skillCount: z.number().int().optional(),
+            providesUi: z.boolean().optional(),
+            providesSkills: z.boolean().optional(),
+            effectiveActions: z
+              .array(ResourcePermissionActionSchema)
+              .optional(),
+            imageApprovalRequired: z.boolean().optional(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+        // Hidden runtime variants are never listed. API clients still open
+        // one through an install's catalogId; the registry's pages do not.
+        rootOnly: request.query.listedOnly === true,
+      });
+
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      await requireCatalogRead({ request, id });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const [stats, effectiveActions, approvalRequired] = await Promise.all([
+        InternalMcpCatalogModel.getListStats(id),
+        ResourcePermissions.getCatalogActions({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          targets: [{ ...catalogItem, toolCount: 0, skillCount: 0 }],
+        }),
+        flagImageApprovalRequired([catalogItem], request.organizationId),
+      ]);
+      // SPDX-SnippetEnd
+      return reply.send({
+        ...catalogItem,
+        ...stats,
+        effectiveActions: effectiveActions.get(id) ?? [],
+        imageApprovalRequired: approvalRequired.has(id),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/credential-preflight",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogCredentialPreflight,
+        description:
+          "List the saved credentials that would stop the caller installing this MCP server, and why",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          scope: z.enum(["personal", "team", "org"]),
+        }),
+        response: constructResponseSchema(
+          z.object({ blockers: z.array(McpCredentialBlockerSchema) }),
+        ),
       },
     },
     async (request, reply) => {
@@ -741,13 +1367,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAdmin,
         organizationId: request.organizationId,
       });
-
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
       }
-
       await requireCatalogRead({ request, id });
-      return reply.send(catalogItem);
+      return reply.send({
+        blockers: await preflightMcpCredentials({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          installationScope: request.query.scope,
+          environment: catalogItem.localConfig?.environment ?? [],
+        }),
+      });
     },
   );
 
@@ -799,8 +1430,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
+        querystring: z.object({
+          view: z
+            .enum(["full", "picker"])
+            .default("full")
+            .describe(
+              "Picker metadata excludes parameter bodies and assigned-agent lists.",
+            ),
+        }),
         response: constructResponseSchema(
-          z.array(ToolWithAssignedAgentCountSchema),
+          z.union([
+            z.array(ToolWithAssignedAgentCountSchema),
+            z.array(
+              ToolWithAssignedAgentCountSchema.omit({
+                parameters: true,
+                assignedAgentCount: true,
+                assignedAgents: true,
+              }),
+            ),
+          ]),
         ),
       },
     },
@@ -814,6 +1462,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
         const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          expandSecrets: false,
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
@@ -825,7 +1474,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await requireCatalogRead({ request, id });
-      const tools = await ToolModel.findByCatalogId(id);
+      const tools =
+        request.query.view === "picker"
+          ? await ToolModel.findPickerToolsByCatalogId(id)
+          : await ToolModel.findByCatalogId(id);
       return reply.send(tools);
     },
   );
@@ -845,6 +1497,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // retired sharing fields are refused rather than dropped.
           scope: RetiredSharingUpdateFieldSchema,
           teams: RetiredSharingUpdateFieldSchema,
+          // Tenancy is locked after creation. Accepted only so a change can be
+          // refused with a 400 instead of silently dropped; the unchanged
+          // value is fine, since edit forms send it back.
+          multitenant: z.boolean().optional(),
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -869,6 +1525,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        multitenant: requestedMultitenant,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -916,6 +1573,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        requestedMultitenant !== undefined &&
+        requestedMultitenant !== originalCatalogItem.multitenant
+      ) {
+        throw new ApiError(
+          400,
+          "Tenancy can't be changed after the server is created",
+        );
       }
 
       // App backing catalogs are owned by the Apps flow. Through this generic
@@ -1028,6 +1695,65 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requestedLocalConfig: restBody.localConfig,
         current: originalCatalogItem.deploymentSpecYaml,
         currentLocalConfig: originalCatalogItem.localConfig,
+      });
+      await assertCanChangeMcpRuntimeConfig({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+        requested: { ...restBody, multitenant: requestedMultitenant },
+        current: originalCatalogItemForGate,
+        requestedVaultReferences: {
+          oauthClientSecretVaultPath,
+          oauthClientSecretVaultKey,
+          localConfigVaultPath,
+          localConfigVaultKey,
+        },
+      });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (restBody.localConfig !== undefined)
+        await CredentialAccess.requireUseOfNewKeys({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          previous: boundCredentialKeys(originalCatalogItem.localConfig),
+          next: boundCredentialKeys(restBody.localConfig),
+        });
+      // SPDX-SnippetEnd
+
+      const clientSecretRecovery = {
+        requiredKeys: [
+          ...(originalCatalogItem.oauthConfig ? ["client_secret"] : []),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(originalCatalogItem.enterpriseManagedConfig
+            ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+            : []),
+          // SPDX-SnippetEnd
+        ],
+        values: {
+          ...(restBody.oauthConfig?.client_secret
+            ? { client_secret: restBody.oauthConfig.client_secret }
+            : {}),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(restBody.enterpriseManagedConfig?.clientSecretOverride
+            ? {
+                [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+                  restBody.enterpriseManagedConfig.clientSecretOverride,
+              }
+            : {}),
+          // SPDX-SnippetEnd
+        },
+      };
+      await assertCatalogCredentialRecovery({
+        localSecretId: originalCatalogItem.localConfigSecretId,
+        existingLocalConfig: originalCatalogItemForGate.localConfig,
+        localConfig: restBody.localConfig,
+        clientSecretId: originalCatalogItem.clientSecretId,
+        clientRecovery: clientSecretRecovery,
       });
 
       // ── Rename ─────────────────────────────────────────────────────────
@@ -1167,6 +1893,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogName: originalCatalogItem.name,
             key: "client_secret",
             value: clientSecret,
+            recovery: clientSecretRecovery,
           });
           clientSecretId = result.id;
           if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1176,6 +1903,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       const enterpriseManagedClientSecretOverride =
         restBody.enterpriseManagedConfig?.clientSecretOverride;
       if (enterpriseManagedClientSecretOverride) {
@@ -1184,6 +1914,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogName: originalCatalogItem.name,
           key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
           value: enterpriseManagedClientSecretOverride,
+          recovery: clientSecretRecovery,
         });
         clientSecretId = result.id;
         if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1191,6 +1922,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.clientSecretId = clientSecretId;
         delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
+
+      // SPDX-SnippetEnd
 
       // Handle local config secrets - either via Readonly Vault or direct values
       if (localConfigVaultPath && localConfigVaultKey) {
@@ -1238,6 +1971,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localConfig: restBody.localConfig,
           existingSecretId: localConfigSecretId,
           catalogName: originalCatalogItem.name,
+          existingLocalConfig: originalCatalogItemForGate.localConfig,
         });
         // A userConfig-only edit reaches here with no localConfig. Assigning
         // the (undefined) result would still create the key, and `update()`
@@ -1598,7 +2332,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const restartResults = await Promise.allSettled(
-        targetCatalogItems.map(refreshCatalogImage),
+        targetCatalogItems.map((item) => refreshCatalogImage(item)),
       );
       const failures = restartResults.filter(
         (result): result is PromiseRejectedResult =>
@@ -1971,6 +2705,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2082,6 +2817,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2282,6 +3018,10 @@ async function cascadeReinstallForCatalog(
     return;
   }
 
+  // This edit asks for nothing new, but it may have dropped what an earlier
+  // edit asked for — clear flags whose installs now hold every required value.
+  await clearSatisfiedNewInputFlags(catalogItem, installedServers);
+
   // Execution-only drift on a shared deployment. The admin who saved the
   // edit is the sole owner of that pod and no tenant owes new input, so the
   // recreate runs now instead of parking behind a second click. Not routed
@@ -2476,56 +3216,6 @@ async function reinstallApprovedImage(
     return;
   }
   autoReinstallInstallsInBackground(installedServers, catalogItem);
-}
-
-async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
-  if (catalogItem.multitenant === true) {
-    await reinstallMultitenantCatalog(catalogItem, { freshImagePull: true });
-    return;
-  }
-
-  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
-  const restartResults = await Promise.allSettled(
-    installs.map(async (server) => {
-      await McpServerModel.update(server.id, {
-        localInstallationStatus: "pending",
-        localInstallationError: null,
-      });
-      broadcastMcpInstallationStatus(server.id, "pending", null);
-
-      try {
-        await autoReinstallServer(server, catalogItem, {
-          freshImagePull: true,
-        });
-        await McpServerModel.update(server.id, {
-          localInstallationStatus: "success",
-          localInstallationError: null,
-        });
-        broadcastMcpInstallationStatus(server.id, "success", null);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        logger.error(
-          { err: error, serverId: server.id, catalogId: catalogItem.id },
-          "Pod restart failed for MCP server install",
-        );
-        await McpServerModel.update(server.id, {
-          localInstallationStatus: "error",
-          localInstallationError: errorMessage,
-        });
-        broadcastMcpInstallationStatus(server.id, "error", errorMessage);
-        throw error;
-      }
-    }),
-  );
-  const failures = restartResults.filter(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  if (failures.length > 0 && failures.length === restartResults.length) {
-    // Rethrow the original reason (not a rewrapped Error) so the route can
-    // classify it by error name in toMcpOperationApiError.
-    throw failures[0].reason;
-  }
 }
 
 /**
@@ -2738,3 +3428,197 @@ async function requireCatalogRead({
   if (!readable) throw new ApiError(404, "Catalog item not found");
   // SPDX-SnippetEnd
 }
+
+/** The saved credentials a catalog item's environment variables read. */
+function boundCredentialKeys(
+  localConfig:
+    | { environment?: { credentialId?: string | null }[] }
+    | null
+    | undefined,
+): string[] {
+  return (localConfig?.environment ?? []).flatMap((variable) =>
+    variable.credentialId ? [variable.credentialId] : [],
+  );
+}
+
+/**
+ * Who is asking and what they asked for, in the model's terms. Mirrors the
+ * full list route's options so a registry page lists exactly the items that
+ * route returns.
+ */
+async function resolveRegistryQuery(
+  request: FastifyRequest,
+  body: Partial<z.infer<typeof McpRegistryQueryBodySchema>>,
+): Promise<{
+  lookups: RequestLookups;
+  permissions: Permissions;
+  options: RegistryListOptions;
+  filters: RegistryListFilters;
+  sorting: RegistrySorting;
+}> {
+  // Every ranked or filtered id becomes one bind parameter of the page query.
+  const idCount =
+    (body.catalogIds?.length ?? 0) +
+    (body.rankTiers ?? []).reduce((sum, tier) => sum + tier.length, 0);
+  if (idCount > MAX_REGISTRY_QUERY_IDS) {
+    throw new ApiError(
+      400,
+      `At most ${MAX_REGISTRY_QUERY_IDS} catalog ids across catalogIds and rankTiers`,
+    );
+  }
+  const userId = request.user.id;
+  const organizationId = request.organizationId;
+  // Every check below, and the model and decoration reads after it, resolve
+  // the same caller: memoize membership, teams, roles and grants for this
+  // request instead of reading them once per check.
+  const lookups = new RequestLookups();
+  const caller = { userId, organizationId };
+  const [isAdmin, predefinedAdmin, permissions] = await Promise.all([
+    isMcpInstallationAdmin({ ...caller, lookups }),
+    isPredefinedAdmin({ ...caller, lookups }),
+    lookups.permissions(caller),
+  ]);
+  const canReadRegistry = isPermissionActionGranted({
+    resource: "mcpRegistry",
+    grantedActions: permissions.mcpRegistry ?? [],
+    requiredAction: "read",
+  });
+  // GET /api/mcp_server's permission: without it the caller sees no installs,
+  // so nothing derived from them either.
+  const canReadInstalls = isPermissionActionGranted({
+    resource: "mcpServerInstallation",
+    grantedActions: permissions.mcpServerInstallation ?? [],
+    requiredAction: "read",
+  });
+  return {
+    lookups,
+    permissions,
+    options: {
+      lookups,
+      expandSecrets: false,
+      userId,
+      isAdmin,
+      organizationId,
+      access: resourceAccessSelection({
+        access: body.access,
+        sharedWith: body.sharedWith,
+        owner: body.owner,
+      }),
+      readGrantContext: canReadRegistry
+        ? undefined
+        : { userId, organizationId },
+      installViewer: {
+        userId,
+        isMcpServerAdmin: isAdmin,
+        isPredefinedAdmin: predefinedAdmin,
+        canReadInstalls,
+      },
+    },
+    filters: {
+      search: body.search,
+      searchDescriptions: body.searchDescriptions,
+      includeBuiltIn: body.includeBuiltIn,
+      includeDefaultEnvironment: body.includeDefaultEnvironment,
+      // App backings are gated by `app:read`, as on the full list.
+      includeApps:
+        body.includeApps === true &&
+        (await hasPermission({ app: ["read"] }, request.headers)).success,
+      labels: body.labels,
+      environmentIds: body.environmentIds,
+      authorIds: body.authorIds,
+      authorServiceAccountIds: body.authorServiceAccountIds,
+      installState: body.installState,
+      catalogIds: body.catalogIds,
+    },
+    sorting: {
+      sortBy: body.sortBy,
+      sortDirection: body.sortDirection,
+      rankTiers: body.rankTiers,
+    },
+  };
+}
+
+/**
+ * Per catalog item: how many installs the viewer sees, whether one is theirs
+ * to use, and the install that stands in for the item — the registry cards'
+ * priority (the viewer's own personal install, then team, then org; never one
+ * they cannot use while a usable one exists).
+ */
+function summarizeRegistryInstalls(
+  rows: RegistryInstallRow[],
+  userId: string,
+): Map<
+  string,
+  {
+    visibleCount: number;
+    installedForViewer: boolean;
+    primaryServerId: string | null;
+  }
+> {
+  const priority = (row: RegistryInstallRow) => {
+    if (!row.usable) return 3;
+    if (row.scope === "personal" && row.ownerId === userId) return 0;
+    if (row.scope === "team") return 1;
+    if (row.scope === "org") return 2;
+    return 3;
+  };
+  const result = new Map<
+    string,
+    {
+      visibleCount: number;
+      installedForViewer: boolean;
+      primaryServerId: string | null;
+      primaryPriority: number;
+    }
+  >();
+  for (const row of rows) {
+    const current = result.get(row.catalogId);
+    const rowPriority = priority(row);
+    if (!current) {
+      result.set(row.catalogId, {
+        visibleCount: 1,
+        installedForViewer: row.usable,
+        primaryServerId: row.id,
+        primaryPriority: rowPriority,
+      });
+      continue;
+    }
+    current.visibleCount += 1;
+    current.installedForViewer ||= row.usable;
+    if (rowPriority < current.primaryPriority) {
+      current.primaryServerId = row.id;
+      current.primaryPriority = rowPriority;
+    }
+  }
+  return new Map(
+    [...result].map(([catalogId, { primaryPriority: _, ...summary }]) => [
+      catalogId,
+      summary,
+    ]),
+  );
+}
+
+/**
+ * Drops null and empty-array fields, which the issue index declares optional:
+ * on a large registry they are most of its bytes.
+ */
+function withoutEmptyFields<T extends Record<string, unknown>>(
+  row: T,
+): {
+  [K in keyof T]: null extends T[K] ? Exclude<T[K], null> | undefined : T[K];
+} {
+  return Object.fromEntries(
+    Object.entries(row).filter(
+      ([, value]) =>
+        value !== null && !(Array.isArray(value) && value.length === 0),
+    ),
+  ) as never;
+}
+
+/** Catalog ids one registry list request may name across all its filters. */
+const MAX_REGISTRY_QUERY_IDS = 10_000;
+/**
+ * 10,000 ids are about 390 KB of JSON. The limit also bounds what validation
+ * parses before the combined id check (about 13,000 UUIDs).
+ */
+const REGISTRY_QUERY_BODY_LIMIT_BYTES = 512 * 1024;

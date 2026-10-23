@@ -73,17 +73,13 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
-  test("single-delegation DELETE inherits agent.updated, not agent.deleted", () => {
-    // DELETE /api/agents/:agentId/delegations/:targetAgentId walks up. A DELETE
-    // walk-up is NOT suppressed, so without the explicit /delegations entry it
-    // would inherit /api/agents/:agentId and derive agent.deleted — mislabeling
-    // the removal of one delegation as deleting the whole agent.
+  test("single-delegation mutations audit the source agent update", () => {
     const resolved = resolveAuditableRouteConfig(
       "/api/agents/:agentId/delegations/:targetAgentId",
     );
-    expect(resolved?.viaWalkUp).toBe(true);
     expect(resolved?.cfg.action).toBe("agent.updated");
     expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.resourceIdParam).toBe("agentId");
   });
 
   test("shared Agent credential mutations are explicit Agent updates", () => {
@@ -136,8 +132,8 @@ describe("resolveAuditableRouteConfig", () => {
       ],
       [
         "/api/mcp-oauth-clients/:id/rotate-secret",
-        "mcpOauthClient",
-        "mcpOauthClient.rotated",
+        "oauthClient",
+        "oauthClient.rotated",
       ],
       [
         "/api/service-accounts/:id/tokens/:tokenId",

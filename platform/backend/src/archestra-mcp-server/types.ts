@@ -1,4 +1,3 @@
-import type { SensitiveContextOrigin } from "@archestra/shared";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
@@ -15,14 +14,14 @@ export interface ArchestraContext {
     session: import("@/openappa/service").OpenAppaSession;
     toolCallId: string;
     spawn: boolean;
+    /** Signed while enforcement was off; no policy ruled the call. */
+    observed?: true;
   };
   /**
    * The child trajectory an OpenAPPA spawn bound this delegated run to, minted
    * by the delegation executor. A delegated run without one runs outside APPA.
    */
   openappaSubagent?: import("@/openappa/subagent-binding").SubagentBinding;
-  /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
-  connectionSetupBypass?: boolean;
   agent: {
     id: string;
     name: string;
@@ -43,6 +42,8 @@ export interface ArchestraContext {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   userId?: string;
   /** The ID of the current internal agent (for agent delegation tool lookup) */
   agentId?: string;
@@ -75,6 +76,8 @@ export interface ArchestraContext {
    * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
+  /** The model and key the calling run is on, which `agent__self` forks start from. */
+  parentLlm?: import("@archestra/shared").ModelSelection;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Optional cancellation signal from parent chat/tool execution */
@@ -87,14 +90,6 @@ export interface ArchestraContext {
    * outcome rather than block.
    */
   elicitation?: Pick<ChatMcpElicitationBridge, "elicit">;
-  /** Whether the current caller context is still trusted/safe */
-  contextIsTrusted?: boolean;
-  /**
-   * What flipped the caller's session into the sensitive state, when known.
-   * Meaningful only when `contextIsTrusted` is false; used to phrase
-   * sensitive-context policy blocks so they name the origin.
-   */
-  sensitiveContextOrigin?: SensitiveContextOrigin;
   /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface. Present only when a chat stream is driving the call;
@@ -129,12 +124,6 @@ export interface ArchestraContext {
    * JSON-RPC request ids and ordinary MCP arguments are never valid values.
    */
   currentToolCallId?: string;
-  /**
-   * Chat can pause before execution for user approval. When true, tools that
-   * require approval are allowed to continue because the chat harness already
-   * handled the approval gate.
-   */
-  approvalRequiredPoliciesHandled?: boolean;
   /**
    * Encrypted chat: any real tool dispatch made on behalf of this call
    * (e.g. `run_tool` reaching mcpClient) must not persist its content in the

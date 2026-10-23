@@ -80,8 +80,8 @@ for (const width of [1280, 390]) {
             url: "/api/user/permissions",
             body: {
               ...permissions,
-              openappaDiagnostics: ["read", "update"],
-              openappaPolicy: ["read", "update"],
+              log: ["read"],
+              guardrailsPolicy: ["read", "update"],
               organizationSettings: ["read", "update"],
             },
           },
@@ -102,7 +102,8 @@ for (const width of [1280, 390]) {
             url: "/api/guardrails-deployment",
             body: { enabled: true, featureEnabled: true, active: true },
           },
-          { method: "get", url: "/api/agents/all", body: [agent] },
+          { method: "get", url: "/api/agents/chat-roster", body: [agent] },
+          { method: "get", url: `/api/agents/${agent.id}`, body: agent },
           {
             method: "get",
             url: `/api/chat/agents/${agent.id}/mcp-tools`,
@@ -156,15 +157,22 @@ for (const width of [1280, 390]) {
             .click();
           await resolvedList;
           await expect(page).toHaveURL(/\/openappa\/yells\?status=resolved$/);
+          await expect(status).toHaveText("Resolved");
+          // Status is a view, not a filter: switching it offers no Clear.
+          await expect(
+            page.getByRole("button", { name: "Clear", exact: true }),
+          ).toHaveCount(0);
+          await expect(page.getByText("No resolved yells")).toBeVisible();
+          await status.click();
           await page
-            .getByRole("button", { name: "Clear", exact: true })
+            .getByRole("option", { name: "Unresolved", exact: true })
             .click();
           await expect(status).toHaveText("Unresolved");
           await expect(page).toHaveURL(/\/openappa\/yells$/);
         }
         await expect(
           page.getByText(
-            "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+            "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
           ),
         ).toBeVisible();
         const table = page.getByRole("table");
@@ -284,7 +292,7 @@ for (const width of [1280, 390]) {
   }
 }
 
-test("a diagnostics-only reader reaches Yells without fetching policy or settings", async ({
+test("a log-only reader reaches Yells without fetching policy or settings", async ({
   page,
   request,
   mswControl,
@@ -310,9 +318,9 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       body: {
         ...permissions,
         chat: ["read"],
-        openappaPolicy: [],
+        guardrailsPolicy: [],
         organizationSettings: [],
-        openappaDiagnostics: ["read"],
+        log: ["read"],
       },
     },
     {
@@ -365,9 +373,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       forbiddenRequests.push(path);
   });
   await page.goto("/openappa/yells");
-  await expect(
-    page.getByRole("heading", { name: "Yells Alpha" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yells Beta" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Policy", exact: true }),
   ).toHaveCount(0);
@@ -386,7 +392,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toContainText("Missing permissions");
   await expect(tooltip).toContainText("Chats: create");
-  await expect(tooltip).toContainText("OpenAPPA Policy: read");
+  await expect(tooltip).toContainText("Guardrails Policy: read");
   await expect(tooltip).not.toContainText("Diagnostics");
   const table = await page.getByRole("table").boundingBox();
   const download = await page

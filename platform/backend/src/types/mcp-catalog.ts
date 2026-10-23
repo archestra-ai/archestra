@@ -1,6 +1,8 @@
 import {
   CreatedByNullableSchema,
   EnvFromSchema,
+  HttpUrlSchema,
+  ImagePullPolicySchema,
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
@@ -117,6 +119,7 @@ const LocalConfigSelectSchema = z.object({
       ]),
     )
     .optional(),
+  imagePullPolicy: ImagePullPolicySchema.optional(),
 });
 
 const CatalogLabelSchema = z.object({
@@ -217,8 +220,9 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   .extend({
     // Allow explicit ID for builtin catalog items (e.g., Archestra)
     id: z.string().uuid().optional(),
-    name: z.string().trim().min(1, "Name cannot be empty"),
+    name: z.string().trim().min(1, "Name cannot be empty").max(255),
     serverType: InternalMcpCatalogServerTypeSchema,
+    serverUrl: HttpUrlSchema.nullable().optional(),
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
@@ -272,12 +276,16 @@ export const CreateInternalMcpCatalogBodySchema =
     })
     .superRefine(validateInternalMcpCatalog);
 
+// A field that changes what an entry runs or where it connects must also be
+// listed in MCP_RUNTIME_FIELDS (services/mcp-advanced-settings.ts); otherwise
+// someone with Full access alone could change it.
 const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
-    name: z.string().trim().min(1, "Name cannot be empty"),
+    name: z.string().trim().min(1, "Name cannot be empty").max(255),
     serverType: InternalMcpCatalogServerTypeSchema,
+    serverUrl: HttpUrlSchema.nullable().optional(),
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

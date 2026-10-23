@@ -5,12 +5,14 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
+  BatteryInstallSchema,
   BatteryMatchesSchema,
   BatteryPolicySourceSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   CredentialBindingParamsSchema,
-  EffectivePolicySchema,
+  CredentialBindingViewSchema,
+  EffectivePolicyViewSchema,
   PolicyBatteryViewSchema,
   PolicyDeclarationsViewSchema,
   SetCredentialBindingSchema,
@@ -85,11 +87,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaEffectivePolicy,
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(EffectivePolicySchema),
+        response: constructResponseSchema(EffectivePolicyViewSchema),
       },
     },
     async (request) =>
-      openappaBatteriesService.getEffectivePolicy(request.organizationId),
+      openappaBatteriesService.effectivePolicyView(request.organizationId),
   );
   app.get(
     "/api/openappa/battery-matches",
@@ -129,6 +131,24 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       request.auditResourceId = { value: installId ?? battery.name };
       return battery;
     },
+  );
+  app.get(
+    "/api/openappa/battery-installs/:id",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaBatteryInstall,
+        description:
+          "Get one battery install as the last composition stored it, without recomposing; an install whose battery is no longer available is still returned, with status `unavailable`, though the battery list omits it.",
+        tags: ["OpenAPPA"],
+        params: InstallParamsSchema,
+        response: constructResponseSchema(BatteryInstallSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.getInstall({
+        organizationId: request.organizationId,
+        id: request.params.id,
+      }),
   );
   app.patch(
     "/api/openappa/battery-installs/:id",
@@ -193,6 +213,38 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       return { success: true as const };
     },
   );
+  app.get(
+    "/api/openappa/credential-bindings",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaCredentialBindings,
+        description:
+          "List the stored credential bindings; credential values are never returned.",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(z.array(CredentialBindingViewSchema)),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.listCredentialBindings(request.organizationId),
+  );
+  app.get(
+    "/api/openappa/credential-bindings/:variable",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaCredentialBinding,
+        description:
+          "Get one stored credential binding; the credential value is never returned.",
+        tags: ["OpenAPPA"],
+        params: CredentialBindingParamsSchema,
+        response: constructResponseSchema(CredentialBindingViewSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.getCredentialBinding({
+        organizationId: request.organizationId,
+        variable: request.params.variable,
+      }),
+  );
   app.put(
     "/api/openappa/credential-bindings/:variable",
     {
@@ -223,13 +275,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(UploadedBatteryPackageSchema),
       },
     },
-    async (request) =>
-      openappaBatteriesService.uploadPackage({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        name: request.params.name,
-        files: request.body.files,
-      }),
+    // Only the batteries Archestra ships are supported for now.
+    async (): Promise<never> => {
+      throw new ApiError(501, "Uploading battery packages is not supported");
+    },
   );
   app.delete(
     "/api/openappa/battery-packages/:contentHash",

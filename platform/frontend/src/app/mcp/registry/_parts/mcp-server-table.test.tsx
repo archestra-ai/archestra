@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
+import { cloneElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useReinstallInternalMcpCatalogItem: () => ({
     mutate: vi.fn(),
     isPending: false,
@@ -26,7 +27,16 @@ vi.mock("./catalog-edit-access", () => ({
 }));
 
 vi.mock("./use-chat-with-catalog-item", () => ({
-  useChatWithCatalogItem: () => ({ startChat: vi.fn(), isCreating: false }),
+  useChatWithCatalogItem: () => ({
+    startChat: vi.fn(),
+    startChatById: vi.fn(),
+    isCreating: false,
+  }),
+}));
+
+// The page's installs reach the rows through the list's page-scoped request.
+vi.mock("./registry-page-servers", () => ({
+  useRegistryPageServers: () => useMcpServersMock().data,
 }));
 
 const {
@@ -44,6 +54,11 @@ const {
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useBulkUninstallMcpServers: () => ({ mutate: vi.fn(), isPending: false }),
   useMcpServers: useMcpServersMock,
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
   useDismissMcpServerAlerts: () => ({
     mutateAsync: dismissMutateAsync,
     isPending: false,
@@ -61,23 +76,50 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useAppearanceSettings } from "@/lib/organization.query";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import type { InstalledServer, RegistryListItem } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 
 const CURRENT_USER_ID = "user-me";
 
-const item = {
+const itemFields = {
   id: "cat-1",
   name: "some-remote-server",
   serverType: "remote",
   icon: null,
+  iconUrl: null,
   description: null,
   toolCount: 0,
   environmentId: null,
   imageApprovalRequired: false,
   multitenant: false,
   catalogReinstallRequired: false,
-} as unknown as CatalogItem;
+  bindsCredential: false,
+  enterpriseManaged: false,
+};
+
+/**
+ * A registry list row. The server summarizes each row's installs; here the
+ * summary follows whatever installs the test hands the page.
+ */
+function registryRow(fields: Record<string, unknown>): RegistryListItem {
+  const row = { ...fields } as unknown as RegistryListItem;
+  Object.defineProperty(row, "install", {
+    enumerable: true,
+    get: () => {
+      const servers = (useMcpServersMock.getMockImplementation()?.()?.data ??
+        []) as InstalledServer[];
+      const own = servers.filter((server) => server.catalogId === row.id);
+      return {
+        visibleCount: own.length,
+        installedForViewer: own.some((server) => server.canUseCredential),
+        primaryServerId: own[0]?.id ?? null,
+      };
+    },
+  });
+  return row;
+}
+
+const item = registryRow(itemFields);
 
 const personalInstall = {
   id: "srv-1",
@@ -85,6 +127,8 @@ const personalInstall = {
   name: "some-remote-server",
   ownerId: CURRENT_USER_ID,
   teamId: null,
+  scope: "personal",
+  canUseCredential: true,
   serverType: "remote",
   reinstallRequired: false,
   assignedAgents: [],
@@ -169,19 +213,59 @@ describe("McpServerTable uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
+  it("reads Installed without an Install action when an organization connection serves the viewer", () => {
+    const orgInstall = {
+      ...personalInstall,
+      ownerId: "someone-else",
+      scope: "org",
+      canUseCredential: true,
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [orgInstall] });
+    renderTable(
+      cloneElement(table, {
+        getServerInfo: () => ({ installedServer: orgInstall }),
+      }),
+    );
+
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Install some-remote-server" }),
+    ).toBeNull();
+  });
+
+  it("offers Install, not Installed, when only a colleague's connection exists", () => {
+    const colleagueInstall = {
+      ...personalInstall,
+      ownerId: "colleague",
+      canUseCredential: false,
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [colleagueInstall] });
+    renderTable(
+      cloneElement(table, {
+        getServerInfo: () => ({ installedServer: colleagueInstall }),
+      }),
+    );
+
+    expect(screen.queryByText("Installed")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Install some-remote-server" }),
+    ).toBeInTheDocument();
+  });
+
   it("moves local runtime state to an icon dot and keeps Status installation-only", async () => {
     const user = userEvent.setup();
-    const localItem = {
-      ...item,
+    const localItem = registryRow({
+      ...itemFields,
       id: "cat-local",
       serverType: "local",
-    } as CatalogItem;
+    });
     const localInstall = {
       ...personalInstall,
       id: "srv-local",
       catalogId: localItem.id,
       serverType: "local",
     } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [localInstall] });
 
     renderTable(
       <McpServerTable

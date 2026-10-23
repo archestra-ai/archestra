@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
+import type {
+  PermissionSubject,
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { describe, expect, test } from "@/test";
@@ -11,6 +18,268 @@ import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("resource permission policy persistence", () => {
+  test("preloaded object presentation policies preserve filtering and an explicitly empty set", async ({
+    makeOrganization,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    const keys = [
+      {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "team" as const, id: team.id },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: "*",
+        grants: [
+          {
+            subject: { type: "organization" as const, id: "*" as const },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: other.id,
+        resource: "agent" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "organization" as const, id: "*" as const },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: org.id,
+        resource: "mcpGateway" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "user" as const, id: user.id },
+            actions: ["read" as const],
+          },
+        ],
+      },
+    ];
+    for (const key of keys) {
+      const existing = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: existing?.revision ?? 0,
+      });
+    }
+    const policies = await ResourcePermissionPolicyModel.findObjectPolicies({
+      resources: ["agent", "mcpGateway"],
+      scopes: [agent.id, "*"],
+    });
+    const audienceParams = {
+      organizationId: org.id,
+      resource: "agent" as const,
+      scopes: [agent.id],
+    };
+    expect(
+      await ResourcePermissionPolicyModel.findAudiences({
+        ...audienceParams,
+        policies,
+      }),
+    ).toEqual(
+      await ResourcePermissionPolicyModel.findAudiences(audienceParams),
+    );
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findAudiences({
+          ...audienceParams,
+          policies,
+        })
+      ).get(agent.id),
+    ).toEqual({ audience: "team", teamIds: [team.id] });
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findAudiences({
+          ...audienceParams,
+          policies: [],
+        })
+      ).get(agent.id),
+    ).toEqual({ audience: "personal", teamIds: [] });
+    const recipientsParams = {
+      resources: ["agent" as const],
+      scopes: [agent.id],
+    };
+    expect(
+      await ResourcePermissionPolicyModel.findReadRecipients({
+        ...recipientsParams,
+        policies,
+      }),
+    ).toEqual(
+      await ResourcePermissionPolicyModel.findReadRecipients(recipientsParams),
+    );
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findReadRecipients({
+          ...recipientsParams,
+          policies: [],
+        })
+      ).get(agent.id),
+    ).toEqual({ teamIds: [], userIds: [], teamActions: {} });
+  });
+
+  test("grant SQL preserves wildcard, object, subject, action and organization boundaries", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const foreign = await makeOrganization();
+    const first = await makeAgent({ organizationId: org.id });
+    const second = await makeAgent({ organizationId: org.id });
+    const wildcardOnly = await makeAgent({ organizationId: org.id });
+    const third = await makeAgent({ organizationId: foreign.id });
+    const subject = { type: "role" as const, id: "query-reader" };
+    const replace = async (params: {
+      organizationId: string;
+      scope: string;
+      grants: ResourcePermissionGrant[];
+    }) => {
+      const key = { ...params, resource: "agent" as const };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+      });
+    };
+    await replace({
+      organizationId: org.id,
+      scope: "*",
+      grants: [{ subject, actions: ["read"] }],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: first.id,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: second.id,
+      grants: [
+        { subject, actions: ["read"] },
+        { subject: { type: "role", id: "another-reader" }, actions: ["use"] },
+      ],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: wildcardOnly.id,
+      grants: [],
+    });
+    await replace({
+      organizationId: foreign.id,
+      scope: third.id,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    const find = async (
+      action: "read" | "use",
+      includeWildcard = true,
+      subjects: PermissionSubject[] = [subject],
+    ) => {
+      const rows = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.organizationId, org.id),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId: org.id,
+              resource: "agent",
+              scopeColumn: schema.agentsTable.id,
+              action,
+              includeWildcard,
+              subjects,
+            }),
+          ),
+        );
+      return rows.map((row) => row.id).sort();
+    };
+    expect(await find("read")).toEqual(
+      [first.id, second.id, wildcardOnly.id].sort(),
+    );
+    expect(await find("read", false)).toEqual([first.id, second.id].sort());
+    expect(await find("use")).toEqual([first.id]);
+    expect(await find("use", false)).toEqual([first.id]);
+    expect(await find("read", true, [])).toEqual([]);
+    await replace({ organizationId: org.id, scope: "*", grants: [] });
+    expect(await find("read")).toEqual([first.id, second.id].sort());
+  });
+
+  test("subject lookup retains only UUID and wildcard scopes belonging to the caller organization", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const foreign = await makeOrganization();
+    const subject = { type: "role" as const, id: "scope-reader" };
+    const valid = "ABCDEF12-3456-7890-ABCD-EF1234567890";
+    const invalid = [
+      "teams:*",
+      "teams:00000000-0000-4000-8000-000000000001",
+      "not-a-uuid",
+      `${valid}0`,
+      `${valid}\n`,
+      "GBCDEF12-3456-7890-ABCD-EF1234567890",
+    ];
+    for (const scope of ["*", valid, ...invalid]) {
+      const key = { organizationId: org.id, resource: "agent" as const, scope };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [{ subject, actions: ["read"] }],
+      });
+    }
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: foreign.id,
+      resource: "agent",
+      scope: valid,
+      revision: 0,
+      grants: [{ subject, actions: ["read"] }],
+    });
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findForSubjects({
+          organizationId: org.id,
+          subjects: [subject],
+        })
+      )
+        .map((policy) => policy.scope)
+        .sort(),
+    ).toEqual(["*", valid].sort());
+    expect(
+      await ResourcePermissionPolicyModel.findForSubjects({
+        organizationId: org.id,
+        subjects: [],
+      }),
+    ).toEqual([]);
+    expect(
+      await ResourcePermissionPolicyModel.findForSubjects({
+        organizationId: org.id,
+        subjects: [{ type: "role", id: "unrelated-reader" }],
+      }),
+    ).toEqual([]);
+  });
+
   test("batch policy lookup accepts more scopes than the PostgreSQL parameter limit", async ({
     makeOrganization,
   }) => {
@@ -49,6 +318,35 @@ describe("resource permission policy persistence", () => {
         scopes: [],
       });
     expect(wildcardOnly.map((policy) => policy.scope)).toEqual(["*"]);
+  });
+
+  test("read recipients resolve for scope lists beyond the PostgreSQL parameter limit", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const reader = await makeUser();
+    const target = await makeAgent({ organizationId: organization.id });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: organization.id,
+      resource: "agent",
+      scope: target.id,
+      revision: 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    const scopes = Array.from(
+      { length: 65_536 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+    );
+    scopes[scopes.length - 1] = target.id;
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["agent"],
+      scopes,
+    });
+    expect(recipients.get(target.id)?.userIds).toEqual([reader.id]);
+    expect(recipients.get(scopes[0])?.userIds).toEqual([]);
   });
 
   test("a private agent shared with a role stays unavailable to organization credentials", async ({
@@ -399,5 +697,182 @@ describe("resource permission policy persistence", () => {
           policy.resource === "agent",
       ),
     ).toBe(true);
+  });
+});
+
+describe("accessRelationCondition sharedWith and ownerIds", () => {
+  test("narrows by the subjects an object's own policy grants read to, by owner, and ANDs them with relations", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeTeam,
+    makeCustomRole,
+    makeServiceAccount,
+  }) => {
+    const organization = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const named = await makeUser();
+    const team = await makeTeam(organization.id, caller.id);
+    const otherTeam = await makeTeam(organization.id, caller.id);
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const serviceAccount = await makeServiceAccount(organization.id);
+
+    const agentWith = async (params: {
+      name: string;
+      authorId: string;
+      grants: ResourcePermissionGrant[];
+    }) => {
+      const agent = await makeAgent({
+        name: params.name,
+        organizationId: organization.id,
+        authorId: params.authorId,
+        agentType: "agent",
+        access: "personal",
+      });
+      const key = {
+        organizationId: organization.id,
+        resource: "agent" as const,
+        scope: agent.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: params.authorId },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+          ...params.grants,
+        ],
+      });
+      return agent;
+    };
+    await agentWith({ name: "Private", authorId: caller.id, grants: [] });
+    await agentWith({
+      name: "Team",
+      authorId: caller.id,
+      grants: [{ subject: { type: "team", id: team.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Other team",
+      authorId: other.id,
+      grants: [
+        { subject: { type: "team", id: otherTeam.id }, actions: ["read"] },
+      ],
+    });
+    await agentWith({
+      name: "Role",
+      authorId: other.id,
+      grants: [{ subject: { type: "role", id: role.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Org",
+      authorId: other.id,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
+    });
+    await agentWith({
+      name: "Named user",
+      authorId: other.id,
+      grants: [{ subject: { type: "user", id: named.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Service account",
+      authorId: caller.id,
+      grants: [
+        {
+          subject: { type: "serviceAccount", id: serviceAccount.id },
+          actions: ["read"],
+        },
+      ],
+    });
+
+    const list = async (filter: {
+      relations?: ResourceAccessRelation[];
+      sharedWith?: PermissionSubject[];
+      ownerIds?: string[];
+    }) => {
+      const table = schema.agentsTable;
+      const condition = ResourcePermissionPolicyModel.accessRelationCondition({
+        organizationId: table.organizationId,
+        resource: "agent",
+        scopeColumn: table.id,
+        ownerColumn: table.authorId,
+        userId: caller.id,
+        subjects: [{ type: "user", id: caller.id }],
+        ...filter,
+      });
+      const rows = await db
+        .select({ name: table.name })
+        .from(table)
+        .where(and(eq(table.organizationId, organization.id), condition));
+      return rows.map((row) => row.name).sort();
+    };
+
+    expect(
+      ResourcePermissionPolicyModel.accessRelationCondition({
+        organizationId: organization.id,
+        resource: "agent",
+        scopeColumn: schema.agentsTable.id,
+        ownerColumn: schema.agentsTable.authorId,
+        userId: caller.id,
+        subjects: [],
+      }),
+    ).toBeUndefined();
+    expect(await list({ sharedWith: [{ type: "team", id: team.id }] })).toEqual(
+      ["Team"],
+    );
+    expect(
+      await list({
+        sharedWith: [
+          { type: "team", id: team.id },
+          { type: "team", id: otherTeam.id },
+        ],
+      }),
+    ).toEqual(["Other team", "Team"]);
+    // Literal: a role grant is not a grant to everyone, and vice versa.
+    expect(await list({ sharedWith: [{ type: "role", id: role.id }] })).toEqual(
+      ["Role"],
+    );
+    expect(
+      await list({ sharedWith: [{ type: "organization", id: "*" }] }),
+    ).toEqual(["Org"]);
+    expect(
+      await list({ sharedWith: [{ type: "user", id: named.id }] }),
+    ).toEqual(["Named user"]);
+    expect(
+      await list({
+        sharedWith: [{ type: "serviceAccount", id: serviceAccount.id }],
+      }),
+    ).toEqual(["Service account"]);
+    expect(await list({ ownerIds: [other.id] })).toEqual([
+      "Named user",
+      "Org",
+      "Other team",
+      "Role",
+    ]);
+    expect(
+      await list({
+        ownerIds: [caller.id],
+        sharedWith: [
+          { type: "team", id: team.id },
+          { type: "team", id: otherTeam.id },
+        ],
+      }),
+    ).toEqual(["Team"]);
+    // `org` relation counts role grants too; sharedWith then narrows.
+    expect(await list({ relations: ["org"] })).toEqual(["Org", "Role"]);
+    expect(
+      await list({
+        relations: ["org"],
+        sharedWith: [{ type: "role", id: role.id }],
+      }),
+    ).toEqual(["Role"]);
+    expect(await list({ relations: ["mine"], ownerIds: [other.id] })).toEqual(
+      [],
+    );
   });
 });

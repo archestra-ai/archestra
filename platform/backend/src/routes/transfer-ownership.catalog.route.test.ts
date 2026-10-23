@@ -23,7 +23,7 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
       makeMember,
       makeInternalMcpCatalog,
     }) => {
-      config.plugins.enabled = true;
+      config.beta = false;
       organizationId = (await makeOrganization()).id;
       user = await makeUser();
       recipient = await makeUser();
@@ -158,7 +158,7 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
     });
   });
 
-  test("a personal owner can hand off and loses ownership rights", async ({
+  test("a personal owner can hand off and keeps full access", async ({
     makeUser,
     makeMember,
   }) => {
@@ -166,6 +166,6 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
     await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
     const resource = await create();
     expect((await transfer(resource.id)).statusCode).toBe(200);
-    expect((await transfer(resource.id, user.id)).statusCode).toBe(403);
+    expect((await transfer(resource.id, user.id)).statusCode).toBe(200);
   });
 });

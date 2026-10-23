@@ -30,10 +30,8 @@ import { policyLineHref } from "./policy-line-href";
 import {
   type CoverChip,
   coverChips,
-  forTools,
   groupBySource,
   isWired,
-  runsAs,
 } from "./remedies.utils";
 
 export type RemedyFilter = "all" | "authority" | "sanitizer" | "unwired";
@@ -46,8 +44,8 @@ const FILTERS: { key: RemedyFilter; label: string }[] = [
 ];
 
 /**
- * Every remedy the policy declares, grouped by the file that declares it,
- * with who runs it, what it may lift and which tools it may act on.
+ * Every authority and sanitizer the policy declares, grouped by the file
+ * that declares it, with what each may unblock and when it was last used.
  */
 export function RemediesDialog({
   view,
@@ -61,7 +59,10 @@ export function RemediesDialog({
 }) {
   return (
     <Dialog open={filter !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent
+        className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         {filter !== null && (
           <RemediesDialogContent view={view} initialFilter={filter} />
         )}
@@ -98,7 +99,6 @@ function RemediesDialogContent({
       [
         remedy.name,
         remedy.source.battery ?? "",
-        ...remedy.tags,
         ...coverChips(remedy).map((chip) => chip.value),
       ].some((text) => text.toLowerCase().includes(needle)));
   const groups = groupBySource(view)
@@ -107,15 +107,20 @@ function RemediesDialogContent({
       remedies: group.remedies.filter(shown),
     }))
     .filter((group) => group.remedies.length > 0);
-  const batteries = groupBySource(view).filter((group) => group.battery).length;
+  const sources = groupBySource(view);
+  const batteries = sources.filter((group) => group.battery).length;
+  const filters = FILTERS.filter(
+    (each) =>
+      each.key !== "unwired" || counts.unwired > 0 || filter === each.key,
+  );
 
   return (
     <>
-      <DialogHeader className="shrink-0 space-y-3 border-b px-5 pt-5 pb-4 text-left">
+      <DialogHeader className="shrink-0 space-y-4 border-b px-6 pt-6 pb-4 text-left">
         <div className="space-y-1">
-          <DialogTitle>All remedies</DialogTitle>
+          <DialogTitle>Authorities and sanitizers</DialogTitle>
           <DialogDescription>
-            {`${all.length} ${all.length === 1 ? "remedy" : "remedies"} from the root policy${batteries > 0 ? ` and ${batteries} ${batteries === 1 ? "battery" : "batteries"}` : ""}. A remedy is offered only when it is wired to an implementation.`}
+            {`Who can unblock a blocked call, and what each one may unblock. ${all.length} declared by the root policy${batteries > 0 ? ` and ${batteries} ${batteries === 1 ? "battery" : "batteries"}` : ""}.`}
           </DialogDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -125,14 +130,14 @@ function RemediesDialogContent({
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
             />
             <Input
-              aria-label="Search remedies"
-              placeholder="Search by name, mark, tag or battery"
+              aria-label="Search authorities and sanitizers"
+              placeholder="Search by name, mark or battery"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="h-8 pl-8 text-sm"
             />
           </div>
-          {FILTERS.map((each) => (
+          {filters.map((each) => (
             <Button
               key={each.key}
               size="sm"
@@ -151,39 +156,44 @@ function RemediesDialogContent({
           ))}
         </div>
       </DialogHeader>
-      <DialogBody className="min-h-0 flex-1 overflow-auto p-0">
+      <DialogBody className="min-h-0 flex-1 overflow-auto p-0 pb-6">
         {groups.length === 0 ? (
-          <p className="text-muted-foreground px-5 py-10 text-center text-sm">
-            No remedy matches.
+          <p className="text-muted-foreground px-6 py-10 text-center text-sm">
+            Nothing matches.
           </p>
         ) : (
-          <Table>
+          <Table className="table-auto">
             <TableHeader>
-              <TableRow>
-                <TableHead className="pl-5">Name</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Runs as</TableHead>
-                <TableHead>Covers</TableHead>
-                <TableHead>For</TableHead>
-                <TableHead className="pr-5">Last used</TableHead>
+              <TableRow className="bg-muted/40 text-muted-foreground whitespace-nowrap text-xs hover:bg-muted/40">
+                <TableHead className="text-muted-foreground w-[30%] pl-6 md:pl-6">
+                  Name
+                </TableHead>
+                <TableHead className="text-muted-foreground">
+                  Can unblock
+                </TableHead>
+                <TableHead className="text-muted-foreground w-[18%] pr-6 text-right md:pr-6">
+                  Last used
+                </TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="[&_tr:last-child]:border-b">
               {groups.map((group) => (
                 <Fragment key={group.key}>
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableCell
-                      colSpan={6}
-                      className="text-muted-foreground py-2 pl-5 text-xs font-medium"
-                    >
-                      <span>
-                        {group.battery
-                          ? batteryDisplayName(group.battery)
-                          : "Root policy"}
-                      </span>
-                      <span className="font-normal">{` · ${group.remedies.length}`}</span>
-                    </TableCell>
-                  </TableRow>
+                  {sources.length > 1 && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={3}
+                        className="text-muted-foreground pt-4 pb-2 pl-6 text-xs font-medium md:pl-6"
+                      >
+                        <span>
+                          {group.battery
+                            ? batteryDisplayName(group.battery)
+                            : "Root policy"}
+                        </span>
+                        <span className="font-normal">{` · ${group.remedies.length}`}</span>
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {group.remedies.map((remedy) => (
                     <RemedyRow key={remedy.name} remedy={remedy} />
                   ))}
@@ -198,61 +208,58 @@ function RemediesDialogContent({
 }
 
 function RemedyRow({ remedy }: { remedy: Remedy }) {
-  const runner = runsAs(remedy);
-  const scope = forTools(remedy);
   return (
     <TableRow>
-      <TableCell className="pl-5 font-mono text-xs font-medium">
-        <Link href={policyLineHref(remedy.source)} className="hover:underline">
-          {remedy.name}
-        </Link>
-      </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
-        {remedy.kind === "authority" ? "Authority" : "Sanitizer"}
-      </TableCell>
-      <TableCell className="text-xs">
-        {runner ? (
-          <span className="text-muted-foreground">{runner.phrase}</span>
-        ) : (
-          <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-            <TriangleAlert aria-hidden className="size-3.5" />
-            <span>not wired</span>
+      <TableCell className="py-3.5 pl-6 align-top md:pl-6">
+        <span className="flex flex-col gap-0.5">
+          <Link
+            href={policyLineHref(remedy.source)}
+            className="font-mono text-[13px] font-semibold hover:underline"
+          >
+            {remedy.name}
+          </Link>
+          <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <span>
+              {remedy.kind === "authority" ? "Authority" : "Sanitizer"}
+            </span>
+            {!isWired(remedy) && (
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <TriangleAlert aria-hidden className="size-3" />
+                <span>not wired</span>
+              </span>
+            )}
           </span>
-        )}
+        </span>
       </TableCell>
-      <TableCell>
+      <TableCell className="py-3.5 align-top">
         <span className="flex flex-wrap gap-1.5">
           {coverChips(remedy).map((chip) => (
             <Chip key={`${chip.lock}:${chip.value}`} chip={chip} />
           ))}
         </span>
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
-        <span className="flex flex-wrap items-center gap-1.5">
-          {scope.prefix && <span>{scope.prefix}</span>}
-          {scope.tags.length === 0 ? (
-            <span>any tool</span>
-          ) : (
-            scope.tags.map((tag) => (
-              <Chip key={tag} chip={{ lock: "Tag", value: tag, code: true }} />
-            ))
-          )}
-        </span>
-      </TableCell>
-      <TableCell className="text-muted-foreground pr-5 text-xs whitespace-nowrap">
-        {remedy.lastConsult
-          ? `${formatRelativeTimeFromNow(remedy.lastConsult.at)} · ${remedy.lastConsult.outcome}`
-          : "never"}
+      <TableCell className="text-muted-foreground py-3.5 pr-6 text-right align-top text-sm whitespace-nowrap md:pr-6">
+        {remedy.lastConsult ? (
+          <span className="flex flex-col">
+            <span>{formatRelativeTimeFromNow(remedy.lastConsult.at)}</span>
+            <span className="text-xs">{remedy.lastConsult.outcome}</span>
+          </span>
+        ) : (
+          <span>Never</span>
+        )}
       </TableCell>
     </TableRow>
   );
 }
 
-/** `Lock · value`: the grey lock name, then what the remedy may do about it. */
-function Chip({ chip }: { chip: Omit<CoverChip, "lock"> & { lock: string } }) {
+/** `lock value`: the grey policy lock name, then what may be done about it. */
+function Chip({ chip }: { chip: CoverChip }) {
   return (
-    <Badge variant="outline" className="gap-1 whitespace-nowrap font-normal">
-      <span className="text-muted-foreground">{`${chip.lock} ·`}</span>
+    <Badge
+      variant="outline"
+      className="h-6 gap-1.5 rounded-md px-2 whitespace-nowrap font-normal"
+    >
+      <span className="text-muted-foreground font-mono">{chip.lock}</span>
       <span className={cn(chip.code && "font-mono")}>{chip.value}</span>
     </Badge>
   );

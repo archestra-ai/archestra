@@ -1,10 +1,7 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ResourceAccessRelation,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -26,15 +23,6 @@ const {
   updatePlugin,
   updatePluginGithubSync,
 } = archestraApiSdk;
-
-/** How many plugins a "Show" selection holds, for the filter's counts. */
-export async function countPlugins(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getPlugins({ query: params });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.length ?? 0;
-}
 
 export type PluginListItem =
   archestraApiTypes.GetPluginsResponses["200"][number];
@@ -58,7 +46,7 @@ export function usePlugins(
   enabled = true,
   filters?: Pick<
     NonNullable<archestraApiTypes.GetPluginsData["query"]>,
-    "labels" | "access"
+    "labels" | "access" | "sharedWith" | "owner"
   >,
 ) {
   // Label and access filtering are resolved server-side (the junction table
@@ -66,12 +54,14 @@ export function usePlugins(
   // filters.
   const labels = filters?.labels;
   const access = filters?.access;
+  const sharedWith = filters?.sharedWith;
+  const owner = filters?.owner;
   return useQuery({
-    queryKey: ["plugins", { labels, access }],
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: { labels, access },
+        query: { labels, access, sharedWith, owner },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -159,7 +149,7 @@ export function useApplyGithubPluginUpdate(id: string) {
       if (!data) return;
       queryClient.setQueryData(["plugins", id], data);
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("GitHub update approved and applied");
+      toast.success("Update approved and applied");
     },
   });
 }
@@ -178,7 +168,7 @@ export function useImportGithubPlugin() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin imported from GitHub");
+      toast.success("Plugin imported");
     },
   });
 }
@@ -277,8 +267,8 @@ export function useUpdatePluginGithubSync(id: string) {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success(
         data.githubSyncInterval
-          ? "GitHub checks updated"
-          : "GitHub checks disabled",
+          ? "Update checks updated"
+          : "Update checks turned off",
       );
     },
   });
@@ -298,7 +288,7 @@ export function useTriggerPluginGithubSync(id: string) {
     onSuccess: (queued) => {
       if (queued === null) return;
       toast.success(
-        queued ? "GitHub check queued" : "GitHub check already running",
+        queued ? "Update check queued" : "Update check already running",
       );
       for (const delay of [1_000, 3_000, 8_000]) {
         setTimeout(() => {
@@ -359,20 +349,4 @@ export function useBulkDeletePlugins() {
   });
 }
 
-/**
- * Whether a connection setup for this client delivers the plugin: it is for
- * that client, enabled, and its current content is the approved one.
- */
-export function isDeliverablePlugin(
-  plugin: Pick<
-    PluginListItem,
-    "clientType" | "enabled" | "approvedContentHash" | "contentHash"
-  >,
-  clientId: string,
-): boolean {
-  return (
-    plugin.clientType === clientId &&
-    plugin.enabled &&
-    plugin.approvedContentHash === plugin.contentHash
-  );
-}
+export { isDeliverablePlugin } from "./plugin-eligibility";

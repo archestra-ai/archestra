@@ -1,40 +1,34 @@
 "use client";
 
 import { CLIENT_FILTER_OPTIONS, type ClientFilter } from "@archestra/shared";
-import { FilterSelect } from "@/components/filter-bar";
-import {
-  ClientFilterOption,
-  UserFilterOption,
-} from "@/components/log-filter-option";
+import { FilterSelect, filterControlClass } from "@/components/filter-bar";
+import { ClientFilterOption } from "@/components/log-filter-option";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 
 /**
- * The shared "Filter by User" dropdown used by the LLM logs and Guardrails
- * pages. `value` is a user id or the "all" sentinel (DEFAULT_FILTER_ALL).
+ * The shared "Filter by User" picker used by the LLM and MCP logs pages.
+ * `value` is a user id or the "all" sentinel (DEFAULT_FILTER_ALL). `source`
+ * picks the users offered: users with LLM logs, or organization members.
  */
 export function UserFilterSelect({
   value,
   onValueChange,
-  users,
+  source,
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  users: Array<{ id: string; name: string }> | undefined;
+  source: "logs" | "members";
 }) {
   return (
-    <FilterSelect
+    <RemoteUserSelect
       value={value}
       onValueChange={onValueChange}
       placeholder="Filter by User"
-      items={[
-        { value: DEFAULT_FILTER_ALL, label: "All Users" },
-        ...(users?.map((user) => ({
-          value: user.id,
-          label: user.name || user.id,
-          content: <UserFilterOption name={user.name || user.id} />,
-          selectedContent: <UserFilterOption name={user.name || user.id} />,
-        })) || []),
-      ]}
+      className={filterControlClass({ active: value !== DEFAULT_FILTER_ALL })}
+      searchMode="name"
+      source={source}
+      pinnedOption={{ value: DEFAULT_FILTER_ALL, label: "All Users" }}
     />
   );
 }
@@ -64,14 +58,18 @@ export function ClientFilterSelect({
       placeholder="Filter by Client"
       items={[
         { value: DEFAULT_FILTER_ALL, label: "All Clients" },
-        ...options.map(({ value: optionValue, label, provider, icon }) => ({
-          value: optionValue,
-          label,
-          content: <ClientFilterOption client={{ label, provider, icon }} />,
-          selectedContent: (
-            <ClientFilterOption client={{ label, provider, icon }} />
-          ),
-        })),
+        ...options.map(
+          ({ value: optionValue, label, provider, icon, mark }) => ({
+            value: optionValue,
+            label,
+            content: (
+              <ClientFilterOption client={{ label, provider, icon, mark }} />
+            ),
+            selectedContent: (
+              <ClientFilterOption client={{ label, provider, icon, mark }} />
+            ),
+          }),
+        ),
       ]}
     />
   );

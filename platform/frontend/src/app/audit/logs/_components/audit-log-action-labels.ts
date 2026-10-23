@@ -40,6 +40,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
+  "browserStorageState.deleted": "Browser saved login removed",
   // Runtime credential
   "credential.created": "Credential created",
   "credential.updated": "Credential updated",
@@ -135,6 +136,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
+  "oauthClient.created": "OAuth client created",
+  "oauthClient.updated": "OAuth client updated",
+  "oauthClient.deleted": "OAuth client deleted",
+  "oauthClient.rotated": "OAuth client secret rotated",
+  "oauthClient.bulk_deleted": "OAuth clients bulk deleted",
   // LLM OAuth client
   "llmOauthClient.created": "LLM OAuth client created",
   "llmOauthClient.updated": "LLM OAuth client updated",
@@ -217,9 +223,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "team.deleted": "Team deleted",
   // Team / org token
   "teamToken.rotated": "Team token rotated",
-  // Tool
-  "tool.deleted": "Tool deleted",
-  // Tool invocation policy
+  // OpenAPPA
   "openappaYell.updated": "Updated OpenAPPA yell status",
   "guardrailsPolicy.updated": "Updated guardrails policy",
   // Guardrails batteries
@@ -229,16 +233,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "openappaBatteryPackage.updated": "Guardrails battery package uploaded",
   "openappaBatteryPackage.deleted": "Guardrails battery package deleted",
   "openappaCredentialBinding.updated": "Guardrails battery credential bound",
-  "toolInvocationPolicy.created": "Tool policy created",
-  "toolInvocationPolicy.updated": "Tool policy updated",
-  "toolInvocationPolicy.deleted": "Tool policy deleted",
-  "toolInvocationPolicy.bulk_defaulted": "Tool policies bulk defaulted",
-  "toolInvocationPolicy.auto_configured": "Tool policies auto-configured",
-  // Trusted data policy
-  "trustedDataPolicy.created": "Trusted data policy created",
-  "trustedDataPolicy.updated": "Trusted data policy updated",
-  "trustedDataPolicy.deleted": "Trusted data policy deleted",
-  "trustedDataPolicy.bulk_defaulted": "Trusted data policies bulk defaulted",
   // User
   "user.password_reset": "Password reset",
   // User token
@@ -386,6 +380,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "knowledgeFile",
   "limit",
   "llmModel",
+  "oauthClient",
   "llmOauthClient",
   "llmProviderApiKey",
   "llmProxy",
@@ -402,9 +397,6 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "skillShareLink",
   "team",
   "teamToken",
-  "tool",
-  "toolInvocationPolicy",
-  "trustedDataPolicy",
   "user",
   "userToken",
   "virtualApiKey",
@@ -422,6 +414,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   internalMcpCatalog: "Internal MCP catalog",
   mcpOauthClient: "MCP OAuth client",
   llmModel: "LLM model",
+  oauthClient: "OAuth client",
   llmOauthClient: "LLM OAuth client",
   llmProviderApiKey: "LLM provider key",
   llmProxy: "LLM Proxy",
@@ -438,9 +431,6 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   skill: "Agent skill",
   skillShareLink: "Marketplace link",
   teamToken: "Team / org token",
-  tool: "Discovered tool",
-  toolInvocationPolicy: "Tool invocation policy",
-  trustedDataPolicy: "Trusted data policy",
   userToken: "Personal token",
   virtualApiKey: "Virtual API key",
 };

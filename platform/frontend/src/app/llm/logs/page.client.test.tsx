@@ -3,12 +3,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import {
-  useInteractionSessions,
-  useUniqueUserIds,
-} from "@/lib/interactions/interaction.query";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useInteractionSessions } from "@/lib/interactions/interaction.query";
+import { useOrganization } from "@/lib/organization.query";
 import LlmProxyLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -23,17 +21,58 @@ globalThis.ResizeObserver = class {
   disconnect() {}
 };
 
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+const agentOptions = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const agentRows = () => ({ data: agentOptions.rows as never[] });
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: () => agentRows(),
+  useAgentOptionIds: () => ({
+    data: (agentRows().data ?? []).map((row: { id: string }) => row.id),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = agentRows();
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
+}));
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
 vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@/lib/interactions/interaction.query")
   >()),
   useInteractionSessions: vi.fn(),
-  useUniqueUserIds: vi.fn(),
 }));
 
 // Two users can each name their own agent "My Agent", so the filter has to
@@ -90,6 +129,7 @@ function makeSessionSummary(
     models: ["gpt-5.4"],
     profileId: orgProxy.id,
     profileName: orgProxy.name,
+    profileAgentType: "llm_proxy",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],
@@ -101,8 +141,10 @@ function makeSessionSummary(
     lastUserMessagePreview: null,
     lastInteractionId: null,
     lastInteractionType: null,
+    contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
+    connectorName: null,
     ...overrides,
   };
 }
@@ -126,16 +168,16 @@ describe("LlmProxyLogsPage proxy filter", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useProfiles).mockReturnValue({
-      data: [personalProxy, orgProxy],
-    } as unknown as ReturnType<typeof useProfiles>);
-    vi.mocked(useUniqueUserIds).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useUniqueUserIds>);
+    agentOptions.rows = [personalProxy, orgProxy];
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [], pagination: makePagination() },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
   });
 
   it("shows the owner email of a personal proxy alongside its name", async () => {
@@ -202,7 +244,6 @@ describe("LlmProxyLogsPage proxy filter", () => {
       "Agent",
       "Model",
       "Usage",
-      "Spend",
       "Last request",
     ]) {
       expect(
@@ -210,9 +251,16 @@ describe("LlmProxyLogsPage proxy filter", () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByText("Summarize the quarterly report")).toBeVisible();
-    expect(screen.getByText("3 requests")).toBeVisible();
-    expect(screen.getByText("25% cache read")).toBeVisible();
-    expect(screen.getByText("+1 more")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Demo Admin via API" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /3 requests,.*100 input tokens/ }),
+    ).toBeVisible();
+    expect(screen.getByText("150 tokens")).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Spend" })).toBeNull();
+    expect(screen.getByText("GPT-5.4")).toBeVisible();
+    expect(screen.getByText("+ 1 more model")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();
   });
@@ -251,7 +299,8 @@ describe("LlmProxyLogsPage proxy filter", () => {
     render(<LlmProxyLogsPage />);
 
     expect(screen.getByText("ci-runners")).toBeVisible();
-    expect(screen.getByText("No user — shared key")).toBeVisible();
+    expect(screen.getByText("org")).toBeVisible();
+    expect(screen.getByText("Shared key")).toBeVisible();
   });
 
   it("names the key and its owner for an attributed session", () => {
@@ -308,7 +357,103 @@ describe("LlmProxyLogsPage proxy filter", () => {
 
     render(<LlmProxyLogsPage />);
 
-    expect(screen.getByText("No user — provider key")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Provider key via API" }),
+    ).toBeVisible();
     expect(screen.queryByText(/archestra_/)).toBeNull();
+  });
+
+  it("says a Metadata only session's content was not stored", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [makeSessionSummary({ contentNotStored: true })],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("Content not stored")).toBeVisible();
+    expect(screen.queryByText("No message")).toBeNull();
+  });
+
+  // The knowledge base has no prompt, and the row already says "Knowledge
+  // base", so the title says what the call did rather than repeating it.
+  it("titles a knowledge-base row by its task without repeating its source", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            source: "knowledge:embedding",
+            sources: ["knowledge:embedding"],
+            profileId: null,
+            profileName: null,
+            unattributedReason: "internal",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("Embedding documents")).toBeVisible();
+    expect(screen.queryByText("Knowledge - Embedding")).toBeNull();
+    expect(screen.queryByText("Deleted LLM proxy")).toBeNull();
+  });
+
+  // Every cell's tooltip trigger is a button; a click on one must still open
+  // the row, while the chat link goes to the chat instead.
+  it("opens the session from anywhere in the row except the chat link", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: "chat-session",
+            source: "chat",
+            sources: ["chat"],
+            conversationTitle: "Quarterly planning",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    await user.click(screen.getByText("GPT-5.4"));
+    expect(push).toHaveBeenCalledWith("/llm/logs/chat-session");
+
+    push.mockClear();
+    const chatLink = screen.getByRole("link", { name: "Open chat" });
+    expect(chatLink).toHaveAttribute("href", "/chat/chat-session");
+    await user.click(chatLink);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("opens a sessionless interaction as a session of its own", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: null,
+            interactionId: "interaction-1",
+            lastUserMessagePreview: "One-off request",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    await user.click(screen.getByText("One-off request"));
+    expect(push).toHaveBeenCalledWith("/llm/logs/interaction-1");
   });
 });

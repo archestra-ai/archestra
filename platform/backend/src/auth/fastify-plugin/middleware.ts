@@ -1,4 +1,4 @@
-import { RouteId, SupportedProviders } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import {
   buildForbiddenErrorMessage,
   requiredEndpointPermissionsMap,
@@ -6,6 +6,7 @@ import {
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
+import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -15,21 +16,23 @@ import {
   SessionModel,
   UserModel,
 } from "@/models";
-import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
   ARCHESTRA_CATALOG_PROXY_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
+  CONNECTION_INSTRUCTIONS_PATH,
+  CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
+  CONNECTION_STARTUP_GUARD_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
+  isLlmProxyPath,
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
-  OAUTH_CALLBACK_PATH,
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
   OPENAPPA_HELPERS_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
@@ -115,6 +118,12 @@ export class Authnz {
     // lifecycles and no TOTP.
     await this.enforceOrganizationAuthPolicies(request);
 
+    // No route matched: let the not-found handler answer 404. Denying by
+    // default here would report a missing route as an unregistered one.
+    if (request.routeOptions.url === undefined) {
+      return;
+    }
+
     const { success, error } = await this.isAuthorized(request);
     if (success) {
       logger.trace(
@@ -158,19 +167,10 @@ export class Authnz {
       return true;
     }
     const isGetOrHead = method === "GET" || method === "HEAD";
-    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
-    const isLlmProxyRoute = SupportedProviders.some((provider) =>
-      url.startsWith(`/v1/${provider}`),
-    );
-    // Prefer route consts here instead of hardcoding paths; these checks must
-    // stay in sync with route registration.
-    const isModelRouterRoute = url.startsWith(MODEL_ROUTER_PREFIX);
-
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
-      isLlmProxyRoute ||
-      isModelRouterRoute ||
+      isLlmProxyPath(url) ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
@@ -210,10 +210,6 @@ export class Authnz {
       url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)
       url.startsWith("/oauth/") ||
-      // OAuth providers redirect here without a platform session. The one-time
-      // state value is the callback's authentication proof and is validated
-      // by the route before any token exchange.
-      (method === "POST" && url === OAUTH_CALLBACK_PATH) ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Sandbox proxy HTML is a static file with no secrets — must load without
@@ -235,6 +231,12 @@ export class Authnz {
       // this path — the exemption is intentional here and must survive a
       // rename of either path.
       (isGetOrHead && url === AUTH_STATE_PATH) ||
+      // Managed instructions authenticate their installation credential in the handler.
+      (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
+      // Executable updates have a distinct installation capability and live access checks.
+      (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
+      // Pure public code rendering: accepts no credential and grants no access.
+      (method === "POST" && url === CONNECTION_STARTUP_GUARD_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&
@@ -284,10 +286,7 @@ export class Authnz {
       logger.trace("[Authnz] Attempting session-based authentication");
       // Reads the short-lived cookie cache when present (see session.cookieCache
       // in better-auth config), falling back to the session table on a miss.
-      const { response: session } = await betterAuth.api.getSession({
-        headers,
-        returnHeaders: true,
-      });
+      const { response: session } = await this.getSession(request);
 
       if (session) {
         logger.trace(
@@ -306,35 +305,21 @@ export class Authnz {
 
     const authHeader = headers.get("authorization");
     if (authHeader) {
-      try {
-        logger.trace("[Authnz] Attempting API key authentication");
-        const { valid } = await betterAuth.api.verifyApiKey({
-          body: { key: authHeader },
-        });
-
-        if (valid) {
-          logger.trace({ valid }, "[Authnz] API key verification result");
-          return true;
-        }
-      } catch (_apiKeyError) {
-        logger.trace(
-          "[Authnz] API key verification failed, trying service account token",
-        );
+      // Service-account tokens go first. Both token kinds carry the platform
+      // prefix, but a service-account token is one indexed lookup by hash,
+      // while Better Auth's API-key check reads the apikey table by key and
+      // logs an error on every miss. Checking API keys first charged every
+      // service-account request that miss twice: here and again in
+      // populateUserInfo.
+      if (await this.verifyServiceAccountToken(request, authHeader)) {
+        logger.trace("[Authnz] Service account token verification succeeded");
+        return true;
       }
 
-      try {
-        const serviceAccountResult =
-          await ServiceAccountModel.verifyToken(authHeader);
-        if (serviceAccountResult) {
-          request.serviceAccountAuthResult = serviceAccountResult;
-          logger.trace("[Authnz] Service account token verification succeeded");
-          return true;
-        }
-      } catch (error) {
-        logger.warn(
-          { error: error instanceof Error ? error.message : "unknown" },
-          "[Authnz] Service account token verification errored, treating as unauthenticated",
-        );
+      const apiKey = await this.verifyApiKey(request, authHeader);
+      if (apiKey?.valid) {
+        logger.trace("[Authnz] API key verification succeeded");
+        return true;
       }
     }
 
@@ -492,12 +477,86 @@ export class Authnz {
     };
   };
 
+  private getSession = (request: FastifyRequest) =>
+    requestScope.memo("session", () =>
+      betterAuth.api.getSession({
+        headers: new Headers(request.headers as HeadersInit),
+        returnHeaders: true,
+      }),
+    );
+
+  /**
+   * Better Auth's API-key verification, once per request. The promise is kept
+   * on the request so populateUserInfo reuses what isAuthenticated found
+   * instead of repeating the lookup and, on a miss, its error log.
+   */
+  private apiKeyResults = new WeakMap<
+    FastifyRequest,
+    Promise<Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>> | null>
+  >();
+
+  private verifyApiKey = (request: FastifyRequest, authHeader: string) => {
+    const cached = this.apiKeyResults.get(request);
+    if (cached) return cached;
+    logger.trace("[Authnz] Attempting API key authentication");
+    const result = betterAuth.api
+      .verifyApiKey({ body: { key: authHeader } })
+      .catch((error: unknown) => {
+        // Reached only by real API keys and unknown tokens now, so a miss is
+        // worth a debug line when someone's key stops working.
+        logger.debug(
+          { error: error instanceof Error ? error.message : "unknown" },
+          "[Authnz] API key verification failed",
+        );
+        return null;
+      });
+    this.apiKeyResults.set(request, result);
+    return result;
+  };
+
+  /**
+   * Service-account token verification, once per request: the result stays on
+   * the request for populateUserInfo and the route handlers.
+   */
+  private verifyServiceAccountToken = async (
+    request: FastifyRequest,
+    authHeader: string,
+  ) => {
+    if (request.serviceAccountAuthResult) {
+      return request.serviceAccountAuthResult;
+    }
+    try {
+      const result = await ServiceAccountModel.verifyToken(authHeader);
+      if (result) {
+        request.serviceAccountAuthResult = result;
+      }
+      return result;
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : "unknown" },
+        "[Authnz] Service account token verification errored, treating as unauthenticated",
+      );
+      return null;
+    }
+  };
+
   private populateUserInfo = async (
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> => {
     try {
       const headers = new Headers(request.headers as HeadersInit);
+
+      // A service-account token verified by isAuthenticated needs no session
+      // or API-key lookup here: both would miss, and Better Auth logs the
+      // API-key miss as an error.
+      if (request.serviceAccountAuthResult) {
+        this.populateServiceAccountUserInfo(
+          request,
+          request.serviceAccountAuthResult,
+        );
+        return;
+      }
 
       // Try session-based authentication first
       try {
@@ -508,7 +567,7 @@ export class Authnz {
         // short TTL would lapse between those calls and most API requests would
         // still hit the session table.
         const { response: session, headers: authHeaders } =
-          await betterAuth.api.getSession({ headers, returnHeaders: true });
+          await this.getSession(request);
         this.forwardSessionCookies(reply, authHeaders);
 
         if (session?.user?.id) {
@@ -559,9 +618,7 @@ export class Authnz {
       if (authHeader) {
         try {
           logger.trace("[Authnz] populateUserInfo: trying API key lookup");
-          const apiKeyResult = await betterAuth.api.verifyApiKey({
-            body: { key: authHeader },
-          });
+          const apiKeyResult = await this.verifyApiKey(request, authHeader);
 
           if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
             logger.trace(
@@ -588,11 +645,11 @@ export class Authnz {
           );
         }
 
-        const serviceAccountResult =
-          request.serviceAccountAuthResult ??
-          (await ServiceAccountModel.verifyToken(authHeader));
+        const serviceAccountResult = await this.verifyServiceAccountToken(
+          request,
+          authHeader,
+        );
         if (serviceAccountResult) {
-          request.serviceAccountAuthResult = serviceAccountResult;
           this.populateServiceAccountUserInfo(request, serviceAccountResult);
           return;
         }

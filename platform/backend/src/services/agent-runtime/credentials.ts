@@ -1,4 +1,6 @@
 import { isVaultReference } from "@archestra/shared";
+import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -6,10 +8,8 @@ import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
-import {
-  resolveCredential,
-  resolveCredentialValue,
-} from "@/services/credentials";
+import { CredentialAccess } from "@/services/credential-access";
+import { CredentialResolutionBatch } from "@/services/credentials";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -45,8 +45,23 @@ export async function resolveAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  await requireSharedCredentialAccess({
+    shared,
+    organizationId: params.organizationId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
+  });
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
+      (entry) => (entry.credentialId ? [entry.credentialId] : []),
+    ),
+  });
   const env: Record<string, string> = {};
   const renewableCredentials: Record<string, RenewableCredential> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
@@ -56,7 +71,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const credential = declaration.credentialId
-        ? await resolveCredential({
+        ? await batch.resolve({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
@@ -102,7 +117,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const credential = declaration.credentialId
-        ? await resolveCredential({
+        ? await batch.resolve({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -141,12 +156,60 @@ export async function preflightAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
+  /**
+   * Report organization credentials the caller may not run with as `missing`
+   * entries marked `adminOnly`, instead of refusing the whole check. For the
+   * read-only setup check a person sees; a launch leaves this off and still
+   * refuses.
+   */
+  reportAdminOnlyCredentials?: boolean;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  const declarations = splitDeclarations(applicableCredentials(params));
+  const { perUser } = declarations;
+  let { shared } = declarations;
+  const adminOnly: MissingAgentRuntimeCredential[] = [];
+  try {
+    await requireSharedCredentialAccess({
+      shared,
+      organizationId: params.organizationId,
+      userId:
+        params.authorizationUserId === undefined
+          ? params.userId
+          : params.authorizationUserId,
+    });
+  } catch (error) {
+    if (
+      !params.reportAdminOnlyCredentials ||
+      !(error instanceof SharedCredentialAccessDeniedError)
+    ) {
+      throw error;
+    }
+    // Never resolve these for this caller: reading the organization value is
+    // exactly what they may not do. Only saved credentials (with a
+    // credentialId) are gated, as at launch; a shared value without one still
+    // resolves below.
+    for (const declaration of shared) {
+      if (declaration.credentialId) {
+        adminOnly.push({
+          ...toMissing(declaration),
+          canConnect: false,
+          adminOnly: true,
+        });
+      }
+    }
+    shared = shared.filter((declaration) => !declaration.credentialId);
+  }
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
+      (entry) => (entry.credentialId ? [entry.credentialId] : []),
+    ),
+  });
   const configured: string[] = [];
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -155,11 +218,13 @@ export async function preflightAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await resolveCredentialValue({
-            organizationId: params.organizationId,
-            scope: "organization",
-            credentialId: declaration.credentialId,
-          })
+        ? (
+            await batch.resolve({
+              organizationId: params.organizationId,
+              scope: "organization",
+              credentialId: declaration.credentialId,
+            })
+          )?.value
         : bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
         configured.push(declaration.key);
@@ -186,12 +251,14 @@ export async function preflightAgentRuntimeCredentials(params: {
     for (const declaration of perUser) {
       const connected = declaration.credentialId
         ? Boolean(
-            await resolveCredentialValue({
-              organizationId: params.organizationId,
-              scope: "personal",
-              userId: params.userId,
-              credentialId: declaration.credentialId,
-            }),
+            (
+              await batch.resolve({
+                organizationId: params.organizationId,
+                scope: "personal",
+                userId: params.userId,
+                credentialId: declaration.credentialId,
+              })
+            )?.value,
           )
         : present.has(declaration.key);
       if (connected) {
@@ -200,9 +267,67 @@ export async function preflightAgentRuntimeCredentials(params: {
         missing.push(toMissing(declaration));
       }
     }
+    const usable = await CredentialAccess.usableKeys({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      keys: missing.flatMap((entry) =>
+        entry.credentialId ? [entry.credentialId] : [],
+      ),
+    });
+    for (const entry of missing)
+      if (entry.credentialId) entry.canConnect = usable.has(entry.credentialId);
   }
 
-  return { configured, missing, misconfigured };
+  return { configured, missing: [...adminOnly, ...missing], misconfigured };
+}
+
+async function requireSharedCredentialAccess(params: {
+  shared: AgentRuntimeCredentialDeclaration[];
+  organizationId: string;
+  userId: string | null;
+}): Promise<void> {
+  if (
+    !params.userId ||
+    !params.shared.some((declaration) => declaration.credentialId)
+  ) {
+    return;
+  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (isServiceAccountUserId(params.userId)) {
+    for (const declaration of params.shared) {
+      if (!declaration.credentialId) continue;
+      await CredentialAccess.requireUseOfKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        key: declaration.credentialId,
+        message: "Service account cannot use this shared credential.",
+      });
+    }
+    return;
+  }
+  // SPDX-SnippetEnd
+  const permitted = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "organizationSettings",
+    "update",
+  );
+  if (!permitted) {
+    throw new SharedCredentialAccessDeniedError();
+  }
+}
+
+/** A person without organization settings access tried to run with an organization credential. */
+class SharedCredentialAccessDeniedError extends ApiError {
+  constructor() {
+    super(
+      403,
+      "Only admins can run this agent, because it uses an organization credential. Ask an admin to run it for you.",
+    );
+    this.name = "SharedCredentialAccessDeniedError";
+  }
 }
 
 /**
@@ -316,6 +441,17 @@ export async function setAgentRuntimeCredential(params: {
   }
   const declaration = requireDeclaration(params.runtime, params.key);
   assertCredentialValue(params.value);
+  // A value stored here is a value of the saved credential, so it takes the
+  // same grant the Credentials page asks for: `use` to add your own,
+  // `update` to set the organization's.
+  if (declaration.credentialId)
+    await CredentialAccess.requireOnKey({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      key: declaration.credentialId,
+      action: declaration.scope === "per_user" ? "use" : "update",
+      message: `You don't have access to the "${declaration.label}" credential. Ask an admin to share it with you.`,
+    });
 
   if (declaration.scope === "per_user") {
     if (declaration.credentialId) {

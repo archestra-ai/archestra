@@ -17,6 +17,7 @@ interface SkillCatalogContext {
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
   lookups?: PrincipalSource;
+  includeContent?: boolean;
 }
 
 /**
@@ -119,6 +120,11 @@ export async function listAccessibleCatalogSkills(
       organizationId,
       accessibleSkillIds,
       environmentId,
+      includeContent: params.includeContent,
+      // The catalog lands in system prompts, which must stay byte-stable
+      // between turns for prompt caching and thinking-signature replay; the
+      // usage-count default reorders whenever any skill is loaded.
+      sorting: { sortBy: "name", sortDirection: "asc" },
     }),
   );
 }

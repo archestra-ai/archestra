@@ -8,10 +8,12 @@ import { randomUUID } from "node:crypto";
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import { APIError as OpenAIAPIError } from "openai";
 import { describe, expect, test, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { Agent } from "@/types";
+import { formatResponsesStreamErrorFrame } from "./adapters/responses-stream-error-frame";
 
 // Mock prom-client (required by metrics)
 vi.mock("prom-client", () => ({
@@ -84,12 +86,13 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   normalizeToolCallsForPolicy,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
-  toolCallsForPolicyEvaluation,
   toSpanUserInfo,
+  upstreamErrorMessage,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import type { GatewayToolDeclaration } from "./utils/gateway-tool-declarations";
@@ -681,122 +684,6 @@ describe("normalizeToolCallsForPolicy", () => {
 });
 
 // --------------------------------------------------------------------------
-// toolCallsForPolicyEvaluation
-// --------------------------------------------------------------------------
-describe("toolCallsForPolicyEvaluation", () => {
-  const issueWrite = JSON.stringify({
-    tool_name: "github__issue_write",
-    tool_args: { title: "hello" },
-  });
-
-  // The same gateway registered twice in one client: both run_tool spellings
-  // carry one marker, so both are demoted, and the client still routes each
-  // to the gateway, which runs the target.
-  test("rules on the target of a demoted run_tool, as well as on the wrapper", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
-      attested(
-        { name: "mcp__archestra__archestra__run_tool" },
-        "archestra__run_tool",
-      ),
-    ]);
-    expect(identity.attestationOf("mcp__gw__archestra__run_tool")).toBe(
-      undefined,
-    );
-
-    expect(
-      toolCallsForPolicyEvaluation({
-        toolCalls: [
-          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
-        ],
-        toolIdentity: identity,
-        discoveredToolDefault: "block_when_context_is_untrusted",
-      }),
-    ).toEqual([
-      {
-        toolCallName: "mcp__gw__archestra__run_tool",
-        toolCallArgs: issueWrite,
-      },
-      {
-        toolCallName: "github__issue_write",
-        toolCallArgs: '{"title":"hello"}',
-        isRunToolDispatchTarget: true,
-      },
-    ]);
-  });
-
-  test("unwraps an attested run_tool once, and never adds a built-in target", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
-      { name: "mcp__evil__archestra__run_tool" },
-    ]);
-
-    expect(
-      toolCallsForPolicyEvaluation({
-        toolCalls: [
-          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
-          {
-            name: "mcp__evil__archestra__run_tool",
-            arguments: { tool_name: "whoami" },
-          },
-        ],
-        toolIdentity: identity,
-        discoveredToolDefault: "block_when_context_is_untrusted",
-      }),
-    ).toEqual([
-      {
-        toolCallName: "github__issue_write",
-        toolCallArgs: '{"title":"hello"}',
-        isRunToolDispatchTarget: true,
-      },
-      {
-        toolCallName: "mcp__evil__archestra__run_tool",
-        toolCallArgs: '{"tool_name":"whoami"}',
-      },
-    ]);
-  });
-
-  // No tool row is ever persisted under these names, so without the org's
-  // default they would be allowed in any context.
-  test("rules a foreign lookalike and an unattested namespace member under the org's default", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "archestra__run_tool" }, "archestra__run_tool"),
-      attested({ name: "gw_github__list_repos" }, "github__list_repos"),
-      { name: "archestra__read_file" },
-      { name: "exfiltrate", namespace: "mcp__evil" },
-      { name: "mcp__evil__notes" },
-    ]);
-
-    const entries = toolCallsForPolicyEvaluation({
-      toolCalls: [
-        { name: "archestra__read_file", arguments: "{}" },
-        { name: "exfiltrate", namespace: "mcp__evil", arguments: "{}" },
-        { name: "mcp__evil__notes", arguments: "{}" },
-        { name: "gw_github__list_repos", arguments: "{}" },
-      ],
-      toolIdentity: identity,
-      discoveredToolDefault: "block_always",
-    });
-
-    expect(entries).toEqual([
-      {
-        toolCallName: "foreign:archestra__read_file",
-        toolCallArgs: "{}",
-        actionWithoutToolRow: "block_always",
-      },
-      {
-        toolCallName: "mcp__evil__exfiltrate",
-        toolCallArgs: "{}",
-        actionWithoutToolRow: "block_always",
-      },
-      // Discovered under its own name, like any tool the client declares.
-      { toolCallName: "mcp__evil__notes", toolCallArgs: "{}" },
-      { toolCallName: "github__list_repos", toolCallArgs: "{}" },
-    ]);
-  });
-});
-
-// --------------------------------------------------------------------------
 // calculateInteractionCosts
 // --------------------------------------------------------------------------
 describe("calculateInteractionCosts", () => {
@@ -832,6 +719,24 @@ describe("calculateInteractionCosts", () => {
         write1hTokens: 0,
       },
     );
+  });
+
+  test("records the cost the provider reports instead of the price-table estimate", async () => {
+    mockCalculateCost.mockResolvedValue(0.0099);
+    mockCalculateCacheCost.mockResolvedValue(undefined);
+
+    const result = await calculateInteractionCosts({
+      actualModel: "anthropic/claude-sonnet-4.5",
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 300,
+        providerReportedCost: 0.0123,
+      },
+      providerName: "openrouter",
+    });
+
+    expect(result.actualCost).toBe(0.0123);
+    expect(mockCalculateCost).not.toHaveBeenCalled();
   });
 
   test("handles undefined costs (model not found)", async () => {
@@ -880,20 +785,11 @@ describe("buildInteractionRecord", () => {
       cacheCost: 0.0002,
       cacheSavings: 0.0018,
     },
-    dualLlmAnalyses: [],
     billingMode: "metered" as const,
   };
 
   test("builds correct record with all fields", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      unsafeContextBoundary: {
-        kind: "tool_result",
-        reason: "tool_result_marked_untrusted",
-        toolCallId: "call-1",
-        toolName: "read_email",
-      },
-    });
+    const record = buildInteractionRecord(baseParams);
 
     expect(record.profileId).toBe("agent-1");
     expect(record.externalAgentId).toBe("ext-1");
@@ -911,12 +807,6 @@ describe("buildInteractionRecord", () => {
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
-    expect(record.unsafeContextBoundary).toEqual({
-      kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
-      toolCallId: "call-1",
-      toolName: "read_email",
-    });
   });
 
   test("carries a subscription billing mode through to the record", () => {
@@ -1102,6 +992,126 @@ describe("shouldForwardAnthropicBeta", () => {
   });
 });
 
+describe("isRetryableUpstreamConnectionFailure", () => {
+  test.each([
+    ["SDK connection message", new Error("Connection error.")],
+    [
+      "SDK connection error name",
+      Object.assign(new Error("upstream unavailable"), {
+        name: "APIConnectionError",
+        status: undefined,
+        error: undefined,
+      }),
+    ],
+    ["closed connection", new Error("connection closed")],
+    ["refused connection", new Error("connection refused")],
+    [
+      "undici socket cause",
+      new TypeError("terminated", {
+        cause: Object.assign(new Error("other side closed"), {
+          code: "UND_ERR_SOCKET",
+        }),
+      }),
+    ],
+    [
+      "nested errno cause",
+      new Error("fetch failed", {
+        cause: new Error("transport failed", {
+          cause: Object.assign(new Error("read failed"), {
+            code: "ECONNRESET",
+          }),
+        }),
+      }),
+    ],
+    [
+      "refused errno without connection wording",
+      Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" }),
+    ],
+  ])("accepts %s without a provider response", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(true);
+  });
+
+  test.each([
+    ["Archestra ApiError", new ApiError(502, "Connection error.")],
+    [
+      "HTTP status",
+      Object.assign(new Error("Connection error."), { status: 503 }),
+    ],
+    [
+      "HTTP statusCode",
+      Object.assign(new Error("connection reset"), { statusCode: 429 }),
+    ],
+    [
+      "AWS HTTP response metadata",
+      Object.assign(new Error("connection refused"), {
+        $metadata: { httpStatusCode: 500 },
+      }),
+    ],
+    ["fetch client abort", new DOMException("fetch failed", "AbortError")],
+    [
+      "SDK client abort",
+      Object.assign(new Error("Connection error."), {
+        name: "APIUserAbortError",
+      }),
+    ],
+    [
+      "provider error object",
+      Object.assign(new Error("Connection error."), {
+        error: { type: "api_error", message: "provider failed" },
+      }),
+    ],
+    [
+      "provider error envelope",
+      Object.assign(new Error("connection reset"), {
+        error: {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        },
+      }),
+    ],
+    [
+      "provider error string",
+      Object.assign(new Error("Connection error."), {
+        error: "provider rejected the request",
+      }),
+    ],
+    ["SDK timeout message", new Error("Request timed out.")],
+    [
+      "SDK timeout overrides connection wording",
+      Object.assign(new Error("Connection error."), {
+        name: "APIConnectionTimeoutError",
+      }),
+    ],
+    [
+      "timeout errno overrides fetch failure",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("connect failed"), {
+          code: "ETIMEDOUT",
+        }),
+      }),
+    ],
+    [
+      "undici headers timeout",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("headers failed"), {
+          code: "UND_ERR_HEADERS_TIMEOUT",
+        }),
+      }),
+    ],
+    [
+      "abort caused by timeout",
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      ),
+    ],
+    ["internal error", new TypeError("cannot read x of undefined")],
+    ["non-Error rejection", { code: "ECONNRESET" }],
+  ])("rejects %s even if transport wording is present", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(false);
+  });
+});
+
 describe("handleError", () => {
   function makeReply(headersSent: boolean) {
     const writes: string[] = [];
@@ -1116,8 +1126,11 @@ describe("handleError", () => {
         sent.statusCode = statusCode;
         return replyShape;
       },
+      type: () => replyShape,
       send: (body: unknown) => {
-        sent.body = body;
+        // Provider bodies are sent pre-serialized; parse so tests assert on
+        // the JSON the client receives.
+        sent.body = typeof body === "string" ? JSON.parse(body) : body;
         return replyShape;
       },
       raw: {
@@ -1135,6 +1148,13 @@ describe("handleError", () => {
 
   const extractMessage = (error: unknown) =>
     error instanceof Error ? error.message : "Internal server error";
+
+  /** The events of a Responses error frame: the `error` event, then the terminal. */
+  const responsesEvents = (frame: string) =>
+    frame
+      .split("\n\n")
+      .filter(Boolean)
+      .map((event) => JSON.parse(event.replace(/^data: /, "")));
 
   test("preserves the internal code carried by a thrown ApiError", () => {
     const { reply } = makeReply(false);
@@ -1240,6 +1260,106 @@ describe("handleError", () => {
       }),
     });
     expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  // An upstream that closes its socket mid-stream surfaces from undici as a
+  // bare TypeError("terminated") with the reason on `cause`. The proxy names
+  // what happened, keeps the reason, and frames it as a retryable server
+  // error — not as a final "api_error" called "terminated".
+  function upstreamClosedSocket() {
+    return Object.assign(new TypeError("terminated"), {
+      cause: Object.assign(new Error("other side closed"), {
+        code: "UND_ERR_SOCKET",
+      }),
+    });
+  }
+  const CLOSED_MESSAGE =
+    "The model provider closed the connection before the response finished (other side closed). Retry the request.";
+
+  test("names a connection the upstream closed before headers commit", () => {
+    const { reply } = makeReply(false);
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamClosedSocket(),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as ApiError).statusCode).toBe(502);
+    expect((thrown as ApiError).message).toBe(CLOSED_MESSAGE);
+  });
+
+  test("frames a connection the upstream closed mid-stream as a retryable server error", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      upstreamClosedSocket(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+      formatResponsesStreamErrorFrame,
+    );
+
+    expect(writes).toHaveLength(1);
+    const [payload] = responsesEvents(writes[0]);
+    expect(payload.error).toEqual({
+      type: "server_error",
+      code: "upstream_connection_closed",
+      message: CLOSED_MESSAGE,
+      param: null,
+    });
+  });
+
+  test("keeps an in-stream provider error's own code and fields on a Responses stream", () => {
+    // The OpenAI SDK throws this when the stream carries an `error` event:
+    // no HTTP status, the event's error object on `.error`. Codex stops a
+    // turn on `misalignment_policy_violation` and shows its review details;
+    // replaced by the error type, the code read as a retryable failure.
+    const upstreamError = {
+      type: "invalid_request_error",
+      code: "misalignment_policy_violation",
+      message: "This request was blocked by our safety systems.",
+      misalignment: {
+        error_type: "other",
+        detailed_explanation: "The agent turned off a safety check.",
+      },
+    };
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      new OpenAIAPIError(undefined, upstreamError, undefined, new Headers()),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+      formatResponsesStreamErrorFrame,
+    );
+
+    const events = responsesEvents(writes[0]);
+    expect(events[0].error).toMatchObject(upstreamError);
+    expect(events.at(-1)).toMatchObject({
+      type: "response.failed",
+      response: { status: "failed", error: upstreamError },
+    });
+  });
+
+  test("records the same description for the failed interaction", () => {
+    expect(upstreamErrorMessage(upstreamClosedSocket(), extractMessage)).toBe(
+      CLOSED_MESSAGE,
+    );
+    // A provider error with an HTTP status keeps the adapter's own message.
+    const providerError = Object.assign(new Error("terminated"), {
+      status: 500,
+    });
+    expect(upstreamErrorMessage(providerError, extractMessage)).toBe(
+      "terminated",
+    );
   });
 
   test("leaves an error that carries an explicit HTTP status untouched", () => {
@@ -1513,6 +1633,20 @@ describe("handleError", () => {
     expect(thrown.retryAfterSeconds).toBe(7);
   });
 
+  test("preserves the internal failure cause without putting it in the client message", () => {
+    const { reply } = makeReply(false);
+    const cause = new Error("native storage operation failed");
+    const error = new ApiError(503, "Policy service temporarily unavailable");
+    error.cause = cause;
+
+    const thrown = throwErrorFor(error, reply);
+
+    expect(thrown.message).toBe(error.message);
+    expect(thrown.message).not.toContain(cause.message);
+    expect(thrown.cause).toBe(error);
+    expect((thrown.cause as Error).cause).toBe(cause);
+  });
+
   test("drops a Retry-After value that is neither seconds nor a date", () => {
     const { reply, headers } = makeReply(false);
     const error = Object.assign(new Error("rate limited"), {
@@ -1695,6 +1829,189 @@ describe("handleError", () => {
     expect(thrown.internalCode).toBe(
       ArchestraInternalErrorCode.ProviderInsufficientBalance,
     );
+  });
+
+  describe("provider error relay for every upstream status", () => {
+    const threadNotFound = {
+      type: "error",
+      error: {
+        type: "not_found_error",
+        message:
+          "No thread state was found for the requested `previous_message_id`.",
+        details: { error_code: "thread_not_found" },
+      },
+      request_id: "req_test",
+    };
+
+    function anthropicError(status: number, body: unknown) {
+      return Object.assign(new Error(JSON.stringify(body)), {
+        status,
+        error: body,
+      });
+    }
+
+    test("relays an Anthropic thread_not_found 404 with its details intact", () => {
+      const { reply, sent } = makeReply(false);
+
+      handleError(
+        anthropicError(404, threadNotFound),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(404);
+      expect(sent.body).toEqual(threadNotFound);
+    });
+
+    test("relays an Anthropic 400 invalid_request_error verbatim", () => {
+      const { reply, sent } = makeReply(false);
+      const body = {
+        type: "error",
+        error: { type: "invalid_request_error", message: "prompt is too long" },
+      };
+
+      handleError(
+        anthropicError(400, body),
+        reply,
+        extractMessage,
+        false,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(400);
+      expect(sent.body).toEqual(body);
+    });
+
+    test("relays an OpenAI-wire error with its code", () => {
+      const { reply, sent } = makeReply(false);
+      const error = Object.assign(new Error("context too long"), {
+        status: 400,
+        error: {
+          message: "maximum context length exceeded",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      });
+
+      handleError(error, reply, extractMessage, false, () => undefined);
+
+      expect(sent.statusCode).toBe(400);
+      expect(sent.body).toEqual({
+        error: {
+          message: "maximum context length exceeded",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      });
+    });
+
+    test("relays a provider 5xx body and still marks nothing as ours", () => {
+      const { reply, sent } = makeReply(false);
+      const body = {
+        type: "error",
+        error: { type: "api_error", message: "Internal server error" },
+      };
+
+      handleError(
+        anthropicError(500, body),
+        reply,
+        extractMessage,
+        false,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(500);
+      expect(sent.body).toEqual(body);
+    });
+
+    test("keeps the envelope for an error without a recognizable provider body", () => {
+      const { reply } = makeReply(false);
+      const error = Object.assign(new Error("bad gateway"), {
+        status: 502,
+        error: { message: "bad gateway" },
+      });
+
+      expect(throwErrorFor(error, reply).statusCode).toBe(502);
+    });
+
+    test("keeps the envelope for an Archestra ApiError", () => {
+      const { reply } = makeReply(false);
+      const thrown = throwErrorFor(new ApiError(404, "Agent not found"), reply);
+
+      expect(thrown.statusCode).toBe(404);
+      expect(thrown.message).toBe("Agent not found");
+    });
+
+    test("keeps the envelope when the adapter reclassifies the error", () => {
+      const { reply } = makeReply(false);
+      const thrown = (() => {
+        try {
+          handleError(
+            anthropicError(400, {
+              type: "error",
+              error: { type: "invalid_request_error", message: "credit" },
+            }),
+            reply,
+            extractMessage,
+            false,
+            () => ArchestraInternalErrorCode.ProviderInsufficientBalance,
+          );
+        } catch (caught) {
+          return caught as ApiError;
+        }
+        throw new Error("handleError did not throw");
+      })();
+
+      expect(thrown.statusCode).toBe(400);
+      expect(thrown.internalCode).toBe(
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+    });
+
+    test("does not leak a foreign-format body on a wire-translating route", () => {
+      const { reply, sent } = makeReply(false);
+
+      for (const status of [404, 429]) {
+        const thrown = (() => {
+          try {
+            handleError(
+              anthropicError(status, threadNotFound),
+              reply,
+              extractMessage,
+              false,
+              () => undefined,
+              undefined,
+              true,
+            );
+          } catch (caught) {
+            return caught as ApiError;
+          }
+          throw new Error("handleError did not throw");
+        })();
+        expect(thrown.statusCode).toBe(status);
+      }
+      expect(sent.body).toBeUndefined();
+    });
+
+    test("keeps the provider's type and details in a mid-stream error event", () => {
+      const { reply, writes } = makeReply(true);
+
+      handleError(
+        anthropicError(404, threadNotFound),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+
+      const payload = JSON.parse(
+        writes[0].replace(/^event: error\ndata: /, ""),
+      );
+      expect(payload.error.type).toBe("not_found_error");
+      expect(payload.error.details).toEqual({ error_code: "thread_not_found" });
+    });
   });
 });
 

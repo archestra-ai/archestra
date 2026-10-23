@@ -1,5 +1,4 @@
 import {
-  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -52,9 +51,6 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseFrontendBaseUrl,
-  parseHackathonGalleryRepo,
-  parseHackathonRecorderEnabled,
-  parseHackathonRecorderMaxFinalCutMs,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -63,6 +59,7 @@ import config, {
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
   parseLlmProxyPlugins,
+  parseLogContentMode,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -81,7 +78,7 @@ import config, {
   parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
-  resolveRenderBaseUrl,
+  resolveAllowedOrigins,
 } from "./config";
 
 // Mock the logger
@@ -462,21 +459,12 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
     process.env = originalEnv;
   });
 
-  test("should accept all origins when no env vars are set", () => {
+  test("should configure no origins when no env vars are set", () => {
     delete process.env.ARCHESTRA_FRONTEND_URL;
     delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-    const cors = getCorsOrigins();
-    expect(cors).toHaveLength(1);
-    expect(cors[0]).toBeInstanceOf(RegExp);
-
-    const trusted = getTrustedOrigins();
-    expect(trusted).toEqual([
-      "http://*:*",
-      "https://*:*",
-      "http://*",
-      "https://*",
-    ]);
+    expect(getCorsOrigins()).toEqual([]);
+    expect(getTrustedOrigins()).toEqual([]);
   });
 
   test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", () => {
@@ -504,22 +492,6 @@ describe("getTrustedOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all wildcards when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getTrustedOrigins();
-
-      expect(result).toEqual([
-        "http://*:*",
-        "https://*:*",
-        "http://*",
-        "https://*",
-      ]);
-    });
   });
 
   describe("configured origins (enforce)", () => {
@@ -566,6 +538,53 @@ describe("getTrustedOrigins", () => {
 
       expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
+  });
+});
+
+describe("resolveAllowedOrigins", () => {
+  test("allows only configured origins when any are configured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: ["https://app.example.com"],
+        forwardedHost: "evil.example.com",
+        host: "evil.example.com",
+      }),
+    ).toEqual(["https://app.example.com"]);
+  });
+
+  test("falls back to the forwarded host's own origin when unconfigured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: "192.168.1.20:3000, proxy.internal",
+        host: "localhost:9000",
+      }),
+    ).toEqual(["http://192.168.1.20:3000", "https://192.168.1.20:3000"]);
+  });
+
+  test("falls back to the Host header with loopback equivalents", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: undefined,
+        host: "localhost:3000",
+      }),
+    ).toEqual([
+      "http://localhost:3000",
+      "https://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://127.0.0.1:3000",
+    ]);
+  });
+
+  test("allows nothing when unconfigured and the host is unknown", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: null,
+        host: undefined,
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -927,6 +946,12 @@ describe("getOtelExporterOtlpLogEndpoint", () => {
         "http://otel-collector:4318/v1",
       );
       expect(result).toBe("http://otel-collector:4318/v1/logs");
+    });
+
+    test("replaces a traces path with the logs path", () => {
+      expect(
+        getOtelExporterOtlpLogEndpoint("http://otel-collector:4318/v1/traces/"),
+      ).toBe("http://otel-collector:4318/v1/logs");
     });
 
     test("should handle /v1 with trailing slash", () => {
@@ -1682,6 +1707,59 @@ describe("mcp gateway config", () => {
 
     expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
   });
+
+  test("defaults the subscription stream cap to disabled", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("reads the subscription stream cap from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "20000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(20_000);
+  });
+
+  test("accepts zero as no subscription stream expiry", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "0";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("falls back when the subscription stream cap exceeds the timer range", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483648";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("accepts the largest delay a timer can schedule", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483647";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(2_147_483_647);
+  });
+
+  test.each([
+    "-1",
+    "Infinity",
+    "NaN",
+    "1.5",
+  ])("disables subscription stream expiry for invalid value %s", async (value) => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = value;
+    const { default: cfg } = await import("./config");
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
 });
 
 describe("rum export config", () => {
@@ -1748,21 +1826,6 @@ describe("getCorsOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all regex when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getCorsOrigins();
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBeInstanceOf(RegExp);
-      expect((result[0] as RegExp).test("http://anything.example.com")).toBe(
-        true,
-      );
-    });
   });
 
   describe("configured origins (enforce)", () => {
@@ -2060,75 +2123,18 @@ describe("parseProcessType", () => {
     expect(parseProcessType("worker")).toBe("worker");
   });
 
-  test("should return 'renderer' for 'renderer'", () => {
-    expect(parseProcessType("renderer")).toBe("renderer");
-  });
-
   test("should be case insensitive", () => {
     expect(parseProcessType("WEB")).toBe("web");
     expect(parseProcessType("WORKER")).toBe("worker");
-    expect(parseProcessType("RENDERER")).toBe("renderer");
     expect(parseProcessType("Web")).toBe("web");
     expect(parseProcessType("Worker")).toBe("worker");
-    expect(parseProcessType("Renderer")).toBe("renderer");
   });
 
   test("should return 'all' for unknown values", () => {
     expect(parseProcessType("unknown")).toBe("all");
+    expect(parseProcessType("renderer")).toBe("all");
     expect(parseProcessType("both")).toBe("all");
     expect(parseProcessType("api")).toBe("all");
-  });
-
-  test.each([
-    { input: undefined, type: "all", web: true, worker: true, renderer: false },
-    { input: "", type: "all", web: true, worker: true, renderer: false },
-    { input: "all", type: "all", web: true, worker: true, renderer: false },
-    { input: "web", type: "web", web: true, worker: false, renderer: false },
-    { input: "WEB", type: "web", web: true, worker: false, renderer: false },
-    {
-      input: "worker",
-      type: "worker",
-      web: false,
-      worker: true,
-      renderer: false,
-    },
-    {
-      input: "WORKER",
-      type: "worker",
-      web: false,
-      worker: true,
-      renderer: false,
-    },
-    {
-      input: "renderer",
-      type: "renderer",
-      web: false,
-      worker: false,
-      renderer: true,
-    },
-    {
-      input: "RENDERER",
-      type: "renderer",
-      web: false,
-      worker: false,
-      renderer: true,
-    },
-    { input: "unknown", type: "all", web: true, worker: true, renderer: false },
-  ])("input=$input → web=$web worker=$worker renderer=$renderer", ({
-    input,
-    type,
-    web,
-    worker,
-    renderer,
-  }) => {
-    const result = parseProcessType(input);
-    expect(result).toBe(type);
-    // Mirror the derivations in config.ts: only "web"/"all" run the web
-    // server, only "worker"/"all" run the worker, and "renderer" is neither —
-    // it runs only the isolated app-recording render service.
-    expect(result === "web" || result === "all").toBe(web);
-    expect(result === "worker" || result === "all").toBe(worker);
-    expect(result === "renderer").toBe(renderer);
   });
 });
 
@@ -3083,101 +3089,6 @@ describe("parseRetentionDays", () => {
   });
 });
 
-describe("parseHackathonRecorderEnabled", () => {
-  const parse = (
-    enterpriseLicenseActivated: boolean,
-    enterpriseOverride?: string,
-  ) =>
-    parseHackathonRecorderEnabled({
-      enterpriseLicenseActivated,
-      enterpriseOverride,
-    });
-
-  test("on for every community deployment — there is no opt-out flag", () => {
-    // The date window and the org toggle already decide when and whether it
-    // shows, so a community deployment has no switch of its own.
-    expect(parse(false)).toBe(true);
-    expect(parse(false, "true")).toBe(true);
-  });
-
-  test("stays off when the enterprise license is activated", () => {
-    expect(parse(true)).toBe(false);
-  });
-
-  test("the undocumented override is the only enterprise way in", () => {
-    expect(parse(true, "true")).toBe(true);
-  });
-
-  test("the override does nothing unless it is exactly true", () => {
-    expect(parse(true, "yes")).toBe(false);
-    expect(parse(true, "")).toBe(false);
-  });
-});
-
-describe("parseHackathonGalleryRepo", () => {
-  test("unset means sharing is not offered", () => {
-    expect(parseHackathonGalleryRepo(undefined)).toBeUndefined();
-    expect(parseHackathonGalleryRepo("")).toBeUndefined();
-    expect(parseHackathonGalleryRepo("   ")).toBeUndefined();
-  });
-
-  test("splits owner/name, tolerating surrounding whitespace", () => {
-    expect(parseHackathonGalleryRepo("archestra-ai/app-gallery")).toEqual({
-      owner: "archestra-ai",
-      name: "app-gallery",
-    });
-    expect(parseHackathonGalleryRepo(" archestra-ai/app-gallery ")).toEqual({
-      owner: "archestra-ai",
-      name: "app-gallery",
-    });
-  });
-
-  test("refuses anything that is not exactly owner/name", () => {
-    // Fail at boot, not with a broken share button: a URL, a bare owner, or a
-    // nested path are all misconfigurations.
-    expect(() =>
-      parseHackathonGalleryRepo("https://github.com/archestra-ai/app-gallery"),
-    ).toThrow(/owner\/name/);
-    expect(() => parseHackathonGalleryRepo("archestra-ai")).toThrow(
-      /owner\/name/,
-    );
-    expect(() =>
-      parseHackathonGalleryRepo("archestra-ai/app-gallery/main"),
-    ).toThrow(/owner\/name/);
-  });
-});
-
-describe("resolveRenderBaseUrl", () => {
-  test("films the deployment's own first configured origin", () => {
-    // The renderer must reach the frontend at an origin the app sandbox trusts
-    // to be framed by. Reaching it at loopback instead is refused by the
-    // sandbox's frame-ancestors policy, and the export films an empty app pane
-    // rather than failing — so the default has to come from the same set CORS
-    // and auth are built from.
-    expect(
-      resolveRenderBaseUrl({
-        explicit: undefined,
-        configuredOrigins: ["https://apps.example.com", "https://tunnel.test"],
-      }),
-    ).toBe("https://apps.example.com");
-  });
-
-  test("an explicit base URL wins, for a renderer pointed somewhere internal", () => {
-    expect(
-      resolveRenderBaseUrl({
-        explicit: "http://frontend.svc:3000",
-        configuredOrigins: ["https://apps.example.com"],
-      }),
-    ).toBe("http://frontend.svc:3000");
-  });
-
-  test("falls back to loopback only when nothing is configured", () => {
-    expect(
-      resolveRenderBaseUrl({ explicit: "  ", configuredOrigins: [] }),
-    ).toBe("http://localhost:3000");
-  });
-});
-
 describe("betaFeatureEnabled", () => {
   const originalEnv = process.env;
 
@@ -3246,6 +3157,30 @@ describe("betaFeatureEnabled", () => {
     expect(betaFeatureEnabled("TRUE")).toBe(false);
     expect(betaFeatureEnabled("yes")).toBe(false);
     expect(betaFeatureEnabled("1")).toBe(false);
+  });
+});
+
+describe("parseLogContentMode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("defaults to full content when unset", () => {
+    expect(parseLogContentMode(undefined)).toBe("full");
+    expect(parseLogContentMode("  ")).toBe("full");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("accepts both modes, ignoring case and whitespace", () => {
+    expect(parseLogContentMode("full")).toBe("full");
+    expect(parseLogContentMode(" METADATA_ONLY ")).toBe("metadata_only");
+  });
+
+  test("an unrecognized value stores metadata only and warns", () => {
+    expect(parseLogContentMode("metadata-only")).toBe("metadata_only");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("ARCHESTRA_LOGS_CONTENT_MODE"),
+    );
   });
 });
 
@@ -3401,38 +3336,6 @@ describe("deriveOllamaNativeBaseUrl", () => {
   });
 });
 
-describe("parseHackathonRecorderMaxFinalCutMs", () => {
-  test("defaults to the shared limit when unset", () => {
-    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
-    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
-      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
-    );
-    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
-      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
-    );
-  });
-
-  test("takes a deployment's own limit", () => {
-    expect(parseHackathonRecorderMaxFinalCutMs("30000")).toBe(30_000);
-    expect(parseHackathonRecorderMaxFinalCutMs(" 600000 ")).toBe(600_000);
-  });
-
-  test("refuses a value it cannot honour rather than silently defaulting", () => {
-    // Falling back would read as the platform ignoring the operator's limit —
-    // the one failure mode a length cap must not have.
-    expect(() => parseHackathonRecorderMaxFinalCutMs("abc")).toThrow(
-      /whole number of milliseconds/,
-    );
-    expect(() => parseHackathonRecorderMaxFinalCutMs("60.5")).toThrow();
-    expect(() => parseHackathonRecorderMaxFinalCutMs("-1000")).toThrow();
-  });
-
-  test("refuses a limit so small nothing could ever be submitted", () => {
-    expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
-    expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
-  });
-});
-
 describe("parseNonNegativeInt", () => {
   test("falls back when unset or unparseable", () => {
     expect(parseNonNegativeInt(undefined, 90)).toBe(90);
@@ -3579,118 +3482,129 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("reporting defaults on for OpenAPPA and supports an explicit opt-out", () => {
-    expect(parseOpenAppaConfig("true").yellEnabled).toBe(true);
-    expect(parseOpenAppaConfig("true", "true").yellEnabled).toBe(true);
-    for (const [enabled, reporting] of [
-      [undefined, "true"],
-      ["false", "true"],
-      ["true", "false"],
-      ["true", ""],
-      ["true", "TRUE"],
-    ]) {
-      expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
+  test.each([
+    undefined,
+    "",
+    "false",
+    "true",
+    " true ",
+  ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    for (const analytics of ["disabled", "enabled", undefined]) {
+      vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
+      for (const environment of ["production", "development"]) {
+        vi.stubEnv("NODE_ENV", environment);
+        expect(
+          parseOpenAppaConfig({ yellForwardingEnabled: forwarding })
+            .yellForwardingEnabled,
+        ).toBe(forwarding?.trim() === "true");
+        expect(getAnalyticsConfig().enabled).toBe(
+          analytics ? analytics !== "disabled" : environment === "production",
+        );
+      }
     }
-  });
-  test("gates APPA registration on the beta switch, regardless of the explicit plugin list", () => {
-    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
-    expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
-    expect(parseLlmProxyPlugins("", true)).toEqual(["appa"]);
-    expect(parseLlmProxyPlugins(" appa ", true)).toEqual(["appa"]);
   });
 
   test.each([
-    false,
-    true,
-  ])("rejects invalid plugin configuration (APPA enabled=%s)", (enabled) => {
-    expect(() => parseLlmProxyPlugins("unknown", enabled)).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    "TRUE",
+    "enabled",
+    "1",
+    "yes",
+    "disabled",
+  ])("rejects invalid external reporting configuration (%s)", (yellForwardingEnabled) => {
+    expect(() => parseOpenAppaConfig({ yellForwardingEnabled })).toThrow(
+      "ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED must be true or false",
     );
-    expect(() => parseLlmProxyPlugins("appa,appa", enabled)).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
-    );
+  });
+
+  test("reporting defaults on and supports an explicit opt-out", () => {
+    expect(parseOpenAppaConfig().yellEnabled).toBe(true);
+    expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
+    for (const reporting of ["false", "", "TRUE"]) {
+      expect(parseOpenAppaConfig({ yellEnabled: reporting }).yellEnabled).toBe(
+        false,
+      );
+    }
   });
 
   test.each([
     undefined,
     "false",
-    "TRUE",
-    "1",
-  ])("stays off unless ARCHESTRA_BETA is exactly true (value=%s)", (beta) => {
-    expect(parseOpenAppaConfig(beta)).toEqual({
-      enabled: false,
-      yellEnabled: false,
-      offerSigningSecret: "",
-      postgresMaxConnections: 4,
-    });
+    "true",
+  ])("makes OpenAPPA available independently of the beta switch (value=%s)", (beta) => {
+    vi.stubEnv("ARCHESTRA_BETA", beta);
+    expect(parseOpenAppaConfig().enabled).toBe(true);
+    expect(parseLlmProxyPlugins(undefined)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins("")).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
   });
+
+  test("rejects invalid plugin configuration", () => {
+    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    );
+    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
+    );
+  });
+
   test("enables database policies without a container path", () => {
-    expect(parseOpenAppaConfig("true")).toEqual({
+    expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
       yellEnabled: true,
+      yellForwardingEnabled: false,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
     });
     expect(
-      parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
-        .offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "offer-signing-secret-at-least-32ch",
+      }).offerSigningSecret,
     ).toBe("offer-signing-secret-at-least-32ch");
-    expect(() => parseOpenAppaConfig("true", "true", "short")).toThrow(
+    expect(() =>
+      parseOpenAppaConfig({ yellEnabled: "true", offerSigningSecret: "short" }),
+    ).toThrow(
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
   });
 
   test("derives the offer signing secret from the auth secret when unset", () => {
-    const derived = parseOpenAppaConfig(
-      "true",
-      "true",
-      undefined,
-      undefined,
-      "auth-secret-for-derivation",
-    ).offerSigningSecret;
+    const derived = parseOpenAppaConfig({
+      yellEnabled: "true",
+      authSecret: "auth-secret-for-derivation",
+    }).offerSigningSecret;
     expect(derived.length).toBeGreaterThanOrEqual(32);
     expect(derived).not.toContain("auth-secret-for-derivation");
     // Deterministic: every replica with the same auth secret signs alike.
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        undefined,
-        undefined,
-        "auth-secret-for-derivation",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        authSecret: "auth-secret-for-derivation",
+      }).offerSigningSecret,
     ).toBe(derived);
     // Domain-separated: a different auth secret gives a different key.
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        undefined,
-        undefined,
-        "other-auth-secret",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        authSecret: "other-auth-secret",
+      }).offerSigningSecret,
     ).not.toBe(derived);
   });
 
   test("prefers the dedicated offer signing secret over the derivation", () => {
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        "offer-signing-secret-at-least-32ch",
-        undefined,
-        "auth-secret-for-derivation",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "offer-signing-secret-at-least-32ch",
+        authSecret: "auth-secret-for-derivation",
+      }).offerSigningSecret,
     ).toBe("offer-signing-secret-at-least-32ch");
     expect(() =>
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        "short",
-        undefined,
-        "auth-secret-for-derivation",
-      ),
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "short",
+        authSecret: "auth-secret-for-derivation",
+      }),
     ).toThrow(
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
@@ -3705,8 +3619,82 @@ describe("OpenAPPA feature configuration", () => {
     ["many", 4],
   ])("reads the ledger pool size (value=%s)", (value, expected) => {
     expect(
-      parseOpenAppaConfig("true", undefined, undefined, value)
+      parseOpenAppaConfig({ postgresMaxConnections: value })
         .postgresMaxConnections,
     ).toBe(expected);
+  });
+
+  describe("review summary model (explicit opt-in)", () => {
+    test.each([
+      { provider: undefined, model: undefined },
+      { provider: "", model: "" },
+      { provider: "  ", model: " " },
+    ])("stays disabled when both variables are blank (%j)", ({
+      provider,
+      model,
+    }) => {
+      const result = parseOpenAppaConfig({
+        reviewSummaryProvider: provider,
+        reviewSummaryModel: model,
+      });
+      expect(result.reviewSummary).toBeUndefined();
+      expect(result).not.toHaveProperty("reviewSummary");
+    });
+
+    test("enables with a supported chat provider and model", () => {
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "kimi",
+          reviewSummaryModel: "kimi-for-coding",
+        }).reviewSummary,
+      ).toEqual({ provider: "kimi", model: "kimi-for-coding" });
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: " anthropic ",
+          reviewSummaryModel: " claude-sonnet-4-5 ",
+        }).reviewSummary,
+      ).toEqual({ provider: "anthropic", model: "claude-sonnet-4-5" });
+    });
+
+    test.each([
+      { provider: "kimi", model: undefined },
+      { provider: "kimi", model: "" },
+      { provider: undefined, model: "kimi-for-coding" },
+      { provider: " ", model: "kimi-for-coding" },
+    ])("rejects a partial configuration (%j)", ({ provider, model }) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: model,
+        }),
+      ).toThrow(
+        "ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER and ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL must be set together",
+      );
+    });
+
+    test("rejects an unsupported provider", () => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "not-a-provider",
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        'ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "not-a-provider" is not a supported provider',
+      );
+    });
+
+    test.each([
+      "voyage",
+      "jev",
+    ])("rejects a non-chat provider (%s)", (provider) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${provider}" does not support chat completions`,
+      );
+    });
   });
 });

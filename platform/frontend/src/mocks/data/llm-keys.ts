@@ -50,6 +50,7 @@ export function makeVirtualKey(
     name: "test-virtual-key",
     labels: [],
     keyType: "standard",
+    includeFutureProviders: false,
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",
     scope: "personal",
@@ -60,6 +61,9 @@ export function makeVirtualKey(
     teams: [],
     authorName: "Test Admin",
     providerApiKeys: [],
+    billingTeamId: null,
+    billingTeam: null,
+    spendCap: null,
     ...overrides,
   };
 }

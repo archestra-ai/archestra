@@ -2,8 +2,8 @@ import { E2eTestId } from "@archestra/shared";
 import type { Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
 import {
-  openAgentRowMenu,
-  selectAgentTableView,
+  clickAgentRowMenuItem,
+  waitForAgentsTable,
   waitForElementWithReload,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
@@ -62,7 +62,7 @@ test("browses, compares, and restores an agent version from the row menu", async
     });
 
     await goToPage(page, "/agents");
-    await selectAgentTableView(page);
+    await waitForAgentsTable(page);
 
     // Names are CSS-truncated, so the full string lives on the title
     // attribute, not in visible text.
@@ -74,26 +74,27 @@ test("browses, compares, and restores an agent version from the row menu", async
       intervals: [2000, 3000, 5000],
       checkEnabled: false,
     });
-    await openAgentRowMenu(page, AGENT_NAME);
-    await page
-      .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${AGENT_NAME}`)
-      .click();
+    await clickAgentRowMenuItem(page, {
+      agentName: AGENT_NAME,
+      itemTestId: `${E2eTestId.AgentVersionHistoryButton}-${AGENT_NAME}`,
+    });
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();
 
-    // Opens on the head (v2), badged as current.
+    // Opens on the head (v2), marked as current on its rail row.
     await expect(
       dialog.getByRole("heading", { name: "Version 2" }),
     ).toBeVisible();
     await expect(
-      dialog.getByRole("button", { name: /^v2\b/ }).getByText("Current"),
+      dialog.getByRole("button", { name: /^Version 2 \(current\)/ }),
     ).toBeVisible();
 
-    // Compare v2 against v1: the system prompt is what moved. Asserted on the
-    // unified diff rather than the section header, which renders in the "All
-    // settings" view too — an assertion on it passes whether or not the click
-    // switched anything. Only the diff carries both revisions at once, and
+    // Compare v2 against v1: the system prompt is what moved. The dialog opens
+    // on Changes, and the control stays disabled until v1 has loaded as the
+    // baseline, so the click doubles as the wait for it. Asserted on the
+    // unified diff rather than the hunk header, which renders in the "All
+    // settings" view too. Only the diff carries both revisions at once, and
     // e2e is the only place real Monaco renders it.
     await dialog.getByRole("button", { name: /^Changes \(/ }).click();
     const unifiedDiff = dialog.getByRole("code").last();
@@ -102,15 +103,15 @@ test("browses, compares, and restores an agent version from the row menu", async
 
     // Restore v1. It lands as a new head (v3) — the history is never
     // rewritten — and the preview jumps to the version just created.
-    await dialog.getByRole("button", { name: /^v1\b/ }).click();
-    await dialog.getByRole("button", { name: "Restore this version" }).click();
+    await dialog.getByRole("button", { name: /^Version 1\b/ }).click();
+    await dialog.getByRole("button", { name: "Restore v1" }).click();
     await page.getByRole("button", { name: "Restore version 1" }).click();
 
     await expect(
       dialog.getByRole("heading", { name: "Version 3" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      dialog.getByRole("button", { name: /^v3\b/ }).getByText("Current"),
+      dialog.getByRole("button", { name: /^Version 3 \(current\)/ }),
     ).toBeVisible();
   } finally {
     await deleteAgent(request, agent.id);
@@ -139,7 +140,7 @@ test("opens an MCP gateway's version history from its row button", async ({
     });
 
     await goToPage(page, "/mcp/gateways");
-    await selectAgentTableView(page);
+    await waitForAgentsTable(page);
 
     // Version history sits in the row's "More actions" menu on every entity
     // list, so the row has to arrive before the menu can be opened.
@@ -151,15 +152,19 @@ test("opens an MCP gateway's version history from its row button", async ({
       intervals: [2000, 3000, 5000],
       checkEnabled: false,
     });
-    await openAgentRowMenu(page, GATEWAY_NAME);
-    await page
-      .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${GATEWAY_NAME}`)
-      .click();
+    await clickAgentRowMenuItem(page, {
+      agentName: GATEWAY_NAME,
+      itemTestId: `${E2eTestId.AgentVersionHistoryButton}-${GATEWAY_NAME}`,
+    });
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /^v2\b/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /^v1\b/ })).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: /^Version 2\b/ }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: /^Version 1\b/ }),
+    ).toBeVisible();
   } finally {
     await deleteAgent(request, gateway.id);
   }

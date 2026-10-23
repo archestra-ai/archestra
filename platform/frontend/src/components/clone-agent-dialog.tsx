@@ -22,7 +22,7 @@ import {
 import { useCloneAgent } from "@/lib/agent.query";
 
 type CloneSourceAgent = Pick<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+  archestraApiTypes.GetAgentResponses["200"],
   "id" | "name" | "agentType" | "scope" | "teams"
 >;
 

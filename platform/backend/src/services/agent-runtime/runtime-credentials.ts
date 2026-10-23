@@ -1,11 +1,17 @@
-import { isVaultReference } from "@archestra/shared";
+import {
+  isVaultReference,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import type { ResourceAccessFilter } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled } from "@/secrets-manager";
+import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
   InsertRuntimeCredentialDefinition,
   RuntimeCredentialConnectionScope,
@@ -17,11 +23,17 @@ import { ApiError } from "@/types";
 export async function listRuntimeCredentialDefinitions(params: {
   organizationId: string;
   userId: string;
+  /** The list's `access`, `sharedWith`, and `owner` filters. */
+  access?: ResourceAccessFilter;
 }): Promise<RuntimeCredentialDefinitionView[]> {
-  const [custom, configured] = await Promise.all([
-    RuntimeCredentialDefinitionModel.list(params.organizationId),
+  const [all, configured] = await Promise.all([
+    RuntimeCredentialDefinitionModel.list(params.organizationId, params.access),
     RuntimeCredentialConnectionModel.listConfigured(params),
   ]);
+  const custom = await CredentialAccess.filterReadable({
+    ...params,
+    items: all,
+  });
   const personal = new Set(
     configured
       .filter(({ scope }) => scope === "personal")
@@ -37,6 +49,7 @@ export async function listRuntimeCredentialDefinitions(params: {
       id: definition.id,
       kind: definition.kind,
       githubUrl: definition.githubUrl,
+      gitlabUrl: definition.gitlabUrl,
       appId: definition.appId,
       installationId: definition.installationId,
       githubClientId: definition.githubClientId,
@@ -66,6 +79,8 @@ export async function createRuntimeCredentialDefinition(params: {
   organizationId: string;
   userId: string;
   definition: InsertRuntimeCredentialDefinition;
+  /** Who else may reach it from the start; its creator always may. */
+  initialGrants?: ResourcePermissionGrant[];
 }) {
   if (params.definition.key === "claude-code") {
     throw new ApiError(
@@ -87,10 +102,25 @@ export async function createRuntimeCredentialDefinition(params: {
   ) {
     throw new ApiError(409, "A credential with this name already exists");
   }
+  if (params.initialGrants?.length)
+    await ResourcePermissions.validateInitialGrants({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "credential",
+      grants: params.initialGrants,
+      target: {
+        id: crypto.randomUUID(),
+        name: params.definition.name,
+        authorId: params.userId,
+      },
+    });
   return RuntimeCredentialDefinitionModel.create({
     organizationId: params.organizationId,
     createdBy: params.userId,
     definition: params.definition,
+    initialPermissionGrants:
+      params.initialGrants ??
+      (await ResourcePermissions.defaultCredentialGrants(params)),
   });
 }
 
@@ -122,6 +152,14 @@ export async function updateRuntimeCredentialDefinition(params: {
   });
   const updated = await RuntimeCredentialDefinitionModel.update(params);
   if (!updated) throw new ApiError(404, "Credential not found");
+  // Which GitHub a definition answers for decides who the member roster knows.
+  if (
+    updated.githubUrl !== current.githubUrl ||
+    updated.githubAppCredentialKey !== current.githubAppCredentialKey
+  )
+    await openappaBatteriesService.recompileOrganizations([
+      params.organizationId,
+    ]);
   return updated;
 }
 
@@ -188,7 +226,13 @@ export async function deleteRuntimeCredentialConnection(params: {
   const definition = await requireRuntimeCredentialDefinition(params);
   if (definition.kind === "github_app_user") {
     assertScopeAllowed({ definition, scope: params.scope });
-    return githubUserConnectionManager.disconnect(params);
+    const disconnected = await githubUserConnectionManager.disconnect(params);
+    // The account left the organization's member roster.
+    if (disconnected)
+      await openappaBatteriesService.recompileOrganizations([
+        params.organizationId,
+      ]);
+    return disconnected;
   }
   const deleted = await RuntimeCredentialConnectionModel.delete({
     organizationId: params.organizationId,
@@ -308,7 +352,7 @@ function assertProviderConfiguration(definition: {
     )
       throw new ApiError(
         400,
-        "GitHub user connections require personal ownership and an organization GitHub App",
+        "GitHub user credentials require personal ownership and an organization GitHub App",
       );
     return;
   }

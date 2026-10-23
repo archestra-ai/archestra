@@ -19,8 +19,9 @@ const refetchProviders = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
 
-vi.mock("@/lib/agent.query", () => ({
-  useProfiles: vi.fn(),
+vi.mock("@/app/_parts/use-settings-area-access");
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -39,6 +40,16 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
   useApplyChatOpsBindingPlan: () => ({
     mutate: applyBindingPlan,
     isPending: false,
+  }),
+}));
+
+// The agent's Slack bot section has its own data; these tests are about
+// channel assignment, so it renders nothing here.
+vi.mock("@/lib/chatops/chatops-config.query", () => ({
+  useSlackAgentBots: () => ({
+    data: undefined,
+    isError: false,
+    isLoading: true,
   }),
 }));
 
@@ -127,7 +138,7 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
     ) : null,
 }));
 
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   useAllChatOpsBindings,
   useChatOpsStatus,
@@ -268,7 +279,7 @@ describe("AgentChatAppsEditor", () => {
       isLoadingError: false,
       refetch: vi.fn(),
     } as never);
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [{ id: "agent-2", name: "Incident Agent" }],
       isPending: false,
       isLoadingError: false,
@@ -314,7 +325,7 @@ describe("AgentChatAppsEditor", () => {
 
   it("falls back to a placeholder when the holding agent cannot be read", async () => {
     const user = userEvent.setup();
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [],
       isPending: false,
       isLoadingError: false,
@@ -588,6 +599,51 @@ describe("AgentChatAppsEditor", () => {
 
     expect(saved).toBe(true);
     expect(applyBindingPlan).toHaveBeenCalled();
+  });
+
+  it("does not treat a held channel that disappeared as a change to save", async () => {
+    const onDirtyChange = vi.fn();
+    let saveChanges: (() => Promise<boolean>) | null = null;
+    const { rerender } = render(
+      <AgentChatApps
+        agent={agent}
+        standaloneSave={false}
+        onDirtyChange={onDirtyChange}
+        onSaveHandlerChange={(handler) => {
+          saveChanges = handler;
+        }}
+      />,
+    );
+    expect(channelRow("General")).toBeVisible();
+
+    // The channel this agent held is gone from the next fetch.
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: bindings.filter(({ id }) => id !== "binding-1") },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    rerender(
+      <AgentChatApps
+        agent={agent}
+        standaloneSave={false}
+        onDirtyChange={onDirtyChange}
+        onSaveHandlerChange={(handler) => {
+          saveChanges = handler;
+        }}
+      />,
+    );
+
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+    let saved = false;
+    await act(async () => {
+      saved = (await saveChanges?.()) ?? false;
+    });
+    expect(saved).toBe(true);
+    expect(applyBindingPlan).not.toHaveBeenCalled();
   });
 
   it("saves a new assignment and its staged settings in one request", async () => {
@@ -1020,7 +1076,7 @@ describe("AgentChatAppsEditor", () => {
   });
 
   it("shows an error when assigned agent names cannot load", () => {
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: undefined,
       isPending: false,
       isLoadingError: true,
@@ -1037,7 +1093,7 @@ describe("AgentChatAppsEditor", () => {
   });
 
   it("does not wait for agent names when no channel belongs to another agent", () => {
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: undefined,
       isPending: true,
       isLoadingError: false,
@@ -1091,7 +1147,7 @@ describe("AgentChatAppsEditor", () => {
     await openPicker(user, "Slack");
     // The refusal names the access to grant and where to grant it.
     const reason =
-      'A personal agent answers only in its owner\'s direct messages. To use shared channels, open the Permissions tab and add "Everyone in this organization" with "Can use" access.';
+      "A personal agent answers only in its owner's direct messages. To use shared channels, add a team, a role or everyone in Who can use it on General.";
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

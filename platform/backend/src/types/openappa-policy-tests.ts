@@ -68,6 +68,8 @@ export const PolicyTestResultSchema = z.object({
   status: z.enum(["passed", "failed", "cannot_run"]),
   error: z.string().nullable().optional(),
   contentHash: z.string(),
+  /** Wall time replay spent on the file; absent on runs recorded before it was measured. */
+  durationMs: z.number().int().nonnegative().optional(),
   steps: z.array(
     z.object({
       line: z.number().int().nonnegative(),
@@ -76,11 +78,15 @@ export const PolicyTestResultSchema = z.object({
       actual: z.string().nullable(),
       status: z.enum(["passed", "failed", "cannot_run"]),
       error: z.string().nullable().optional(),
+      /** Why a blocked call was blocked; runs recorded before it have none. */
+      reasons: z.array(z.string()).optional(),
     }),
   ),
 });
 export const PolicyTestRunResultSchema = z.object({
   trigger: z.enum(["manual", "github_sync", "policy_change"]).optional(),
+  /** Set when the run replayed only some of the saved files. */
+  partial: z.boolean().optional(),
   executionError: z.string().optional(),
   source: z.enum(["local", "github"]),
   sourceVersion: z.string(),
@@ -95,15 +101,11 @@ export const PolicyTestRunResultSchema = z.object({
   validation: GuardrailsValidationSchema,
 });
 export type PolicyTestRunResult = z.infer<typeof PolicyTestRunResultSchema>;
-export const PolicyTestPreviewSchema = PolicyTestRunResultSchema.extend({
-  stale: z.boolean(),
-});
 export const PolicyTestRunSchema = createSelectSchema(
   openappaPolicyTestRunsTable,
 )
   .omit({ organizationId: true, result: true })
-  .extend(PolicyTestRunResultSchema.shape)
-  .extend({ stale: z.boolean() });
+  .extend(PolicyTestRunResultSchema.shape);
 export const UpdatePolicyTestsSchema = z.strictObject({
   files: PolicyTestFilesSchema,
   expectedVersion: z.string(),
@@ -115,8 +117,18 @@ export const RunPolicyTestsSchema = z.strictObject({
   ),
   sourceVersion: z.string(),
   directory: PolicyTestDirectorySchema.default("traces"),
+  /** Run only these saved files instead of the whole suite. */
+  partial: z.boolean().optional(),
+  /**
+   * Set to stream this run's progress to the requesting user's open sockets as
+   * `openappa_validation_progress` messages carrying this token.
+   */
+  progressToken: z.string().uuid().optional(),
 });
-export const PreviewPolicyTestSchema = RunPolicyTestsSchema.extend({
+export const PreviewPolicyTestSchema = RunPolicyTestsSchema.omit({
+  partial: true,
+  progressToken: true,
+}).extend({
   files: PolicyTestFilesSchema.refine(
     (files) => files.length === 1,
     "An editor preview runs exactly one validation file",

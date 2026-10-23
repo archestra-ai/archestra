@@ -3,14 +3,19 @@
 import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import {
+  AgentRuntimeCredentialPrompt,
+  AgentRuntimePreflightError,
+} from "@/components/agent-run-credential-prompt";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
-import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useMemberDefaultModel } from "@/lib/chat/chat.query";
+import {
+  runtimePreflightDisabledReason,
+  useAgentRuntimePreflight,
+} from "@/lib/agent-runtime.query";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
-import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ViewTransition } from "@/lib/view-transition";
 
@@ -18,7 +23,7 @@ import { ViewTransition } from "@/lib/view-transition";
  * The /chat "new conversation" composer as a standalone component: the SAME
  * ArchestraPromptInput driven by the shared new-chat resolution chain
  * (project default → org default → saved pick → member default → first
- * available) and the same persistence (saved agent, member-default model). The
+ * available) and the same saved-agent persistence. The
  * only difference is what happens on submit: the prompt is handed to
  * `onSubmitPrompt` instead of creating a conversation in place.
  *
@@ -56,17 +61,24 @@ export function NewChatComposer({
   isProjectLoading?: boolean;
   isSubmitting?: boolean;
 }) {
-  const { data: internalAgents = [] } = useChatAgents();
+  const {
+    data: internalAgents = [],
+    isPending: isLoadingAgents,
+    resolveAgent,
+  } = useChatAgents({ ids: [projectDefaultAgentId] });
   const { data: defaultAgentId } = useDefaultAgentId();
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();
   const { data: chatModels = [] } = useLlmModels();
-  const { data: chatApiKeys = [] } = useLlmProviderApiKeys();
+  // Keys the viewer may use: one merely shared with them as read-only is
+  // refused when the chat is created.
+  const { data: chatApiKeys = [], isLoading: isApiKeysLoading } =
+    useAvailableLlmProviderApiKeys();
   const { data: organization, isPending: isOrgLoading } = useOrganization();
-  const { data: memberDefault } = useMemberDefaultModel();
 
   const {
     agentId,
+    selectedAgent,
     modelId,
     apiKeyId,
     provider,
@@ -78,16 +90,18 @@ export function NewChatComposer({
     onResetModelOverride,
   } = useInitialChatModelState({
     agents: internalAgents,
+    resolveAgent,
+    isAgentsLoading: isLoadingAgents,
     organization: organization ?? null,
     defaultAgentId,
     projectDefaultAgentId,
     isProjectLoading,
     modelsByProvider,
     chatApiKeys,
-    memberDefault: memberDefault ?? null,
     canUseSavedAgent: true,
     isPermissionResolving: false,
     isOrgLoading,
+    isApiKeysLoading,
   });
 
   const inputModalities = useMemo(() => {
@@ -97,16 +111,23 @@ export function NewChatComposer({
   }, [modelId, chatModels]);
 
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const runtimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === agentId && agent.runtime !== null,
-      )
-    : undefined;
+  const currentAgent =
+    internalAgents.find((agent) => agent.id === agentId) ?? selectedAgent;
+  const runtimeAgent =
+    runtimeEnabled && currentAgent?.runtime ? currentAgent : undefined;
   const isRuntimeMode = !!runtimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     agentId ?? "",
     isRuntimeMode,
   );
+
+  const agentLlmApiKeyId = currentAgent?.llmApiKeyId;
+  // Keys shared only to read cannot run a chat; the agent's own key can.
+  const hasNoUsableKey =
+    !isRuntimeMode &&
+    !isApiKeysLoading &&
+    chatApiKeys.length === 0 &&
+    !agentLlmApiKeyId;
 
   if (!agentId) return null;
 
@@ -124,6 +145,26 @@ export function NewChatComposer({
           collapses against it instead of stretching to the surrounding
           column. */}
       <div className="w-full">
+        <div className="mb-3 empty:hidden">
+          {isRuntimeMode && runtimePreflight.data?.ready === false && (
+            <AgentRuntimeCredentialPrompt
+              agentId={agentId}
+              missing={[
+                ...runtimePreflight.data.missing,
+                ...runtimePreflight.data.misconfigured,
+              ]}
+              declarations={runtimeAgent?.runtime?.credentials ?? []}
+              incompatible={runtimePreflight.data.incompatible}
+              onConnected={() => runtimePreflight.refetch()}
+            />
+          )}
+          {isRuntimeMode && runtimePreflight.isError && (
+            <AgentRuntimePreflightError
+              error={runtimePreflight.error}
+              onRetry={() => void runtimePreflight.refetch()}
+            />
+          )}
+        </div>
         <ArchestraPromptInput
           onSubmit={(message) => {
             const text = message.text?.trim() ?? "";
@@ -150,37 +191,27 @@ export function NewChatComposer({
           allowFileUploads={organization?.allowChatFileUploads ?? false}
           isModelsLoading={isModelsLoading}
           inputModalities={inputModalities}
-          agentLlmApiKeyId={
-            (
-              internalAgents.find((a) => a.id === agentId) as
-                | Record<string, unknown>
-                | undefined
-            )?.llmApiKeyId as string | null
-          }
+          agentLlmApiKeyId={agentLlmApiKeyId ?? null}
           selectorAgentId={agentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
           sendDisabled={
-            isRuntimeMode &&
-            (runtimePreflight.isPending ||
-              runtimePreflight.data?.ready !== true)
+            hasNoUsableKey ||
+            (isRuntimeMode &&
+              (runtimePreflight.isPending ||
+                runtimePreflight.data?.ready !== true))
+          }
+          disabledReason={
+            isRuntimeMode
+              ? runtimePreflightDisabledReason(runtimePreflight)
+              : hasNoUsableKey
+                ? "You have no API key you can use. Ask an admin to share one."
+                : undefined
           }
           runtimeMode={isRuntimeMode}
           runtimeAgentName={runtimeAgent?.name}
         />
-        {isRuntimeMode && runtimePreflight.data?.ready === false && (
-          <AgentRuntimeCredentialPrompt
-            agentId={agentId}
-            missing={[
-              ...runtimePreflight.data.missing,
-              ...runtimePreflight.data.misconfigured,
-            ]}
-            declarations={runtimeAgent?.runtime?.credentials ?? []}
-            incompatible={runtimePreflight.data.incompatible}
-            onConnected={() => runtimePreflight.refetch()}
-          />
-        )}
       </div>
     </ViewTransition>
   );

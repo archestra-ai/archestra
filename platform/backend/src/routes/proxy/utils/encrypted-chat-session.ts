@@ -15,7 +15,6 @@ import type {
   InteractionRequest,
   InteractionResponse,
 } from "@/types";
-import { isLoopbackAddress } from "@/utils/network";
 
 /**
  * LLM-proxy side of encrypted chats: decide how a request's stored audit
@@ -79,20 +78,23 @@ const ENCRYPTED_CHAT_SESSION_CACHE_TTL_MS = 5 * TimeInMs.Minute;
  */
 export async function resolveEncryptedChatAuditContext(params: {
   source: InteractionSource;
-  requestIp: string | undefined;
+  /** The in-process proof was valid for this request. */
+  internalCall: boolean;
   sessionId: string | null | undefined;
   userId: string | undefined;
   dek: Buffer | null;
 }): Promise<EncryptedChatAuditDisposition> {
-  const { source, requestIp, sessionId, userId, dek } = params;
+  const { source, internalCall, sessionId, userId, dek } = params;
   // "chat" plus chat:* subrequests (e.g. chat:tool_call_repair — a repair
   // prompt carries the same conversation content as the turn it repairs).
   // NOT chatops:* — those are unrelated messaging-channel sessions.
   if (
-    (source !== "chat" && !source?.startsWith("chat:")) ||
+    (source !== "chat" &&
+      !source?.startsWith("chat:") &&
+      source !== "guardrail:annotator") ||
     !sessionId ||
     !userId ||
-    !isLoopbackAddress(requestIp)
+    !internalCall
   ) {
     return { kind: "none" };
   }
@@ -162,8 +164,6 @@ export function redactEncryptedChatInteraction(
     request: ENCRYPTED_CHAT_REDACTED_MARKER as unknown as InteractionRequest,
     processedRequest: null,
     response: ENCRYPTED_CHAT_REDACTED_MARKER as unknown as InteractionResponse,
-    dualLlmAnalyses: null,
-    unsafeContextBoundary: null,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
+import { inspectOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import {
@@ -174,10 +175,8 @@ describe("APPA Guide feature availability", () => {
     expect(initialPolicy()).toContain(
       "[policy.deployment]\ncontext_control = true",
     );
-    const binding =
-      '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
-      header + fallback + binding,
+      header + fallback,
       // Declarations are root-level keys, so they precede the first table.
       declarations + header,
     ]) {
@@ -198,14 +197,14 @@ describe("APPA Guide feature availability", () => {
     if (!reference) throw new Error("Archestra reference not found");
     for (const text of [APPA_GUIDE_SKILL.content, reference]) {
       expect(text).toContain("archestra__bind_guardrails_credential");
-      // A text line wins over the stored binding and locks it in the UI.
+      // Validation refuses a text line: keys are set with bindings only.
       for (const [, toml] of text.matchAll(/```toml\n([\s\S]*?)```/g))
         expect(toml).not.toContain("[credentials]");
       expect(text).not.toContain("`[server_aliases]`, and `[credentials]`");
       expect(text).not.toContain("`[server_aliases]` and `[credentials]`");
     }
     expect(APPA_GUIDE_SKILL.content).toContain(
-      "overrides the stored binding and locks it in the Batteries dialog; do not add one",
+      "validation refuses a `[credentials]` line",
     );
   });
 
@@ -218,6 +217,111 @@ describe("APPA Guide feature availability", () => {
     expect(
       APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
     ).toBe(false);
+  });
+
+  test("validation-writing examples parse with the embedded scenario parser", async () => {
+    config.openappa.enabled = true;
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-writing.md",
+    );
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const examples = [...reference.content.matchAll(/```appa\n([\s\S]*?)```/g)];
+    expect(examples.length).toBeGreaterThan(0);
+    const inspection = await inspectOpenAppaPolicyTests(
+      examples.map((example, index) => ({
+        path: `traces/example-${index}.appa`,
+        content: example[1],
+      })),
+    );
+    for (const file of inspection.files) {
+      expect(file.error, file.path).toBeNull();
+      expect(file.assertionCount).toBeGreaterThan(0);
+    }
+  });
+
+  test("the validation example isolates the read restriction and catches its removal", async () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-read-restriction.md",
+    )?.content;
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const policy = reference.match(/```toml\n([\s\S]*?)```/)?.[1];
+    const scenario = reference.match(/```appa\n([\s\S]*?)```/)?.[1];
+    if (!policy || !scenario) throw new Error("Validation example is missing");
+    const { replayOpenappaPolicy } = await import("@archestra/openappa-rs");
+    const replay = async (content: string) =>
+      JSON.parse(
+        await replayOpenappaPolicy(
+          JSON.stringify({
+            content,
+            files: [{ path: "traces/private-read.appa", content: scenario }],
+          }),
+        ),
+      ).files[0];
+
+    const baseline = await replay(policy);
+    expect(baseline.status).toBe("passed");
+    expect(
+      baseline.steps.map((step: { actual: string }) => step.actual),
+    ).toEqual(["allow", "allow", "deny"]);
+
+    const unprotected = await replay(
+      policy.replace('delta = { audience = ["internal"] }', "delta = {}"),
+    );
+    expect(unprotected.status).toBe("failed");
+    expect(unprotected.steps.at(-1)).toMatchObject({
+      expected: "deny",
+      actual: "allow",
+    });
+
+    const alwaysBlocked = await replay(
+      policy.replace(
+        'contains = ["public"] } }',
+        'contains = ["public"] }, attention = ["blocked"] }',
+      ),
+    );
+    expect(alwaysBlocked.status).toBe("failed");
+    expect(alwaysBlocked.steps[0]).toMatchObject({
+      expected: "allow",
+      actual: "deny",
+    });
+  });
+
+  test("the appa/do_something example checks a read restriction without naming a tool", async () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-read-restriction.md",
+    )?.content;
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const scenario = [...reference.matchAll(/```appa\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .find((block) => block.includes("appa/do_something"));
+    if (!scenario) throw new Error("appa/do_something example is missing");
+    const { replayOpenappaPolicy } = await import("@archestra/openappa-rs");
+    const replay = async (delta: string) =>
+      JSON.parse(
+        await replayOpenappaPolicy(
+          JSON.stringify({
+            content: `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "slack__read_channel"\ndelta = ${delta}\n`,
+            files: [{ path: "traces/stays-private.appa", content: scenario }],
+          }),
+        ),
+      ).files[0];
+
+    const restricted = await replay('{ audience = ["internal"] }');
+    expect(restricted.status).toBe("passed");
+    expect(
+      restricted.steps.map((step: { actual: string }) => step.actual),
+    ).toEqual(["allow", "allow", "deny"]);
+
+    const unrestricted = await replay("{}");
+    expect(unrestricted.status).toBe("failed");
+    expect(unrestricted.steps.at(-1)).toMatchObject({
+      expected: "deny",
+      actual: "allow",
+    });
+  });
+
+  test("the shipped body carries no frontmatter of its own, so SKILL.md shows one block", () => {
+    expect(APPA_GUIDE_SKILL.content.startsWith("---")).toBe(false);
   });
 
   test("every file the skill points to is bundled with it", () => {

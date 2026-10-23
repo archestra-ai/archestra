@@ -5,7 +5,6 @@ import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,6 +12,10 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils/tailwind";
 import { CodeBlock } from "./code-block";
+import {
+  TRUNCATED_CONTENT_MAX_LINES,
+  TruncatedContent,
+} from "./truncated-content";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -55,11 +58,7 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state:
-    | ToolUIPart["state"]
-    | "output-available-dual-llm"
-    | "output-denied"
-    | "output-cancelled";
+  state: ToolUIPart["state"] | "output-denied" | "output-cancelled";
   className?: string;
   icon?: React.ReactNode;
   isCollapsible?: boolean;
@@ -72,11 +71,7 @@ export type ToolHeaderProps = {
 };
 
 const getStatusBadge = (
-  status:
-    | ToolUIPart["state"]
-    | "output-available-dual-llm"
-    | "output-denied"
-    | "output-cancelled",
+  status: ToolUIPart["state"] | "output-denied" | "output-cancelled",
   label?: string,
 ) => {
   const labels = {
@@ -85,7 +80,6 @@ const getStatusBadge = (
     "approval-requested": "Approval requested",
     "approval-responded": "Approval responded",
     "output-available": "Completed",
-    "output-available-dual-llm": "Completed (dual LLM)",
     "output-error": "Error",
     "output-denied": "Denied",
     // A user-stopped call: neither a success nor a failure, so it gets a
@@ -99,7 +93,6 @@ const getStatusBadge = (
     "approval-requested": "bg-amber-500",
     "approval-responded": "bg-blue-500",
     "output-available": "bg-emerald-500",
-    "output-available-dual-llm": "bg-emerald-500",
     "output-error": "bg-destructive",
     "output-denied": "bg-orange-500",
     "output-cancelled": "bg-muted-foreground",
@@ -285,13 +278,11 @@ const COMPACT_CODE_STYLE = {
 const COMPACT_CODE_CLASS =
   "[&_code]:!text-[0.6875rem] [&_code]:!leading-[1rem] [&>pre]:!text-[0.6875rem]";
 
-const TRUNCATED_CODE_MAX_LINES = 20;
-
 /**
- * Renders a CodeBlock that collapses long content to TRUNCATED_CODE_MAX_LINES
- * with a "Show N more lines" affordance over a gradient fade. Used for both
- * tool request bodies and tool response output so neither side overruns the
- * chat when a tool dumps a large JSON payload.
+ * Renders a CodeBlock that collapses long content to
+ * TRUNCATED_CONTENT_MAX_LINES with a "Show N more lines" affordance over a
+ * gradient fade. Used for both tool request bodies and tool response output
+ * so neither side overruns the chat when a tool dumps a large JSON payload.
  */
 const TruncatedCodeBlock = ({
   code,
@@ -304,63 +295,29 @@ const TruncatedCodeBlock = ({
   copyText: string;
   wrapLongLines?: boolean;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const lines = code.split("\n");
-  const isLarge = lines.length > TRUNCATED_CODE_MAX_LINES;
-
-  const displayCode =
-    isExpanded || !isLarge
-      ? code
-      : `${lines.slice(0, TRUNCATED_CODE_MAX_LINES).join("\n")}\n... (${
-          lines.length - TRUNCATED_CODE_MAX_LINES
-        } more lines)`;
 
   return (
-    <div ref={containerRef} className="relative group">
-      <CodeBlock
-        code={displayCode}
-        language={language}
-        wrapLongLines={wrapLongLines}
-        contentStyle={COMPACT_CODE_STYLE}
-        contentClassName={COMPACT_CODE_CLASS}
-        className="border-border/50"
-      >
-        <CopyButton text={copyText} className="-translate-y-1" />
-      </CodeBlock>
-      {isLarge && (
-        <div
-          className={cn(
-            "absolute bottom-1 left-0 right-0 flex justify-center transition-all duration-200",
-            !isExpanded &&
-              "pt-12 pb-1 bg-gradient-to-t from-background/80 to-transparent",
-          )}
+    <TruncatedContent lineCount={lines.length}>
+      {(showAll) => (
+        <CodeBlock
+          code={
+            showAll
+              ? code
+              : `${lines.slice(0, TRUNCATED_CONTENT_MAX_LINES).join("\n")}\n... (${
+                  lines.length - TRUNCATED_CONTENT_MAX_LINES
+                } more lines)`
+          }
+          language={language}
+          wrapLongLines={wrapLongLines}
+          contentStyle={COMPACT_CODE_STYLE}
+          contentClassName={COMPACT_CODE_CLASS}
+          className="border-border/50"
         >
-          <Button
-            variant="secondary"
-            size="xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              const el = containerRef.current;
-              const scrollTop = el ? el.getBoundingClientRect().top : undefined;
-              setIsExpanded(!isExpanded);
-              if (el && scrollTop !== undefined) {
-                requestAnimationFrame(() => {
-                  const newTop = el.getBoundingClientRect().top;
-                  window.scrollBy(0, newTop - scrollTop);
-                });
-              }
-            }}
-            className="shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
-          >
-            {isExpanded
-              ? "Show Less"
-              : `Show ${lines.length - TRUNCATED_CODE_MAX_LINES} more lines`}
-          </Button>
-        </div>
+          <CopyButton text={copyText} className="-translate-y-1" />
+        </CodeBlock>
       )}
-    </div>
+    </TruncatedContent>
   );
 };
 
@@ -384,10 +341,6 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
-  conversations?: Array<{
-    role: "user" | "assistant";
-    content: string | unknown;
-  }>;
 };
 
 export const ToolOutput = ({
@@ -395,57 +348,13 @@ export const ToolOutput = ({
   output,
   errorText,
   label,
-  conversations,
   ...props
 }: ToolOutputProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelText = label ?? (errorText ? "Error" : "Response");
 
-  if (!(output || errorText || conversations)) {
+  if (!(output || errorText)) {
     return null;
-  }
-
-  // Render conversations as chat bubbles if provided
-  // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
-  if (conversations && conversations.length > 0) {
-    return (
-      <div className={cn("px-3 py-3 space-y-1.5", className)} {...props}>
-        <SectionLabel accent="bg-emerald-400">
-          {label ?? "Conversation"}
-        </SectionLabel>
-        <div className="space-y-3 rounded-md bg-muted/50 p-3">
-          {conversations.map((conv, idx) => {
-            // Create a stable key combining index and content hash
-            const contentStr =
-              typeof conv.content === "string"
-                ? conv.content
-                : JSON.stringify(conv.content);
-            const key = `${idx}-${conv.role}-${contentStr.slice(0, 20)}`;
-
-            return (
-              <div
-                key={key}
-                className={cn(
-                  "flex gap-2 items-start",
-                  conv.role === "assistant" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
-                    conv.role === "assistant"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground",
-                  )}
-                >
-                  {contentStr}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
   }
 
   let Output: ReactNode;

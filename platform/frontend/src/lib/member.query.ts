@@ -11,7 +11,14 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
-import { organizationKeys, useActiveOrganization } from "./organization.query";
+import {
+  organizationKeys,
+  useActiveOrganizationId,
+} from "./organization.query";
+import {
+  parseRoleAssignmentBlocked,
+  RoleAssignmentBlockedError,
+} from "./role-assignment-blocked";
 
 const { bulkDeleteMembers, getMembers } = archestraApiSdk;
 
@@ -189,20 +196,20 @@ export function useMemberSearch({
 export function useInvitationsPaginated(
   query: Required<Pick<InvitationsQuery, "limit" | "offset">>,
 ) {
-  const { data: activeOrganization } = useActiveOrganization();
+  const { data: activeOrganizationId } = useActiveOrganizationId();
 
   return useQuery<PaginatedInvitationsResponse>({
     queryKey: invitationKeys.paginated({
       ...query,
-      organizationId: activeOrganization?.id,
+      organizationId: activeOrganizationId,
     }),
     queryFn: async () => {
-      if (!activeOrganization?.id) {
+      if (!activeOrganizationId) {
         return buildEmptyPaginatedInvitations(query);
       }
 
       const response = await authClient.organization.listInvitations({
-        query: { organizationId: activeOrganization.id },
+        query: { organizationId: activeOrganizationId },
       });
       const allInvitations: Invitation[] =
         response.data
@@ -231,7 +238,7 @@ export function useInvitationsPaginated(
         }),
       };
     },
-    enabled: !!activeOrganization?.id,
+    enabled: !!activeOrganizationId,
   });
 }
 
@@ -257,7 +264,11 @@ export function useUpdateMemberRole() {
         >[0]["role"],
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Failed to update role");
+        // A refused role is explained in the dialog, not a toast.
+        throw (
+          parseRoleAssignmentBlocked(response.error) ??
+          new Error(response.error.message ?? "Failed to update role")
+        );
       }
       return response.data;
     },
@@ -267,6 +278,7 @@ export function useUpdateMemberRole() {
       toast.success("Member roles updated");
     },
     onError: (error: Error) => {
+      if (error instanceof RoleAssignmentBlockedError) return;
       toast.error("Failed to update role", { description: error.message });
     },
   });

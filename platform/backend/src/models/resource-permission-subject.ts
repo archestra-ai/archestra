@@ -5,6 +5,7 @@ import {
   type ResourceAccessRelation,
 } from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import MemberModel from "./member";
@@ -24,8 +25,40 @@ export type GrantPrincipal = {
 export type ResourceAccessFilter = {
   userId: string;
   subjects: PermissionSubject[];
-  relations: ResourceAccessRelation[];
+} & ResourceAccessSelection;
+
+/**
+ * What a list's `access`, `sharedWith`, and `owner` query parameters
+ * selected, before the caller's subjects are resolved. Every part is
+ * optional; see `ResourcePermissionPolicyModel.accessRelationCondition`.
+ */
+export type ResourceAccessSelection = {
+  relations?: ResourceAccessRelation[];
+  sharedWith?: PermissionSubject[];
+  ownerIds?: string[];
 };
+
+/**
+ * The selection a list's query parameters make, or undefined when none of
+ * them filters, so a list that predates them keeps its unfiltered path.
+ */
+export function resourceAccessSelection(query: {
+  access?: ResourceAccessRelation[];
+  sharedWith?: PermissionSubject[];
+  owner?: string[];
+}): ResourceAccessSelection | undefined {
+  if (
+    !query.access?.length &&
+    !query.sharedWith?.length &&
+    !query.owner?.length
+  )
+    return undefined;
+  return {
+    relations: query.access,
+    sharedWith: query.sharedWith,
+    ownerIds: query.owner,
+  };
+}
 
 /** Resolves principals; a request passes one that resolves each caller once. */
 export type PrincipalSource = {
@@ -56,10 +89,13 @@ export default class ResourcePermissionSubjectModel {
     userId: string;
     organizationId: string;
   }): Promise<GrantPrincipal> {
-    return {
-      organizationId: params.organizationId,
-      subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
-    };
+    return requestScope.memo(
+      `principal\0${params.organizationId}\0${params.userId}`,
+      async () => ({
+        organizationId: params.organizationId,
+        subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
+      }),
+    );
   }
 
   /**
@@ -100,16 +136,23 @@ export default class ResourcePermissionSubjectModel {
   }
 
   /**
-   * The caller's subjects for a list's `access` filter, resolved once so a
-   * page query and its count share them. Undefined when the list is not
-   * filtered.
+   * The caller's subjects for a list's `access`, `sharedWith`, and `owner`
+   * filters, resolved once so a page query and its count share them.
+   * Undefined when none of them filters the list.
    */
   static async resolveAccessFilter(params: {
     userId: string;
     organizationId: string;
-    relations: ResourceAccessRelation[] | undefined;
+    relations?: ResourceAccessRelation[];
+    sharedWith?: PermissionSubject[];
+    ownerIds?: string[];
   }): Promise<ResourceAccessFilter | undefined> {
-    if (!params.relations) return undefined;
+    const selection = resourceAccessSelection({
+      access: params.relations,
+      sharedWith: params.sharedWith,
+      owner: params.ownerIds,
+    });
+    if (!selection) return undefined;
     const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
       userId: params.userId,
       organizationId: params.organizationId,
@@ -117,7 +160,7 @@ export default class ResourcePermissionSubjectModel {
     return {
       userId: params.userId,
       subjects: principal.subjects,
-      relations: params.relations,
+      ...selection,
     };
   }
 
@@ -304,6 +347,7 @@ export default class ResourcePermissionSubjectModel {
         .select({
           role: schema.serviceAccountsTable.role,
           disabled: schema.serviceAccountsTable.disabled,
+          teamId: schema.serviceAccountsTable.teamId,
         })
         .from(schema.serviceAccountsTable)
         .where(
@@ -318,6 +362,18 @@ export default class ResourcePermissionSubjectModel {
         .limit(1);
       if (!account || account.disabled) return [];
       subjects.push({ type: "serviceAccount", id });
+      // An account acting for a team is reached by that team's grants, and
+      // its ancestors', the same way a member is. The team's roles are not
+      // inherited: the account's own role says what its keys may do.
+      if (account.teamId) {
+        const teams = await RoleCompositionModel.getTeamSources({
+          organizationId: params.organizationId,
+          teamId: account.teamId,
+        });
+        subjects.push(
+          ...teams.map(({ id }) => ({ type: "team" as const, id })),
+        );
+      }
       identifiers = account.role.split(",");
     } else {
       const member = await MemberModel.getByUserId(
@@ -326,7 +382,11 @@ export default class ResourcePermissionSubjectModel {
       );
       if (!member) return [];
       const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
+        requestScope.isMemoizing()
+          ? TeamModel.getUserTeamContext(params).then(
+              (context) => context.subjectTeamIds,
+            )
+          : TeamModel.getUserTeamIds(params.userId),
         RoleCompositionModel.getUserSources(params),
       ]);
       subjects.push(

@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  BUILT_IN_AGENT_IDS,
   DocsPage,
   getSystemPromptTemplateExpressions,
+  SYSTEM_PROMPT_HELPER_EXPRESSIONS,
+  SYSTEM_PROMPT_HELPER_NAMES,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
 import { TriangleAlert } from "lucide-react";
@@ -40,7 +41,6 @@ export function SystemPromptEditor({
   variant = "default",
   showTitle = true,
   headerExtra,
-  builtInAgentId,
 }: {
   title?: string;
   description?: string;
@@ -67,8 +67,6 @@ export function SystemPromptEditor({
   showTitle?: boolean;
   /** Extra element rendered in the header, beside the title. */
   headerExtra?: React.ReactNode;
-  /** Optional built-in agent id to expose built-in-agent-specific template variables */
-  builtInAgentId?: string | null;
 }) {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
@@ -90,9 +88,7 @@ export function SystemPromptEditor({
   const unparseableExpressions = useUnparseableExpressions(
     templating ? value : "",
   );
-  const templateExpressions = getSystemPromptTemplateExpressions({
-    builtInAgentId,
-  });
+  const templateExpressions = getSystemPromptTemplateExpressions();
   const [templatingInfoOpen, setTemplatingInfoOpen] = useState(false);
 
   return (
@@ -227,6 +223,7 @@ export function SystemPromptEditor({
         </div>
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
+      {templating && usesPerTurnHelper(value) && <PerTurnHelperWarning />}
       {templating && (
         <StandardDialog
           open={templatingInfoOpen}
@@ -281,29 +278,25 @@ export function SystemPromptEditor({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                      ? "Use the tool context"
-                      : "Personalize a response"}
+                    Personalize a response
                   </p>
                   <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
                     <code>
-                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                        ? "Evaluate {{tool.name}} from {{mcpServerName}}."
-                        : "You are helping {{user.name}}. Today is {{currentDate}}."}
+                      {
+                        "You are helping {{user.name}}. Today is {{currentDate}}."
+                      }
                     </code>
                   </pre>
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                      ? "Include details when available"
-                      : "Tailor instructions to a team"}
+                    Tailor instructions to a team
                   </p>
                   <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
                     <code>
-                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                        ? "{{#if tool.description}}\nConsider: {{tool.description}}\n{{/if}}"
-                        : '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'}
+                      {
+                        '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'
+                      }
                     </code>
                   </pre>
                 </div>
@@ -357,6 +350,36 @@ function UnparseableExpressionsWarning({
     </p>
   );
 }
+
+/**
+ * `{{currentTime}}` renders differently on every turn, so the instruction it
+ * sits in never matches the previous turn's: the provider's prompt cache misses
+ * and the earlier turns' thinking has to be dropped.
+ */
+function PerTurnHelperWarning() {
+  return (
+    <output
+      aria-label="Per-turn template helper"
+      className="block text-xs text-amber-600 dark:text-amber-500"
+    >
+      <TriangleAlert className="mr-1 inline size-3.5 align-[-2px]" />
+      <code className="font-mono">
+        {SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentTime}
+      </code>{" "}
+      changes the instruction on every turn, which disables prompt caching and
+      makes conversations cost more. Leave it out unless the agent needs the
+      exact time.
+    </output>
+  );
+}
+
+function usesPerTurnHelper(value: string): boolean {
+  return PER_TURN_HELPER_PATTERN.test(value);
+}
+
+const PER_TURN_HELPER_PATTERN = new RegExp(
+  `(?<!\\\\)\\{\\{~?\\s*${SYSTEM_PROMPT_HELPER_NAMES.currentTime}\\s*~?\\}\\}`,
+);
 
 /** Enough to act on without turning the warning into a second prompt. */
 const UNPARSEABLE_SHOWN_MAX = 5;

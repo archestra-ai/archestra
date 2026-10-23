@@ -5,7 +5,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
@@ -16,21 +15,23 @@ import {
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
-import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   AgentToolModel,
   AgentVersionModel,
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
 } from "@/models";
+import { createAgentDelegation } from "@/services/agent-delegation";
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
@@ -48,6 +49,15 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUuid } from "@/utils/uuid";
+
+/** One target of `GET /api/agents/:agentId/delegations`. */
+export const AgentDelegationTargetSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  systemPrompt: z.string().nullable(),
+});
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -63,6 +73,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .merge(PaginationQuerySchema)
           .extend({
             skipPagination: z.coerce.boolean().optional(),
+            includeToolDetails: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists.",
+              ),
           }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
@@ -82,6 +101,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerOwnerId,
           excludeArchestraTools,
           skipPagination,
+          includeToolDetails,
         },
         organizationId,
         user,
@@ -107,6 +127,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         isAgentAdmin,
         skipPagination,
+        includeToolDetails,
       });
 
       return reply.send(result);
@@ -467,95 +488,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/agent-tools/auto-configure-policies",
-    {
-      schema: {
-        operationId: RouteId.AutoConfigureAgentToolPolicies,
-        description:
-          "Automatically configure security policies for tools using LLM analysis",
-        tags: ["Agent Tools"],
-        body: z.object({
-          toolIds: z.array(z.string().uuid()).min(1),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            results: z.array(
-              z.object({
-                toolId: z.string().uuid(),
-                success: z.boolean(),
-                config: z
-                  .object({
-                    toolInvocationAction: z.enum([
-                      "allow_when_context_is_sensitive",
-                      "block_when_context_is_sensitive",
-                      "require_approval",
-                      "block_always",
-                    ]),
-                    trustedDataAction: z.enum([
-                      "mark_as_safe",
-                      "mark_as_sensitive",
-                      "sanitize_with_dual_llm",
-                      "block_always",
-                    ]),
-                    reasoning: z.string(),
-                  })
-                  .optional(),
-                error: z.string().optional(),
-              }),
-            ),
-          }),
-        ),
-      },
-    },
-    async ({ body, organizationId, user }, reply) => {
-      const { toolIds } = body;
-
-      logger.info(
-        { organizationId, userId: user.id, count: toolIds.length },
-        "POST /api/agent-tools/auto-configure-policies: request received",
-      );
-
-      // Pre-resolve LLM to give a clear 400 error if no API key is configured.
-      // This resolved config is then threaded through to avoid redundant DB queries.
-      const resolvedLlm = await policyConfigurationService.resolveLlm({
-        organizationId,
-        userId: user.id,
-      });
-      if (!resolvedLlm) {
-        logger.warn(
-          { organizationId, userId: user.id },
-          "POST /api/agent-tools/auto-configure-policies: service not available",
-        );
-        throw new ApiError(
-          400,
-          "Auto-policy requires an LLM API key to be configured in LLM API Keys settings",
-        );
-      }
-
-      const result = await policyConfigurationService.configurePoliciesForTools(
-        {
-          toolIds,
-          organizationId,
-          userId: user.id,
-        },
-      );
-
-      logger.info(
-        {
-          organizationId,
-          userId: user.id,
-          success: result.success,
-          resultsCount: result.results.length,
-        },
-        "POST /api/agent-tools/auto-configure-policies: completed",
-      );
-
-      return reply.send(result);
-    },
-  );
-
   fastify.delete(
     "/api/agents/:agentId/tools/:toolId",
     {
@@ -612,41 +544,29 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
+        querystring: z.object({
+          catalogId: z
+            .string()
+            .optional()
+            .describe(
+              "Only return tools from this catalog item, e.g. to check whether one server's tools are assigned without loading every tool's schema",
+            ),
+        }),
         response: constructResponseSchema(z.array(AssignedToolSchema)),
       },
     },
-    async ({ params: { agentId }, user, organizationId }, reply) => {
-      // Fetch the resource first so we can enforce type- and scope-aware access.
-      const agent = await AgentModel.findById(agentId, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, `Agent with ID ${agentId} not found`);
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      try {
-        checker.require(agent.agentType, { action: "read", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      if (!checker.isAdmin(agent.agentType)) {
-        const filteredAgent = await AgentModel.findById(
+    async (
+      { params: { agentId }, query: { catalogId }, user, organizationId },
+      reply,
+    ) => {
+      return reply.send(
+        await getAgentToolsForUser({
           agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      const tools = await ToolModel.getToolsByAgent(agentId);
-
-      return reply.send(tools);
+          catalogId,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -757,66 +677,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              description: z.string().nullable(),
-              systemPrompt: z.string().nullable(),
-            }),
-          ),
-        ),
+        response: constructResponseSchema(z.array(AgentDelegationTargetSchema)),
       },
     },
     async ({ params: { agentId }, organizationId, user }, reply) => {
-      // Fetch agent first to determine its type (admin=true to bypass team filter)
-      const agent = await AgentModel.findById(agentId, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Check read permission for this agent's type (return 404 to avoid leaking existence)
-      try {
-        await requireAgentTypePermission({
+      return reply.send(
+        await getAgentDelegationsForUser({
+          agentId,
           userId: user.id,
           organizationId,
-          agentType: agent.agentType,
-          action: "read",
-        });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
-      if (agent.agentType === "llm_proxy") {
-        throw new ApiError(400, "LLM proxies cannot have subagents");
-      }
-
-      const admin = await isAgentTypeAdmin({
-        userId: user.id,
-        organizationId,
-        agentType: agent.agentType,
-      });
-
-      // If not admin, verify team access
-      if (!admin) {
-        const filteredAgent = await AgentModel.findById(
-          agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      const delegations = await AgentToolModel.getDelegationTargets(
-        agentId,
-        user.id,
-        admin,
+        }),
       );
-      return reply.send(delegations);
     },
   );
 
@@ -904,6 +775,32 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       clearChatMcpClient(agentId);
 
       return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:agentId/delegations/:targetAgentId",
+    {
+      schema: {
+        operationId: RouteId.CreateAgentDelegation,
+        description:
+          "Create one delegation edge without replacing other targets; repeated creation reports created=false.",
+        tags: ["Agent Delegations"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          targetAgentId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(z.object({ created: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const created = await createAgentDelegation({
+        ...request.params,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (!created) request.auditSkip = true;
+      return reply.send({ created });
     },
   );
 
@@ -1029,16 +926,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const [connections, agents] = await Promise.all([
         AgentToolModel.getAllDelegationConnections(organizationId),
-        AgentModel.findByOrganizationId(organizationId, { agentType: "agent" }),
+        AgentModel.findDelegationGraphNodes(organizationId),
       ]);
 
       return reply.send({
         connections,
-        agents: agents.map((a) => ({
-          id: a.id,
-          name: a.name,
-          agentType: a.agentType,
-        })),
+        agents,
       });
     },
   );
@@ -1053,6 +946,119 @@ function mapAgentToolAssignmentErrorCodeToHttpStatus(
 }
 
 export default agentToolRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/agents/:agentId/tools` */
+export async function getAgentToolsForUser(params: {
+  agentId: string;
+  catalogId: string | undefined;
+  userId: string;
+  organizationId: string;
+}) {
+  const { agentId, catalogId, userId, organizationId } = params;
+  // Only the access columns: the tools are read on their own below.
+  const agent = await AgentModel.findByIdForAccess(agentId);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, `Agent with ID ${agentId} not found`);
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
+  if (
+    !isAgentTypeAdmin &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId,
+      agentId,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    }))
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // A catalog id that is not a uuid matches no tool; the column would
+  // reject it.
+  const tools =
+    catalogId && !isUuid(catalogId)
+      ? []
+      : await ToolModel.getToolsByAgent(agentId, catalogId);
+
+  // A user who can only use the agent sees the tools the gateway would
+  // serve them: an assigned tool whose MCP server they cannot access is
+  // left out, as it is from their tools/list.
+  return isAgentTypeAdmin
+    ? tools
+    : await filterToolsByCallerCatalogAccess(tools, {
+        userId,
+        organizationId,
+      });
+}
+
+/** `GET /api/agents/:agentId/delegations` */
+export async function getAgentDelegationsForUser(params: {
+  agentId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const { agentId, userId, organizationId } = params;
+  // Only the access columns, to learn the type; the targets are read below.
+  const agent = await AgentModel.findByIdForAccess(agentId);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // Check read permission for this agent's type (return 404 to avoid leaking existence)
+  try {
+    await requireAgentTypePermission({
+      userId,
+      organizationId,
+      agentType: agent.agentType,
+      action: "read",
+    });
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
+  if (agent.agentType === "llm_proxy") {
+    throw new ApiError(400, "LLM proxies cannot have subagents");
+  }
+
+  const admin = await isAgentTypeAdmin({
+    userId,
+    organizationId,
+    agentType: agent.agentType,
+  });
+
+  // If not admin, verify team access
+  if (
+    !admin &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId,
+      agentId,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    }))
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  return AgentToolModel.getDelegationTargets(agentId, userId, admin);
+}
 
 function normalizeBulkAssignmentCredentialResolutionMode(params: {
   assignment: z.infer<typeof BulkAgentToolAssignmentSchema>;

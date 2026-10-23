@@ -1,35 +1,65 @@
 ---
-title: Hand Off Work
-description: Hand a task from your coding agent to Agent Runtime, then bring the result back
+title: Remote Agents
+description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
-lastUpdated: 2026-10-05
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). See [Setup](/docs/agents/runtime/setup)."
+beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to an agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
+Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to a Remote Agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
 
 With a [dedicated runtime](/docs/agents/runtime), the task runs in its own container, with a live terminal you can watch.
 
+## Start With Connect
+
+You need [Agent Runtime set up](/docs/agents/runtime/setup) on the deployment. [Connect](/docs/get-started/connect) adds instructions to your local agent's system prompt. By default, they tell it to offer “move this to Archestra Remote Agents” once per session and load the **Remote Agents Handoff** skill when you ask. The suggestion uses your deployment’s configured name. The prompt makes the agent aware of handoff; the skill supplies the transfer procedure.
+
+1. Connect your local client with the MCP Gateway and shared skills enabled.
+2. Start a new client session. Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code receive updated instructions on their next launch. Older connections need setup run once to install instruction refreshing; Unix wrappers require Python 3. Cursor and Claude Desktop need setup updated. Clients keep the last fetched instructions during an outage.
+3. Ask to “move this to Archestra Remote Agents”. The client loads the skill, chooses an accessible agent with a runtime, and prepares your task context and files.
+
+To change the suggestion, use **Settings → Connect Page → Instructions for connected agents**, with [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). Turning it off removes this prompt guidance; you can still ask explicitly for the handoff skill.
+
 ## Hand Off a Task
 
-1. Install the **Agent Runtime Handoff** skill from [Connect](/docs/get-started/connect).
-2. Ask your coding agent to "hand this over to Archestra".
-3. To continue locally, ask it to "bring it back and continue here".
-4. Review the repository patch it returns before you apply it.
+The skill transfers a starting point the remote agent can actually use, including repository changes that exist only on your laptop.
+
+1. Let your local agent inspect staged, unstaged, and untracked changes, and select the files needed for the task. It supplies the repository, exact base commit, changes, goal, and acceptance criteria; a local path alone is not a transfer.
+2. The client starts a remote session and transfers the selected files. Follow-up instructions reuse that session instead of starting another one. Open its run link to check progress and the live terminal.
+3. To continue locally, ask to “bring it back and continue here”. The client coordinates a stopping point and retrieves the result and continuation notes before workspace retention expires.
+4. Review the returned patch against your current local changes. The client checks applicability, reports conflicts, and runs the relevant local checks after applying it.
+
+Processes, installed dependencies, and databases do not transfer automatically. Keep secrets out of ordinary file transfers; use the agent's saved credentials or the [credential transfer](#pass-a-credential) flow. Missing tools or an expired workspace must be resolved before the handoff can continue.
 
 ## What Your Agent Uses
 
 The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can also call them yourself.
 
 - **Find an agent:** [`list_agents`](/docs/reference/archestra-mcp-server#list_agents).
-- **Start a run:** [`start_run`](/docs/reference/archestra-mcp-server#start_run).
-- **Check progress:** [`get_run`](/docs/reference/archestra-mcp-server#get_run) or [`list_runs`](/docs/reference/archestra-mcp-server#list_runs).
-- **Change course:** [`steer_run`](/docs/reference/archestra-mcp-server#steer_run) or [`cancel_run`](/docs/reference/archestra-mcp-server#cancel_run). Steering a finished run starts a new turn with the same files.
+- **Start a run:** [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run). It returns a `run_id` and a link to the run page. The other tools take that `run_id`.
+- **Check progress:** [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run), or [`list_agent_runs`](/docs/reference/archestra-mcp-server#list_agent_runs) with `mine_only` for your own runs.
+- **Change course:** [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run) or [`cancel_agent_run`](/docs/reference/archestra-mcp-server#cancel_agent_run). Steering a finished run starts a new turn with the same files.
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.
+
+## Hand Off With Guardrails On
+
+With [Guardrails](/docs/agents/guardrails) on, a run keeps the restrictions of the session that started it, when Guardrails check that session. They check it when your coding agent is connected as a [Guardrails client](/docs/agents/guardrails/clients): its model requests go through the LLM Proxy.
+
+- **A client Guardrails check:** the run starts under your session's restrictions. Its answer passes the guardrail check before your agent reads it. Another session cannot steer the run or read its files.
+- **Any other client:** the [Unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients) setting decides. When it is **Allowed**, the run starts without your session's restrictions, and Guardrails still check each tool call inside it. When it is **Blocked**, the run does not start.
+
+A file you read or download while the run is in the middle of a tool call comes back as `pending`. Guardrails pin that version and release it once the tool call finishes, so call the same tool again a little later.
+
+If a request is refused:
+
+- **"OpenAPPA does not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
+- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a model's runtime tool calls. A script or a client whose model requests skip the LLM Proxy gets this. Make the call as a tool call from the run's own conversation or from the one that started it. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client). Once a [yell with **Break the glass** on](/docs/agents/guardrails/policies#yells) turns Guardrails off for the run's session or the session that started it, its calls need no proof.
+- **"The protected file could not be admitted":** Guardrails held the file's bytes from your session. The ruling after the message says why and names any plan that lets them through.
 
 ## Pass a Credential
 
@@ -39,3 +69,4 @@ What to know:
 
 - The value passes through your agent's model and transcript. A secret that must never reach a model belongs in the agent's **Environment variables** instead.
 - To refuse transfers, turn off **Accept credentials from a connected client** on the agent.
+- Claude Code's auto mode can block the transfer before it reaches Archestra. [Connect](/docs/integrations/claude-code#gateway-tool-permissions) adds the allow rule that prevents this. If you added the gateway another way, add the rule in `/permissions`.

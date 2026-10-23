@@ -3,11 +3,10 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
-import config from "@/config";
 import { AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
-import { afterEach, beforeEach, expect, test } from "@/test";
+import { beforeEach, expect, test } from "@/test";
 import type { Agent, AgentRuntime } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -16,7 +15,6 @@ const SECRET_VALUE = "sk-transfer-PLAINTEXT-must-not-escape";
 let organizationId: string;
 let actorId: string;
 let context: ArchestraContext;
-let originalRuntimeEnabled: boolean;
 
 function runtimeConfig(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
   return {
@@ -47,8 +45,6 @@ beforeEach(
     makeUser,
     seedAndAssignArchestraTools,
   }) => {
-    originalRuntimeEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
     const organization = await makeOrganization();
     organizationId = organization.id;
     const actor = await makeUser();
@@ -64,10 +60,6 @@ beforeEach(
     };
   },
 );
-
-afterEach(() => {
-  config.agentRuntime.enabled = originalRuntimeEnabled;
-});
 
 async function makeRuntimeAgent(
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>,
@@ -135,6 +127,14 @@ test("declares a credential without a value and returns a paste link", async ({
   // The section parameter would be rewritten away by agentDetailHref, taking
   // `setup` with it, so the link must not carry one.
   expect(url).not.toContain("section=");
+  // The paste link is handed over in the reply, where it opens; a question
+  // form would show it as dead text. Both renderings say so.
+  expect(textOf(result)).toContain(
+    `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
+  );
+  expect(result.structuredContent).toMatchObject({
+    next_step: expect.stringContaining("never inside a question form"),
+  });
 
   const stored = await AgentModel.findById(target.id);
   expect(stored?.runtime?.credentials).toEqual([

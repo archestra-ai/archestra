@@ -1,6 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  isPluginArchestraToolShortName,
+  isCodeRuntimeArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -396,13 +396,15 @@ async function agentHasSearchableKnowledgeConnectors(params: {
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
-// the current deployment config. Both the runtime tools
-// (run_command/upload_file/download_file) and the persistent-files tools
-// (search_files/read_file/…) follow the skills-sandbox runtime flag. Non-sandbox
+// the current deployment config. The runtime tools
+// (run_command/upload_file/download_file) follow the code runtime flag; the
+// persistent-files tools (search_files/read_file/…) are always on. Non-sandbox
 // tools are never enabled by this predicate.
 function isSandboxToolEnabled(shortName: string): boolean {
+  if (!isSandboxArchestraToolShortName(shortName)) return false;
   return (
-    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
+    !isCodeRuntimeArchestraToolShortName(shortName) ||
+    config.skillsSandbox.enabled
   );
 }
 
@@ -447,17 +449,13 @@ function isExcludedFromDiscovery(
 
 // Whether a built-in's feature group is live under the current deployment
 // config, mirroring the registration/execution gates in index.ts
-// (getArchestraMcpTools + executeArchestraTool): the sandbox group (runtime +
-// persistent-files) follows the skills-sandbox flag (see
-// isSandboxToolEnabled), and the plugin group follows the plugins beta flag.
-// Everything else — including the skill, app, and Projects tools, which are
+// (getArchestraMcpTools + executeArchestraTool): the sandbox runtime tools
+// follow the code runtime flag (see isSandboxToolEnabled).
+// Everything else — including the plugin, skill, app, and Projects tools, which are
 // registered unconditionally — is always on.
 function isBuiltInFeatureEnabled(shortName: string): boolean {
   if (isSandboxArchestraToolShortName(shortName)) {
     return isSandboxToolEnabled(shortName);
-  }
-  if (isPluginArchestraToolShortName(shortName)) {
-    return config.plugins.enabled;
   }
   return true;
 }

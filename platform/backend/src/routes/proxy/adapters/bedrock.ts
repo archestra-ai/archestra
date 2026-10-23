@@ -30,6 +30,8 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
+import { wordToolCallId } from "../utils/tool-call-ids";
 import {
   type SamplingParam,
   withSamplingParamFallback,
@@ -546,6 +548,30 @@ function isReasoningContentBlock(
   );
 }
 
+/** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
+function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message;
+    let changed = false;
+    const content = message.content.map((block) => {
+      if (isToolUseBlock(block) && block.toolUse.toolUseId) {
+        const toolUseId = wordToolCallId(block.toolUse.toolUseId);
+        if (toolUseId === block.toolUse.toolUseId) return block;
+        changed = true;
+        return { ...block, toolUse: { ...block.toolUse, toolUseId } };
+      }
+      if (isToolResultBlock(block) && block.toolResult.toolUseId) {
+        const toolUseId = wordToolCallId(block.toolResult.toolUseId);
+        if (toolUseId === block.toolResult.toolUseId) return block;
+        changed = true;
+        return { ...block, toolResult: { ...block.toolResult, toolUseId } };
+      }
+      return block;
+    });
+    return changed ? ({ ...message, content } as typeof message) : message;
+  });
+}
+
 /**
  * Check if a content block is a tool result block.
  * Works with both AWS SDK ContentBlock and our internal Zod types.
@@ -637,28 +663,13 @@ class BedrockRequestAdapter
               toolUseId,
             );
 
-            let content: unknown;
-            // Extract content from tool result
-            if (toolResult.content && toolResult.content.length > 0) {
-              const firstContent = toolResult.content[0];
-              if ("text" in firstContent && firstContent.text) {
-                try {
-                  content = JSON.parse(firstContent.text);
-                } catch {
-                  content = firstContent.text;
-                }
-              } else if ("json" in firstContent) {
-                content = firstContent.json;
-              } else {
-                content = firstContent;
-              }
-            }
-
+            const { content, structured } = sentToolResultContent(toolResult);
             results.push({
               id: toolUseId,
               name: toolUse?.name ?? "unknown",
               arguments: toolUse?.arguments,
               content,
+              structured,
               isError: toolResult.status === "error",
             });
           }
@@ -730,7 +741,8 @@ class BedrockRequestAdapter
     return {
       ...this.request,
       modelId: this.getModel(),
-      messages,
+      // After the result updates above, which look up the client's call ids.
+      messages: withBedrockToolCallIds(messages),
     };
   }
 
@@ -873,6 +885,18 @@ class BedrockRequestAdapter
             contentBlock.toolResult.toolUseId &&
             Object.hasOwn(updates, contentBlock.toolResult.toolUseId)
           ) {
+            // Kept as sent: the runtime read this one block, so a block
+            // forwarded unchanged (an image, a JSON block) is what it approved.
+            // Further blocks were never read, so they are never forwarded.
+            if (
+              contentBlock.toolResult.content?.length === 1 &&
+              approvedMatches({
+                sent: sentToolResultContent(contentBlock.toolResult),
+                approved: updates[contentBlock.toolResult.toolUseId],
+              })
+            ) {
+              return contentBlock;
+            }
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.toolResult.toolUseId },
@@ -1054,6 +1078,11 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
       },
       stopReason: "end_turn",
     };
+  }
+
+  /** The response as one text answer, as a governed child's turn ends. */
+  withReplacedText(text: string): BedrockResponse {
+    return this.toRefusalResponse("", text);
   }
 }
 
@@ -2033,4 +2062,43 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * The content the runtime reads for a Bedrock tool result: its first block.
+ * `structured` is false for text, whose JSON the adapter parsed.
+ */
+function sentToolResultContent(toolResult: {
+  content?: Array<Record<string, unknown>>;
+}): { content: unknown; structured: boolean } {
+  if (!toolResult.content || toolResult.content.length === 0) {
+    return { content: undefined, structured: false };
+  }
+  const firstContent = toolResult.content[0];
+  if ("text" in firstContent && firstContent.text) {
+    try {
+      return {
+        content: JSON.parse(firstContent.text as string),
+        structured: false,
+      };
+    } catch {
+      return { content: firstContent.text, structured: false };
+    }
+  }
+  if ("json" in firstContent) {
+    return { content: firstContent.json, structured: true };
+  }
+  return { content: firstContent, structured: true };
+}
+
+/** How the runtime is handed a result: text as is, anything else as JSON. */
+function approvedMatches(params: {
+  sent: { content: unknown; structured: boolean };
+  approved: string;
+}): boolean {
+  const { content, structured } = params.sent;
+  if (typeof content === "string") return params.approved === content;
+  return structured
+    ? isApprovedAsSent({ sent: content, approved: params.approved })
+    : params.approved === JSON.stringify(content);
 }

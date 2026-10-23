@@ -2,8 +2,41 @@ import { z } from "zod";
 import { InteractionAuthMethodSchema } from "./interaction";
 
 export const ProxyCostQuerySchema = z.object({
+  serviceAccountId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Limit spend to this authenticated service-account principal across its OAuth clients and virtual keys.",
+    ),
   authMethod: InteractionAuthMethodSchema.optional(),
   credentialId: z.string().min(1).max(256).optional(),
+  includeLabelKeys: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Include the distinct historical label keys in the filtered proxy usage.",
+    ),
+  labelKey: z
+    .string()
+    .min(1)
+    .max(256)
+    .optional()
+    .describe("Group by the admission-time value of this server-owned label."),
+  labelValue: z
+    .string()
+    .min(1)
+    .max(1024)
+    .optional()
+    .describe(
+      "Match this exact historical label value. Requires labelKey; cannot be combined with labelUnassigned=true.",
+    ),
+  labelUnassigned: z
+    .stringbool()
+    .optional()
+    .describe(
+      "Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.",
+    ),
 });
 
 export const ProxyCostTotalsSchema = z.object({
@@ -11,6 +44,8 @@ export const ProxyCostTotalsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
 });
@@ -33,6 +68,20 @@ export const ProxyCostStatisticsSchema = z.object({
     offset: z.number(),
     total: z.number(),
   }),
+  labelKeys: z.array(z.string()).optional(),
+  labels: z
+    .object({
+      key: z.string(),
+      groups: z.array(
+        ProxyCostTotalsSchema.extend({ value: z.string().nullable() }),
+      ),
+      pagination: z.object({
+        limit: z.number(),
+        offset: z.number(),
+        total: z.number(),
+      }),
+    })
+    .optional(),
 });
 
 export type ProxyCostStatistics = z.infer<typeof ProxyCostStatisticsSchema>;
@@ -45,6 +94,8 @@ export const StatisticsTimeSeriesPointSchema = z.object({
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   cacheReadTokens: z.number().optional(),
+  cacheWriteTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   billedCost: z.number().optional(),
   subscriptionCost: z.number().optional(),
 });
@@ -57,6 +108,9 @@ export const TeamStatisticsSchema = z.object({
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
 });
@@ -70,6 +124,8 @@ export const AgentStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
 });
@@ -80,6 +136,8 @@ export const ModelStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   percentage: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
@@ -95,8 +153,9 @@ export const UserModelUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
-  /** Share of this user's input + output tokens. */
+  /** Share of this user's reported tokens. */
   percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
@@ -112,8 +171,9 @@ export const MyClientUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
-  /** Share of the caller's input + output tokens. */
+  /** Share of the caller's reported tokens. */
   percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
@@ -138,6 +198,7 @@ export const UserStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
   /** Billed spend: list-price `cost` of metered rows only. */
   billedCost: z.number(),
@@ -171,6 +232,7 @@ export const MyStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
   /** Billed spend: list-price `cost` of metered rows only. */
   billedCost: z.number(),
@@ -476,6 +538,14 @@ export const CostSavingsStatisticsSchema = z.object({
     }),
   ),
 });
+
+export const CostStatisticsSchema = z.object({
+  models: z.array(ModelStatisticsSchema),
+  costSavings: CostSavingsStatisticsSchema,
+  /** Active users in the range; self-scoped without member:read. No roster is returned. */
+  activeUsers: z.number(),
+});
+export type CostStatistics = z.infer<typeof CostStatisticsSchema>;
 
 const BaseTimeSeriesDataSchema = z.object({
   timeBucket: z.string(),

@@ -2,15 +2,24 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaDeclarations } from "@/openappa/declarations";
-import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
-import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
+import { declaredCredentials } from "@/openappa/battery-target";
 import {
-  resolveGithubAppInstallationToken,
-  resolveGithubPatToken,
-} from "@/skills/github-app-token";
+  addedGrants,
+  openappaDeclarations,
+  type PolicyResolution,
+} from "@/openappa/declarations";
+import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import {
+  guardrailsPolicyService,
+  requireGrantPermission,
+} from "@/services/guardrails-policy";
+import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
+import {
+  resolveOpenAppaGithubAccess,
+  resolveOpenAppaGitlabAccess,
+} from "@/services/openappa-github-access";
+import { openappaGitlab } from "@/services/openappa-gitlab";
+import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicyProposal } from "@/types/guardrails-policy-proposal";
 import {
@@ -61,6 +70,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     throw new ApiError(400, "The proposed policy has no changes");
   await refuseCredentialLines({
     organizationId: params.organizationId,
+    userId: params.userId,
     before: before.content,
     after: content,
   });
@@ -94,11 +104,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   if (
     !source.repo ||
     !source.path ||
-    !(source.githubAppConfigId || source.githubPatId)
+    !(source.githubAppConfigId || source.githubPatId || source.gitlabTokenId)
   )
     throw new ApiError(
       409,
-      "Connect a GitHub credential and policy file before proposing changes.",
+      "Connect a Git credential and policy file before proposing changes.",
     );
   if (
     !(await userHasPermission(
@@ -116,8 +126,19 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   });
   if (!validation.valid) throw new ApiError(400, validation.errors.join("\n"));
 
-  const token = await resolveWriteToken(source);
-  const base = `/repos/${source.repo}`;
+  if (source.gitlabTokenId)
+    return publishGitlabChange({
+      params,
+      source: { ...source, repo: source.repo, path: source.path },
+      gitlabTokenId: source.gitlabTokenId,
+      includePolicy,
+      content,
+      before: before.content,
+      warnings: validation.warnings,
+    });
+
+  const { token, api, web } = await resolveWriteToken(source);
+  const base = `${api}/repos/${source.repo}`;
   const branch =
     source.ref ??
     (
@@ -253,7 +274,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       base: branch,
     },
   });
-  const url = checkedPullUrl(pull.html_url, source.repo, pull.number);
+  const url = checkedPullUrl({
+    url: pull.html_url,
+    web,
+    repo: source.repo,
+    number: pull.number,
+  });
   return {
     delivery: "pull_request" as const,
     number: pull.number,
@@ -275,9 +301,9 @@ export async function getOpenAppaPolicyChangeStatus(params: {
   if (
     !source?.interval ||
     !source.repo ||
-    !(source.githubAppConfigId || source.githubPatId)
+    !(source.githubAppConfigId || source.githubPatId || source.gitlabTokenId)
   )
-    throw new ApiError(409, "GitHub sync with a credential is not configured");
+    throw new ApiError(409, "Git sync with a credential is not configured");
   if (
     !(await userHasPermission(
       params.userId,
@@ -287,7 +313,28 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     ))
   )
     throw new ApiError(403, "GitHub credential read permission is required");
-  const token = await resolveWriteToken(source);
+  if (source.gitlabTokenId) {
+    const request = await openappaGitlab.changeStatus({
+      access: await resolveOpenAppaGitlabAccess({
+        organizationId: params.organizationId,
+        gitlabTokenId: source.gitlabTokenId,
+      }),
+      repo: source.repo,
+      iid: params.number,
+    });
+    return {
+      number: request.iid,
+      url: request.webUrl,
+      state: request.state,
+      mergeable: request.mergeable,
+      sync: {
+        sourceCommit: source.sourceCommit,
+        lastSyncedAt: source.lastSyncedAt,
+        lastSyncError: source.lastSyncError,
+      },
+    };
+  }
+  const { token, api, web } = await resolveWriteToken(source);
   const pull = await githubJson<{
     number: number;
     html_url: string;
@@ -296,14 +343,19 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     mergeable: boolean | null;
     head: { ref: string };
   }>({
-    path: `/repos/${source.repo}/pulls/${params.number}`,
+    path: `${api}/repos/${source.repo}/pulls/${params.number}`,
     token,
   });
   if (!pull.head?.ref?.startsWith("archestra/openappa-"))
     throw new ApiError(404, "OpenAPPA policy pull request not found");
   return {
     number: pull.number,
-    url: checkedPullUrl(pull.html_url, source.repo, pull.number),
+    url: checkedPullUrl({
+      url: pull.html_url,
+      web,
+      repo: source.repo,
+      number: pull.number,
+    }),
     state: pull.merged ? "merged" : pull.state,
     mergeable: pull.mergeable,
     sync: {
@@ -318,44 +370,48 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * The agent path binds battery credentials with bind_guardrails_credential. A
  * `[credentials]` line wins over that binding and locks it in the Batteries
  * dialog, so an agent may not add a line, or change its key, for a variable an
- * included battery reads. Removing a line is allowed. A variable only a root
- * external's `token_env` names has no stored binding, so its line stays writable.
+ * included battery reads. Removing a line is allowed. A credential a root
+ * external or profile reads as its `token_env` has no stored binding, so adding
+ * or rekeying it, or pointing another reader at it, takes `credential:update`
+ * as it does on the Policy route.
  */
 export async function refuseCredentialLines(params: {
   organizationId: string;
+  userId: string;
   before: string;
   after: string;
 }): Promise<void> {
-  const [previous, submitted] = await Promise.all([
-    openappaDeclarations.resolve({
-      organizationId: params.organizationId,
-      content: params.before,
-    }),
-    batteryCredentialLines(params.organizationId, params.after),
-  ]);
-  const written = [...submitted]
-    .filter(([variable, key]) => previous.credentials[variable] !== key)
+  const [previous, submitted] = await Promise.all(
+    [params.before, params.after].map((content) =>
+      openappaDeclarations.resolveWithBindings({
+        organizationId: params.organizationId,
+        content,
+      }),
+    ),
+  );
+  const before = textLines(previous);
+  const written = [
+    ...batteryLines(submitted.resolution.entries, textLines(submitted)),
+  ]
+    .filter(([variable, key]) => before[variable] !== key)
     .map(([variable]) => variable);
   if (written.length > 0)
     throw new ApiError(
       400,
       `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
     );
-}
-
-/** The validation warning for `[credentials]` lines that override a stored binding. */
-export async function credentialLineWarnings(
-  organizationId: string,
-  content: string,
-): Promise<string[]> {
-  const lines = await batteryCredentialLines(organizationId, content);
-  if (lines.size === 0) return [];
-  return [
-    `[credentials] in the policy text overrides the stored binding for ${[...lines.keys()].join(", ")}. Prefer bind_guardrails_credential; a text line locks the key in the Batteries dialog.`,
-  ];
+  await requireGrantPermission({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    granted: addedGrants(
+      openappaDeclarations.rootGrants(previous.resolution),
+      openappaDeclarations.rootGrants(submitted.resolution),
+    ),
+  });
 }
 
 async function githubJson<T = unknown>(params: {
+  /** Full API URL; the base comes from the source's credential. */
   path: string;
   token: string;
   method?: "GET" | "POST" | "PUT";
@@ -363,7 +419,7 @@ async function githubJson<T = unknown>(params: {
 }): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`https://api.github.com${params.path}`, {
+    response = await fetch(params.path, {
       method: params.method ?? "GET",
       headers: {
         Accept: "application/vnd.github+json",
@@ -391,8 +447,14 @@ async function githubJson<T = unknown>(params: {
   }
 }
 
-function checkedPullUrl(url: string, repo: string, number: number) {
-  const expected = `https://github.com/${repo}/pull/${number}`;
+function checkedPullUrl(params: {
+  url: string;
+  web: string;
+  repo: string;
+  number: number;
+}) {
+  const { url, number } = params;
+  const expected = `${params.web}/${params.repo}/pull/${number}`;
   if (url !== expected || !Number.isSafeInteger(number) || number < 1)
     throw new ApiError(502, "GitHub returned an invalid pull request");
   return url;
@@ -418,6 +480,7 @@ async function assertPublishSource(params: {
     current.path !== params.source.path ||
     current.githubAppConfigId !== params.source.githubAppConfigId ||
     current.githubPatId !== params.source.githubPatId ||
+    current.gitlabTokenId !== params.source.gitlabTokenId ||
     policy.revision !== params.params.expectedRevision ||
     (params.params.validationChanges &&
       ((suite?.directory ?? "traces") !==
@@ -430,22 +493,79 @@ async function assertPublishSource(params: {
     );
 }
 
+/**
+ * The GitLab write path: one commit on a new branch from the synced commit,
+ * then a merge request. The same freshness checks as GitHub guard it, and
+ * GitLab's `start_sha` refuses the commit if the branch moved meanwhile.
+ */
+async function publishGitlabChange(args: {
+  params: ChangeRequest;
+  source: NonNullable<
+    Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+  > & { repo: string; path: string };
+  gitlabTokenId: string;
+  includePolicy: boolean;
+  content: string;
+  before: string;
+  warnings: string[];
+}) {
+  const { params, source } = args;
+  const access = await resolveOpenAppaGitlabAccess({
+    organizationId: params.organizationId,
+    gitlabTokenId: args.gitlabTokenId,
+  });
+  const branch =
+    source.ref ??
+    (await openappaGitlab.defaultBranch({ access, repo: source.repo }));
+  const baseSha = await openappaGitlab.branchCommit({
+    access,
+    repo: source.repo,
+    branch,
+  });
+  if (!source.sourceCommit || source.sourceCommit !== baseSha)
+    throw new ApiError(
+      409,
+      "GitLab has changed since the last policy sync. Sync the policy, then review the new revision.",
+    );
+  if (params.validationChanges) await assertValidationSource(params);
+  await assertPublishSource({ params, source });
+  const changes = params.validationChanges;
+  const request = await openappaGitlab.proposeChange({
+    access,
+    repo: source.repo,
+    branch,
+    baseSha,
+    title: params.title,
+    summary: params.summary,
+    upsert: [
+      ...(changes?.upsert ?? []),
+      ...(args.includePolicy
+        ? [{ path: source.path, content: args.content }]
+        : []),
+    ],
+    delete: changes?.delete ?? [],
+  });
+  return {
+    delivery: "pull_request" as const,
+    number: request.iid,
+    url: request.webUrl,
+    repo: source.repo,
+    path: source.path,
+    warnings: args.warnings,
+    before: args.before,
+    after: args.content,
+  };
+}
+
 async function resolveWriteToken(source: {
   organizationId: string;
   githubPatId: string | null;
   githubAppConfigId: string | null;
 }) {
-  if (source.githubPatId)
-    return resolveGithubPatToken({
-      organizationId: source.organizationId,
-      githubPatId: source.githubPatId,
-    });
-  if (source.githubAppConfigId)
-    return resolveGithubAppInstallationToken({
-      organizationId: source.organizationId,
-      githubAppConfigId: source.githubAppConfigId,
-    });
-  throw new ApiError(409, "A GitHub write credential is required");
+  if (!source.githubPatId && !source.githubAppConfigId)
+    throw new ApiError(409, "A GitHub write credential is required");
+  const access = await resolveOpenAppaGithubAccess(source);
+  return { ...access, token: access.token as string };
 }
 
 async function assertValidationSource(params: ChangeRequest) {
@@ -598,19 +718,27 @@ async function assertRegularGitPaths(params: {
   }
 }
 
-/** The text's `[credentials]` lines for variables an included battery reads. */
-async function batteryCredentialLines(
-  organizationId: string,
-  content: string,
-): Promise<Map<string, string>> {
-  const { entries, credentials } = await openappaDeclarations.resolve({
-    organizationId,
-    content,
-  });
+function batteryLines(
+  entries: PolicyResolution["entries"],
+  credentials: Record<string, string>,
+): Map<string, string> {
   const read = new Set(
-    entries.flatMap((entry) => entry.battery?.credentials ?? []),
+    entries.flatMap((entry) =>
+      entry.battery ? declaredCredentials(entry.battery) : [],
+    ),
   );
   return new Map(
     Object.entries(credentials).filter(([variable]) => read.has(variable)),
+  );
+}
+
+/** The `[credentials]` lines the text itself spells, without stored bindings. */
+function textLines(
+  bound: Awaited<ReturnType<typeof openappaDeclarations.resolveWithBindings>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(bound.resolution.credentials).filter(
+      ([variable]) => bound.credentialSource[variable] === "policy",
+    ),
   );
 }

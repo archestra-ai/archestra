@@ -67,6 +67,7 @@ export function ProjectScheduleRunsClient() {
         </Button>
       }
       maxWidth="wizard"
+      stackHeaderOnMobile
     >
       <ScheduleRunsList triggerId={triggerId} />
     </PageLayout>

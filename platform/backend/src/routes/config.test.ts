@@ -3,8 +3,18 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { OrganizationModel } from "@/models";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from "@/test";
 import type { User } from "@/types";
 
 describe("config routes", () => {
@@ -32,15 +42,36 @@ describe("config routes", () => {
     await app.register(configRoutes);
   });
 
+  test("advertises plugins with beta disabled", async () => {
+    config.beta = false;
+    const response = await app.inject({ method: "GET", url: "/api/config" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().features.plugins).toBe(true);
+  });
+
   afterEach(async () => {
     await app.close();
   });
 
-  test("returns public config without authentication", async () => {
+  test("advertises the UI feedback overlay only when its flag is set", async () => {
+    config.devFeedback.enabled = true;
+    const on = await app.inject({ method: "GET", url: "/api/config" });
+    config.devFeedback.enabled = false;
+    const off = await app.inject({ method: "GET", url: "/api/config" });
+
+    expect(off.json().features.devFeedbackEnabled).toBe(false);
+    expect(on.json().features.devFeedbackEnabled).toBe(true);
+  });
+
+  test.for([
+    1, 2,
+  ])("returns public config without authentication for isolated database %s", async () => {
+    const expectedAnalyticsState = await OrganizationModel.getAnalyticsState();
     const getAnalyticsStateSpy = vi.spyOn(
       OrganizationModel,
       "getAnalyticsState",
     );
+    onTestFinished(() => getAnalyticsStateSpy.mockRestore());
 
     const response = await app.inject({
       method: "GET",
@@ -48,6 +79,9 @@ describe("config routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().analytics.instanceId).toBe(
+      expectedAnalyticsState.analyticsInstanceId,
+    );
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
@@ -56,7 +90,6 @@ describe("config routes", () => {
       maintenanceMode: null,
       siteNotificationMessage: null,
       enterpriseCoreActive: expect.any(Boolean),
-      mcpSandboxDomain: null,
       analytics: {
         enabled: expect.any(Boolean),
         instanceId: expect.any(String),
@@ -180,6 +213,43 @@ describe("config routes", () => {
       "xai",
       "zhipuai",
     ]);
+  });
+
+  test("reports Agent Runtime and OpenAPPA without enabling beta features", async () => {
+    const originalBeta = config.beta;
+    config.beta = false;
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(false);
+    try {
+      const missing = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      // The backend settings stay visible so the UI can explain what is
+      // missing instead of hiding Agent Runtime entirely.
+      expect(missing.features.agentRuntime).toBe(false);
+      expect(missing.features.agentRuntimeBackend).toMatchObject({
+        name: "kubernetes",
+        available: false,
+        defaultTtlHours: config.agentRuntime.defaultTtlHours,
+      });
+
+      sandboxInstalled.mockReturnValue(true);
+      const installed = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      expect(installed.features.betaEnabled).toBe(false);
+      expect(installed.features.openappaEnabled).toBe(true);
+      expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+      expect(installed.features.agentRuntime).toBe(true);
+      expect(installed.features.agentRuntimeBackend).toMatchObject({
+        name: "kubernetes",
+        available: true,
+      });
+    } finally {
+      config.beta = originalBeta;
+      sandboxInstalled.mockRestore();
+    }
   });
 
   test("returns configured provider base URLs exactly", async () => {

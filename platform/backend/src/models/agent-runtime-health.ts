@@ -16,7 +16,7 @@ class AgentRuntimeHealthModel {
     // the PostgreSQL driver serializes Date parameters in the process timezone.
     const timestamp = now.toISOString();
     const recent = new Date(now.getTime() - 15 * 60_000).toISOString();
-    return db
+    const rows = await db
       .select({
         agentId: agents.id,
         backend,
@@ -73,6 +73,53 @@ class AgentRuntimeHealthModel {
         ),
       )
       .groupBy(agents.id, backend);
+
+    // Admission can fail before an A2A task exists. Keep those failures in the
+    // durable fleet snapshot; process counters miss first events after restart.
+    const scheduledRuns = schema.scheduleTriggerRunsTable;
+    const triggers = schema.scheduleTriggersTable;
+    const scheduledBackend = sql<string>`coalesce(${agents.runtime}->>'backend', 'kubernetes')`;
+    const rejectedLaunches = await db
+      .select({
+        agentId: agents.id,
+        backend: scheduledBackend,
+        failedRecent: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(scheduledRuns)
+      .innerJoin(triggers, eq(scheduledRuns.triggerId, triggers.id))
+      .innerJoin(agents, eq(triggers.agentId, agents.id))
+      .where(
+        and(
+          isNotNull(agents.runtime),
+          eq(scheduledRuns.status, "failed"),
+          isNull(scheduledRuns.runtimeTaskId),
+          isNull(scheduledRuns.blockedBy),
+          sql`${scheduledRuns.completedAt} >= ${recent}::timestamptz`,
+        ),
+      )
+      .groupBy(agents.id, scheduledBackend);
+    for (const rejected of rejectedLaunches) {
+      const existing = rows.find(
+        (row) =>
+          row.agentId === rejected.agentId && row.backend === rejected.backend,
+      );
+      if (existing) {
+        existing.failedRecent += rejected.failedRecent;
+      } else {
+        rows.push({
+          ...rejected,
+          working: 0,
+          submitted: 0,
+          inputRequired: 0,
+          authRequired: 0,
+          completionPending: 0,
+          heartbeatAge: 0,
+          submittedAge: 0,
+          completionAge: 0,
+        });
+      }
+    }
+    return rows;
   }
 }
 

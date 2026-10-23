@@ -90,7 +90,9 @@ class AgentVersionModel {
       connectors,
       excludedConnectors,
       activationSkillRuleRows,
-      modelRows,
+      model,
+      fastModel,
+      smartModel,
       keyRows,
     ] = await Promise.all([
       tx
@@ -196,13 +198,9 @@ class AgentVersionModel {
         .select()
         .from(schema.agentActivationSkillRulesTable)
         .where(eq(schema.agentActivationSkillRulesTable.agentId, agent.id)),
-      agent.modelId
-        ? tx
-            .select({ externalId: schema.modelsTable.externalId })
-            .from(schema.modelsTable)
-            .where(eq(schema.modelsTable.id, agent.modelId))
-            .limit(1)
-        : Promise.resolve([]),
+      findModelIdentity(tx, agent.modelId),
+      findModelIdentity(tx, agent.fastModelId),
+      findModelIdentity(tx, agent.smartModelId),
       // Redacted key identity (never key material) so an LLM-config change is
       // legible in history — mirrors findByIdForAudit.
       agent.llmApiKeyId
@@ -224,7 +222,6 @@ class AgentVersionModel {
       description: agent.description ?? null,
       icon: agent.icon ?? null,
       systemPrompt: agent.systemPrompt ?? null,
-      considerContextUntrusted: agent.considerContextUntrusted,
       toolExposureMode: agent.toolExposureMode,
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,
@@ -244,10 +241,9 @@ class AgentVersionModel {
       incomingEmailSecurityMode: agent.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain ?? null,
       builtInAgentConfig: agent.builtInAgentConfig ?? null,
-      model:
-        agent.modelId && modelRows[0]
-          ? { id: agent.modelId, externalId: modelRows[0].externalId }
-          : null,
+      model,
+      fastModel,
+      smartModel,
       llmApiKey: keyRows[0] ?? null,
       identityProviderId: agent.identityProviderId ?? null,
       environmentId: agent.environmentId ?? null,
@@ -530,8 +526,31 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
         AgentConfigSnapshotSchema.shape.activationSkillRules.parse(
           row.snapshot.activationSkillRules,
         ),
+      fastModel: AgentConfigSnapshotSchema.shape.fastModel.parse(
+        row.snapshot.fastModel,
+      ),
+      smartModel: AgentConfigSnapshotSchema.shape.smartModel.parse(
+        row.snapshot.smartModel,
+      ),
     },
   };
+}
+
+/** Resolved model identity (FK + human-readable externalId), null when unset or gone. */
+async function findModelIdentity(
+  tx: Transaction,
+  modelId: string | null,
+): Promise<AgentConfigSnapshot["model"]> {
+  if (!modelId) return null;
+  const [row] = await tx
+    .select({
+      id: schema.modelsTable.id,
+      externalId: schema.modelsTable.externalId,
+    })
+    .from(schema.modelsTable)
+    .where(eq(schema.modelsTable.id, modelId))
+    .limit(1);
+  return row ?? null;
 }
 
 /**

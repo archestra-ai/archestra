@@ -8,8 +8,6 @@ import {
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import {
-  ArrowUpRight,
-  Bot,
   Copy,
   FileSearch,
   Globe,
@@ -21,14 +19,19 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type MouseEventHandler, useEffect, useRef, useState } from "react";
+import {
+  type MouseEventHandler,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { TableCard } from "@/components/table-card-view";
+import { TableRowActions } from "@/components/table-row-actions";
 import {
   Avatar,
   AvatarFallback,
@@ -44,11 +47,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -63,13 +61,12 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import type { McpRegistryRow } from "@/lib/mcp/mcp-registry.query";
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
-import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
-  canFixInstall,
+  canReinstallInstall,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -85,13 +82,15 @@ import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
 import {
-  type AgentUsage,
-  agentOwnerLabel,
-  deriveAgentUsage,
-} from "./mcp-server-agent-usage";
+  InstallBlockedTooltip,
+  installBlockedSummary,
+  useMcpInstallBlockers,
+} from "./mcp-credential-blockers";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
+import { useRegistryPageServers } from "./registry-page-servers";
+import { isOwnPersonalInstall } from "./uninstall-scope";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -104,8 +103,11 @@ export type CatalogItem =
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
 
+/** One row of the registry's paged list: what the cards and table read. */
+export type RegistryListItem = McpRegistryRow;
+
 export type McpServerCardProps = {
-  item: CatalogItem;
+  item: RegistryListItem;
   installedServer?: InstalledServer | null;
   installingItemId: string | null;
   installationStatus?:
@@ -174,12 +176,14 @@ export function McpServerCard({
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
-  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const { startChatById, isCreating: isChatCreating } =
+    useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const installBlockers = useMcpInstallBlockers(item);
 
   // A named, explicit environment is useful placement information. The
   // implicit Default is the baseline and stays unlabeled. Built-in servers
@@ -199,8 +203,8 @@ export function McpServerCard({
   const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
     useCanModifyCatalogItem(variant !== "builtin" ? item : null);
 
-  // Fetch all MCP servers to get installations for logs dropdown
-  const { data: allMcpServers } = useMcpServers();
+  // The installs of the items on this page, loaded once by the list.
+  const allMcpServers = useRegistryPageServers();
   // Teams the user may install a shared connection for: any team for an install
   // admin, otherwise only the teams they belong to.
   const { data: isMcpServerInstallAdmin } = useHasPermissions(
@@ -293,32 +297,25 @@ export function McpServerCard({
     (s) => s.catalogId === item.id,
   );
 
-  // Find the current user's personal connection for this catalog item
-  const personalServer = mcpServerOfCurrentCatalogItem?.find(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  // Find the current user's personal connection for this catalog item. An
+  // org-wide install the user created is not theirs to uninstall here.
+  const personalServer = mcpServerOfCurrentCatalogItem?.find((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
 
-  const allServersForCatalog = (allMcpServers ?? []).filter(
-    (s) => s.catalogId === item.id,
+  const allServersForCatalog = useMemo(
+    () => (allMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [allMcpServers, item.id],
   );
-  const personalServersForCatalog = allServersForCatalog.filter(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  const personalServersForCatalog = allServersForCatalog.filter((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
-
-  // The distinct agents that can reach this catalog item, across every install
-  // of it — the audience affected if those installs go away. Shared with the
-  // detail page's Usage tab so both surfaces count the same way.
-  const { data: autoModeAgents } = useAutoModeAgents();
-  const {
-    assigned: assignedAgents,
-    autoOnly: autoModeOnlyAgents,
-    total: totalAgentCount,
-  } = deriveAgentUsage({
-    serversForCatalog: allServersForCatalog,
-    autoModeAgents,
-  });
+  // Install is offered only while the viewer has no connection they can use —
+  // the same rule as the registry's Installed filter and the server page,
+  // decided by the server for the row.
+  const isInstalledForViewer = item.install.installedForViewer;
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
@@ -331,8 +328,12 @@ export function McpServerCard({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
-            assignedAgents: install.assignedAgents ?? [],
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
           },
         ]
       : [];
@@ -359,13 +360,13 @@ export function McpServerCard({
     </PermissionButton>
   ) : null;
 
-  // The reinstall button follows `canFixInstall`, so an installs admin is
-  // never shown a reinstall prompt for a connection whose button the card
-  // then withholds because they do not own it.
+  // The reinstall button follows `canReinstallInstall`: an installs admin
+  // reinstalls others' connections, except a personal one waiting for its
+  // owner's new values.
   const userFlaggedInstalls = allServersForCatalog.filter(
     (s) =>
       s.reinstallRequired &&
-      canFixInstall({
+      canReinstallInstall({
         server: s,
         viewer: {
           userId: currentUserId ?? null,
@@ -394,27 +395,29 @@ export function McpServerCard({
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
-  // Check for OAuth refresh errors on any credential the user can see
-  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  // Re-auth entry point gated by per-connection permission, not catalog-edit
-  // access; the detailed reason lives on the credentials tab. When several
-  // connections have failed, prefer one the caller can re-authenticate so the
-  // marker stays actionable regardless of row order.
-  const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers =
-    mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [];
-  const oauthFailedServer =
-    oauthFailedServers.find((s) => canReauthenticate(s)) ??
-    oauthFailedServers[0];
-  const oauthReauthIndicator = oauthFailedServer ? (
-    <OAuthReauthIndicator
-      onActivate={
-        canReauthenticate(oauthFailedServer)
-          ? () => goToItemPage("credentials")
-          : undefined
-      }
-    />
-  ) : null;
+  // Worst live issue first, since issues are kind-ordered; an item whose only
+  // trouble the viewer muted still shows it, muted.
+  const statusIssue =
+    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
+  // The re-auth marker follows the shared issue rule: it shows only when a
+  // connection the viewer's own calls resolve to lost its sign-in, never for a
+  // colleague's connection an admin merely sees. It is a click target when the
+  // viewer may re-authenticate that connection; the detailed reason lives on
+  // the credentials tab. The issue badge already says "Needs
+  // re-authentication", so a second marker for it on the same row is skipped.
+  const viewerReauthIssue = issues?.find(
+    (issue) => issue.kind === "needs-reauth" && issue.onViewerConnection,
+  );
+  const oauthReauthIndicator =
+    viewerReauthIssue && statusIssue?.kind !== "needs-reauth" ? (
+      <OAuthReauthIndicator
+        onActivate={
+          viewerReauthIssue.audience === "you"
+            ? () => goToItemPage("credentials")
+            : undefined
+        }
+      />
+    ) : null;
 
   const isInstalling = isCardShowingInstallInProgress({
     deploymentFailed: isDeploymentFailed,
@@ -521,10 +524,6 @@ export function McpServerCard({
   const deploymentStatusIndicator = deploymentSummary ? (
     <DeploymentStatusIconDot summary={deploymentSummary} />
   ) : null;
-  // Worst live issue first, since issues are kind-ordered; an item whose only
-  // trouble the viewer muted still shows it, muted.
-  const statusIssue =
-    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   const primaryIssueAction = statusIssue ? (
     <McpServerIssueNotice
       item={item}
@@ -538,7 +537,7 @@ export function McpServerCard({
   const chatButton = shouldShowMcpCardChatButton({
     toolsCount,
     isBuiltin: isBuiltinVariant,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   }) ? (
     <Button
       variant="outline"
@@ -546,7 +545,7 @@ export function McpServerCard({
       className="flex-1"
       disabled={isChatCreating}
       aria-label={`Chat using ${item.name}`}
-      onClick={() => startChat(item)}
+      onClick={() => startChatById(item.id)}
     >
       <MessageSquare className="h-4 w-4" />
       {isChatCreating ? "Creating..." : "Chat"}
@@ -615,8 +614,7 @@ export function McpServerCard({
       Boolean(oauthReauthIndicator));
 
   /** Operational details shown alongside resource metadata. */
-  const hasOperationalDetails =
-    toolsCount > 0 || totalAgentCount > 0 || hasTrailingCluster;
+  const hasOperationalDetails = toolsCount > 0 || hasTrailingCluster;
   const hasCardMetadata = Boolean(
     environmentLabel ||
       statusIssue ||
@@ -677,61 +675,6 @@ export function McpServerCard({
             {toolsCount}
           </span>
         </div>
-      )}
-      {totalAgentCount > 0 && (
-        <>
-          {/*
-            The popover is informational only, and it MUST NOT capture pointer
-            events: it opens directly on top of the card's action row (Chat /
-            Reinstall / Uninstall), so an interactive popover sits between the
-            cursor and those buttons and swallows the click — the user presses
-            Reinstall and nothing happens. `pointerEventsNone` puts the popper
-            wrapper out of the hit-test path so clicks fall through to the
-            button underneath. That leaves nothing clickable inside the card,
-            so the trigger itself carries the link to the full usage list.
-          */}
-          <HoverCard openDelay={150}>
-            <HoverCardTrigger asChild>
-              <Link
-                href={`/mcp/registry/${item.id}?tab=usage`}
-                aria-label={`${totalAgentCount} ${
-                  totalAgentCount === 1 ? "agent" : "agents"
-                } can use ${item.name}, view usage`}
-                className="flex shrink-0 items-center gap-1 hover:text-foreground transition-colors"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
-                  {totalAgentCount}
-                </span>
-              </Link>
-            </HoverCardTrigger>
-            <HoverCardContent pointerEventsNone className="w-72 p-3 text-sm">
-              {assignedAgents.length > 0 && (
-                <AgentUsageSection
-                  title={`Used by ${assignedAgents.length} ${
-                    assignedAgents.length === 1 ? "agent" : "agents"
-                  } (assigned tools)`}
-                  agents={assignedAgents}
-                />
-              )}
-              {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
-                <div className="my-2 h-px bg-border" />
-              )}
-              {autoModeOnlyAgents.length > 0 && (
-                <AgentUsageSection
-                  title={`${autoModeOnlyAgents.length} auto-mode ${
-                    autoModeOnlyAgents.length === 1 ? "agent" : "agents"
-                  } (access all tools)`}
-                  agents={autoModeOnlyAgents}
-                />
-              )}
-              <p className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground">
-                <span>View all usage</span>
-                <ArrowUpRight className="h-3 w-3" />
-              </p>
-            </HoverCardContent>
-          </HoverCard>
-        </>
       )}
       {/*
         Trailing cluster, pushed to the card's right edge by `ml-auto` so the
@@ -893,7 +836,24 @@ export function McpServerCard({
   // When the image is gated, the full-width approval banner at the top of the
   // card body explains it and carries the action — so drop the inline install
   // button entirely (it would only fail the gate).
-  const localInstallButton = showApprovalPanel ? null : (
+  const localInstallButton = showApprovalPanel ? null : installBlockers.length >
+      0 && isLocalMcpEnabled ? (
+    <div className="flex-1">
+      <PermissionButton
+        permissions={{ mcpServerInstallation: ["create"] }}
+        disabled
+        tooltip={installBlockedSummary(installBlockers)}
+        reasonContent={<InstallBlockedTooltip blockers={installBlockers} />}
+        size="sm"
+        variant="outline"
+        className="w-full"
+        data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
+      >
+        <Server className="h-4 w-4" />
+        Install
+      </PermissionButton>
+    </div>
+  ) : (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1048,14 +1008,16 @@ export function McpServerCard({
         description={item.description}
         icon={
           <span className="relative flex size-9 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
+            <McpCatalogIcon
+              icon={item.iconUrl ?? item.icon}
+              catalogId={item.id}
+              size={20}
+            />
             {deploymentStatusIndicator}
           </span>
         }
         actions={
-          <ResourceTableRowActions
-            kind="catalog"
-            resource={item}
+          <TableRowActions
             itemName={item.name}
             actions={
               canEditCatalog
@@ -1087,46 +1049,3 @@ export function McpServerCard({
     </>
   );
 }
-
-/**
- * One "used by" group in the card's hover card. Personal agents are seeded per
- * member and all share a name, so each is attributed to its owner — without it
- * the list reads as several identical "My Assistant" rows.
- */
-function AgentUsageSection({
-  title,
-  agents,
-}: {
-  title: string;
-  agents: AgentUsage[];
-}) {
-  const shown = agents.slice(0, AGENT_USAGE_PREVIEW_LIMIT);
-  const remaining = agents.length - shown.length;
-
-  return (
-    <>
-      <p className="font-medium">{title}</p>
-      <div className="mt-1 space-y-0.5">
-        {shown.map((agent) => {
-          const owner = agentOwnerLabel(agent);
-          return (
-            <div key={agent.id} className="flex items-baseline gap-1.5">
-              <span className="truncate">{agent.name}</span>
-              {owner && (
-                <span className="truncate text-xs text-muted-foreground">
-                  {owner}
-                </span>
-              )}
-            </div>
-          );
-        })}
-        {remaining > 0 && (
-          <div className="text-muted-foreground">+{remaining} more</div>
-        )}
-      </div>
-    </>
-  );
-}
-
-/** How many agents each hover-card group lists before collapsing to "+N more". */
-const AGENT_USAGE_PREVIEW_LIMIT = 8;

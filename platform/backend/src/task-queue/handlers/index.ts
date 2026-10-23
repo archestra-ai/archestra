@@ -1,4 +1,5 @@
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
 import {
   checkDueAppaGithubSyncs,
@@ -6,6 +7,7 @@ import {
 } from "@/services/openappa-github-sync";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import type { TaskQueueService } from "../task-queue";
+import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
@@ -18,7 +20,11 @@ import { handleConnectorSync } from "./connector-sync-handler";
 import { handleContentEncryptionBackfill } from "./content-encryption-backfill-handler.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
+import { handleInteractionSessionPreviewBackfill } from "./interaction-session-preview-backfill-handler";
+import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
+import { handleLlmModelSync } from "./llm-model-sync-handler";
+import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -27,6 +33,14 @@ import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
+  taskQueueService.registerHandler(
+    "agent_run_attention_notice",
+    handleAgentRunAttentionNotice,
+  );
+  taskQueueService.registerHandler(
+    "interaction_user_activity_rebuild",
+    handleInteractionUserActivityRebuild,
+  );
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);
@@ -80,9 +94,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("openappa_effective_policy_recompile", () =>
     openappaBatteriesService.recompileAll(),
   );
-  taskQueueService.registerHandler("openappa_unenforced_cleanup", () =>
-    deleteExpiredUnenforcedRecords(),
-  );
+  taskQueueService.registerHandler("openappa_unenforced_cleanup", async () => {
+    await deleteExpiredUnenforcedRecords();
+    await threadStates.deleteExpired();
+  });
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
   taskQueueService.registerHandler(
     "check_due_plugin_github_syncs",
@@ -96,4 +111,13 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "skill_publication_backfill",
     handleSkillPublicationBackfill,
   );
+  taskQueueService.registerHandler(
+    "interaction_session_preview_backfill",
+    handleInteractionSessionPreviewBackfill,
+  );
+  taskQueueService.registerHandler(
+    "mcp_tool_description_backfill",
+    handleMcpToolDescriptionBackfill,
+  );
+  taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
 }

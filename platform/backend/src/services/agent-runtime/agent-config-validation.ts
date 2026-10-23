@@ -4,8 +4,10 @@ import {
   LlmProviderApiKeyModelLinkModel,
   TeamModel,
 } from "@/models";
+import { CredentialAccess } from "@/services/credential-access";
 import type { Agent, AgentRuntime, AgentType } from "@/types";
 import { ApiError } from "@/types";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "./backends";
 import { getResolvedAgentRuntimeModelCompatibility } from "./model-compatibility";
 
 // Checks every surface that writes an Agent's runtime or model must run. The
@@ -18,8 +20,11 @@ export function requireAgentRuntimePermission(params: {
   isAdmin: boolean;
 }): void {
   if (params.runtime == null) return;
-  if (!config.agentRuntime.enabled) {
-    throw new ApiError(400, "Agent Runtime is not enabled");
+  if (!isAnyAgentRuntimeBackendDriverEnabled()) {
+    throw new ApiError(
+      400,
+      "Agent Runtime is unavailable: this cluster does not have the Agent Sandbox controller installed",
+    );
   }
   if (params.agentType !== "agent") {
     throw new ApiError(400, "Agent Runtime can only be configured for Agents");
@@ -36,6 +41,30 @@ export function requireAgentRuntimePermission(params: {
       "Privileged background deployments are disabled by the deployment operator",
     );
   }
+}
+
+/**
+ * Refuse a runtime that newly reads a saved credential the caller may not use:
+ * the Agent's runs would hand its value to whatever they execute. `previous`
+ * is the stored runtime on an edit, so credentials it already read stay put.
+ */
+export async function assertCanBindRuntimeCredentials(params: {
+  organizationId: string;
+  userId: string;
+  previous: AgentRuntime | null | undefined;
+  next: AgentRuntime | null | undefined;
+}): Promise<void> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (params.next == null) return;
+  await CredentialAccess.requireUseOfNewKeys({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    previous: runtimeCredentialKeys(params.previous),
+    next: runtimeCredentialKeys(params.next),
+  });
+  // SPDX-SnippetEnd
 }
 
 /** Refuse a model/key pair the caller cannot use, or a half-set pair. */
@@ -93,4 +122,10 @@ export async function assertAgentRuntimeModelCompatibility(params: {
   if (!result.compatibility.compatible) {
     throw new ApiError(409, result.compatibility.message);
   }
+}
+
+function runtimeCredentialKeys(runtime: AgentRuntime | null | undefined) {
+  return (runtime?.credentials ?? []).flatMap((declaration) =>
+    declaration.credentialId ? [declaration.credentialId] : [],
+  );
 }

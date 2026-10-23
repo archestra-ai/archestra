@@ -2,9 +2,12 @@ import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  ChatOpsProviderType,
   MsTeamsDbConfig,
   NgrokDbConfig,
   SecretValue,
+  SlackAgentBotConfig,
+  SlackAppConfigToken,
   SlackDbConfig,
   TelegramDbConfig,
 } from "@/types";
@@ -19,8 +22,21 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
+const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
 const NGROK_SECRET_NAME = "chatops-ngrok";
+const PROVIDER_SECRET_NAMES: Record<ChatOpsProviderType, string> = {
+  "ms-teams": MS_TEAMS_SECRET_NAME,
+  slack: SLACK_SECRET_NAME,
+  telegram: TELEGRAM_SECRET_NAME,
+};
+
+interface ProviderDbConfigs {
+  "ms-teams": MsTeamsDbConfig;
+  slack: SlackDbConfig;
+  telegram: TelegramDbConfig;
+}
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -29,21 +45,22 @@ class ChatOpsConfigModel {
 
   async getSlackConfig(): Promise<SlackDbConfig | null> {
     const raw = await this.getConfig<SlackDbConfig>(SLACK_SECRET_NAME);
-    if (!raw) return null;
-    // Backward compatibility — precedence:
-    // 1. Explicit connectionMode from DB (already set by user)
-    // 2. Infer "webhook" if signingSecret is present but connectionMode is missing
-    //    (configs saved before socket mode was added)
-    // 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
-    const inferredMode =
-      !raw.connectionMode && raw.signingSecret
-        ? "webhook"
-        : (raw.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE);
+    return raw ? normalizeSlackConfig(raw) : null;
+  }
 
+  /** A provider's stored config and when it last changed, from one read of its row. */
+  async getStoredConfig<P extends ChatOpsProviderType>(
+    provider: P,
+  ): Promise<{ value: ProviderDbConfigs[P]; updatedAt: Date } | null> {
+    const stored = await this.getConfigRow<ProviderDbConfigs[P]>(
+      PROVIDER_SECRET_NAMES[provider],
+    );
+    if (!stored || provider !== "slack") return stored;
     return {
-      ...raw,
-      connectionMode: inferredMode,
-      appLevelToken: raw.appLevelToken ?? "",
+      ...stored,
+      value: normalizeSlackConfig(
+        stored.value as SlackDbConfig,
+      ) as ProviderDbConfigs[P],
     };
   }
 
@@ -58,6 +75,63 @@ class ChatOpsConfigModel {
   async saveSlackConfig(value: SlackDbConfig): Promise<void> {
     await this.saveConfig(SLACK_SECRET_NAME, value as unknown as SecretValue);
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
+  }
+
+  /** Slack apps pinned to one agent each (see SlackAgentBotConfig). */
+  async getSlackAgentBots(): Promise<SlackAgentBotConfig[]> {
+    const raw = await this.getConfig<{ bots?: SlackAgentBotConfig[] }>(
+      SLACK_AGENT_BOTS_SECRET_NAME,
+    );
+    return (raw?.bots ?? []).map((bot) => ({
+      ...bot,
+      connectionMode: bot.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+      appLevelToken: bot.appLevelToken ?? "",
+    }));
+  }
+
+  /** Add or replace the bot pinned to `bot.agentId`. */
+  async saveSlackAgentBot(bot: SlackAgentBotConfig): Promise<void> {
+    const bots = await this.getSlackAgentBots();
+    await this.saveSlackAgentBots([
+      ...bots.filter((existing) => existing.agentId !== bot.agentId),
+      bot,
+    ]);
+    logger.info(
+      { agentId: bot.agentId },
+      "ChatOpsConfigModel: saved Slack agent bot",
+    );
+  }
+
+  /**
+   * A user's Slack app configuration token. Without a user, the
+   * organization-wide token saved before tokens were per user.
+   */
+  async getSlackAppConfigToken(
+    userId?: string,
+  ): Promise<SlackAppConfigToken | null> {
+    return this.getConfig<SlackAppConfigToken>(
+      appConfigTokenSecretName(userId),
+    );
+  }
+
+  async saveSlackAppConfigToken(
+    value: SlackAppConfigToken,
+    userId?: string,
+  ): Promise<void> {
+    await this.saveConfig(
+      appConfigTokenSecretName(userId),
+      value as unknown as SecretValue,
+    );
+  }
+
+  /** Remove the bot pinned to an agent. Returns whether one existed. */
+  async deleteSlackAgentBot(agentId: string): Promise<boolean> {
+    const bots = await this.getSlackAgentBots();
+    const remaining = bots.filter((bot) => bot.agentId !== agentId);
+    if (remaining.length === bots.length) return false;
+    await this.saveSlackAgentBots(remaining);
+    logger.info({ agentId }, "ChatOpsConfigModel: deleted Slack agent bot");
+    return true;
   }
 
   async getTelegramConfig(): Promise<TelegramDbConfig | null> {
@@ -85,12 +159,15 @@ class ChatOpsConfigModel {
    * Non-secret ChatOps connectivity snapshot for audit diffs.
    */
   async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
-    const [ms, slack, telegram, ngrok] = await Promise.all([
-      this.getMsTeamsConfig(),
-      this.getSlackConfig(),
-      this.getTelegramConfig(),
-      this.getNgrokConfig(),
-    ]);
+    const [ms, slack, telegram, ngrok, slackAgentBots, slackAppConfigToken] =
+      await Promise.all([
+        this.getMsTeamsConfig(),
+        this.getSlackConfig(),
+        this.getTelegramConfig(),
+        this.getNgrokConfig(),
+        this.getSlackAgentBots(),
+        this.getSlackAppConfigToken(),
+      ]);
 
     return {
       msTeams: ms
@@ -99,6 +176,7 @@ class ChatOpsConfigModel {
             hasAppId: Boolean(ms.appId),
             hasAppSecret: Boolean(ms.appSecret),
             hasTenantId: Boolean(ms.tenantId),
+            groupChatFileSignIn: ms.groupChatFileSignIn ?? false,
           }
         : null,
       slack: slack
@@ -111,6 +189,13 @@ class ChatOpsConfigModel {
             hasAppLevelToken: Boolean(slack.appLevelToken),
           }
         : null,
+      hasSlackAppConfigToken: Boolean(slackAppConfigToken),
+      slackAgentBots: slackAgentBots.map((bot) => ({
+        agentId: bot.agentId,
+        enabled: bot.enabled,
+        connectionMode: bot.connectionMode,
+        hasBotToken: Boolean(bot.botToken),
+      })),
       telegram: telegram
         ? {
             enabled: telegram.enabled,
@@ -126,14 +211,29 @@ class ChatOpsConfigModel {
     };
   }
 
+  private async saveSlackAgentBots(bots: SlackAgentBotConfig[]): Promise<void> {
+    await this.saveConfig(SLACK_AGENT_BOTS_SECRET_NAME, {
+      bots,
+    } as unknown as SecretValue);
+  }
+
   private async getConfig<T>(secretName: string): Promise<T | null> {
+    return (await this.getConfigRow<T>(secretName))?.value ?? null;
+  }
+
+  private async getConfigRow<T>(
+    secretName: string,
+  ): Promise<{ value: T; updatedAt: Date } | null> {
     const secretRow = await SecretModel.findByName(secretName);
     if (!secretRow) return null;
 
     const secret = await secretManager().getSecret(secretRow.id);
     if (!secret?.secret) return null;
 
-    return secret.secret as unknown as T;
+    return {
+      value: secret.secret as unknown as T,
+      updatedAt: secretRow.updatedAt,
+    };
   }
 
   private async saveConfig(
@@ -151,3 +251,28 @@ class ChatOpsConfigModel {
 }
 
 export default new ChatOpsConfigModel();
+
+/**
+ * Backward compatibility — connectionMode precedence:
+ * 1. Explicit connectionMode from DB (already set by user)
+ * 2. Infer "webhook" if signingSecret is present but connectionMode is missing
+ *    (configs saved before socket mode was added)
+ * 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
+ */
+function normalizeSlackConfig(raw: SlackDbConfig): SlackDbConfig {
+  const inferredMode =
+    !raw.connectionMode && raw.signingSecret
+      ? "webhook"
+      : (raw.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE);
+  return {
+    ...raw,
+    connectionMode: inferredMode,
+    appLevelToken: raw.appLevelToken ?? "",
+  };
+}
+
+function appConfigTokenSecretName(userId?: string): string {
+  return userId
+    ? `${SLACK_APP_CONFIG_TOKEN_SECRET_NAME}:${userId}`
+    : SLACK_APP_CONFIG_TOKEN_SECRET_NAME;
+}

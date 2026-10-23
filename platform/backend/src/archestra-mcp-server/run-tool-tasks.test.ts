@@ -65,7 +65,7 @@ describe("run_tool - Tasks integration", () => {
         await makeConversation(agent.id, { organizationId, userId })
       ).id;
 
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({ organizationId });
       const tool = await makeTool({ name: TARGET_TOOL, catalogId: catalog.id });
       await makeAgentTool(agent.id, tool.id);
     },
@@ -81,7 +81,9 @@ describe("run_tool - Tasks integration", () => {
       tokenAuth: {
         tokenId: "token-1",
         teamId: null,
-        isOrganizationToken: true,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId,
         organizationId,
       },
       taskBridge: bridge,

@@ -12,7 +12,7 @@ class AgentRuntimeHealthMetrics {
     if (this.counts) return;
     this.counts = new client.Gauge({
       name: "agent_runtime_health_tasks",
-      help: "Database snapshot of runtime task health. Conditions overlap; failed_recent covers 15 minutes. Use max across replicas, not sum.",
+      help: "Database snapshot of runtime work health. Conditions overlap; failed_recent covers tasks and rejected scheduled launches within 15 minutes. Use max across replicas, not sum.",
       labelNames: ["agent_id", "backend", "condition"],
       collect: () => this.refresh(),
     });

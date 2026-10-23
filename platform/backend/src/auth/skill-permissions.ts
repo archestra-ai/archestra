@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { hasScopedPermission } from "@archestra/shared";
+import { hasScopedPermission, type ScopedPermission } from "@archestra/shared";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import { getPermissionsForUserContext } from "./utils";
@@ -17,6 +17,8 @@ export interface SkillPermissionChecker {
   canRead: boolean;
   /** Holds `update` on every skill — a grant at `*` scope. */
   isAdmin: boolean;
+  /** The caller's skill grants, for other checks in the same request to reuse. */
+  grants: ScopedPermission[];
 }
 
 /**
@@ -34,8 +36,12 @@ export async function getSkillPermissionChecker(params: {
     organizationId: params.organizationId,
   });
   const skill = permissions.skill ?? [];
-  const grants = await ResourcePermissions.resolveAll(params);
+  const grants = await ResourcePermissions.resolveAll({
+    ...params,
+    resources: ["skill"],
+  });
   return {
+    grants,
     allowsScoped: (skillId, action) =>
       hasScopedPermission({
         grants,

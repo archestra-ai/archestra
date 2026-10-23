@@ -17,15 +17,16 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
-  DualLlmAnalysis,
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  UnsafeContextBoundary,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
+import type { InteractionSessionPreview } from "@/types/interaction";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -59,6 +60,10 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     virtualKeyId: uuid("virtual_key_id").references(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
@@ -140,7 +145,7 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'codex_session', 'opencode_session',
+     * 'openwebui_chat', 'codex_session', 'opencode_session', 'kilo_session',
      * 'claude_code_header', 'appa_header', 'openai_user', null. Legacy rows may
      * carry 'claude_code' / 'claude_desktop'.
      */
@@ -175,7 +180,18 @@ const interactionsTable = pgTable(
      */
     authenticatedAppId: text("authenticated_app_id"),
     authenticatedAppName: varchar("authenticated_app_name"),
+    /**
+     * Team the credential's spend was charged to at request time (a virtual
+     * key's or LLM OAuth client's billing team). When set, team statistics
+     * attribute this row to that team instead of the LLM proxy's teams.
+     * Snapshot, not a foreign key: a later team deletion must not rewrite
+     * history on this write-hot table.
+     */
+    billingTeamId: text("billing_team_id"),
+    /** Admission-time labels; later edits/deletions must not rewrite showback. */
+    attributionLabels: jsonb("attribution_labels").$type<AttributionLabels>(),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
+    sessionPreview: jsonb("session_preview").$type<InteractionSessionPreview>(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     /**
      * Delta-encoding metadata (Claude/Anthropic interactions only — session_source
@@ -216,10 +232,6 @@ const interactionsTable = pgTable(
      */
     requestLastMessageHash: varchar("request_last_message_hash"),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
-    dualLlmAnalyses: jsonb("dual_llm_analyses").$type<DualLlmAnalysis[]>(),
-    unsafeContextBoundary: jsonb(
-      "unsafe_context_boundary",
-    ).$type<UnsafeContextBoundary>(),
     /**
      * Non-null when a guardrail refused this turn's tool calls. Lets a refused
      * turn be told apart from a healthy one — and counted per session — without
@@ -232,8 +244,8 @@ const interactionsTable = pgTable(
      */
     toolCallBlock: jsonb("tool_call_block").$type<ToolCallBlock>(),
     /**
-     * Non-null marks this row's five content columns (request, processedRequest,
-     * response, dualLlmAnalyses, unsafeContextBoundary) as encrypted under an
+     * Non-null marks this row's content columns (request, processedRequest,
+     * response) as encrypted under an
      * encrypted chat's browser-held key rather than the server key, and
      * names the conversation whose escrow record recovers it. Readers MUST
      * consult this before decrypting: a server-key decrypt of these envelopes
@@ -252,6 +264,8 @@ const interactionsTable = pgTable(
      * When no optimization: baselineModel = model (or null for backward compatibility)
      */
     baselineModel: varchar("baseline_model"),
+    /** Elapsed milliseconds from proxy handler entry to response processing completion. */
+    durationMs: integer("duration_ms"),
     inputTokens: integer("input_tokens"),
     inputTokensEstimated: boolean("input_tokens_estimated")
       .notNull()
@@ -294,6 +308,16 @@ const interactionsTable = pgTable(
       "interactions_session_thread_created_at_idx",
     ).on(table.sessionId, table.threadId, table.createdAt.desc()),
     parentIdIdx: index("interactions_parent_id_idx").on(table.parentId),
+    // The partial index interactions_passthrough_virtual_key_id_idx is built
+    // concurrently from worker startup (database/index-maintenance.ts). Keep
+    // it out of Drizzle's transactional migrations, which can only take the
+    // write-blocking CREATE INDEX.
+    // The optional interactions_statistics_v2_idx is managed by the operator
+    // CLI db:create-statistics-index. Keep it out of Drizzle's transactional
+    // migrations so its build remains concurrent on existing large tables.
+    // The partial interactions_session_preview_missing_idx (rows still without
+    // a session preview) is built concurrently from worker startup
+    // (database/index-maintenance.ts), for the same reason.
     // Note: interactions deliberately has NO trgm/GIN indexes on the request/
     // response payload columns. Migration 0116 used to create them for a
     // free-text log search that no longer exists (the LLM logs UI filters by

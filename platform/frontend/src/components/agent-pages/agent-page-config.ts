@@ -20,8 +20,6 @@ export interface AgentPageConfig {
   /** Permission resource the routes are gated on. */
   resource: "agent" | "llmProxy" | "mcpGateway";
   defaultIconType: AgentIconVariant;
-  /** Sub-headline under "Create <singular>". */
-  createDescription: string;
   /** Body of the permanent-delete confirmation; names what history survives. */
   permanentDeleteDescription: (name: string) => string;
 }
@@ -35,7 +33,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "Agents",
     resource: "agent",
     defaultIconType: "agent",
-    createDescription: "Give the agent a name and instructions.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
@@ -47,8 +44,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "MCP Gateways",
     resource: "mcpGateway",
     defaultIconType: "mcp_gateway",
-    createDescription:
-      "Name the gateway and choose who can use it, then pick the tools it exposes and connect a client.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`,
   },
@@ -166,16 +161,26 @@ export function agentDetailHref(
 }
 
 /**
- * Where "edit this record" lands. Configuration is not a page of its own any
- * more: it is the detail page's own sections, so every edit deep link in the
- * app resolves to one of them. The wizard's step ids are what those links
- * carry, so they are translated here.
+ * An agent's edit page: the setup steps again, every one reachable at once,
+ * with one save. `configuration` is the page's default and carries no
+ * `?step=`.
+ */
+export function agentEditHref(id: string, step?: AgentSetupStepId): string {
+  const base = `${AGENT_PAGE_CONFIGS.agent.basePath}/${encodeURIComponent(id)}/edit`;
+  return step && step !== "configuration" ? `${base}?step=${step}` : base;
+}
+
+/**
+ * Where "edit this record" lands. An agent edits on its own page; a gateway
+ * still edits in its detail page's sections. The wizard's step ids are what
+ * those links carry, so they are translated here.
  */
 export function agentConfigureHref(
   kind: AgentPageKind,
   id: string,
   step?: AgentSetupStepId,
 ): string {
+  if (kind === "agent") return agentEditHref(id, step);
   // "Edit this record" means its configuration, never wherever the page
   // happens to open — a gateway opens on Connect, which configures nothing.
   //
@@ -224,7 +229,7 @@ const TOOLS_SKILLS_STEP: AgentSetupStep = {
 };
 const MESSAGING_STEP: AgentSetupStep = {
   id: "messaging",
-  title: "Messaging Channels",
+  title: "Triggers & Channels",
 };
 const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 
@@ -232,11 +237,11 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
  * The setup wizard's steps for one agent — the same on create and on edit.
  * Configuration is what the record is and who can use it; the Tools step holds
  * everything the record reaches (and names Skills for internal agents);
- * Messaging Channels where it answers;
+ * Triggers & Channels where it answers and what starts it;
  * Advanced the settings a record rarely needs. Only an `agent` has channels —
  * a gateway or proxy is not something a person messages — so the step is
- * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
- * stepper. Connecting is not a step: it is the detail page's Connect section,
+ * offered for that type alone. A built-in agent edits only its configuration
+ * and its tools. Connecting is not a step: it is the detail page's Connect section,
  * which the list's Connect action opens. New agents open a creation summary; new gateways
  * open on Connect.
  */
@@ -247,7 +252,7 @@ export function getAgentSetupSteps({
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
-  if (builtIn) return [CONFIGURATION_STEP];
+  if (builtIn) return [CONFIGURATION_STEP, TOOLS_STEP];
   return [
     CONFIGURATION_STEP,
     agentType === "agent" ? TOOLS_SKILLS_STEP : TOOLS_STEP,

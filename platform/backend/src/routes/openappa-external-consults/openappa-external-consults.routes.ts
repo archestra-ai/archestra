@@ -9,9 +9,10 @@ import { z } from "zod";
 import {
   exportExternalConsults,
   externalConsultAccess,
+  findExternalConsult,
   listExternalConsults,
 } from "@/services/openappa-external-consults";
-import { constructResponseSchema } from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
 import {
   type ExternalConsult,
   type ExternalConsultExport,
@@ -38,6 +39,21 @@ const QuerySchema = z
       .describe("Recorded on or before this time (ISO 8601)"),
     root: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
+    llmSessionId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "An LLM session ID, as on the LLM logs page: consults from every trajectory of that session, sub-agents included",
+      ),
+    search: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "Case-insensitive substring of the external's name or the session ID",
+      ),
     format: ExportFormatSchema.default("json").describe(
       `\`jsonl\` streams up to ${JSONL_ROW_CAP} rows as application/x-ndjson, one consult per line, ignoring \`limit\``,
     ),
@@ -51,7 +67,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -99,6 +115,38 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             .send(Readable.from(jsonLines(rows)) as never);
         }
       }
+    },
+  );
+  app.get(
+    "/api/openappa/external-consults/:id",
+    {
+      schema: {
+        operationId: RouteId.GetOpenappaExternalConsult,
+        description:
+          "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.",
+        tags: ["OpenAPPA"],
+        params: z.object({ id: z.string().min(1) }),
+        response: constructResponseSchema(
+          z.object({
+            consult: ExternalConsultSchema,
+            llmSessionId: z.string().nullable(),
+            mcpToolCallId: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ params, user, organizationId }, reply) => {
+      const access = await externalConsultAccess({
+        userId: user.id,
+        organizationId,
+      });
+      const found = await findExternalConsult({
+        organizationId,
+        access,
+        id: params.id,
+      });
+      if (!found) throw new ApiError(404, "Consult not found");
+      return reply.send({ ...found, consult: toExport(found.consult) });
     },
   );
 };

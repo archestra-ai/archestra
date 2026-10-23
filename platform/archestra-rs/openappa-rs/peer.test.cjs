@@ -155,7 +155,7 @@ context_control = true
   );
   assert.equal(Number(unstarted.rows[0].count), 0);
   assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
-  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id);
+  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
 
   const released = await hook(parent, {
     event: 'tool_call',
@@ -190,6 +190,69 @@ context_control = true
   });
   assert.equal(changed.kind, 'denied');
 
+  // A send whose receipt completion failed after the message was stored is
+  // recovered by its retry: the store deduplicates the resubmission, so the
+  // message exists exactly once and the pending receipt completes.
+  const sendAdmission = await hook(parent, {
+    event: 'tool_call', operation_id: 'call:send-interrupted', tool: 'read_plain', arguments: {},
+  });
+  assert.equal(sendAdmission.decision, 'allow_call', JSON.stringify(sendAdmission));
+  await client.query(`CREATE OR REPLACE FUNCTION openappa_peer_fail_send() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected receipt failure'; END $$`);
+  await client.query('DROP TRIGGER IF EXISTS openappa_peer_fail_send ON openappa_operations');
+  await client.query(`CREATE TRIGGER openappa_peer_fail_send BEFORE UPDATE ON openappa_operations FOR EACH ROW WHEN (NEW.operation_id = 'peer_send:send-interrupted' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_peer_fail_send()`);
+  const interrupted = {
+    operation_id: 'peer_send:send-interrupted',
+    recipient_session_id: child.session_id,
+    recipient_parent_id: parent.session_id,
+    value: 'delivered despite the stop',
+  };
+  try {
+    await assert.rejects(() => send(parent, interrupted), /PostgreSQL|database|db error/);
+  } finally {
+    await client.query('DROP TRIGGER IF EXISTS openappa_peer_fail_send ON openappa_operations');
+    await client.query('DROP FUNCTION IF EXISTS openappa_peer_fail_send()');
+  }
+  assert.equal((await client.query(
+    `SELECT status FROM openappa_operations WHERE organization_id = $1 AND operation_id = 'peer_send:send-interrupted'`,
+    [organization_id],
+  )).rows[0].status, 'pending');
+  const restored = await send(parent, interrupted);
+  assert.equal(restored.kind, 'released', JSON.stringify(restored));
+  assert.equal((await client.query(
+    `SELECT status FROM openappa_operations WHERE organization_id = $1 AND operation_id = 'peer_send:send-interrupted'`,
+    [organization_id],
+  )).rows[0].status, 'complete');
+  assert.equal(Number((await client.query(
+    'SELECT count(*) FROM openappa_embedded_peer_messages WHERE id = $1',
+    [restored.message_id],
+  )).rows[0].count), 1, 'the interrupted send stored its message exactly once');
+  assert.deepEqual(await send(parent, interrupted), restored, 'the completed send replays');
+
+  for (const failure of [
+    { table: 'openappa_operations', column: 'operation_id', id: 'peer_list:list-interrupted', call: 'list-interrupted' },
+    { table: 'openappa_processed_results', column: 'tool_call_id', id: 'list-torn', call: 'list-torn' },
+  ]) {
+    const request = { ...parent, tool_call_id: failure.call, tool: 'archestra__list_peer_messages' };
+    const listTracked = () => native.listPeerMessages(JSON.stringify(request), policy).then(JSON.parse);
+    await client.query(`CREATE OR REPLACE FUNCTION openappa_peer_fail_list() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected list receipt failure'; END $$`);
+    await client.query(`CREATE TRIGGER openappa_peer_fail_list BEFORE UPDATE ON ${failure.table} FOR EACH ROW WHEN (NEW.organization_id = '${organization_id}' AND NEW.${failure.column} = '${failure.id}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_peer_fail_list()`);
+    try {
+      await assert.rejects(listTracked, /PostgreSQL|database|db error/);
+    } finally {
+      await client.query(`DROP TRIGGER IF EXISTS openappa_peer_fail_list ON ${failure.table}`);
+      await client.query('DROP FUNCTION IF EXISTS openappa_peer_fail_list()');
+    }
+    const repaired = await listTracked();
+    assert.equal(repaired.peer_list, true);
+    assert.deepEqual(await listTracked(), repaired, 'both list receipts now replay the saved answer');
+    const tracked = await client.query(
+      'SELECT status, decision FROM openappa_processed_results WHERE organization_id = $1 AND session_id = $2 AND tool_call_id = $3',
+      [organization_id, parent.session_id, failure.call],
+    );
+    assert.equal(tracked.rows[0].status, 'complete');
+    assert.deepEqual(tracked.rows[0].decision, repaired);
+  }
+
   assert.equal((await send(parent, {
     operation_id: 'peer_send:empty',
     recipient_session_id: child.session_id,
@@ -217,7 +280,7 @@ context_control = true
   const ambiguous = await admit(child, { sender_session_id: parent.session_id });
   assert.equal(ambiguous.kind, 'unverified');
 
-  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id);
+  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
   assert.equal(after.trust, before.trust);
   assert.equal(after.audience, before.audience);
 

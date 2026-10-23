@@ -140,6 +140,9 @@ gh() {
             ("1.4.0-rc.14", "1.4.0-rc.14", True, False),
             ("1.4.0-rc.14", None, True, True),
             ("1.4.0-rc.15", None, True, True),
+            ("1.4.0-rc.35", "1.4.0-rc.36", True, True),
+            ("1.4.0-rc.36", "1.4.0-rc.36", True, False),
+            ("1.4.0-rc.36", None, True, True),
             ("1.4.0-beta.14", None, False, None),
             ("1.4.0", None, False, None),
             ("1.4.0-rc.0", None, False, None),
@@ -178,7 +181,7 @@ gh() {
 
     def test_chart_destination_is_independent_and_requires_mcp_reference(self):
         section = WORKFLOW.read_text().split(
-            "      - name: Publish approved stable artifacts without rebuilding\n", 1
+            "      - name: Publish stable artifacts without rebuilding\n", 1
         )[1].split("      - name:", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         mcp_image = "registry.example.invalid/relocated/mcp@sha256:" + "a" * 64

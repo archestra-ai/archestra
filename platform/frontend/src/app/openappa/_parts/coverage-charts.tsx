@@ -1,16 +1,7 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -22,99 +13,88 @@ import {
   useCoverageSummary,
 } from "@/lib/openappa-coverage.query";
 import { cn } from "@/lib/utils/tailwind";
-import { BatteriesCard, hasBatteries } from "./batteries-card";
 import { CoverageWarnings } from "./coverage-warnings";
-import { OpenAppaChatButton } from "./openappa-chat-button";
-import { UnrecognizedClientsCard } from "./overview-setup-cards";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
+import { StepCard } from "./step-card";
 
 type Totals = CoverageSummary["totals"];
 
 /**
- * How many of the visible tools a rule covers, beside the batteries that cover
- * or could cover them and the clients the guardrail follows. Tool coverage
- * takes the width its content needs; the other two stack beside it.
+ * Step two of "How your policy decides": how many of the visible tools a rule
+ * annotates, as a donut, with a warning when tools run with no rule at all.
  */
-export function CoverageCharts() {
+export function RulesCard() {
   const summary = useCoverageSummary();
-  // Held open while loading, so the layout does not jump when it fits.
-  const batteries = summary.data
-    ? hasBatteries(summary.data.batteries)
-    : !summary.isLoadingError;
-
-  return (
-    <div className="@container">
-      <div className="grid gap-4 @3xl:grid-cols-[auto_minmax(0,1fr)]">
-        <ToolCoverageCard summary={summary} />
-        <div className="flex min-w-0 flex-col gap-4">
-          {batteries && (
-            <BatteriesCard
-              summary={summary.data ?? undefined}
-              className="flex-1"
-            />
-          )}
-          <UnrecognizedClientsCard />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ToolCoverageCard({
-  summary,
-}: {
-  summary: ReturnType<typeof useCoverageSummary>;
-}) {
   const totals = summary.data?.totals;
 
   return (
-    <Card className="gap-4 py-5">
-      <CardHeader className="gap-1 px-5">
-        <CardTitle>Tool coverage</CardTitle>
-        <CardDescription className="text-xs">
-          How your policy covers your tools.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-center px-5">
-        {summary.isLoadingError ? (
-          <QueryLoadError
-            title="Could not load tool coverage"
-            onRetry={() => summary.refetch()}
-          />
-        ) : !totals ? (
-          <div className="flex items-center gap-6">
-            <Skeleton className="size-40 shrink-0 rounded-full" />
-            <Skeleton className="h-32 w-64" />
-          </div>
-        ) : totals.tools === 0 ? (
-          <p className="text-muted-foreground py-8 text-center text-sm">
-            No MCP server tools yet.
-          </p>
-        ) : (
+    <StepCard
+      step={2}
+      title="Rules annotate your tools"
+      description="A rule says which label a tool needs. Tools without one always run."
+    >
+      {summary.isLoadingError ? (
+        <QueryLoadError
+          title="Could not load tool coverage"
+          error={summary.error}
+          onRetry={() => summary.refetch()}
+        />
+      ) : !totals ? (
+        <div className="flex items-center justify-center gap-6">
+          <Skeleton className="size-28 shrink-0 rounded-full" />
+          <Skeleton className="hidden h-28 flex-1 @[22rem]:block" />
+        </div>
+      ) : totals.tools === 0 ? (
+        <p className="text-muted-foreground py-8 text-center text-sm">
+          No MCP server tools yet.
+        </p>
+      ) : (
+        <>
           <CoverageDonut totals={totals} />
-        )}
-      </CardContent>
-      {totals &&
-        !summary.isLoadingError &&
-        (totals.notCovered > 0 || totals.catchAll > 0) && (
-          <CardContent className="space-y-3 px-5 [contain:inline-size]">
+          <div className="mt-auto space-y-2">
+            <CompositionCaption composition={summary.data?.composition} />
             <CoverageWarnings totals={totals} />
-          </CardContent>
-        )}
-      {totals && totals.tools > 0 && (
-        <CardFooter className="px-5">
-          <OpenAppaChatButton
-            size="sm"
-            variant="outline"
-            promptKey="improveCoverage"
-          >
-            <MessageCircle />
-            <span>Improve with chat</span>
-          </OpenAppaChatButton>
-        </CardFooter>
+          </div>
+        </>
       )}
-    </Card>
+    </StepCard>
   );
+}
+
+/** Which composition the chart describes, when it is not the latest revision's. */
+function CompositionCaption({
+  composition,
+}: {
+  composition: CoverageSummary["composition"] | undefined;
+}) {
+  if (!composition || composition.kind === "current") return null;
+  return (
+    <p
+      className="text-xs text-muted-foreground"
+      data-testid="coverage-composition-caption"
+    >
+      <span>{compositionCaption(composition)}</span>
+    </p>
+  );
+}
+
+function compositionCaption(composition: CoverageSummary["composition"]) {
+  if (composition.kind === "root_only")
+    return "Nothing is enforced: the policy could not be composed and no composition opened before it.";
+  const { servedRootRevision: served, refusedRootRevision: refused } =
+    composition;
+  const showing =
+    served === null
+      ? "Showing the earlier composition the runtime still enforces"
+      : served === refused
+        ? `Showing the earlier composition of revision ${served} the runtime still enforces`
+        : `Showing revision ${served}, which the runtime still enforces`;
+  const attempt =
+    refused === null ? "the latest revision" : `revision ${refused}`;
+  const differ = composition.rulesMayDiffer
+    ? " The rules below are the current text's and may differ from what runs."
+    : "";
+  return `${showing}; ${attempt} was refused.${differ}`;
 }
 
 const share = (count: number, of: number) => Math.round((count / of) * 100);
@@ -159,8 +139,10 @@ function CoverageDonut({ totals }: { totals: Totals }) {
   });
 
   return (
-    <div className="flex flex-col items-center gap-x-8 gap-y-5 @md:flex-row">
-      <div className="relative size-40 shrink-0">
+    // The legend shows beside the donut while the card is wide enough for
+    // both; narrower, the donut stands alone and hovering a slice names it.
+    <div className="flex items-center justify-center gap-5">
+      <div className="relative size-28 shrink-0">
         <svg
           viewBox="0 0 100 100"
           className="size-full"
@@ -209,28 +191,28 @@ function CoverageDonut({ totals }: { totals: Totals }) {
           ))}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold tabular-nums">
+          <span className="text-2xl font-semibold tabular-nums">
             {`${share(focus ? focus.value : covered, totals.tools)}%`}
           </span>
-          <span className="text-muted-foreground text-sm">
+          <span className="text-muted-foreground text-xs">
             {focus ? focus.label.toLowerCase() : "covered"}
           </span>
         </div>
       </div>
-      <dl className="grid min-w-64 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 text-sm">
+      <dl className="hidden min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2.5 text-xs @[22rem]:grid">
         {slices.map((slice) => (
           <Tooltip key={slice.key}>
             <TooltipTrigger asChild>
               <div
                 className={cn(
-                  "col-span-4 grid grid-cols-subgrid items-center py-1.5 transition-opacity duration-150 motion-reduce:transition-none",
+                  "col-span-4 grid grid-cols-subgrid items-center py-0.5 transition-opacity duration-150 motion-reduce:transition-none",
                   hovered && slice.key !== hovered && "opacity-50",
                 )}
                 {...hover(slice.key)}
               >
                 <span
                   aria-hidden
-                  className="size-2.5 rounded-full"
+                  className="size-2 rounded-full"
                   style={{ backgroundColor: slice.color }}
                 />
                 <dt className="text-muted-foreground truncate">
@@ -239,7 +221,7 @@ function CoverageDonut({ totals }: { totals: Totals }) {
                 <dd className="text-right font-medium tabular-nums">
                   {slice.value.toLocaleString()}
                 </dd>
-                <dd className="text-muted-foreground w-9 text-right text-xs tabular-nums">
+                <dd className="text-muted-foreground w-8 text-right tabular-nums">
                   {`${share(slice.value, totals.tools)}%`}
                 </dd>
               </div>

@@ -351,6 +351,22 @@ describe("applyPromptCacheBreakpoints", () => {
     });
   });
 
+  it.each([
+    "claude-sonnet-5-5",
+    "claude-opus-5",
+    "claude-fable-5-1",
+  ])("uses a 1h TTL for Anthropic Claude 5 model %s", (model) => {
+    const [result] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model,
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(result)).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+  });
+
   it("keeps the 5m default for older models and when model is absent", () => {
     const [sonnet4] = applyPromptCacheBreakpoints({
       provider: "anthropic",

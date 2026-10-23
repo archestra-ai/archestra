@@ -1,4 +1,18 @@
-import type { SupportedProvider } from "./model-constants";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  type SupportedProvider,
+} from "./model-constants";
+
+/**
+ * Virtual keys also support providers translated by the Model Router. Microsoft
+ * 365 Copilot is left out: its proxy adapter rejects every request that carries
+ * tools, and OpenCode sends tools on each agent turn.
+ */
+export const OPENCODE_PRIMARY_PROVIDERS: readonly SupportedProvider[] = [
+  ...MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  "kimi",
+  "archestra",
+];
 
 export interface OpenCodeProviderRoute {
   provider: SupportedProvider;
@@ -11,6 +25,12 @@ export interface OpenCodeProviderRoute {
  * Archestra provider endpoint. These overrides preserve provider and model IDs
  * and local credentials. They only replace the upstream base URL. Each mapped
  * Archestra route forwards native chat model IDs to the proxy.
+ *
+ * The same routes carry the organization's credential: a connection with
+ * primary providers keeps the client's stock provider, filters its models to
+ * the ones the organization's key serves, and sends them here with the
+ * connection's virtual key. A provider without a row here cannot be shown in
+ * the client without an Archestra-specific provider, so it is left out.
  */
 export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
   {
@@ -32,6 +52,7 @@ export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
     openCodeProviderId: "openrouter",
     pathSuffix: "",
   },
+  { provider: "xai", openCodeProviderId: "xai", pathSuffix: "" },
   { provider: "deepseek", openCodeProviderId: "deepseek", pathSuffix: "" },
   { provider: "zhipuai", openCodeProviderId: "zhipuai", pathSuffix: "" },
   { provider: "minimax", openCodeProviderId: "minimax", pathSuffix: "" },

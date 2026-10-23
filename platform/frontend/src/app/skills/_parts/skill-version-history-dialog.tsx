@@ -1,21 +1,37 @@
 "use client";
 
-import { Github, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { GIT_PROVIDER_LABELS, type Permissions } from "@archestra/shared";
+import { RotateCcw } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DiffEditor } from "@/components/diff-editor";
-import { Editor } from "@/components/editor";
-import { StandardDialog } from "@/components/standard-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { CommitGraphRail } from "@/components/version-history/commit-graph-rail";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  CommitHeader,
+  RestoreButton,
+  UnreadVersionHeader,
+} from "@/components/version-history/commit-header";
+import {
+  DiffSummaryStrip,
+  type VersionViewMode,
+} from "@/components/version-history/diff-summary-strip";
+import { HunkScrollArea } from "@/components/version-history/hunk-block";
+import { LoadFailure } from "@/components/version-history/load-failure";
+import {
+  NothingToDiff,
+  PaneMessage,
+  PaneSkeleton,
+} from "@/components/version-history/pane-states";
+import { ShortHash } from "@/components/version-history/refs";
+import { VersionHistoryStatusLine } from "@/components/version-history/status-line";
+import { useVersionHistoryShortcuts } from "@/components/version-history/use-version-history-shortcuts";
+import {
+  VersionHistoryShell,
+  VersionHistorySubtitle,
+} from "@/components/version-history/version-history-shell";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type SkillVersionDetail,
@@ -31,36 +47,18 @@ import {
   type SkillFileChange,
 } from "@/lib/skills/skill-version-diff";
 import { languageForPath } from "@/lib/skills/skill-version-format";
-import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { LoadFailure } from "./load-failure";
-import { type VersionEntry, VersionFileTree } from "./version-file-tree";
-import { VersionTimeline } from "./version-timeline";
-
-/**
- * What the pane reads: the whole version, or only the files that moved. The
- * mode picks the rendering too — the whole version reads as files, a change set
- * reads as diffs — so there is a way to read a changed file either way.
- */
-type VersionViewMode = "all" | "changes";
+import {
+  SKILL_MANIFEST_PATH,
+  type SkillVersionFile,
+  SkillVersionFiles,
+  summarizeSkillChanges,
+} from "./skill-version-files";
 
 /** The manifest is markdown; resource files take their language from the path. */
 const SKILL_MANIFEST_LANGUAGE = "markdown";
 
-type SkillVersionFile = SkillVersionDetail["files"][number];
-
-/**
- * One file of the version being viewed, paired with the predecessor's copy when
- * there is one. `change` is null when there is no baseline — version 1, or a
- * predecessor that could not be read — since nothing about the row is then a
- * comparison, and calling it added would report a failed fetch as a fact about
- * the skill's history.
- */
-interface VersionFile {
-  path: string;
-  change: SkillFileChange | null;
-  current: SkillVersionFile | null;
-  previous: SkillVersionFile | null;
-}
+/** Restoring and resetting are both edits to the skill. */
+const SKILL_UPDATE_PERMISSIONS: Permissions = { skill: ["update"] };
 
 /**
  * Browse a skill's immutable version history and restore an earlier one.
@@ -78,8 +76,8 @@ export function SkillVersionHistoryDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  // Remounting per skill drops the previewed version and file selection, which
-  // belong to the skill they were chosen for and mean nothing for another one.
+  // Remounting per skill drops the previewed version, which belongs to the
+  // skill it was chosen for and means nothing for another one.
   return <VersionHistory key={props.skillId} {...props} />;
 }
 
@@ -101,12 +99,17 @@ function VersionHistory({
   const versionsQuery = useSkillVersions(open ? skillId : null);
   const restoreVersion = useRestoreSkillVersion();
   const resetSkill = useResetSkill();
+  // The restore button checks this itself; the `r` key has to answer to it too.
+  const { data: canUpdate } = useHasPermissions(
+    SKILL_UPDATE_PERMISSIONS,
+    skillId ?? undefined,
+  );
 
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  // null = SKILL.md is open; otherwise a resource file path.
-  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
-  // Survives version selection: whoever came to read diffs keeps reading diffs.
-  const [viewMode, setViewMode] = useState<VersionViewMode>("all");
+  // Opens on what moved, the way `git show` does, and survives version
+  // selection: whoever came to read diffs keeps reading diffs. A version with
+  // no baseline still reads whole, whatever this says.
+  const [viewMode, setViewMode] = useState<VersionViewMode>("changes");
   const [confirmingRestore, setConfirmingRestore] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
 
@@ -147,23 +150,9 @@ function VersionHistory({
   // Worth saying out loud only when a baseline was expected and did not arrive;
   // version 1 having no predecessor is not a failure to report.
   const baselineFailed = hasPredecessor && predecessorQuery.isError;
-
-  const versionFiles = useMemo((): VersionFile[] => {
-    if (!detail) return [];
-    if (predecessor) {
-      return compareSkillVersionFiles(detail.files, predecessor.files);
-    }
-    // No baseline, so the version is listed on its own — same path order the
-    // comparison produces, and no row claims anything about what moved.
-    return [...detail.files]
-      .sort((a, b) => a.path.localeCompare(b.path))
-      .map((file) => ({
-        path: file.path,
-        change: null,
-        current: file,
-        previous: null,
-      }));
-  }, [detail, predecessor]);
+  // Comparing takes a baseline, so a version without one stays on the whole
+  // file list however the switcher was left on the version before it.
+  const effectiveViewMode: VersionViewMode = predecessor ? viewMode : "all";
 
   // What a restore would do to the skill *as it stands today* — a different
   // question from what this version changed, and the one a confirmation has to
@@ -179,6 +168,11 @@ function VersionHistory({
   const canRestore = !!detail && !!skill && !isHead && !isSynced;
   // Only a skill the app ships has a default to go back to.
   const isBuiltIn = skill?.sourceType === "built_in";
+  const activeHash =
+    detail?.contentHash ??
+    versions.find((version) => version.version === activeVersion)
+      ?.contentHash ??
+    null;
 
   const handleRestore = async () => {
     if (!skill || !detail || activeVersion === null) return;
@@ -196,115 +190,105 @@ function VersionHistory({
     if (!result) return;
     setConfirmingRestore(false);
     // A restore lands as the new head, so the previewed version is no longer
-    // what the skill looks like — jump the selection to the version just made,
-    // clearing the open file the way picking a version from the timeline does.
-    // Without that, a path the new head does not carry would silently read as
-    // the manifest instead of as a file that is no longer there.
+    // what the skill looks like — jump the selection to the version just made.
     setSelectedVersion(result.latestVersion);
-    setActiveFilePath(null);
   };
 
+  const shortcuts = useVersionHistoryShortcuts({
+    enabled: !confirmingRestore && !confirmingReset,
+    versions: versions.map((version) => version.version),
+    activeVersion,
+    headVersion,
+    onSelectVersion: setSelectedVersion,
+    hasMore: !!versionsQuery.hasNextPage,
+    isLoadingMore: versionsQuery.isFetchingNextPage,
+    onLoadMore: () => versionsQuery.fetchNextPage(),
+    onToggleViewMode: predecessor
+      ? () => setViewMode(effectiveViewMode === "changes" ? "all" : "changes")
+      : undefined,
+    hash: activeHash,
+    onRestore:
+      canRestore && canUpdate && !restoreVersion.isPending
+        ? () => setConfirmingRestore(true)
+        : undefined,
+  });
+
   return (
-    <StandardDialog
+    <VersionHistoryShell
       open={open}
       onOpenChange={onOpenChange}
-      title="Version history"
-      description={
-        skill
-          ? `Every change to "${skill.name}"'s instructions or files is kept as a version. Restoring one adds a new version.`
-          : "Every change to a skill's instructions or files is kept as a version."
+      onKeyDown={shortcuts.onKeyDown}
+      subtitle={
+        <VersionHistorySubtitle
+          name={skill?.name}
+          versionCount={versions.length}
+          hasMore={!!versionsQuery.hasNextPage}
+          isLoading={versionsQuery.isPending}
+          fallback="Every change to a skill's instructions or files is kept as a version."
+        />
       }
-      size="large"
-      bodyClassName="flex flex-col overflow-hidden p-0"
-      footer={
-        <div className="flex w-full items-center gap-3">
-          {/* Resetting a built-in skill is the same move as restoring: go back
-              to a version someone already had. It sits here rather than in the
-              row menu so both are reachable from the history you read to
-              decide. */}
-          {isBuiltIn ? (
-            <PermissionButton
-              permissions={{ skill: ["update"] }}
-              permissionScope={skillId ?? undefined}
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={resetSkill.isPending}
-              onClick={() => setConfirmingReset(true)}
-            >
-              <RotateCcw className="h-4 w-4" />
-              <span>Reset to default</span>
-            </PermissionButton>
-          ) : null}
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Close
-            </Button>
-            <PermissionButton
-              permissions={{ skill: ["update"] }}
-              permissionScope={skillId ?? undefined}
-              disabled={!canRestore || restoreVersion.isPending}
-              onClick={() => setConfirmingRestore(true)}
-              tooltip={restoreTooltip({ isSynced, isHead, appName })}
-            >
-              {restoreVersion.isPending
-                ? "Restoring..."
-                : "Restore this version"}
-            </PermissionButton>
-          </div>
-        </div>
+      headerAction={
+        // Resetting a built-in skill is the same move as restoring: go back to
+        // a version someone already had. It sits here rather than in the row
+        // menu so both are reachable from the history you read to decide.
+        isBuiltIn ? (
+          <PermissionButton
+            permissions={SKILL_UPDATE_PERMISSIONS}
+            permissionScope={skillId ?? undefined}
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={resetSkill.isPending}
+            onClick={() => setConfirmingReset(true)}
+          >
+            <RotateCcw />
+            <span>Reset to default</span>
+          </PermissionButton>
+        ) : undefined
       }
-    >
-      {isSynced ? (
-        <InlineNotice className="mx-4 mt-2">
-          <InlineNoticeText>
-            This skill&apos;s content is synced from GitHub. Earlier versions
-            stay viewable, but restoring one is unavailable — stop syncing the
-            skill in its editor to make it editable in {appName}.
-          </InlineNoticeText>
-        </InlineNotice>
-      ) : null}
-
-      <div className="flex min-h-0 flex-1">
-        <nav
-          aria-label="Versions"
-          className="w-48 shrink-0 overflow-y-auto border-r py-2"
-        >
-          <VersionTimeline
-            versions={versions}
-            headVersion={headVersion}
-            activeVersion={activeVersion}
-            isLoading={versionsQuery.isPending || isSkillLoading}
-            isError={versionsQuery.isError}
-            onRetry={() => versionsQuery.refetch()}
-            hasMore={!!versionsQuery.hasNextPage}
-            isLoadingMore={versionsQuery.isFetchingNextPage}
-            onLoadMore={() => versionsQuery.fetchNextPage()}
-            onSelect={(version) => {
-              setSelectedVersion(version);
-              setActiveFilePath(null);
-            }}
-          />
-        </nav>
-
-        <section className="flex min-w-0 flex-1 flex-col">
-          {/* Every skill has at least version 1, so there is no version to show
-              only while the reads are in flight or after one of them failed.
-              Saying the skill has no history would state something that is
-              never true of a live skill. */}
-          {activeVersion === null ? (
-            isSkillLoading || versionsQuery.isPending ? (
-              <p className="p-6 text-sm text-muted-foreground">
-                Loading version...
-              </p>
-            ) : (
-              // Worded apart from the timeline's own failure next to it: the
-              // head is unknown because the *skill* did not load, which is a
-              // different read from the version list the timeline reports on.
+      notice={
+        isSynced ? (
+          <InlineNotice>
+            <InlineNoticeText>
+              This skill&apos;s content is synced from GitHub. Earlier versions
+              stay viewable, but restoring one is unavailable — stop syncing the
+              skill in its editor to make it editable in {appName}.
+            </InlineNoticeText>
+          </InlineNotice>
+        ) : undefined
+      }
+      rail={
+        <CommitGraphRail
+          versions={versions}
+          headVersion={headVersion}
+          activeVersion={activeVersion}
+          isLoading={versionsQuery.isPending || isSkillLoading}
+          // Every skill has at least version 1, so an empty list after a
+          // failed fetch is an outage, not a history. Saying "No versions"
+          // would state something that is never true of a live skill.
+          isError={versionsQuery.isError}
+          errorMessage="Could not load this skill's versions."
+          onRetry={() => versionsQuery.refetch()}
+          emptyMessage="No versions"
+          hasMore={!!versionsQuery.hasNextPage}
+          isLoadingMore={versionsQuery.isFetchingNextPage}
+          onLoadMore={() => versionsQuery.fetchNextPage()}
+          onSelect={setSelectedVersion}
+        />
+      }
+      pane={
+        // Every skill has at least version 1, so there is no version to show
+        // only while the reads are in flight or after one of them failed.
+        // Saying the skill has no history would state something that is never
+        // true of a live skill.
+        activeVersion === null ? (
+          isSkillLoading || versionsQuery.isPending ? (
+            <PaneSkeleton />
+          ) : (
+            // Worded apart from the timeline's own failure next to it: the head
+            // is unknown because the *skill* did not load, which is a
+            // different read from the version list the timeline reports on.
+            <div className="p-6">
               <LoadFailure
                 message="Could not load this skill."
                 onRetry={() => {
@@ -312,30 +296,63 @@ function VersionHistory({
                   versionsQuery.refetch();
                 }}
               />
-            )
-          ) : (
-            <VersionPreview
-              version={activeVersion}
-              isHead={isHead}
-              detail={detail ?? null}
-              predecessor={predecessor}
-              baselineFailed={baselineFailed}
-              onRetryBaseline={() => predecessorQuery.refetch()}
-              isLoading={isDetailLoading}
-              isUnavailable={isDetailUnavailable}
-              onRetry={() => refetchDetail()}
-              versionFiles={versionFiles}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              activeFilePath={activeFilePath}
-              onSelectFile={setActiveFilePath}
-              sourceRef={skill?.sourceRef ?? null}
-              sourceOrigin={skill?.sourceOrigin ?? null}
-            />
-          )}
-        </section>
-      </div>
-
+            </div>
+          )
+        ) : (
+          <VersionPreview
+            version={activeVersion}
+            isHead={isHead}
+            detail={detail ?? null}
+            predecessor={predecessor}
+            baselineFailed={baselineFailed}
+            onRetryBaseline={() => predecessorQuery.refetch()}
+            isLoading={isDetailLoading}
+            isUnavailable={isDetailUnavailable}
+            onRetry={() => refetchDetail()}
+            viewMode={effectiveViewMode}
+            onViewModeChange={setViewMode}
+            onSelectVersion={setSelectedVersion}
+            sourceRef={skill?.sourceRef ?? null}
+            sourceOrigin={skill?.sourceOrigin ?? null}
+            sourceProvider={skill?.sourceProvider ?? null}
+            restoreAction={
+              <RestoreButton
+                version={activeVersion}
+                permissions={SKILL_UPDATE_PERMISSIONS}
+                permissionScope={skillId ?? undefined}
+                canRestore={canRestore}
+                isPending={restoreVersion.isPending}
+                tooltip={restoreTooltip({
+                  isSynced,
+                  isHead,
+                  appName,
+                  host: GIT_PROVIDER_LABELS[skill?.sourceProvider ?? "github"],
+                })}
+                onClick={() => setConfirmingRestore(true)}
+              />
+            }
+          />
+        )
+      }
+      statusLine={
+        <VersionHistoryStatusLine
+          activeVersion={activeVersion}
+          headVersion={headVersion}
+          isHead={isHead}
+          hash={activeHash}
+          isBusy={isDetailLoading && !detail}
+          notice={shortcuts.notice}
+          reading={
+            detail ? (effectiveViewMode === "changes" ? "diff" : "tree") : null
+          }
+          keys={{
+            toggleView: !!predecessor,
+            copyHash: !!activeHash,
+            restore: canRestore && !!canUpdate,
+          }}
+        />
+      }
+    >
       {skill && detail && activeVersion !== null ? (
         <DeleteConfirmDialog
           open={confirmingRestore}
@@ -372,21 +389,20 @@ function VersionHistory({
             // enough here — unlike a restore, the response carries no version
             // number to select.
             setSelectedVersion(null);
-            setActiveFilePath(null);
           }}
           confirmLabel="Reset to default"
           pendingLabel="Resetting..."
         />
       ) : null}
-    </StandardDialog>
+    </VersionHistoryShell>
   );
 }
 
 /**
- * One version, read either way: the whole thing as a file list, or only what
- * moved as a set of diffs. The switcher decides both what the tree lists and
- * how the pane renders it, so a changed file can be read whole under "All
- * files" and as a comparison under "Changes".
+ * One version, read either way: every file it holds, or only what moved as a
+ * set of diffs under a `git diff --stat`. The switcher decides both what is
+ * listed and how each file renders, so a changed file can be read whole under
+ * "All files" and as a comparison under "Changes".
  */
 function VersionPreview({
   version,
@@ -398,13 +414,13 @@ function VersionPreview({
   isLoading,
   isUnavailable,
   onRetry,
-  versionFiles,
   viewMode,
   onViewModeChange,
-  activeFilePath,
-  onSelectFile,
+  onSelectVersion,
   sourceRef,
   sourceOrigin,
+  sourceProvider,
+  restoreAction,
 }: {
   version: number;
   isHead: boolean;
@@ -417,278 +433,172 @@ function VersionPreview({
   /** This version itself could not be read — distinct from it not existing. */
   isUnavailable: boolean;
   onRetry: () => void;
-  versionFiles: VersionFile[];
+  /** Already settled against the baseline: "all" whenever there is none. */
   viewMode: VersionViewMode;
   onViewModeChange: (mode: VersionViewMode) => void;
-  activeFilePath: string | null;
-  onSelectFile: (path: string | null) => void;
+  onSelectVersion: (version: number) => void;
   /** The skill's provenance string, paired with a version's commit to link out. */
   sourceRef: string | null;
   sourceOrigin: string | null;
+  sourceProvider: "github" | "gitlab" | null;
+  restoreAction: ReactNode;
 }) {
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
-    new Set(),
+  const versionFiles = useMemo(
+    () => (detail ? versionFilesOf(detail, predecessor) : []),
+    [detail, predecessor],
   );
 
-  if (isLoading && !detail) {
-    return (
-      <p className="p-6 text-sm text-muted-foreground">Loading version...</p>
-    );
-  }
+  if (isLoading && !detail) return <PaneSkeleton />;
   // A 404 is the only reading that supports "no longer available": the version
   // was pruned. A failed read supports nothing about the history at all, so it
-  // gets the same treatment as a failed baseline — say what happened, and offer
-  // a way back rather than leaving the dialog with no route out.
+  // says what happened and offers a way back rather than leaving the dialog
+  // with no route out.
   if (!detail) {
-    return isUnavailable ? (
-      <LoadFailure
-        message={`Version ${version} could not be loaded.`}
-        onRetry={onRetry}
-      />
-    ) : (
-      <p className="p-6 text-sm text-muted-foreground">
-        This version is no longer available.
-      </p>
+    return (
+      <>
+        <UnreadVersionHeader version={version} action={restoreAction} />
+        {isUnavailable ? (
+          <div className="p-6">
+            <LoadFailure
+              message={`Version ${version} could not be loaded.`}
+              onRetry={onRetry}
+            />
+          </div>
+        ) : (
+          <PaneMessage>This version is no longer available.</PaneMessage>
+        )}
+      </>
     );
   }
 
-  // With no baseline the manifest is in the same position as every other row:
-  // there is nothing to compare it against, so it claims nothing.
-  const manifestChange: SkillFileChange | null = !predecessor
-    ? null
-    : predecessor.content !== detail.content
-      ? "changed"
-      : "unchanged";
-  // Comparing takes a baseline, so a version without one stays on the whole
-  // file list however the switcher was left on the version before it.
-  const mode: VersionViewMode = predecessor ? viewMode : "all";
-
-  // "All files" is the version itself, so a file it dropped has no row there.
-  // "Changes" is what moved, which is exactly where a dropped file belongs.
+  // "All files" is the version itself, so a file it dropped has no hunk there.
+  // "Changes" is what moved, which is exactly where a dropped file belongs —
+  // and an untouched SKILL.md has no place in it.
   const heldFiles = versionFiles.filter((file) => file.current !== null);
   const movedFiles = versionFiles.filter(
     (file) => file.change !== null && file.change !== "unchanged",
   );
-  const entries: VersionEntry[] =
-    mode === "all"
-      ? [
-          { path: null, change: manifestChange },
-          ...heldFiles.map((file) => ({
-            path: file.path,
-            change: file.change,
-          })),
-        ]
-      : [
-          // An unchanged body has no place in a list of what moved.
-          ...(manifestChange === "changed"
-            ? [{ path: null, change: manifestChange }]
-            : []),
-          ...movedFiles.map((file) => ({
-            path: file.path,
-            change: file.change,
-          })),
-        ];
-
-  // The open file is a preference, not a guarantee: switching to "Changes" can
-  // hide it, and so can a version that never held it. Fall back to the first
-  // row rather than reading a path this list does not have.
-  const activeEntry =
-    entries.find((entry) => entry.path === activeFilePath) ??
-    entries[0] ??
-    null;
-  const activePath = activeEntry?.path ?? null;
-  const selected = activePath
-    ? (versionFiles.find((file) => file.path === activePath) ?? null)
-    : null;
-  const original = selected
-    ? (selected.previous?.content ?? "")
-    : (predecessor?.content ?? "");
-  const modified = selected
-    ? (selected.current?.content ?? "")
-    : detail.content;
-  // The copy actually rendered: this version's file, or — for one it removed —
-  // the predecessor's. Only that side's encoding decides readability, so a
-  // binary re-saved as text reads fine here even though the last version's copy
-  // would not have.
-  const rendered = selected ? (selected.current ?? selected.previous) : null;
-  const isBinary = rendered?.encoding === "base64";
-  // A diff needs two readable sides. When only the older copy is binary — a
-  // file re-saved as text — the newer one still reads, so it is shown whole
-  // rather than compared against bytes nothing can render.
-  const asDiff =
-    mode === "changes" && selected?.previous?.encoding !== "base64";
-  const language = activePath
-    ? languageForPath(activePath)
-    : SKILL_MANIFEST_LANGUAGE;
+  const entries = viewMode === "all" ? heldFiles : movedFiles;
+  const summary = summarizeSkillChanges(movedFiles);
+  const provider = sourceProvider ?? "github";
   const sourceUrl = githubSourceUrlAtCommit({
     sourceRef,
     sourceOrigin,
+    provider: sourceProvider,
     commit: detail.sourceCommit,
   });
 
   return (
     <>
-      <header className="flex items-baseline gap-2 px-4 pt-3">
-        <h2 className="text-base font-semibold">Version {version}</h2>
-        {isHead ? <Badge variant="outline">Current</Badge> : null}
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTimeFromNow(detail.createdAt)}
-        </span>
-        {/* Only versions a GitHub pull produced. The link is named rather than
-            spelled out as a SHA, which stays in the title. */}
-        {sourceUrl && detail.sourceCommit ? (
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
-            title={`Open this version's source on GitHub (${detail.sourceCommit})`}
-          >
-            <Github className="size-3 shrink-0" />
-            <span>Open version in GitHub</span>
-          </a>
-        ) : null}
-      </header>
-      {baselineFailed ? (
-        <LoadFailure
-          message={`Version ${version - 1} could not be loaded, so this version is shown on its own.`}
-          onRetry={onRetryBaseline}
-        />
-      ) : null}
-      <div className="px-4 pt-3">
-        <ViewModeSwitcher
-          mode={mode}
-          onChange={onViewModeChange}
-          fileCount={heldFiles.length + 1}
-          changeCount={
-            movedFiles.length + (manifestChange === "changed" ? 1 : 0)
-          }
-          unavailableReason={
-            predecessor
-              ? null
-              : compareUnavailableReason(version, baselineFailed)
-          }
-        />
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">
-        <div className="min-h-0 overflow-y-auto rounded-md border p-2">
-          {activeEntry ? (
-            <VersionFileTree
-              entries={entries}
-              activePath={activePath}
-              collapsedFolders={collapsedFolders}
-              onToggleFolder={(folder) =>
-                setCollapsedFolders((current) => {
-                  const next = new Set(current);
-                  if (!next.delete(folder)) next.add(folder);
-                  return next;
-                })
-              }
-              onSelect={onSelectFile}
-            />
-          ) : (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
-              Nothing changed in this version.
-            </p>
-          )}
-        </div>
-
-        <div className="min-h-0 overflow-hidden rounded-md border">
-          {!activeEntry ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              Nothing to show here.
-            </p>
-          ) : isBinary ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              This file is binary, so there is nothing to show here.
-            </p>
-          ) : asDiff ? (
-            <DiffEditor
-              height="100%"
-              language={language}
-              original={original}
-              modified={modified}
-              options={{
-                // A unified diff fits this dialog's narrow preview pane;
-                // side-by-side would halve the width for each revision.
-                renderSideBySide: false,
-                // Long, mostly-unchanged bodies collapse to the edited regions,
-                // so a one-line change does not require scrolling past
-                // everything that stayed the same.
-                hideUnchangedRegions: { enabled: true },
-              }}
-            />
-          ) : (
-            <Editor
-              height="100%"
-              language={language}
-              value={modified}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-              }}
-            />
-          )}
-        </div>
-      </div>
+      <CommitHeader
+        version={version}
+        isHead={isHead}
+        hash={detail.contentHash}
+        parentHash={predecessor?.contentHash ?? null}
+        onSelectParent={onSelectVersion}
+        createdAt={detail.createdAt}
+        extraRows={
+          // Only versions a Git pull produced. The link is named rather than
+          // spelled out as a SHA, which stays in its title.
+          sourceUrl && detail.sourceCommit ? (
+            <>
+              <dt className="leading-5 text-muted-foreground">source</dt>
+              <dd className="flex min-w-0 items-center gap-2 leading-5">
+                <GitProviderLogo provider={provider} size={12} />
+                <ShortHash hash={detail.sourceCommit} />
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate font-sans text-muted-foreground underline underline-offset-4 hover:text-primary"
+                  title={`Open this version's source on ${GIT_PROVIDER_LABELS[provider]} (${detail.sourceCommit})`}
+                >
+                  Open version in {GIT_PROVIDER_LABELS[provider]}
+                </a>
+              </dd>
+            </>
+          ) : null
+        }
+        action={restoreAction}
+      />
+      <DiffSummaryStrip
+        version={version}
+        unavailableReason={
+          predecessor ? null : compareUnavailableReason(version, baselineFailed)
+        }
+        baselineFailed={baselineFailed}
+        onRetryBaseline={onRetryBaseline}
+        added={summary.added}
+        removed={summary.removed}
+        phrases={summary.phrases}
+        changeCount={movedFiles.length}
+        heldCount={heldFiles.length}
+        allLabel="All files"
+        mode={viewMode}
+        onModeChange={onViewModeChange}
+      />
+      <HunkScrollArea isStale={false}>
+        {entries.length === 0 ? (
+          <NothingToDiff>
+            Version {version} holds the same files as version {version - 1}.
+          </NothingToDiff>
+        ) : (
+          <SkillVersionFiles
+            // Remounting per version and reading resets every hunk's fold.
+            key={`${version}-${viewMode}`}
+            files={entries}
+            mode={viewMode}
+          />
+        )}
+      </HunkScrollArea>
     </>
   );
 }
 
 /**
- * Read the whole version, or only what moved. "Changes" needs a predecessor to
- * compare against, so a version without one offers the reason instead — leaving
- * the control live would promise a comparison nothing can produce.
+ * SKILL.md and the resource files of a version, each paired with the
+ * predecessor's copy when there is one. With no baseline the version is listed
+ * on its own — in the same path order the comparison produces — and nothing
+ * claims to have moved.
  */
-function ViewModeSwitcher({
-  mode,
-  onChange,
-  fileCount,
-  changeCount,
-  unavailableReason,
-}: {
-  mode: VersionViewMode;
-  onChange: (mode: VersionViewMode) => void;
-  fileCount: number;
-  changeCount: number;
-  unavailableReason: string | null;
-}) {
-  return (
-    <ButtonGroup>
-      <Button
-        type="button"
-        size="sm"
-        variant={mode === "all" ? "secondary" : "outline"}
-        onClick={() => onChange("all")}
-      >
-        All files ({fileCount})
-      </Button>
-      {unavailableReason ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex">
-              <Button type="button" size="sm" variant="outline" disabled>
-                Changes
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-60">
-            {unavailableReason}
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === "changes" ? "secondary" : "outline"}
-          onClick={() => onChange("changes")}
-        >
-          Changes ({changeCount})
-        </Button>
-      )}
-    </ButtonGroup>
-  );
+function versionFilesOf(
+  detail: SkillVersionDetail,
+  predecessor: SkillVersionDetail | null,
+): SkillVersionFile[] {
+  const manifestChange: SkillFileChange | null = !predecessor
+    ? null
+    : predecessor.content !== detail.content
+      ? "changed"
+      : "unchanged";
+  const manifest: SkillVersionFile = {
+    path: SKILL_MANIFEST_PATH,
+    change: manifestChange,
+    current: { content: detail.content, encoding: "utf8" },
+    previous: predecessor
+      ? { content: predecessor.content, encoding: "utf8" }
+      : null,
+    language: SKILL_MANIFEST_LANGUAGE,
+  };
+  const resources = predecessor
+    ? compareSkillVersionFiles(detail.files, predecessor.files)
+    : [...detail.files]
+        .sort((a, b) => a.path.localeCompare(b.path))
+        .map((file) => ({
+          path: file.path,
+          change: null,
+          current: file,
+          previous: null,
+        }));
+  return [
+    manifest,
+    ...resources.map((file) => ({
+      path: file.path,
+      change: file.change,
+      current: file.current,
+      previous: file.previous,
+      language: languageForPath(file.path),
+    })),
+  ];
 }
 
 /** Why this version cannot be compared — each reading is a different fact. */
@@ -736,13 +646,15 @@ function restoreTooltip({
   isSynced,
   isHead,
   appName,
+  host,
 }: {
   isSynced: boolean;
   isHead: boolean;
   appName: string;
+  host: string;
 }): string | undefined {
   if (isSynced) {
-    return `This skill is synced from GitHub. Stop syncing it to edit and restore it in ${appName}.`;
+    return `This skill is synced from ${host}. Stop syncing it to edit and restore it in ${appName}.`;
   }
   if (isHead) return "This is the skill's current version.";
   return undefined;

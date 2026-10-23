@@ -2,7 +2,6 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type Permissions,
-  type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
   type QueryClient,
@@ -24,6 +23,7 @@ import {
   generateEncryptedChatKey,
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -53,17 +53,6 @@ const {
   getAppLabelValues,
 } = archestraApiSdk;
 
-/** How many apps a "Show" selection holds, for the filter's counts. */
-export async function countApps(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getApps({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
-
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<
   AppsQuery,
@@ -74,7 +63,10 @@ type AppsParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "access"
+  | "sharedWith"
+  | "owner"
   | "labels"
+  | "pinned"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
@@ -94,6 +86,21 @@ export function prefetchApps(queryClient: QueryClient) {
   return queryClient.prefetchQuery(appsQueryOptions(APPS_FIRST_PAGE, false));
 }
 
+/**
+ * The sidebar's read of the pinned apps. The server seeds a full page load of
+ * a shell-seeded route with it, under the same key.
+ */
+export const SIDEBAR_PINNED_APPS_QUERY = {
+  limit: 100,
+  offset: 0,
+  pinned: true,
+} as const satisfies AppsParams;
+
+/** The cache key of one page of the apps list. */
+export function appsQueryKey(params: AppsParams) {
+  return ["apps", "paginated", params] as const;
+}
+
 export function useApps(
   params: AppsParams,
   options?: { enabled?: boolean; toastOnError?: boolean },
@@ -104,6 +111,8 @@ export function useApps(
   return useQuery({
     ...appsQueryOptions(params, options?.toastOnError),
     enabled: (options?.enabled ?? true) && !!canReadApps,
+    // The sidebar's pinned list comes back on refresh with the rest of it.
+    meta: params.pinned === true ? PERSISTED_QUERY_META : undefined,
     placeholderData: (previousData) => previousData,
   });
 }
@@ -614,7 +623,7 @@ export function useAssignToolToApp() {
 
 function appsQueryOptions(params: AppsParams, toastOnError?: boolean) {
   return queryOptions({
-    queryKey: ["apps", "paginated", params],
+    queryKey: appsQueryKey(params),
     queryFn: async ({ signal }) => {
       const { data, error } = await getApps({ query: params, signal });
       // TanStack aborts this request when its observer disappears (for example,

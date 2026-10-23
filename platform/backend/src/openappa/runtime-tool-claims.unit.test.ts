@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -15,7 +16,7 @@ const session = {
 const request = {
   session,
   toolCallId: "call-start",
-  action: "start_run",
+  action: "start_agent_run",
   arguments: {
     agent_id: "worker",
     prompt: "Prepare a report",
@@ -46,6 +47,37 @@ describe("runtime tool origin proofs", () => {
       toolCallId: "call-start",
       spawn: true,
     });
+  });
+
+  it("carries that a call was signed while enforcement was off, and only then", () => {
+    const observed = { ...request, spawn: false, observed: true as const };
+    expect(
+      verifyRuntimeToolProof({
+        proof: signRuntimeToolProof(observed),
+        organizationId: session.organization_id,
+        callerId: session.caller_id,
+        action: request.action,
+        arguments: request.arguments,
+        secret: request.secret,
+      }),
+    ).toEqual({
+      session,
+      toolCallId: "call-start",
+      spawn: false,
+      observed: true,
+    });
+    expect(verify()).not.toHaveProperty("observed");
+  });
+
+  it("refuses a proof whose observed claim was added after signing", () => {
+    const proof = signRuntimeToolProof({ ...request, spawn: false });
+    if (!proof) throw new Error("no proof");
+    const [payload, mac] = proof.split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+    const forged = `${Buffer.from(
+      JSON.stringify({ ...claims, observed: true }),
+    ).toString("base64url")}.${mac}`;
+    expect(verify({ proof: forged })).toBeNull();
   });
 
   it("tolerates key ordering but binds all nested attachment bytes", () => {
@@ -138,7 +170,7 @@ describe("runtime tool origin proofs", () => {
         },
         {
           arguments: JSON.stringify({
-            tool_name: "archestra__steer_run",
+            tool_name: "archestra__steer_agent_run",
             tool_args: { message: "original", runtime_proof: "proof" },
           }),
         },
@@ -148,7 +180,7 @@ describe("runtime tool origin proofs", () => {
     stripRuntimeToolProofs(body);
     expect(JSON.parse(body.input[0].arguments)).toEqual({ task_id: "task" });
     expect(JSON.parse(body.input[1].arguments)).toEqual({
-      tool_name: "archestra__steer_run",
+      tool_name: "archestra__steer_agent_run",
       tool_args: { message: "original" },
     });
     expect(body.input[2].arguments).toBe("non-JSON custom tool input");
@@ -159,7 +191,7 @@ describe("runtime tool origin proofs", () => {
       input: [
         {
           arguments: JSON.stringify({
-            tool_name: "archestra__steer_run",
+            tool_name: "archestra__steer_agent_run",
             tool_args: JSON.stringify({
               message: "original",
               runtime_proof: "proof",
@@ -181,5 +213,28 @@ describe("runtime tool origin proofs", () => {
     expect(() =>
       stripRuntimeToolProofs({ arguments: JSON.stringify(args) }),
     ).toThrow("too deep");
+  });
+});
+
+describe("runtime reads signed while enforcement is off", () => {
+  it("names reads only, so a new transfer direction is not one", () => {
+    const transfer = (args: Record<string, unknown>) =>
+      isObservedRead({ action: "transfer_workspace_file", args });
+
+    expect(isObservedRead({ action: "get_agent_run", args: {} })).toBe(true);
+    expect(isObservedRead({ action: "read_workspace_file", args: {} })).toBe(
+      true,
+    );
+    expect(transfer({ direction: "download" })).toBe(true);
+    expect(transfer({ direction: "upload" })).toBe(false);
+    expect(transfer({ direction: "sync" })).toBe(false);
+    expect(transfer({})).toBe(false);
+    for (const action of [
+      "start_agent_run",
+      "steer_agent_run",
+      "write_workspace_file",
+    ]) {
+      expect(isObservedRead({ action, args: {} })).toBe(false);
+    }
   });
 });

@@ -11,6 +11,7 @@ import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
+import AgentUsageModel from "@/models/agent-usage";
 import AppModel from "@/models/app";
 import AppDataModel from "@/models/app-data";
 import AppToolModel from "@/models/app-tool";
@@ -24,12 +25,11 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import SecretModel from "@/models/secret";
+import ServiceAccountModel from "@/models/service-account";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
@@ -68,8 +68,6 @@ import type {
   Skill,
   TeamMember,
   Tool,
-  ToolInvocation,
-  TrustedData,
 } from "@/types";
 import { accessGrants, type TestAccess } from "./access-grants";
 import { type LegacySharing, seedLegacySharing } from "./legacy-sharing";
@@ -102,8 +100,6 @@ interface TestFixtures {
   makeAppVersion: typeof makeAppVersion;
   makeAppTool: typeof makeAppTool;
   makeAppData: typeof makeAppData;
-  makeToolPolicy: typeof makeToolPolicy;
-  makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
   makeServiceAccount: typeof makeServiceAccount;
   makeMember: typeof makeMember;
@@ -120,6 +116,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeServiceAccountToken: typeof makeServiceAccountToken;
   makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
   makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
@@ -202,8 +199,6 @@ async function makeOrganization(
       InsertOrganization,
       | "name"
       | "slug"
-      | "defaultDiscoveredToolInvocationPolicy"
-      | "defaultDiscoveredToolResultPolicy"
       | "defaultEnvironmentNamespace"
       | "defaultMemberRole"
       | "defaultNetworkPolicy"
@@ -615,47 +610,6 @@ async function makeAppData(
 }
 
 /**
- * Creates a test tool invocation policy using the ToolInvocationPolicy model
- */
-async function makeToolPolicy(
-  toolId: string,
-  overrides: Partial<
-    Pick<
-      ToolInvocation.ToolInvocationPolicy,
-      "conditions" | "action" | "reason"
-    >
-  > = {},
-): Promise<ToolInvocation.ToolInvocationPolicy> {
-  return await ToolInvocationPolicyModel.create({
-    toolId,
-    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
-    action: "block_always",
-    reason: "Test policy reason",
-    ...overrides,
-  });
-}
-
-/**
- * Creates a test trusted data policy using the TrustedDataPolicy model
- * Returns the created policy
- */
-async function makeTrustedDataPolicy(
-  toolId: string,
-  overrides: Partial<
-    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
-  > = {},
-): Promise<TrustedData.TrustedDataPolicy> {
-  return await TrustedDataPolicyModel.create({
-    toolId,
-    description: overrides.description ?? "Test trusted data policy",
-    conditions: overrides.conditions ?? [
-      { key: "test.path", operator: "equal", value: "test-value" },
-    ],
-    action: overrides.action ?? "mark_as_trusted",
-  });
-}
-
-/**
  * Creates a test custom organization role via direct DB insert
  * (bypasses Better Auth API for test simplicity)
  */
@@ -707,6 +661,7 @@ async function makeServiceAccount(
     name: string;
     role: string;
     disabled: boolean;
+    teamId: string | null;
     createdBy: string | null;
   }> = {},
 ) {
@@ -728,7 +683,7 @@ async function makeServiceAccount(
 async function makeMember(
   userId: string,
   organizationId: string,
-  overrides: Partial<Pick<InsertMember, "role">> = {},
+  overrides: Partial<Pick<InsertMember, "role" | "createdAt">> = {},
 ) {
   const [member] = await db
     .insert(schema.membersTable)
@@ -875,7 +830,10 @@ async function makeInvitation(
   organizationId: string,
   inviterId: string,
   overrides: Partial<
-    Pick<InsertInvitation, "email" | "role" | "status" | "expiresAt">
+    Pick<
+      InsertInvitation,
+      "email" | "role" | "status" | "expiresAt" | "createdAt"
+    >
   > = {},
 ) {
   const [invitation] = await db
@@ -1015,6 +973,7 @@ async function makeInteraction(
       | "type"
       | "model"
       | "inputTokens"
+      | "inputTokensEstimated"
       | "outputTokens"
       | "cost"
       | "baselineCost"
@@ -1025,12 +984,16 @@ async function makeInteraction(
       | "passthroughVirtualKeyId"
       | "authenticatedAppId"
       | "authenticatedAppName"
+      | "billingTeamId"
+      | "attributionLabels"
       | "billingMode"
       | "sessionId"
+      | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
       | "externalAgentId"
       | "userId"
+      | "serviceAccountId"
       | "appId"
       | "source"
       | "createdAt"
@@ -1109,6 +1072,13 @@ async function makeInteraction(
       ...overrides,
     })
     .returning();
+  // Inserted directly, so stamp the agent as InteractionModel.create would.
+  if (interaction.profileId) {
+    await AgentUsageModel.recordUse({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
+  }
   return interaction;
 }
 
@@ -1128,8 +1098,34 @@ async function makeSecret(
 }
 
 /**
+ * Creates a service account and one key for it, the credential automation
+ * presents at the MCP gateway and A2A. `teamId` makes the account act for a
+ * team; omitted, it reaches what is shared with the whole organization.
+ */
+async function makeServiceAccountToken(params: {
+  organizationId: string;
+  teamId?: string | null;
+  role?: string;
+  name?: string;
+}) {
+  const serviceAccount = await ServiceAccountModel.create({
+    organizationId: params.organizationId,
+    name: params.name ?? `service-account-${crypto.randomUUID().slice(0, 8)}`,
+    role: params.role ?? MEMBER_ROLE_NAME,
+    teamId: params.teamId ?? null,
+    createdBy: null,
+  });
+  const { token, id } = await ServiceAccountModel.createToken({
+    serviceAccountId: serviceAccount.id,
+    organizationId: params.organizationId,
+    name: "test key",
+  });
+  return { serviceAccount, tokenId: id, value: token };
+}
+
+/**
  * Creates a test chat API key in the database.
- * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ * Used for testing features that require LLM API keys.
  */
 async function makeLlmProviderApiKey(
   organizationId: string,
@@ -1532,7 +1528,7 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
     await db.insert(schema.internalMcpCatalogTable).values({
       id: ARCHESTRA_MCP_CATALOG_ID,
       name: DEFAULT_APP_NAME,
-      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
+      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, and MCP servers.`,
       serverType: "builtin",
     });
   }
@@ -1617,12 +1613,6 @@ export const test = baseTest.extend<TestFixtures>({
   makeAppData: async ({}, use) => {
     await use(makeAppData);
   },
-  makeToolPolicy: async ({}, use) => {
-    await use(makeToolPolicy);
-  },
-  makeTrustedDataPolicy: async ({}, use) => {
-    await use(makeTrustedDataPolicy);
-  },
   makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);
   },
@@ -1670,6 +1660,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeServiceAccountToken: async ({}, use) => {
+    await use(makeServiceAccountToken);
   },
   makeLlmProviderApiKey: async ({}, use) => {
     await use(makeLlmProviderApiKey);

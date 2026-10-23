@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, providerSupportsChat } from "@archestra/shared";
 import { useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -18,7 +18,7 @@ import { useUpdateAgentSettings } from "@/lib/organization.query";
  * default model (organization.defaultModelId + defaultLlmApiKeyId).
  *
  * That org default is the first fallback every built-in background subagent —
- * chat title generation, context compaction, dual-LLM, ... — resolves to when
+ * chat title generation, context compaction, ... — resolves to when
  * it has no model of its own. Left unset, those background calls fall through
  * to the best-available model, which can load a heavy reasoning model for a
  * throwaway task. Setting a default here closes that trap; each built-in agent
@@ -80,9 +80,15 @@ function SetDefaultModelDialog({
   onSaved: () => void;
 }) {
   const appName = useAppName();
-  const { data: availableKeys = [] } = useAvailableLlmProviderApiKeys({
+  const { data: fetchedKeys = [] } = useAvailableLlmProviderApiKeys({
     enabled: open,
   });
+  // The default model answers chats, so a key whose provider cannot chat
+  // (embeddings-only, decisions-only) is never a candidate.
+  const availableKeys = useMemo(
+    () => fetchedKeys.filter((key) => providerSupportsChat(key.provider)),
+    [fetchedKeys],
+  );
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);

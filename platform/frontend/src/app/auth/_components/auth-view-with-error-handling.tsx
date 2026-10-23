@@ -522,7 +522,10 @@ const FAILED_ATTEMPTS_BEFORE_RESET_HINT = 3;
 function SignInView({ callbackURL }: { callbackURL?: string }) {
   const signIn = useSignInWithEmailMutation();
   const [failedAttempts, setFailedAttempts] = useState(0);
-  const docsUrl = getFrontendDocsUrl(DocsPage.PlatformResetUserPassword);
+  const docsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformResetUserPassword,
+    "reset-a-password-from-the-cli",
+  );
   const signInForm = useForm<SignInFormValues>({
     resolver: zodResolver(SignInFormSchema),
     defaultValues: {

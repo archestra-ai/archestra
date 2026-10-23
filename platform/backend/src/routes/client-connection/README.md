@@ -1,7 +1,9 @@
 # Browser-approved client setup
 
-The public `/connect.md` instructions let an existing coding agent bootstrap a
-connection without installing a skill first. `/llms.txt` links to those instructions.
+The Connect page's terminal command runs a public installer that connects a coding
+agent after the user approves it in the browser. The public `/connect.md` points
+agents to the Connect page, and gives agents without an installer
+(`?client=generic`) their own setup steps. `/llms.txt` links to it.
 The frontend root document also links to `/llms.txt` with `rel="describedby"`.
 
 ## Protocol
@@ -34,7 +36,7 @@ The frontend root document also links to `/llms.txt` with `rel="describedby"`.
 This is an application-specific approval protocol, not an OAuth device-grant
 implementation. The configured MCP client still performs native OAuth separately.
 The installer never receives the browser's login cookie or an OAuth access token.
-Cursor's existing model and marketplace setup remains manual.
+Cursor's model settings are written to its settings database (`state.vscdb`) by the setup script, pointing at the Model Router with a multi-provider virtual key. Its marketplace setup remains manual.
 
 ## Claude Desktop
 
@@ -46,8 +48,8 @@ continues running when the approved installer restarts Desktop.
 This requires an allowed host-terminal tool. Computer use cannot be assumed
 to type commands into a terminal. Cowork's execution
 sandbox cannot configure the host app. Desktop Code can also deny localhost
-network access. `/connect.md` directs agents to use ordinary permission flows
-or provide the manual Connect command when host access is unavailable.
+network access. The Connect page offers Claude Desktop a downloaded installer,
+with a terminal option for Desktops already on a third-party profile.
 Do not infer the host OS from Cowork's sandbox or report sandbox edits as success.
 
 ## State and failure behavior
@@ -87,7 +89,7 @@ HTTPS is required except on loopback addresses for local development.
 From `platform/`:
 
 ```sh
-pnpm --dir backend exec vitest run src/routes/client-connection/decision.client-connection.route.test.ts src/services/client-connection-installer.test.ts
+pnpm --dir backend exec vitest run src/routes/client-connection/decision.client-connection.route.test.ts src/services/agent-connection-setup/bootstrap/client-connection-installer.unit.test.ts
 pnpm --dir frontend exec vitest run src/app/connection/client-connection-approval.test.tsx src/app/connection/connect-command-panel.test.tsx
 ```
 

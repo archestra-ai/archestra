@@ -1,7 +1,14 @@
 "use client";
 
 import JSZip from "jszip";
-import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -13,11 +20,22 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
-import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops/chatops-config.query";
+import {
+  useMsTeamsChatOpsConfig,
+  useUpdateChatOpsConfigInQuickstart,
+} from "@/lib/chatops/chatops-config.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  buildChannelFilesRequest,
+  parseSharePointSites,
+} from "@/lib/ms-teams/channel-files-request";
 import { buildTeamsManifest } from "@/lib/ms-teams/teams-manifest";
 
 interface MsTeamsSetupDialogProps {
@@ -35,6 +53,7 @@ export function MsTeamsSetupDialog({
   const { data: chatOpsProviders } = useChatOpsStatus();
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const creds = msTeams?.credentials;
+  const { data: msTeamsConfig } = useMsTeamsChatOpsConfig(open);
 
   const [saving, setSaving] = useState(false);
 
@@ -42,6 +61,12 @@ export function MsTeamsSetupDialog({
   const [sharedAppId, setSharedAppId] = useState("");
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
+  // null until the person flips it, so reopening shows the saved setting.
+  const [groupChatFileSignIn, setGroupChatFileSignIn] = useState<
+    boolean | null
+  >(null);
+  const groupChatFileSignInValue =
+    groupChatFileSignIn ?? msTeamsConfig?.groupChatFileSignIn ?? false;
 
   // The status endpoint exposes the real App ID (it's not a secret) — prefill
   // it on reconfigure so it also flows into the manifest step. Secret and
@@ -63,6 +88,7 @@ export function MsTeamsSetupDialog({
       setSharedAppId("");
       setSharedAppSecret("");
       setSharedTenantId("");
+      setGroupChatFileSignIn(null);
     }
   };
 
@@ -83,6 +109,19 @@ export function MsTeamsSetupDialog({
             onAppIdChange={setSharedAppId}
             onAppSecretChange={setSharedAppSecret}
             onTenantIdChange={setSharedTenantId}
+          />
+        );
+      }
+      if (step.component === "read-files") {
+        return (
+          <StepReadFiles
+            key={step.title}
+            stepNumber={index + 1}
+            appId={sharedAppId || savedAppId}
+            appName={configuredAppName}
+            redirectUri={msTeamsConfig?.signInRedirectUri ?? ""}
+            groupChatEnabled={groupChatFileSignInValue}
+            onGroupChatEnabledChange={setGroupChatFileSignIn}
           />
         );
       }
@@ -121,6 +160,9 @@ export function MsTeamsSetupDialog({
     configuredAppName,
     creds?.appSecret,
     creds?.tenantId,
+    savedAppId,
+    msTeamsConfig?.signInRedirectUri,
+    groupChatFileSignInValue,
   ]);
 
   const lastStepAction = {
@@ -130,18 +172,15 @@ export function MsTeamsSetupDialog({
     onClick: async () => {
       setSaving(true);
       try {
-        const body: Record<string, unknown> = { enabled: true };
+        const body: Parameters<typeof mutation.mutateAsync>[0] = {
+          enabled: true,
+        };
         if (sharedAppId) body.appId = sharedAppId;
         if (sharedAppSecret) body.appSecret = sharedAppSecret;
         if (sharedTenantId) body.tenantId = sharedTenantId;
-        const updateResult = await mutation.mutateAsync(
-          body as {
-            enabled?: boolean;
-            appId?: string;
-            appSecret?: string;
-            tenantId?: string;
-          },
-        );
+        if (groupChatFileSignIn !== null)
+          body.groupChatFileSignIn = groupChatFileSignIn;
+        const updateResult = await mutation.mutateAsync(body);
         if (updateResult?.success) {
           handleOpenChange(false);
         }
@@ -231,6 +270,10 @@ function buildSteps(appName: string) {
           MS Teams
         </>,
       ],
+    },
+    {
+      title: "Read Files (Optional)",
+      component: "read-files" as const,
     },
     {
       title: "Create App Manifest",
@@ -644,6 +687,224 @@ function StepManifest({
         </pre>
       </div>
     </div>
+  );
+}
+
+/**
+ * Optional: let the bot read files shared outside direct messages. Channel
+ * files live in each team's SharePoint site: the bot's app needs Graph
+ * `Sites.Selected` plus a read grant per site, a Microsoft 365 admin task, so
+ * that tab builds a request to hand over. Group-chat files live in each
+ * sender's OneDrive: the bot asks that person to sign in once (delegated
+ * `Files.Read`), which needs a redirect URI and the permission on the app.
+ */
+function StepReadFiles({
+  stepNumber,
+  appId,
+  appName,
+  redirectUri,
+  groupChatEnabled,
+  onGroupChatEnabledChange,
+}: {
+  stepNumber: number;
+  appId: string;
+  appName: string;
+  redirectUri: string;
+  groupChatEnabled: boolean;
+  onGroupChatEnabledChange: (enabled: boolean) => void;
+}) {
+  const [tab, setTab] = useState<ReadFilesTab>("channels");
+  const [sitesInput, setSitesInput] = useState("");
+  const [copied, setCopied] = useState(false);
+  const sites = parseSharePointSites(sitesInput);
+  const request = buildChannelFilesRequest({
+    appId: appId.trim() || "<Microsoft App ID>",
+    botName: `${appName} Teams bot`,
+    sites,
+  });
+
+  const handleCopy = async () => {
+    await copyToClipboard(request);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as ReadFilesTab)}
+      className="grid flex-1 gap-4"
+      style={{ gridTemplateColumns: "1fr 1fr" }}
+    >
+      <StepCard stepNumber={stepNumber} title="Read Files (Optional)">
+        <p className="text-sm text-muted-foreground">
+          Files in direct messages already work. Channels and group chats each
+          need one admin step.
+        </p>
+
+        <TabsList className="w-full">
+          <TabsTrigger value="channels">
+            <span>Channels</span>
+            {sites.length > 0 && (
+              <span className="rounded-full bg-muted-foreground/15 px-1.5 text-xs tabular-nums">
+                {sites.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="group-chats">
+            <span>Group chats</span>
+            {groupChatEnabled && (
+              <span
+                role="img"
+                aria-label="On"
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+              />
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="channels" className="mt-0 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Teams keeps channel files in each team's SharePoint site, which the
+            bot can't open by default. Your admin grants it read access to just
+            the sites you list.
+          </p>
+          <ol className="space-y-3">
+            <NumberedItem n={1}>
+              Paste each team's SharePoint site, one per line. In a channel:{" "}
+              <strong>Files</strong> → <strong>Open in SharePoint</strong>.
+              <Textarea
+                aria-label="Team SharePoint sites"
+                value={sitesInput}
+                onChange={(e) => setSitesInput(e.target.value)}
+                placeholder={
+                  "https://contoso.sharepoint.com/sites/Engineering\nhttps://contoso.sharepoint.com/sites/Support"
+                }
+                className="mt-1.5 min-h-16 font-mono text-xs"
+                rows={3}
+              />
+            </NumberedItem>
+            <NumberedItem n={2}>
+              Send the request to your Microsoft 365 admin.
+              <span className="mt-1.5 flex items-center gap-3">
+                <Button type="button" size="sm" onClick={handleCopy}>
+                  {copied ? (
+                    <Check className="mr-1.5 h-4 w-4" />
+                  ) : (
+                    <Copy className="mr-1.5 h-4 w-4" />
+                  )}
+                  <span>{copied ? "Copied" : "Copy request for IT"}</span>
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Read-only, listed sites only.
+                </span>
+              </span>
+            </NumberedItem>
+          </ol>
+        </TabsContent>
+
+        <TabsContent value="group-chats" className="mt-0 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Teams keeps group-chat files in the sender's own OneDrive. Rather
+            than grant the bot every OneDrive in your organization, each person
+            signs in once, and the bot reads only the files they share with it.
+          </p>
+          <ol className="space-y-3">
+            <NumberedItem n={1}>
+              In your bot's app registration, add a <strong>Web</strong>{" "}
+              redirect URI:
+              <span className="mt-1 flex items-center gap-1">
+                <code className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  {redirectUri}
+                </code>
+                <span className="shrink-0">
+                  <CopyButton text={redirectUri} />
+                </span>
+              </span>
+            </NumberedItem>
+            <NumberedItem n={2}>
+              Add Microsoft Graph delegated permissions{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                Files.Read
+              </code>{" "}
+              and{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                offline_access
+              </code>
+              .
+            </NumberedItem>
+            <NumberedItem n={3}>
+              <span className="flex items-center gap-3">
+                <Switch
+                  id="ms-teams-group-chat-file-sign-in"
+                  checked={groupChatEnabled}
+                  onCheckedChange={onGroupChatEnabledChange}
+                />
+                <Label htmlFor="ms-teams-group-chat-file-sign-in">
+                  Ask people to sign in for group-chat files
+                </Label>
+              </span>
+            </NumberedItem>
+          </ol>
+        </TabsContent>
+      </StepCard>
+
+      {tab === "channels" ? (
+        <div key="channels" className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">
+            What your admin does in Microsoft Entra
+          </span>
+          <video
+            src="/ms-teams/sites-selected.mp4"
+            controls
+            muted
+            autoPlay
+            loop
+            playsInline
+            className="w-full rounded-md"
+          />
+        </div>
+      ) : (
+        <div key="group-chats" className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">
+            What each person sees once, in Teams
+          </span>
+          <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground">
+              {appName} Teams bot
+            </span>
+            <span className="text-sm">
+              Sign in so I can read <strong>report.pdf</strong>
+            </span>
+            <Button type="button" size="sm" className="self-start" disabled>
+              Sign in with Microsoft
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Typing <code>/sign-out</code> to the bot removes it.
+          </span>
+        </div>
+      )}
+    </Tabs>
+  );
+}
+
+type ReadFilesTab = "channels" | "group-chats";
+
+function NumberedItem({
+  n,
+  children,
+}: {
+  n: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-3 text-sm leading-relaxed">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+        {n}
+      </span>
+      <span className="min-w-0 flex-1 pt-0.5">{children}</span>
+    </li>
   );
 }
 

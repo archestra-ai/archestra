@@ -23,6 +23,8 @@ export const ScopedResourceSchema = z.enum([
   "externalAgent",
   // An OAuth client registration. Its tokens never consult these grants: they
   // decide who can see and manage the registration, not what it reaches.
+  "oauthClient",
+  // Retained only for decoding old policies during the startup conversion.
   "mcpOauthClient",
   "llmOauthClient",
   // Deploying into an environment is `use` on that environment.
@@ -32,11 +34,10 @@ export const ScopedResourceSchema = z.enum([
   // to manage, so it is scoped by id like the rest rather than being
   // organization-wide.
   "serviceAccount",
-  // Authority over a whole class of thing, with no object to sit on. These
-  // replace the `admin` role actions that let someone read rows they did not
-  // create. They are granted at `*` and nowhere else, so they appear on the
-  // organization Permissions screen and never on an object's own tab.
-  "scheduledTask",
+  // A saved credential: a secret, a GitHub App, or a GitHub user credential.
+  // Like a service account the organization owns it; who may see, connect,
+  // change or delete one is a grant on it, or at \`*\` for every credential.
+  "credential",
   // Retained only to decode historical stored policies during migration.
   "log",
   "auditLog",
@@ -46,12 +47,12 @@ export const ScopedResourceSchema = z.enum([
 export const ManagedResourceSchema = ScopedResourceSchema.exclude([
   "log",
   "auditLog",
+  "mcpOauthClient",
+  "llmOauthClient",
 ]);
 
 /** Resources with no individual object policy. Logs use role actions instead. */
-export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
-  "scheduledTask",
-]);
+export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>();
 
 export const ResourcePermissionActionSchema = z.enum([
   "read",
@@ -72,6 +73,23 @@ export const ResourcePermissionScopeSchema = z.union([
   z.string().uuid(),
 ]);
 
+/**
+ * Plain-function forms of {@link ManagedResourceSchema} and
+ * {@link ResourcePermissionScopeSchema}. Loops over every policy a caller
+ * holds use them, because a schema parse per row is slow. The scope pattern
+ * is the RFC 9562 form that `z.string().uuid()` accepts, plus the nil and
+ * max ids.
+ */
+export function isManagedResource(
+  value: string,
+): value is z.infer<typeof ManagedResourceSchema> {
+  return MANAGED_RESOURCES.has(value);
+}
+
+export function isResourcePermissionScope(value: string): boolean {
+  return value === "*" || RESOURCE_PERMISSION_SCOPE_UUID.test(value);
+}
+
 export const PermissionSubjectSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), id: z.string().min(1) }),
   z.object({ type: z.literal("team"), id: z.string().min(1) }),
@@ -86,6 +104,34 @@ export const ResourcePermissionGrantSchema = z.object({
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
+
+/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
+export const scopedResourceNouns: Record<ScopedResource, string> = {
+  conversation: "chat session",
+  agentRun: "runtime session",
+  agent: "agent",
+  skill: "skill",
+  app: "app",
+  llmModel: "model",
+  mcpGateway: "MCP gateway",
+  mcpRegistry: "MCP registry entry",
+  project: "project",
+  plugin: "plugin",
+  knowledgeBase: "knowledge base",
+  knowledgeConnector: "connector",
+  knowledgeFile: "file",
+  llmVirtualKey: "virtual key",
+  llmProviderApiKey: "provider key",
+  externalAgent: "external agent",
+  oauthClient: "OAuth client",
+  mcpOauthClient: "OAuth client",
+  llmOauthClient: "OAuth client",
+  environment: "environment",
+  log: "log",
+  auditLog: "audit log entry",
+  serviceAccount: "service account",
+  credential: "credential",
+};
 export type ResourcePermissionAction = z.infer<
   typeof ResourcePermissionActionSchema
 >;
@@ -97,12 +143,79 @@ export type ResourcePermissionGrant = z.infer<
   typeof ResourcePermissionGrantSchema
 >;
 
+/**
+ * Who a new credential reaches when its creator names nobody: everyone in the
+ * organization can see it and connect or bind its value. Remove the grant on
+ * a credential to keep it to the people named instead.
+ */
+export const DEFAULT_CREDENTIAL_GRANTS: ResourcePermissionGrant[] = [
+  { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+];
+
+/**
+ * `internal_code` of a permissions save refused because afterwards nobody
+ * could manage the objects the policy covers.
+ */
+export const PERMISSIONS_LOCKOUT_CODE = "permissions_lockout";
+
+/**
+ * `internal_code` of a role or team assignment refused because it would share
+ * objects the caller cannot share. The error's `details` follow
+ * {@link RoleAssignmentBlockedDetailsSchema}.
+ */
+export const ROLE_ASSIGNMENT_BLOCKED_CODE = "role_assignment_blocked";
+
+export const RoleAssignmentBlockedDetailsSchema = z.object({
+  subjectType: z.enum(["role", "team"]),
+  /** The first objects that blocked it; `total` counts all of them. */
+  items: z.array(
+    z.object({
+      resource: ManagedResourceSchema,
+      scope: ResourcePermissionScopeSchema,
+      /** Null for an organization-wide (`*`) policy. */
+      name: z.string().nullable(),
+      /** The actions on this object the caller would need but lacks. */
+      missing: z.array(ResourcePermissionActionSchema),
+    }),
+  ),
+  total: z.number().int(),
+});
+
+export type RoleAssignmentBlockedDetails = z.infer<
+  typeof RoleAssignmentBlockedDetailsSchema
+>;
+
 export type ScopedPermission = {
   organizationId: string;
   resource: ScopedResource;
   scope: ResourcePermissionScope;
   action: ResourcePermissionAction;
 };
+
+/**
+ * The audience an object's own grants give it, the client twin of the
+ * backend's `audienceIs` / `sharedAudience`: only grants that include `read`
+ * count; one to the organization or a role is `org`, then one to a team is
+ * `team`, and anything else — the owner alone, named people, service
+ * accounts — is `personal`. `ownerId` is accepted for symmetry with the
+ * server, which reads it only to tell the owner from other named people; both
+ * are `personal`, so it never changes the result.
+ */
+export function grantsAudience(
+  grants: readonly ResourcePermissionGrant[],
+  _ownerId?: string | null,
+): "personal" | "team" | "org" {
+  const readers = grants.filter((grant) => grant.actions.includes("read"));
+  if (
+    readers.some(
+      (grant) =>
+        grant.subject.type === "organization" || grant.subject.type === "role",
+    )
+  )
+    return "org";
+  if (readers.some((grant) => grant.subject.type === "team")) return "team";
+  return "personal";
+}
 
 /** Check the whole tuple: independent action/scope unions escalate access. */
 export function hasScopedPermission(params: {
@@ -115,6 +228,32 @@ export function hasScopedPermission(params: {
       grant.resource === params.required.resource &&
       grant.action === params.required.action &&
       (grant.scope === "*" || grant.scope === params.required.scope),
+  );
+}
+
+/**
+ * Drops each single-object grant that a `*` grant for the same organization,
+ * resource and action already covers, so {@link hasScopedPermission} answers
+ * every check the same. An admin's list is mostly such rows: every object they
+ * created carries its own grant next to their organization-wide one.
+ *
+ * Sharing one chat is the exception: a `*` grant on conversations is project
+ * oversight and never manages a single chat's sharing, so those rows stay.
+ */
+export function withoutWildcardCoveredGrants<T extends ScopedPermission>(
+  grants: readonly T[],
+): T[] {
+  const key = (grant: ScopedPermission) =>
+    `${grant.organizationId}:${grant.resource}:${grant.action}`;
+  const wildcards = new Set(
+    grants.filter((grant) => grant.scope === "*").map(key),
+  );
+  return grants.filter(
+    (grant) =>
+      grant.scope === "*" ||
+      (grant.resource === "conversation" &&
+        grant.action === "manage-permissions") ||
+      !wildcards.has(key(grant)),
   );
 }
 
@@ -136,9 +275,9 @@ export function canDelegateScopedPermissions(params: {
 }
 
 export const resourcePermissionPresets = {
-  view: { label: "Can view", actions: ["read"] },
+  view: { label: "Can read", actions: ["read"] },
   use: { label: "Can use", actions: ["read", "use"] },
-  edit: { label: "Can edit", actions: ["read", "use", "update"] },
+  edit: { label: "Can update", actions: ["read", "use", "update"] },
   manage: {
     label: "Full access",
     actions: ["read", "use", "update", "delete", "manage-permissions"],
@@ -178,10 +317,14 @@ export function resourcePermissionPresetsFor(
   // Nothing is done "with" an OAuth client registration: its tokens are
   // checked against the client's own configuration, never against a grant.
   // So there is no `use` to offer, only seeing, editing, and the rest.
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     return {
       view: resourcePermissionPresets.view,
-      edit: { label: "Can edit", actions: ["read", "update"] },
+      edit: { label: "Can update", actions: ["read", "update"] },
       manage: {
         label: "Full access",
         actions: ["read", "update", "delete", "manage-permissions"],
@@ -243,3 +386,10 @@ export function isResourcePermissionPreset(
     actions.every((action) => preset.includes(action))
   );
 }
+
+const MANAGED_RESOURCES: ReadonlySet<string> = new Set(
+  ManagedResourceSchema.options,
+);
+
+const RESOURCE_PERMISSION_SCOPE_UUID =
+  /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;

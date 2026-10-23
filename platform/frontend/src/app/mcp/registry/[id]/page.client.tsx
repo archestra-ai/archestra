@@ -1,7 +1,12 @@
 "use client";
 
-import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
+  E2eTestId,
+  grantsAudience,
+  isPlaywrightCatalogItem,
+} from "@archestra/shared";
+import {
+  Cable,
   Copy,
   MessageSquare,
   MoreHorizontal,
@@ -20,23 +25,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { createdByFact } from "@/components/created-by-cell";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import {
-  type MaybeOverviewFact,
-  type OverviewFact,
-  OverviewSummary,
-} from "@/components/overview-summary";
+import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
-import { ResourcePermissions } from "@/components/resource-permissions";
 import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,18 +56,17 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSavedBrowserLogins } from "@/lib/browser-storage-state.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
-import {
-  useInternalMcpCatalog,
-  useRefreshInternalMcpCatalogImage,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useRefreshInternalMcpCatalogImage } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import {
   type McpDeploymentFeedState,
-  useAutoModeAgents,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
@@ -81,6 +78,8 @@ import {
   useDefaultEnvironment,
   useOrganization,
 } from "@/lib/organization.query";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
+import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import { cn } from "@/lib/utils/tailwind";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
@@ -91,14 +90,20 @@ import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
   type DeploymentStatusSummary,
+  getDeploymentLabel,
   getDeploymentStatusChipLabel,
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
+import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
-import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import { isMcpServerInstalledForViewer } from "../_parts/mcp-registry-visibility";
+import {
+  MCP_ACCESS_SECTION_ID,
+  McpServerAccessSection,
+} from "../_parts/mcp-server-access-section";
 import {
   getMcpServerActionModel,
   mcpServerAction,
@@ -106,16 +111,26 @@ import {
 } from "../_parts/mcp-server-actions-model";
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
+import {
+  McpServerConnectionPanel,
+  type McpServerSpec,
+} from "../_parts/mcp-server-connection-panel";
+import {
+  McpServerConsole,
+  type McpServerConsoleTab,
+} from "../_parts/mcp-server-console";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
-import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
+import { McpServerToolsSection } from "../_parts/mcp-server-tools-section";
+import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
+import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
+  | "logins"
   | "usage"
-  | "permissions"
   | "credentials"
   | "logs"
   | "inspector"
@@ -125,7 +140,7 @@ type DetailTab =
 const DIAGNOSTIC_PANELS: Array<{
   id: Exclude<DetailTab, "overview">;
   title: string;
-  logsTab?: McpLogsTab;
+  logsTab?: McpServerConsoleTab;
   localOnly: boolean;
 }> = [
   { id: "logs", title: "Logs", logsTab: "logs", localOnly: true },
@@ -139,9 +154,9 @@ const DIAGNOSTIC_PANELS: Array<{
   { id: "yaml", title: "K8s YAML", localOnly: true },
 ];
 
-// The Logs/Inspector/Shell tabs share one mounted <McpLogsContent>; this maps
-// the page-level tab id to that component's internal tab.
-const LOGS_TAB_BY_ID: Record<string, McpLogsTab> = {
+// The Logs/Inspector/Shell tabs share one mounted <McpServerConsole>; this
+// maps the page-level tab id to that component's tab.
+const LOGS_TAB_BY_ID: Record<string, McpServerConsoleTab> = {
   logs: "logs",
   inspector: "inspector",
   shell: "debug",
@@ -151,8 +166,12 @@ const MCP_CONNECTIONS_SECTION_ID = "connections";
 
 export function McpCatalogItemPage({ id }: { id: string }) {
   const router = useRouter();
-  const { data: catalogItems, isPending } = useInternalMcpCatalog({});
-  const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
+  // The one item this page shows, by id, with its list figures (tool count,
+  // the caller's actions) — not the whole registry.
+  const { data: itemById, isPending } = useInternalMcpCatalogItem(id);
+  // An app's backing entry is never listed in the registry; its id opens
+  // nothing here, as it did when the page looked the item up in the list.
+  const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
 
   // Deleting this server invalidates the catalog list, and the refetch lands
   // long before the client-side navigation back to the registry has resolved
@@ -223,13 +242,9 @@ function CatalogItemDetails({
   onDeleted: () => void;
 }) {
   const router = useRouter();
-  const ownership = useResourceOwnershipTransfer({
-    kind: "catalog",
-    resource: item,
-    onTransferred: () => router.push("/mcp/registry"),
-  });
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const appName = useAppName();
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const pendingHrefRef = useRef<string | null>(null);
   useBeforeUnloadWhileDirty(permissionsDirty);
@@ -278,8 +293,22 @@ function CatalogItemDetails({
   const { data: userCanViewDeploymentYaml } = useMcpDeploymentPermission(
     item.id,
   );
+  // Signing someone else out of the browser is member management: admins only
+  const { data: userCanManageMembers } = useHasPermissions({
+    member: ["update"],
+  });
+  const showSavedLogins = isPlaywright && !!userCanManageMembers;
+  const { data: savedLogins } = useSavedBrowserLogins({
+    enabled: showSavedLogins,
+  });
 
-  const { data: allMcpServers } = useMcpServers();
+  // This catalog's installs only, with their agents (the usage count and
+  // tab). Narrowed in SQL: the agent lookup covers these installs alone.
+  const { data: catalogMcpServers, isPending: isServersPending } =
+    useMcpServers({
+      catalogId: item.id,
+      includeAssignedAgents: true,
+    });
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
     useMcpDeploymentStatuses();
   const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
@@ -303,8 +332,9 @@ function CatalogItemDetails({
           defaultEnvironmentName: defaultEnvironment.name,
         });
 
-  const allServersForCatalog = (allMcpServers ?? []).filter(
-    (s) => s.catalogId === item.id,
+  const allServersForCatalog = useMemo(
+    () => (catalogMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [catalogMcpServers, item.id],
   );
 
   // Aggregate installations for the logs/inspector dropdown — local installs
@@ -340,11 +370,21 @@ function CatalogItemDetails({
       })
     : allInstalls;
 
+  // The same permission the backend requires for a shared installation.
+  // Without it (a member) the page shows only what is the viewer's own and
+  // what they can act on; everyone else keeps the full detail.
+  const { data: canManageInstallations } = useHasPermissions({
+    mcpServerInstallation: ["update"],
+  });
+  const isMemberView = !canManageInstallations;
   const diagnosticPanels = DIAGNOSTIC_PANELS.filter(
     (panel) =>
       (variant === "local" || !panel.localOnly) &&
       !(isPlaywright && panel.id === "yaml") &&
-      (panel.id !== "yaml" || userCanViewDeploymentYaml),
+      (panel.id !== "yaml" || userCanViewDeploymentYaml) &&
+      // A shell runs commands inside the server's container in the cluster;
+      // the backend refuses it to a member as well.
+      (panel.id !== "shell" || !isMemberView),
   );
   // Runtime diagnostics read an installation. YAML edits the catalog template
   // and must also be reachable before the first installation.
@@ -354,14 +394,31 @@ function CatalogItemDetails({
   // Remote servers manage credentials; local servers manage hosted
   // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin" && !isPlaywright;
+  const connectionsLayout = useConnectionsLayout({
+    item,
+    servers: allServersForCatalog,
+    isServersPending,
+    enabled: showConnectionsTab,
+  });
+  // A member sees Access only if they can change it; to them the list is
+  // detail they can do nothing with. The same query the section's layout
+  // reads, so this adds no request.
+  const { data: sharingPolicy } = useResourcePermissions(
+    "mcpRegistry",
+    item.id,
+    showConnectionsTab,
+  );
+  const canManagePermissions =
+    sharingPolicy?.effectiveActions.includes("manage-permissions") ?? false;
+  const showAccessSection =
+    showConnectionsTab && (!isMemberView || canManagePermissions);
 
   // Overview and Credentials/Installations share the unified main page. Only
   // secondary operational views remain in the tab strip.
   const tabIds: DetailTab[] = [
-    "usage",
-    ...(variant !== "builtin" && !isPlaywright
-      ? (["permissions"] as const)
-      : []),
+    ...(showSavedLogins ? (["logins"] as const) : []),
+    // A member's usage would list only their own agents.
+    ...(isMemberView ? [] : (["usage"] as const)),
     ...diagnosticTabs.map((panel) => panel.id),
   ];
 
@@ -396,8 +453,15 @@ function CatalogItemDetails({
 
   const [logsServerId, setLogsServerId] = useState<string | null>(serverParam);
 
-  // The server's key configuration, as one always-visible row.
-  const overviewFacts = useMcpServerOverviewFacts(item);
+  // The server's key configuration, as one always-visible strip.
+  const spec = useMcpServerSpec({
+    item,
+    appName,
+    environmentName:
+      variant === "builtin"
+        ? null
+        : (environmentLabel ?? defaultEnvironment.name),
+  });
 
   const tabHref = (tab: DetailTab) =>
     buildDetailTabHref({
@@ -406,12 +470,34 @@ function CatalogItemDetails({
       searchParams: new URLSearchParams(searchParams.toString()),
     });
 
-  const connectionsCount = allServersForCatalog.length;
-  const { data: autoModeAgents } = useAutoModeAgents();
-  const agentUsageCount = deriveAgentUsage({
-    serversForCatalog: allServersForCatalog,
-    autoModeAgents,
-  }).total;
+  // A member's view lists only their own installation, and a person has at
+  // most one personal installation per server: the heading names one, and a
+  // count could only read 0 or 1, so it shows none.
+  const connectionsCount = isMemberView
+    ? undefined
+    : allServersForCatalog.length;
+  const connectionsTitle =
+    variant !== "local"
+      ? "Credentials"
+      : isMemberView
+        ? "Installation"
+        : "Installations";
+  const assignedUsage = useMemo(
+    () =>
+      deriveAgentUsage({
+        serversForCatalog: allServersForCatalog,
+        autoModeAgents: undefined,
+      }),
+    [allServersForCatalog],
+  );
+  const { data: usageSummary } = useMcpUsageSummary({
+    catalogId: item.id,
+    assignedAgents: assignedUsage.assigned,
+    enabled: !isMemberView,
+    previews: false,
+  });
+  const agentUsageCount =
+    usageSummary?.pagination.total ?? assignedUsage.assigned.length;
 
   const tabs: {
     label: React.ReactNode;
@@ -429,12 +515,14 @@ function CatalogItemDetails({
       href: tabHref("overview"),
       selected: effectiveTab === "overview",
     },
-    ...(tabIds.includes("permissions")
+    ...(tabIds.includes("logins")
       ? [
           {
-            label: "Permissions",
-            href: tabHref("permissions"),
-            selected: effectiveTab === "permissions",
+            label: (
+              <TabLabel title="Saved logins" count={savedLogins?.length ?? 0} />
+            ),
+            href: tabHref("logins"),
+            selected: effectiveTab === "logins",
           },
         ]
       : []),
@@ -445,11 +533,15 @@ function CatalogItemDetails({
         href: tabHref(panel.id),
         selected: effectiveTab === panel.id,
       })),
-    {
-      label: <TabLabel title="Usage" count={agentUsageCount} />,
-      href: tabHref("usage"),
-      selected: effectiveTab === "usage",
-    },
+    ...(tabIds.includes("usage")
+      ? [
+          {
+            label: <TabLabel title="Usage" count={agentUsageCount} />,
+            href: tabHref("usage"),
+            selected: effectiveTab === "usage",
+          },
+        ]
+      : []),
     ...diagnosticTabs
       .filter((panel) => panel.id === "yaml")
       .map((panel) => ({
@@ -478,10 +570,12 @@ function CatalogItemDetails({
   // same flow and visibility gate as the registry card. The gate reads
   // `item.toolCount` (not the fetched `tools` list) to match the card exactly.
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
   const showChatButton = shouldShowMcpCardChatButton({
     toolsCount: item.toolCount ?? 0,
     isBuiltin: variant === "builtin",
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   });
 
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -490,12 +584,18 @@ function CatalogItemDetails({
   const canRestartPods =
     canModify && variant === "local" && deploymentServerIds.length > 0;
 
+  // Credentials and Permissions were tabs once; their links now land on the
+  // matching Overview section.
   useEffect(() => {
-    if (tabParam !== "credentials" || !showConnectionsTab) return;
-    document
-      .getElementById(MCP_CONNECTIONS_SECTION_ID)
-      ?.scrollIntoView?.({ block: "start" });
-  }, [showConnectionsTab, tabParam]);
+    const sectionId =
+      tabParam === "credentials" && showConnectionsTab
+        ? MCP_CONNECTIONS_SECTION_ID
+        : tabParam === "permissions" && showAccessSection
+          ? MCP_ACCESS_SECTION_ID
+          : null;
+    if (!sectionId) return;
+    document.getElementById(sectionId)?.scrollIntoView?.({ block: "start" });
+  }, [showAccessSection, showConnectionsTab, tabParam]);
 
   return (
     <PageLayout
@@ -509,7 +609,8 @@ function CatalogItemDetails({
             variant={variant}
             deploymentSummary={deploymentSummary}
             deploymentFeedState={deploymentFeedState}
-            connectionsCount={connectionsCount}
+            isInstalledForViewer={isInstalledForViewer}
+            singleInstallation={isMemberView}
           />
         )
       }
@@ -519,8 +620,23 @@ function CatalogItemDetails({
         effectiveTab === "yaml" ? undefined : (item.description ?? "")
       }
       tabs={tabs}
+      // Saved logins adds a tab only the Playwright server has; on a phone
+      // the diagnostics fold into "More" so the row does not crowd.
+      mobileVisibleCount={tabIds.includes("logins") ? 2 : undefined}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
+          {/* Once installed, the next step is a client: the Connect page puts
+              these tools into Claude Code, Cursor and the rest. */}
+          {showChatButton && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/connection">
+                <Cable className="h-4 w-4" />
+                {/* On a phone only the icons show, so the actions still fit
+                    beside the title; the names stay for screen readers. */}
+                <span className="max-sm:sr-only">Connect</span>
+              </Link>
+            </Button>
+          )}
           {showChatButton && (
             <Button
               variant="outline"
@@ -529,14 +645,16 @@ function CatalogItemDetails({
               onClick={() => startChat(item)}
             >
               <MessageSquare className="h-4 w-4" />
-              {isChatCreating ? "Creating..." : "Chat"}
+              <span className="max-sm:sr-only">
+                {isChatCreating ? "Creating..." : "Chat"}
+              </span>
             </Button>
           )}
           {canModify && effectiveTab !== "yaml" && (
             <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
-                {editAction.label}
+                <span className="max-sm:sr-only">{editAction.label}</span>
               </Link>
             </Button>
           )}
@@ -575,7 +693,6 @@ function CatalogItemDetails({
                     {cloneAction.label}
                   </DropdownMenuItem>
                 )}
-                {ownership.menuItem}
                 {canModify && !isPlaywright && (
                   <>
                     <DropdownMenuSeparator />
@@ -591,65 +708,29 @@ function CatalogItemDetails({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {ownership.dialog}
         </div>
       }
     >
       <div className="space-y-4">
-        {effectiveTab === "permissions" && (
-          <ResourcePermissions
-            layout="settings"
-            resource="mcpRegistry"
-            scope={item.id}
-            onDirtyChange={setPermissionsDirty}
-          />
-        )}
+        {effectiveTab === "logins" && <PlaywrightSavedLoginsTab />}
         {effectiveTab === "usage" && (
-          <McpServerUsageTab
+          <McpServerPagedUsageTab
+            catalogId={item.id}
             serversForCatalog={allServersForCatalog}
-            autoModeAgents={autoModeAgents}
           />
         )}
 
         {effectiveTab === "overview" && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <CardIssues
               item={item}
               issues={itemIssues}
               servers={allServersForCatalog}
             />
 
-            <SettingsSectionGroup>
-              {item.serverType !== "builtin" && (
-                <OverviewSummary
-                  facts={[
-                    {
-                      label: "Hosting",
-                      value:
-                        item.serverType === "local"
-                          ? "Managed deployment"
-                          : "External server",
-                    },
-                    {
-                      label: "Environment",
-                      value: environmentLabel ?? defaultEnvironment.name,
-                    },
-                    ...(item.providesUi
-                      ? [{ label: "Interactive tools", value: "Available" }]
-                      : []),
-                    ...(item.providesSkills
-                      ? [
-                          {
-                            label: "Skills",
-                            value: `${item.skillCount ?? 0} available`,
-                          },
-                        ]
-                      : []),
-                    ...overviewFacts,
-                  ]}
-                />
-              )}
+            <McpServerConnectionPanel spec={spec} />
 
+            <SettingsSectionGroup>
               {showConnectionsTab && (
                 <SettingsSection
                   id={MCP_CONNECTIONS_SECTION_ID}
@@ -661,18 +742,19 @@ function CatalogItemDetails({
                       }
                     >
                       <TabLabel
-                        title={
-                          variant === "local" ? "Installations" : "Credentials"
-                        }
+                        title={connectionsTitle}
                         count={connectionsCount}
                       />
                     </span>
                   }
+                  // A member's list of only their own needs no explanation.
                   description={
-                    variant === "local"
-                      ? getLocalInstallationCopy(item.multitenant === true)
-                          .section
-                      : "The credentials this server is used with."
+                    isMemberView
+                      ? undefined
+                      : variant === "local"
+                        ? getLocalInstallationCopy(item.multitenant === true)
+                            .section
+                        : "The credentials this server is used with."
                   }
                 >
                   {reauthServer ? (
@@ -683,29 +765,46 @@ function CatalogItemDetails({
                       onCompleted={closeReauthentication}
                     />
                   ) : null}
-                  <ManageUsersContent
-                    isActive
-                    onClose={() => {}}
-                    label={item.name}
-                    catalogId={item.id}
-                    onAddPersonalConnection={() =>
-                      install.addPersonalConnection(item)
-                    }
-                    onAddSharedConnection={(teamId) =>
-                      install.addSharedConnection(item, teamId)
-                    }
-                    onAddOrgConnection={() => install.addOrgConnection(item)}
-                    deploymentStatuses={deploymentStatuses}
-                    hideHeader
-                    bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
-                    isInstalling={install.installingItemId === item.id}
-                    onReauthenticate={selectReauthServer}
-                    onOpenPodLogs={
-                      variant === "local" ? openPodLogs : undefined
-                    }
-                  />
+                  {connectionsLayout === "pending" ? (
+                    // Held until the sharing level is known, so a personal
+                    // server does not flash the full tables first.
+                    <Skeleton className="h-14 w-full rounded-lg" />
+                  ) : (
+                    <ManageUsersContent
+                      personalOnly={connectionsLayout === "personal"}
+                      isActive
+                      onClose={() => {}}
+                      label={item.name}
+                      catalogId={item.id}
+                      onAddPersonalConnection={() =>
+                        install.addPersonalConnection(item)
+                      }
+                      onAddSharedConnection={(teamId) =>
+                        install.addSharedConnection(item, teamId)
+                      }
+                      onAddOrgConnection={() => install.addOrgConnection(item)}
+                      deploymentStatuses={deploymentStatuses}
+                      hideHeader
+                      bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
+                      isInstalling={install.installingItemId === item.id}
+                      onReauthenticate={selectReauthServer}
+                      onOpenPodLogs={
+                        variant === "local" ? openPodLogs : undefined
+                      }
+                    />
+                  )}
                 </SettingsSection>
               )}
+              {showAccessSection && (
+                <McpServerAccessSection
+                  catalogId={item.id}
+                  memberView={isMemberView}
+                  onDirtyChange={setPermissionsDirty}
+                />
+              )}
+              {/* Playwright has no installations or access to manage, so its
+                  tools fill the page instead. */}
+              {isPlaywright && <McpServerToolsSection catalogId={item.id} />}
             </SettingsSectionGroup>
           </div>
         )}
@@ -713,20 +812,13 @@ function CatalogItemDetails({
         {/* Diagnostics — Logs / Inspector / Shell share one mounted panel so the
           pod selector and live stream survive switching between them. */}
         {isLogsTab && (
-          <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-4">
-              <McpLogsContent
-                isActive={isLogsTab}
-                serverName={item.name}
-                installs={debugInstalls}
-                deploymentStatuses={deploymentStatuses}
-                hideHeader
-                hideTabBar
-                controlledTab={LOGS_TAB_BY_ID[effectiveTab]}
-                initialServerId={logsServerId}
-              />
-            </div>
-          </Card>
+          <McpServerConsole
+            tab={LOGS_TAB_BY_ID[effectiveTab]}
+            serverName={item.name}
+            installs={debugInstalls}
+            deploymentStatuses={deploymentStatuses}
+            initialServerId={logsServerId}
+          />
         )}
 
         {effectiveTab === "yaml" && (
@@ -757,8 +849,53 @@ function CatalogItemDetails({
 }
 
 /**
- * The server's key configuration, as one row: how it is reached and run, and
- * how it authenticates. Derived through the wizard's own
+ * How the Installations/Credentials section lays out. A server whose own
+ * grants share it with nobody is "personal": only the viewer's own
+ * installation matters, shown as one row. Anyone else's installation keeps
+ * the full tables, so an admin never loses sight of other people's — and so
+ * does a sharing level that is unknown or unreadable. "pending" holds the
+ * section while the answer loads.
+ */
+function useConnectionsLayout({
+  item,
+  servers,
+  isServersPending,
+  enabled,
+}: {
+  item: CatalogItem;
+  servers: InstalledServer[];
+  isServersPending: boolean;
+  enabled: boolean;
+}): "pending" | "personal" | "full" {
+  const { data: session, isPending: isSessionPending } = useSession();
+  const sharing = useResourcePermissions("mcpRegistry", item.id, enabled);
+  const currentUserId = session?.user?.id;
+  const hasOthersInstallations =
+    !!currentUserId &&
+    servers.some(
+      (server) =>
+        !isPersonalInstallation(server) || server.ownerId !== currentUserId,
+    );
+
+  if (!enabled || hasOthersInstallations) return "full";
+  if (isServersPending || isSessionPending || sharing.isPending) {
+    return "pending";
+  }
+  if (sharing.data && grantsAudience(sharing.data.grants) === "personal") {
+    return "personal";
+  }
+  return "full";
+}
+
+// `scope` is nullable on rows created before it existed; a team id implies a
+// team installation, and everything else without a scope is personal.
+function isPersonalInstallation(server: InstalledServer): boolean {
+  return (server.scope ?? (server.teamId ? "team" : "personal")) === "personal";
+}
+
+/**
+ * The server's key configuration: how it is reached and run, and how it
+ * authenticates. The auth method is derived through the wizard's own
  * `transformCatalogItemToFormValues`, so the page cannot drift from the form
  * that wrote the values.
  *
@@ -766,71 +903,70 @@ function CatalogItemDetails({
  * arguments — is behind the same link the header's Edit uses, rather than
  * mirrored here a second time read-only.
  */
-function useMcpServerOverviewFacts(item: CatalogItem): MaybeOverviewFact[] {
+function useMcpServerSpec({
+  item,
+  appName,
+  environmentName,
+}: {
+  item: CatalogItem;
+  appName: string;
+  environmentName: string | null;
+}): McpServerSpec {
   const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
   const _hibernation = useIdleHibernationFact(item);
   // Only the derivation comes from the form shape (the auth method): its
   // `localConfig` is textarea-shaped — `arguments` is one newline-joined
   // string there — so everything factual reads the API's own object.
   const local = item.localConfig;
-  const facts: MaybeOverviewFact[] = [];
+  const serverType =
+    item.serverType === "builtin"
+      ? "builtin"
+      : item.serverType === "remote"
+        ? "remote"
+        : "local";
+  // The runtime treats an unset transport as stdio, so only an explicit
+  // streamable-http shows the HTTP label.
+  const isHttp = local?.transportType === "streamable-http";
 
-  if (item.serverType === "remote" && item.serverUrl) {
-    facts.push({
-      label: "Server URL",
-      value: <CodeLine>{item.serverUrl}</CodeLine>,
-    });
-  }
-
-  if (item.serverType === "local") {
-    facts.push({
-      label: "Transport",
-      value:
-        local?.transportType === "stdio" ? (
-          <span>stdio</span>
-        ) : (
-          <span>
-            Streamable HTTP
-            {local?.httpPort || local?.httpPath ? (
-              <span className="text-muted-foreground">
-                {" "}
-                · {local?.httpPort ?? 8080}
-                {local?.httpPath ?? "/mcp"}
-              </span>
-            ) : null}
-          </span>
-        ),
-    });
-    facts.push({
-      label: "Deployment",
-      value: (
-        <span>
-          {values.multitenant
-            ? "Multi-tenant — one shared deployment"
-            : "Single-tenant — one per installation"}
-        </span>
-      ),
-    });
-    if (local?.dockerImage) {
-      facts.push({
-        label: "Image",
-        value: <CodeLine>{local.dockerImage}</CodeLine>,
-      });
-    }
-  }
-
-  facts.push({
-    label: "Authentication",
-    value: (
-      <span>
-        {AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none}
-      </span>
-    ),
-  });
-
-  facts.push(createdByFact(item.createdBy));
-
-  return facts;
+  return {
+    serverType,
+    hosting:
+      serverType === "builtin"
+        ? `Built into ${appName}`
+        : serverType === "local"
+          ? "Managed deployment"
+          : "External server",
+    environment: environmentName,
+    serverUrl:
+      serverType === "remote" ? (item.serverUrl ?? undefined) : undefined,
+    transport:
+      serverType === "local"
+        ? isHttp
+          ? "Streamable HTTP"
+          : "stdio"
+        : undefined,
+    transportDetail:
+      serverType === "local" && isHttp && (local?.httpPort || local?.httpPath)
+        ? `${local?.httpPort ?? 8080}${local?.httpPath ?? "/mcp"}`
+        : undefined,
+    deployment:
+      serverType === "local"
+        ? values.multitenant
+          ? { label: "Multi-tenant", detail: "One shared deployment" }
+          : { label: "Single-tenant", detail: "One per installation" }
+        : undefined,
+    dockerImage:
+      serverType === "local" ? (local?.dockerImage ?? undefined) : undefined,
+    command:
+      serverType === "local" && local?.command
+        ? [local.command, ...(local.arguments ?? [])]
+        : undefined,
+    auth: AUTH_METHOD_LABEL[values.authMethod],
+    createdBy: item.createdBy ?? null,
+    toolCount: item.toolCount ?? 0,
+    interactiveTools: !!item.providesUi,
+    skillCount: item.providesSkills ? (item.skillCount ?? 0) : undefined,
+  };
 }
 
 /**
@@ -844,7 +980,11 @@ function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
   const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
-  const { data: servers = [] } = useMcpServers();
+  // Only this item's installs, without agents: the fact reads their modes.
+  const { data: servers = [] } = useMcpServers({
+    includeAssignedAgents: false,
+    catalogId: item.id,
+  });
 
   if (
     item.serverType !== "local" ||
@@ -914,16 +1054,28 @@ function ServerStatus({
   variant,
   deploymentSummary,
   deploymentFeedState,
-  connectionsCount,
+  isInstalledForViewer,
+  singleInstallation,
 }: {
   variant: "builtin" | "local" | "remote";
   deploymentSummary: DeploymentStatusSummary | null;
   /** Whether pod statuses can arrive at all, and whether any have yet. */
   deploymentFeedState: McpDeploymentFeedState;
-  connectionsCount: number;
+  /** The registry card's rule, so this page and the card's Install agree. */
+  isInstalledForViewer: boolean;
+  /**
+   * The viewer sees only their own installation, so a ratio could only read
+   * 0/1 or 1/1: the state alone says it.
+   */
+  singleInstallation: boolean;
 }) {
   if (variant === "builtin") {
     return <Badge variant="secondary">Built-in</Badge>;
+  }
+  // Somebody else's connection (visible to an admin) does not install the
+  // server for the viewer, however its pod is doing.
+  if (!isInstalledForViewer) {
+    return <span className={typeRole({ role: "body" })}>Not installed</span>;
   }
   // A dot is a claim about a pod, so it is drawn only where a pod's state was
   // actually reported.
@@ -931,31 +1083,34 @@ function ServerStatus({
     return (
       <span className="inline-flex items-center gap-2">
         <DeploymentStatusDot state={deploymentSummary.overallState} />
-        <span className={typeRole({ role: "body" })}>
-          {getDeploymentStatusChipLabel({
-            summary: deploymentSummary,
-            format: "ratio-with-state",
-          })}
+        {/* On a phone the dot alone says it, leaving the title its room. */}
+        <span className={cn(typeRole({ role: "body" }), "max-sm:sr-only")}>
+          {singleInstallation
+            ? getDeploymentLabel(deploymentSummary.overallState)
+            : getDeploymentStatusChipLabel({
+                summary: deploymentSummary,
+                format: "ratio-with-state",
+              })}
         </span>
       </span>
     );
   }
-  if (connectionsCount > 0) {
-    // No summary means no deployment entry for any of this server's ids. The
-    // feed's own state decides what that means, never the absence of an entry
-    // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, so "Installed" is its whole runtime story.
-    return (
-      <span className={typeRole({ role: "body" })}>
-        {variant === "remote" || deploymentFeedState === "disabled"
-          ? "Installed"
-          : deploymentFeedState === "loading"
-            ? "Checking…"
-            : "Status unavailable"}
-      </span>
-    );
+  // No summary means no deployment entry for any of this server's ids. The
+  // feed's own state decides what that means, never the absence of an entry
+  // — the same rule the list's `installedStatusLabel` follows. A remote
+  // server has no pod at all, and the page of an installed server needs no
+  // label that says so, so it shows nothing.
+  if (variant === "remote" || deploymentFeedState === "disabled") {
+    return null;
   }
-  return <span className={typeRole({ role: "body" })}>Not installed</span>;
+  return (
+    <span className={typeRole({ role: "body" })}>
+      {deploymentFeedState === "loading" ||
+      deploymentFeedState === "reconnecting"
+        ? "Checking…"
+        : "Status unavailable"}
+    </span>
+  );
 }
 
 /** Keep operational failures visible even while Overview is collapsed. */
@@ -985,18 +1140,11 @@ function _SubHeading({ label }: { label: string }) {
   return <p className={typeRole({ role: "label" })}>{label}</p>;
 }
 
-function CodeLine({ children }: { children: ReactNode }) {
-  return (
-    <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
-      {children}
-    </code>
-  );
-}
-
 /** Authentication method names from the wizard, without its helper prose. */
-const AUTH_METHOD_LABEL: Record<string, string> = {
+const AUTH_METHOD_LABEL: Record<McpCatalogFormValues["authMethod"], string> = {
   none: "None",
-  bearer: "Token header",
+  bearer: "Access token header (legacy)",
+  auth_header: "Token header",
   oauth: "OAuth 2.1",
   oauth_client_credentials: "OAuth client credentials",
   enterprise_managed: "Identity provider exchange",
@@ -1041,18 +1189,22 @@ function ItemPageSkeleton() {
 }
 
 /**
- * Tab label with an optional count. The e2e hook belongs on the tab's `testId`
+ * Tab label with an optional count, abbreviated past a thousand (130K) so a
+ * busy server does not stretch the tab row; the exact figure is on hover. The e2e hook belongs on the tab's `testId`
  * rather than here — PageLayout renders each label in its desktop row, its
  * mobile row and possibly an overflow popover, so a test id on the label
  * resolves to several elements at once.
  */
-function TabLabel({ title, count }: { title: string; count: number }) {
+function TabLabel({ title, count }: { title: string; count?: number }) {
   return (
     <span className="flex items-center gap-1">
       <span>{title}</span>
-      {count > 0 && (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {count}
+      {count !== undefined && count > 0 && (
+        <span
+          className="text-xs text-muted-foreground tabular-nums"
+          title={count >= 1000 ? count.toLocaleString() : undefined}
+        >
+          {formatCompactNumber(count)}
         </span>
       )}
     </span>

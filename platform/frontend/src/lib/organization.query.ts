@@ -5,16 +5,23 @@ import {
   type archestraApiTypes,
   PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClientContext,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { toast } from "sonner";
-import { useSession } from "@/lib/auth/auth.query";
+import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import { isDocumentSeedFresh } from "@/lib/shell-deferral";
 import { environmentKeys } from "./environment.query";
+import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import {
   getApiErrorInternalCode,
   handleApiError,
@@ -37,7 +44,9 @@ export const appearanceKeys = {
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
     queryKey: appearanceKeys.public(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.appearance) return seed.appearance;
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -63,8 +72,12 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
-  memberSignupStatus: () =>
-    [...organizationKeys.all, "member-signup-status"] as const,
+  memberSignupStatus: (userIds?: string[]) =>
+    [
+      ...organizationKeys.all,
+      "member-signup-status",
+      ...(userIds ? [{ userIds }] : []),
+    ] as const,
 };
 
 /**
@@ -85,11 +98,15 @@ export function useInvitation(invitationId: string) {
 }
 
 /**
- * Use active organization from authClient hook
- * Note: This uses the authClient hook directly as it's already optimized
+ * The caller's active organization id, from the session: no full-organization
+ * fetch, which also loads the members.
  */
-export function useActiveOrganization() {
-  return authClient.useActiveOrganization();
+export function useActiveOrganizationId() {
+  const { data: session, isPending } = useSession();
+  return {
+    data: session?.session?.activeOrganizationId ?? undefined,
+    isPending,
+  };
 }
 
 /**
@@ -98,9 +115,9 @@ export function useActiveOrganization() {
  * session is unresolved or names no active organization.
  *
  * The endpoint resolves the organization from the session itself, so this
- * gates on the session's activeOrganizationId rather than on
- * useActiveOrganization() — waiting for the full-organization fetch would put
- * an extra request in front of the role for no reason.
+ * gates on the session's activeOrganizationId rather than on a
+ * full-organization fetch, which would put an extra request in front of the
+ * role for no reason.
  */
 export function useActiveMemberRole() {
   const { data: session, isPending: isSessionPending } = useSession();
@@ -294,6 +311,9 @@ export function useCreateInvitation(organizationId: string | undefined) {
       });
 
       if (response.error) {
+        // A refused role is explained in the dialog, not a toast.
+        const blocked = parseRoleAssignmentBlocked(response.error);
+        if (blocked) throw blocked;
         toast.error(
           response.error.message || "Failed to generate invitation link",
         );
@@ -318,11 +338,17 @@ export function useOrganization(
   options: { fresh?: boolean } = {},
 ) {
   const session = useSession();
+  // Read through the context, not useQueryClient(): that hook throws without
+  // a provider, and only the seed check below needs the client, so the hook
+  // keeps working where no provider is mounted.
+  const client = useContext(QueryClientContext);
   const { fresh = false } = options;
 
   return useQuery({
     queryKey: organizationKeys.details(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.organization) return seed.organization;
       const { data, error } = await archestraApiSdk.getOrganization();
       throwOnApiError(error, { toastOnError: false });
       return data;
@@ -334,9 +360,13 @@ export function useOrganization(
     // Org settings (theme, app name, etc.) change rarely and all mutations
     // imperatively setQueryData() this key, so a long stale time keeps
     // re-mounts cheap. Connect opts into a fresh read because these settings
-    // authorize which setup artifacts may be generated.
+    // authorize which setup artifacts may be generated. A value the server
+    // read for this document (a seeded approval page) is that fresh read.
     staleTime: fresh ? 0 : 5 * 60 * 1000,
-    refetchOnMount: fresh ? "always" : undefined,
+    refetchOnMount: fresh
+      ? (query) =>
+          client && isDocumentSeedFresh(client, query) ? false : "always"
+      : undefined,
     refetchOnWindowFocus: fresh || undefined,
     // Restored on refresh: the shell reads the app name and theme from here,
     // so without it a reload repaints the branding a beat after the layout.
@@ -679,6 +709,9 @@ export function useUpdateAuthSettings(
         await archestraApiSdk.updateAuthSettings({ body: data });
 
       if (error) {
+        // A refused default role is explained on the page, not a toast.
+        const blocked = parseRoleAssignmentBlocked(error);
+        if (blocked) throw blocked;
         toast.error(onErrorMessage);
         return null;
       }
@@ -861,22 +894,6 @@ export function useTestOcrConnection() {
   });
 }
 
-/**
- * Users the current caller can see: the full organization roster with
- * member:read, otherwise only the caller's teammates (may be empty).
- */
-export function useOrganizationMembers(enabled = true) {
-  return useQuery({
-    queryKey: [...organizationKeys.all, "members"],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getOrganizationMembers();
-      throwOnApiError(error);
-      return data ?? [];
-    },
-    enabled,
-  });
-}
-
 export type PendingSignupMember = {
   userId: string;
   name: string | null;
@@ -888,13 +905,21 @@ export type PendingSignupMember = {
 };
 
 /**
- * Get member signup status — returns members that haven't completed signup
+ * Which members have not completed signup. Pass the user IDs on screen so
+ * the request stays the size of one page instead of every pending member.
  */
-export function useMemberSignupStatus() {
+export function useMemberSignupStatus(options?: {
+  userIds?: string[];
+  enabled?: boolean;
+}) {
+  const userIds = options?.userIds ? [...options.userIds].sort() : undefined;
   return useQuery({
-    queryKey: organizationKeys.memberSignupStatus(),
+    queryKey: organizationKeys.memberSignupStatus(userIds),
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus(
+        userIds ? { query: { userIds } } : undefined,
+      );
       throwOnApiError(error, { toastOnError: false });
       return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
     },

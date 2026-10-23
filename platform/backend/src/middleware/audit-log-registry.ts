@@ -4,8 +4,10 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import DevFeedbackConfigModel from "@/models/dev-feedback-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -22,6 +24,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
@@ -39,13 +42,10 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
-import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -238,13 +238,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
         clientId: String(routeParams?.clientId),
       }),
   },
-  // Sole audited child of the denylisted /api/connection-setups prefix.
-  // Installer tickets stay unaudited; this window grant records no secrets.
-  "/api/connection-setups/prompt-session": {
-    resourceType: "connectionPromptSession",
-    action: "connectionPromptSession.created",
-    resourceIdSource: "organizationContext",
-  },
   "/api/hooks": {
     resourceType: "hook",
     fetchById: (id, organizationId) =>
@@ -382,6 +375,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   // falls to unknown.created with a null resourceType) and the single-target
   // DELETE inherits agent.updated instead of deriving agent.deleted.
   "/api/agents/:agentId/delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/agents/:agentId/delegations/:targetAgentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
     action: "agent.updated",
@@ -560,30 +559,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
 
-  // Tool Invocation Policies
-  "/api/autonomy-policies/tool-invocation": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/autonomy-policies/tool-invocation/:id": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-
-  // Trusted Data Policies
-  "/api/trusted-data-policies": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/trusted-data-policies/:id": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-
   // Knowledge Bases
   "/api/knowledge-bases": {
     resourceType: "knowledgeBase",
@@ -716,6 +691,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
+  // GitLab access tokens, stored as organization credentials
+  "/api/git-credentials/gitlab": {
+    resourceType: "credential",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   // Stored GitHub personal access tokens
   "/api/github-pats": {
     resourceType: "credential",
@@ -848,11 +829,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
-  // A POST walk-up is discarded, so the accept action registers its own path.
-  "/api/openappa/github-sync/accept-held": {
-    resourceType: "organization",
-    action: "organization.updated",
-    resourceIdSource: "organizationContext",
+  // Creating and installing the App only touch GitHub and a short-lived setup
+  // record; the stored credential is audited when installation completes.
+  "/api/openappa/github-app/manifest": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/manifest/complete": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/install": {
+    resourceType: "credential",
+    action: "credential.created",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",
@@ -960,6 +951,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
   },
 
+  // The latest notification is one organization settings slot, including inactive drafts.
+  "/api/site-notification": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: async (_id, orgId) =>
+      (await SiteNotificationModel.getLatest(orgId)) ?? null,
+  },
+
   // Organization (settings, onboarding, knowledge admin actions, members)
   "/api/organization": {
     resourceType: "organization",
@@ -991,13 +991,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       EnvironmentResourceDefaultModel.findByIdForAudit(id, orgId),
   },
-  // Team / org tokens — rotation is semantically distinct from a generic update.
-  "/api/tokens/:tokenId/rotate": {
-    resourceType: "teamToken",
-    action: "teamToken.rotated",
-    resourceIdParam: "tokenId",
-    fetchById: (id, orgId) => TeamTokenModel.findByIdForAudit(id, orgId),
-  },
   "/api/user-tokens/me/rotate": {
     resourceType: "userToken",
     action: "userToken.rotated",
@@ -1022,21 +1015,45 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
   },
 
+  // Saved browser logins (admin "Sign out" on the Playwright server page)
+  "/api/browser-storage-states/:userId": {
+    resourceType: "browserStorageState",
+    resourceIdParam: "userId",
+    fetchById: (id, orgId) =>
+      BrowserStorageStateModel.findByIdForAudit(id, orgId),
+  },
+
+  "/api/oauth-clients": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id/rotate-secret": {
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-oauth-clients": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/llm-oauth-clients/:id": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
 
   "/api/mcp-oauth-clients": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1068,12 +1085,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "name",
     fetchById: (name, orgId) =>
       InternalMcpCatalogModel.findByNameForAudit(name, orgId),
-  },
-
-  // Tools (delete discovered tools)
-  "/api/tools/:id": {
-    resourceType: "tool",
-    fetchById: (id, orgId) => ToolModel.findByIdForAudit(id, orgId),
   },
 
   // ChatOps
@@ -1111,7 +1122,64 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  // Which chatops Slack bot and channel the UI feedback overlay posts to.
+  "/api/dev-feedback/setup": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: async (_id, _orgId) =>
+      (await DevFeedbackConfigModel.get()) ?? {},
+  },
   "/api/chatops/config/slack": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/convert-app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/apps/migrate": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/app-config-token": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/agents/:agentId/app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/router/app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  // Joining a channel claims its binding for the bot's agent when unowned.
+  "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
+  // Joining records the channel's binding, with no agent when it is new.
+  "/api/chatops/config/slack/router/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
+  "/api/chatops/config/slack/agents/:agentId": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
     fetchById: (_id, _orgId) =>
@@ -1132,23 +1200,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
 
-  // Autonomy policy bulk defaults (org-scoped tool footprint)
-  "/api/tool-invocation/bulk-default": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-  "/api/trusted-data-policies/bulk-default": {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-
-  // Agent tool bulk / auto-policy (assignment counts + default policy maps)
+  // Agent tool bulk assignment (assignment counts)
   "/api/agents/tools/bulk-assign": {
     resourceType: "agentTool",
     action: "agentTool.bulk_assigned",
@@ -1165,22 +1217,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentTool",
     action: "agentTool.bulk_updated",
     resourceIdSource: "organizationContext",
-  },
-  "/api/agent-tools/auto-configure-policies": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.auto_configured",
-    resourceIdSource: "organizationContext",
-    fetchById: async (orgId, _orgId) => {
-      const [tip, tdp] = await Promise.all([
-        ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-        TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-      ]);
-      return { ...tip, ...tdp };
-    },
   },
 
   // Enterprise: team vault folder (same snapshot model as teams)
@@ -1356,13 +1392,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   // OAuth client secret rotation — security-critical.
   "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "llmOauthClient",
-    action: "llmOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "mcpOauthClient",
-    action: "mcpOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1438,10 +1474,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
-  "/api/llm-oauth-clients/bulk": {
-    resourceType: "llmOauthClient",
+  "/api/oauth-clients/bulk": {
+    resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "llmOauthClient.bulk_deleted" },
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
+  },
+  "/api/llm-oauth-clients/bulk": {
+    resourceType: "oauthClient",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
   },
   "/api/llm-models/bulk": {
     resourceType: "llmModel",

@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { AlertTriangle, AppWindow } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -52,13 +52,12 @@ type FormValues = {
 
 // The sidebar sections the fields are grouped into, mirroring the Team and
 // identity-provider dialogs' left-nav layout.
-type AppSettingsSection = "general" | "tools" | "access" | "permissions";
+type AppSettingsSection = "general" | "tools" | "access";
 
 const NAV_ITEMS: Array<{ id: AppSettingsSection; label: string }> = [
   { id: "general", label: "General" },
   { id: "tools", label: "Tools" },
   { id: "access", label: "Status" },
-  { id: "permissions", label: "Permissions" },
 ];
 
 // Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
@@ -69,9 +68,9 @@ const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // and the side panel both open that dialog). It folds the previously separate
 // rename dialog, manage-tools dialog, and publish popover into one staged form
 // committed by a single Save: identity (name/description), the bound environment
-// + assigned tools, with permission changes saved independently. It renders the shared
+// + assigned tools, and who can use it. It renders the shared
 // `TabbedDialogShell` — the same left-nav dialog as the identity-provider and
-// team dialogs — with the fields split across General/Tools/Status/Permissions sections and
+// team dialogs — with the fields split across General/Tools/Status sections and
 // a sticky Cancel/Save footer. Delete is intentionally NOT here — it's a
 // separate destructive action owned by each host.
 export function AppSettingsForm({
@@ -101,15 +100,18 @@ export function AppSettingsForm({
     useState<AppSettingsSection>("general");
 
   const [permissionsDirty, setPermissionsDirty] = useState(false);
-  const pendingSection = useRef<AppSettingsSection | null>(null);
+  // The permissions section keeps its edits in its own form. For an editor,
+  // this dialog's Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
   const permissionsGuard = useUnsavedChangesGuard({
     isDirty: permissionsDirty,
-    onOpenChange: (nextOpen) => {
-      const nextSection = pendingSection.current;
-      pendingSection.current = null;
-      if (!nextOpen && nextSection) setActiveSection(nextSection);
-      else onOpenChange(nextOpen);
-    },
+    onOpenChange,
   });
 
   const form = useForm<FormValues>({
@@ -243,10 +245,7 @@ export function AppSettingsForm({
       const flushed = labelsRef.current?.saveUnsavedLabel();
       if (flushed) setLabels(flushed);
     }
-    if (permissionsDirty && next !== activeSection) {
-      pendingSection.current = next;
-      permissionsGuard.requestClose();
-    } else setActiveSection(next);
+    setActiveSection(next);
   };
 
   const onSubmit = form.handleSubmit(
@@ -266,6 +265,7 @@ export function AppSettingsForm({
   );
 
   async function submitSettings(values: FormValues) {
+    await permissionsSave.current?.();
     // Enable/disable is a distinct lifecycle transition on the backend (its
     // own endpoint, authorized against the app's current scope), so a changed
     // selection commits via its own call rather than riding the PATCH body.
@@ -383,7 +383,7 @@ export function AppSettingsForm({
           <Button type="button" variant="outline" onClick={onBack}>
             {!isAccessPending && !canEdit ? "Close" : "Cancel"}
           </Button>
-          {!isAccessPending && canEdit && activeSection !== "permissions" ? (
+          {!isAccessPending && canEdit ? (
             <Button type="submit" disabled={saveDisabled}>
               {saving ? "Saving…" : "Save"}
             </Button>
@@ -392,7 +392,7 @@ export function AppSettingsForm({
       }
     >
       <div className="space-y-4">
-        {!isAccessPending && !canEdit && activeSection !== "permissions" ? (
+        {!isAccessPending && !canEdit ? (
           <Alert variant="info">
             <AlertTriangle />
             <AlertTitle>View-only settings</AlertTitle>
@@ -402,14 +402,6 @@ export function AppSettingsForm({
           </Alert>
         ) : null}
 
-        {activeSection === "permissions" ? (
-          <ResourcePermissions
-            resource="app"
-            scope={app.id}
-            embedded
-            onDirtyChange={setPermissionsDirty}
-          />
-        ) : null}
         {activeSection === "general" ? (
           <div className="space-y-4">
             <IdentityFields
@@ -537,16 +529,26 @@ export function AppSettingsForm({
                 </SelectContent>
               </Select>
             </div>
-
-            {canEdit && (
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
-            )}
           </div>
         ) : null}
+        {/* Kept mounted on every section, so Save commits its edits. Someone
+            who may manage access but not edit the app saves it on its own. */}
+        <div hidden={activeSection !== "general"}>
+          <ResourcePermissions
+            resource="app"
+            scope={app.id}
+            embedded
+            onDirtyChange={setPermissionsDirty}
+            registerSave={canEdit ? registerPermissionsSave : undefined}
+          />
+        </div>
+        {activeSection === "general" && canEdit && (
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
+        )}
 
         {activeSection === "tools" ? (
           <div className="space-y-4">
@@ -648,10 +650,7 @@ export function AppSettingsForm({
       </div>
       <UnsavedChangesDialog
         open={permissionsGuard.confirmOpen}
-        onKeepEditing={() => {
-          pendingSection.current = null;
-          permissionsGuard.keepEditing();
-        }}
+        onKeepEditing={permissionsGuard.keepEditing}
         onDiscard={permissionsGuard.discardChanges}
       />
     </TabbedDialogShell>

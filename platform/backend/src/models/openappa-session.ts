@@ -14,6 +14,7 @@ import {
   openappaActor,
   scopedSessionId,
 } from "@/openappa/actor";
+import { openPlainJson, openPlainText } from "@/openappa/plaintext-envelope";
 import { mintReceiptCode } from "@/openappa/session-token";
 import { ApiError } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -67,6 +68,31 @@ class OpenAppaSessionModel {
       )
       .limit(1);
     return row?.parentId ?? null;
+  }
+
+  /**
+   * The session row a runtime trajectory belongs to: a child's trajectory is
+   * its actor, a root session's trajectory is the root itself. Null when no
+   * row, or more than one, matches.
+   */
+  static async findByTrajectory(params: { root: string; trajectory: string }) {
+    const rows = await db
+      .select({
+        organizationId: table.organizationId,
+        sessionId: table.sessionId,
+        callerId: table.callerId,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.root, params.root),
+          params.trajectory === params.root
+            ? isNull(table.parentId)
+            : eq(table.actor, params.trajectory),
+        ),
+      )
+      .limit(2);
+    return rows.length === 1 ? rows[0] : null;
   }
 
   /** Returns a caller-scoped session record, or null before its first event. */
@@ -303,7 +329,10 @@ class OpenAppaSessionModel {
         ),
       );
     return new Map(
-      rows.map((row) => [row.operationId.slice("call:".length), row.decision]),
+      rows.map((row) => [
+        row.operationId.slice("call:".length),
+        openPlainJson(row.decision),
+      ]),
     );
   }
 
@@ -333,7 +362,7 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return row?.approvedOutput ?? null;
+    return openPlainText(row?.approvedOutput ?? null);
   }
 
   /**
@@ -366,7 +395,10 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return peerReadReceipt(row?.decision, row?.approvedOutput ?? null);
+    return peerReadReceipt(
+      openPlainJson(row?.decision),
+      openPlainText(row?.approvedOutput ?? null),
+    );
   }
 
   /**
@@ -434,6 +466,28 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The client session id that opened a root: the session at the top of the
+   * family, which sub-agents' trajectories share the root of.
+   */
+  static async rootClientSessionId(params: {
+    organizationId: string;
+    root: string;
+  }): Promise<string | null> {
+    const [row] = await db
+      .select({ sessionId: table.sessionId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.root, params.root),
+          isNull(table.parentId),
+        ),
+      )
+      .limit(1);
+    return row ? clientSessionId(row.sessionId) : null;
+  }
+
+  /**
    * Returns fork lineage for a client session ID.
    * If callerId is provided, queries only sessions for that caller.
    * When callerId is omitted, the client session ID must resolve to exactly one caller.
@@ -467,7 +521,7 @@ class OpenAppaSessionModel {
     if (!scoped && ownRows.length > 1) {
       throw new ApiError(
         409,
-        `Session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
+        `OpenAPPA session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
       );
     }
     const [own] = ownRows;

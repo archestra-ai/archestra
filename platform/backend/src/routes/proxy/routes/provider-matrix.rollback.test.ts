@@ -6,15 +6,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import Fastify, {
-  type FastifyInstance,
-  type FastifyPluginAsync,
-} from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import type OpenAI from "openai";
 import type {
   ChatCompletionCreateParamsNonStreaming,
@@ -22,13 +14,17 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import { vi } from "vitest";
 import appConfig from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   InteractionModel,
   LimitValidationService,
   ModelModel,
   ToolModel,
 } from "@/models";
+import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
 import { archestraAdapterFactory } from "../adapters/archestra";
@@ -187,10 +183,21 @@ const DEFAULT_USAGE: UsageSpec = {
 };
 
 function createFastifyApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+  return createFastifyInstance();
+}
+
+async function providerHeaders(
+  config: ProviderTestConfig,
+  agent: Agent,
+  ownerId: string,
+): Promise<Record<string, string>> {
+  return {
+    ...config.headers(),
+    "x-archestra-virtual-key": await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId,
+    }),
+  };
 }
 
 function createAsyncIterable<T>(items: T[]): AsyncIterable<T> {
@@ -2142,11 +2149,13 @@ describe("LLM proxy provider matrix", () => {
 
       test.skipIf(config.supportsDeclaredTools === false)(
         "persists declared tools from LLM proxy requests",
-        async ({ makeAgent }) => {
+        async ({ makeAgent, makeMember, makeUser }) => {
           const agent = await makeAgent({
             agentType: "llm_proxy",
             name: `${config.providerName} proxy`,
           });
+          const owner = await makeUser();
+          await makeMember(owner.id, agent.organizationId);
           await setupRoute(agent, {
             nonStreamingToolCall: {
               name: READ_FILE_TOOL.name,
@@ -2157,7 +2166,7 @@ describe("LLM proxy provider matrix", () => {
           const response = await app.inject({
             method: "POST",
             url: config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: config.requestBuilder.buildToolRequest({
               model: config.model,
               content: "Read a file",
@@ -2165,12 +2174,12 @@ describe("LLM proxy provider matrix", () => {
             }),
           });
 
-          expect(response.statusCode).toBe(200);
+          expect(response.statusCode, response.body).toBe(200);
 
           const secondResponse = await app.inject({
             method: "POST",
             url: config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: config.requestBuilder.buildToolRequest({
               model: config.model,
               content: "Read a file again",
@@ -2195,11 +2204,13 @@ describe("LLM proxy provider matrix", () => {
       // same `reasoning_content` field through its bespoke adapter.
       test.skipIf(config.family !== "openai" && config.family !== "zhipuai")(
         "round-trips reasoning_content for thinking-mode tool calls",
-        async ({ makeAgent }) => {
+        async ({ makeAgent, makeMember, makeUser }) => {
           const agent = await makeAgent({
             agentType: "llm_proxy",
             name: `${config.providerName} reasoning proxy`,
           });
+          const owner = await makeUser();
+          await makeMember(owner.id, agent.organizationId);
           const responseReasoning =
             "Considering the tool result before answering.";
           const harness = await setupRoute(agent, {
@@ -2211,7 +2222,7 @@ describe("LLM proxy provider matrix", () => {
           const response = await app.inject({
             method: "POST",
             url: config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: {
               model: config.model,
               messages: [
@@ -2265,11 +2276,13 @@ describe("LLM proxy provider matrix", () => {
       // reasoning_content.
       test.skipIf(config.family !== "minimax")(
         "translates reasoning_content to MiniMax reasoning_details and back",
-        async ({ makeAgent }) => {
+        async ({ makeAgent, makeMember, makeUser }) => {
           const agent = await makeAgent({
             agentType: "llm_proxy",
             name: `${config.providerName} reasoning proxy`,
           });
+          const owner = await makeUser();
+          await makeMember(owner.id, agent.organizationId);
           const responseReasoning =
             "Considering the tool result before answering.";
           const harness = await setupRoute(agent, {
@@ -2281,7 +2294,7 @@ describe("LLM proxy provider matrix", () => {
           const response = await app.inject({
             method: "POST",
             url: config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: {
               model: config.model,
               messages: [
@@ -2333,17 +2346,19 @@ describe("LLM proxy provider matrix", () => {
 
       test.skipIf(config.family !== "minimax")(
         "converts cumulative streamed reasoning_details into reasoning_content deltas",
-        async ({ makeAgent }) => {
+        async ({ makeAgent, makeMember, makeUser }) => {
           const agent = await makeAgent({
             name: `${config.providerName} reasoning stream`,
           });
+          const owner = await makeUser();
+          await makeMember(owner.id, agent.organizationId);
           const responseReasoning = "First I read the file, then I answer.";
           await setupRoute(agent, { reasoningContent: responseReasoning });
 
           const response = await app.inject({
             method: "POST",
             url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: {
               ...config.requestBuilder.buildTextRequest({
                 model: config.model,
@@ -2381,10 +2396,16 @@ describe("LLM proxy provider matrix", () => {
         },
       );
 
-      test("stores run IDs on interactions", async ({ makeAgent }) => {
+      test("stores run IDs on interactions", async ({
+        makeAgent,
+        makeMember,
+        makeUser,
+      }) => {
         const agent = await makeAgent({
           name: `${config.providerName} execution`,
         });
+        const owner = await makeUser();
+        await makeMember(owner.id, agent.organizationId);
         await ModelModel.upsert({
           externalId: `${config.provider}/${config.model}`,
           provider: config.provider,
@@ -2402,7 +2423,7 @@ describe("LLM proxy provider matrix", () => {
           method: "POST",
           url: config.endpoint(agent.id),
           headers: {
-            ...config.headers(),
+            ...(await providerHeaders(config, agent, owner.id)),
             "x-archestra-run-id": runId,
           },
           payload: config.requestBuilder.buildTextRequest({
@@ -2422,10 +2443,12 @@ describe("LLM proxy provider matrix", () => {
 
       test.skipIf(config.supportsStreamingToolCalls === false)(
         "streams tool calls through the proxy",
-        async ({ makeAgent }) => {
+        async ({ makeAgent, makeMember, makeUser }) => {
           const agent = await makeAgent({
             name: `${config.providerName} stream`,
           });
+          const owner = await makeUser();
+          await makeMember(owner.id, agent.organizationId);
           await setupRoute(agent, {
             streamingToolCall: {
               name: READ_FILE_TOOL.name,
@@ -2436,7 +2459,7 @@ describe("LLM proxy provider matrix", () => {
           const response = await app.inject({
             method: "POST",
             url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
-            headers: config.headers(),
+            headers: await providerHeaders(config, agent, owner.id),
             payload: config.requestBuilder.buildToolRequest({
               model: config.model,
               content: "Stream a tool call",
@@ -2457,15 +2480,19 @@ describe("LLM proxy provider matrix", () => {
 
       test("preserves structured tool results before provider execution", async ({
         makeAgent,
+        makeMember,
+        makeUser,
       }) => {
         const agent = await makeAgent({
           name: `${config.providerName} tool results`,
         });
+        const owner = await makeUser();
+        await makeMember(owner.id, agent.organizationId);
         const harness = await setupRoute(agent);
         const response = await app.inject({
           method: "POST",
           url: config.endpoint(agent.id),
-          headers: config.headers(),
+          headers: await providerHeaders(config, agent, owner.id),
           payload: config.requestBuilder.buildToolResultRequest({
             model: config.model,
           }),
@@ -2493,12 +2520,62 @@ describe("LLM proxy provider matrix", () => {
         expect(foundOriginalResult).toBe(true);
       });
 
+      test("enforces shared throughput storage before native inference", async ({
+        makeAgent,
+        makeMember,
+        makeUser,
+      }) => {
+        const agent = await makeAgent({ name: "Throughput test" });
+        const owner = await makeUser();
+        await makeMember(owner.id, agent.organizationId);
+        await LimitModel.create({
+          entityType: "organization",
+          entityId: agent.organizationId,
+          limitType: "tokens_per_minute",
+          limitValue: 1,
+        });
+        const admitted = await LlmThroughputModel.admit({
+          entities: [
+            { entityType: "organization", entityId: agent.organizationId },
+          ],
+          model: config.model,
+        });
+        if (!("reservation" in admitted) || !admitted.reservation)
+          throw new Error("Expected token accounting receipt");
+        await LlmThroughputModel.reconcile({
+          reservation: admitted.reservation,
+          tokens: 10,
+        });
+        await setupRoute(agent);
+        const response = await app.inject({
+          method: "POST",
+          url: config.endpoint(agent.id),
+          headers: await providerHeaders(config, agent, owner.id),
+          payload: config.requestBuilder.buildTextRequest({
+            model: config.model,
+            content: "Quota test",
+          }),
+        });
+        expect(response.statusCode).toBe(429);
+        expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);
+        expect(response.json()).toMatchObject({
+          error: {
+            code: "archestra_quota_exceeded",
+            quota: { oversized: false, retryAfter: expect.any(Number) },
+          },
+        });
+      });
+
       test("blocks requests when token cost limits are exceeded", async ({
         makeAgent,
+        makeMember,
+        makeUser,
       }) => {
         const agent = await makeAgent({
           name: `${config.providerName} limits`,
         });
+        const owner = await makeUser();
+        await makeMember(owner.id, agent.organizationId);
         vi.spyOn(
           LimitValidationService,
           "checkLimitsBeforeRequest",
@@ -2511,7 +2588,7 @@ describe("LLM proxy provider matrix", () => {
         const blockedResponse = await app.inject({
           method: "POST",
           url: config.endpoint(agent.id),
-          headers: config.headers(),
+          headers: await providerHeaders(config, agent, owner.id),
           payload: config.requestBuilder.buildTextRequest({
             model: config.model,
             content: "Will this get blocked?",

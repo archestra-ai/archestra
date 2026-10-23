@@ -3,6 +3,7 @@
 import { type AgentType, MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
@@ -22,7 +23,7 @@ import {
   CredentialSelect,
   OauthTokenRequest,
 } from "@/components/connect-rail";
-import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
+import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
@@ -34,14 +35,13 @@ import {
   MASKED_KEY,
   MaskedCodeExample,
 } from "@/components/virtual-key-connection-guide";
-import { useProfile, useProfiles } from "@/lib/agent.query";
+import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
-import {
-  useCreateMcpOauthClient,
-  useMcpOauthClients,
-} from "@/lib/mcp-oauth-clients.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useMcpOauthClients } from "@/lib/mcp-oauth-clients.query";
+import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
@@ -205,7 +205,6 @@ function GatewayCredentialSteps({
       detail: "Send it in the Authorization header as a bearer token.",
       children: (
         <GenericAuthRow
-          gatewayId={gateway.id}
           placeholder={SECRET_PLACEHOLDER_TOKEN}
           onTokenChange={onTokenChange}
         />
@@ -297,14 +296,14 @@ function useOauthClientStep(
   dialogs: React.ReactNode;
 } {
   const { data: canCreate } = useHasPermissions({
-    mcpOauthClient: ["create"],
+    oauthClient: ["create"],
   });
   const { data: clients = [] } = useMcpOauthClients({ enabled });
-  const { data: resources = [] } = useProfiles({
-    filters: { agentTypes: ["mcp_gateway", "agent"] },
-  });
-  const create = useCreateMcpOauthClient();
+  const create = useCreateOauthClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys({
+    enabled: createOpen,
+  });
   const [revealed, setRevealed] = useState<CreatedCredentials | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
 
@@ -348,20 +347,17 @@ function useOauthClientStep(
 
   const dialogs = (
     <>
-      <CreateOAuthClientDialog
+      <CreateManagedOAuthClientDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultClientType="mcp"
-        fixedClientType="mcp"
         defaultAllowedGatewayIds={[gateway.id]}
-        gateways={resources}
-        providerApiKeys={[]}
+        providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
-          if (values.kind !== "mcp") return;
-          const result = await create.mutateAsync(values.body);
+          const result = await create.mutateAsync(values);
           if (result) {
             setPickedId(result.id);
-            setRevealed({ ...result, oauthScope: MCP_GATEWAY_OAUTH_SCOPE });
+            setRevealed({ ...result, oauthScope: result.scopes.join(" ") });
             setCreateOpen(false);
           }
         }}
@@ -396,6 +392,7 @@ function useIdentityProviderStep(target: ConnectTarget): {
     target.id,
   );
 
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const idpId = target.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
   // The edit form only shows its IdP field when the org has identity
@@ -415,7 +412,7 @@ function useIdentityProviderStep(target: ConnectTarget): {
           {idpId ? "Change in gateway settings" : "Choose in gateway settings"}
         </Link>
       </Button>
-    ) : (
+    ) : !canSeeSettings ? null : (
       <Button size="sm" asChild>
         <Link href="/settings/identity-providers">
           Set up identity provider

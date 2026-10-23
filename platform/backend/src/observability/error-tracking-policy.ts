@@ -1,11 +1,13 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
   getDbResourceExhaustionErrorCode,
+  getNonDatabaseConnectionTarget,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { extractVaultErrorMessage } from "@/secrets-manager/utils";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import {
   collectErrorCodes,
   isConnectionErrno,
@@ -45,9 +47,19 @@ interface ErrorTrackingDecision {
 export function classifyErrorForTracking(
   error: unknown,
 ): ErrorTrackingDecision {
-  // A native HTTP fetch failure has a known upstream origin. Its socket errno
-  // can also occur on database connections, so classify it before DB matching.
-  if (isFetchConnectivityError(error)) return { report: false };
+  // Only errors observed on an aborted incoming HTTP request are cancellations.
+  // The same socket errno on a database connection must still be reported.
+  if (incomingRequestAbortTracker.isAbortedError(error)) {
+    return { report: false };
+  }
+  // A proxy relay preserves its cause for diagnostics. Its explicit upstream
+  // origin takes precedence over socket codes shared with database errors.
+  if (error instanceof ApiError && error.upstream) return { report: false };
+  // A native HTTP fetch failure, or a connection failure naming a host other
+  // than the database, has a known upstream origin. Its socket errno can also
+  // occur on database connections, so classify it before DB matching.
+  if (isFetchConnectivityError(error) || getNonDatabaseConnectionTarget(error))
+    return { report: false };
 
   // Availability incidents: report once, grouped by root cause.
   //

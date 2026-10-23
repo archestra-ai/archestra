@@ -31,7 +31,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { withInheritedRoleAuthorization } from "@/auth/role-composition";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
-import config from "@/config";
+import config, { resolveAllowedOrigins } from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -48,9 +48,11 @@ import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import { cleanupAfterMembershipRemoval } from "@/services/member-removal";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { ApiError } from "@/types";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -63,6 +65,8 @@ import { devAutoLoginPlugin } from "./dev-auto-login";
 import { ssoConfig, syncSsoRole, syncSsoTeams } from "./idp.ee";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 import { hashOauthClientSecret } from "./oauth-client-secret";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
 
 // SPDX-SnippetEnd
 
@@ -169,6 +173,11 @@ export const auth = betterAuth({
       // better-auth defaults this to "owner", which is not one of our
       // predefined roles and left creators with an empty permission map.
       creatorRole: ADMIN_ROLE_NAME,
+      // The member roster follows who belongs to an organization.
+      organizationHooks: {
+        afterAddMember: recomposeOrganizationOf,
+        afterAcceptInvitation: recomposeOrganizationOf,
+      },
       ac,
       dynamicAccessControl: {
         enabled: true,
@@ -397,6 +406,22 @@ export const auth = betterAuth({
 
   databaseHooks: {
     user: {
+      // The member roster maps GitHub accounts to each member's email. An
+      // update hook sees only the new values, so a change is an email no user
+      // holds yet; emails are unique.
+      update: {
+        before: async (data: { email?: unknown }) => {
+          if (
+            typeof data.email === "string" &&
+            !(await UserModel.findByEmail(data.email))
+          )
+            changingEmails.add(data.email);
+        },
+        after: async (user: { id: string; email: string }) => {
+          if (changingEmails.delete(user.email))
+            await recomposeOrganizationsOf(user.id);
+        },
+      },
       delete: {
         before: async (user: { id: string }) => {
           // The agents.author_id FK uses ON DELETE SET NULL so non-personal agents
@@ -458,6 +483,18 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to purge personal MCP credentials",
             );
           }
+          organizationsOfDeletedUser.set(
+            user.id,
+            await MemberModel.findOrganizationIdsByUserId(user.id),
+          );
+        },
+        // The deleted member leaves the member rosters of their organizations.
+        after: async (user: { id: string }) => {
+          const organizationIds = organizationsOfDeletedUser.get(user.id) ?? [];
+          organizationsOfDeletedUser.delete(user.id);
+          await openappaBatteriesService.recompileOrganizations(
+            organizationIds,
+          );
         },
       },
     },
@@ -574,7 +611,17 @@ export const auth = betterAuth({
           return session?.user.id;
         },
       });
-      if (adapter) return { context: { context: { ...ctx.context, adapter } } };
+      const internalAdapter = withSsoEmailReconciliation(ctx);
+      if (adapter || internalAdapter)
+        return {
+          context: {
+            context: {
+              ...ctx.context,
+              ...(adapter ? { adapter } : {}),
+              ...(internalAdapter ? { internalAdapter } : {}),
+            },
+          },
+        };
     }),
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
@@ -613,6 +660,15 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+/** When an SSO callback (OIDC or SAML) began, to tell the memberships it provisioned. */
+const ssoCallbackStartedAt = new WeakMap<Request, Date>();
+
+/** Organizations of users being deleted, recomposed once the deletion commits. */
+const organizationsOfDeletedUser = new Map<string, string[]>();
+
+/** Emails users are moving to, recomposed once the update commits. */
+const changingEmails = new Set<string>();
 
 /**
  * Same shape for `/organization/leave` — the self-service twin of
@@ -993,7 +1049,15 @@ async function assertCallerCanGrantMemberRole(
       subjects: [{ type: "role", id: targetRole.id }],
     });
     // SPDX-SnippetEnd
-  } catch {
+  } catch (error) {
+    // The refusal names the objects that blocked it; keep that for the UI.
+    if (error instanceof ApiError && error.details) {
+      throw new APIError("FORBIDDEN", {
+        message: error.message,
+        code: error.internalCode,
+        details: error.details,
+      });
+    }
     throw new APIError("FORBIDDEN", {
       message:
         "You cannot assign a role whose scoped permissions you cannot grant",
@@ -1060,7 +1124,11 @@ export type BetterAuth = typeof auth;
  * needs the same treatment during provider creation.
  */
 async function getTrustedOriginsForAuthRequest(request?: Request) {
-  const trustedOrigins = [...staticTrustedOrigins];
+  const trustedOrigins = resolveAllowedOrigins({
+    configuredOrigins: staticTrustedOrigins,
+    forwardedHost: request?.headers.get("x-forwarded-host"),
+    host: request ? new URL(request.url).host : undefined,
+  });
 
   if (!shouldTrustAllOriginsForIdentityProviderRegistration(request)) {
     return trustedOrigins;
@@ -1118,6 +1186,8 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
+  if (beforeRequest && isSsoCallbackPath(path))
+    ssoCallbackStartedAt.set(beforeRequest, new Date());
   if (
     (path === "/organization/update-member-role" ||
       path === "/organization/invite-member") &&
@@ -1555,10 +1625,11 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           expiresAt: invitation.expiresAt,
         };
 
-        // Delete placeholder user (cascades to member, invitation, user tokens)
-        await db
-          .delete(schema.usersTable)
-          .where(eq(schema.usersTable.id, existingUser.id));
+        // Delete placeholder user (cascades to member, invitation, user tokens).
+        // Through the model, not a raw delete: membership seeded the
+        // placeholder a personal MCP gateway, and `agents.author_id` is
+        // `set null`, so a raw delete would leave that gateway ownerless.
+        await UserModel.delete(existingUser.id);
 
         // Re-create invitation as "pending" for better-auth's normal sign-up flow
         await db.insert(schema.invitationsTable).values({
@@ -1607,6 +1678,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
+
+  // SSO provisioning may have made the user a member during this callback.
+  const ssoStartedAt = request && ssoCallbackStartedAt.get(request);
+  if (request) ssoCallbackStartedAt.delete(request);
+  if (ssoStartedAt && context?.newSession?.user)
+    await openappaBatteriesService.recompileOrganizations(
+      await MemberModel.findOrganizationIdsJoinedSince({
+        userId: context.newSession.user.id,
+        since: ssoStartedAt,
+      }),
+    );
 
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
@@ -1978,6 +2060,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
       await cleanupAfterMembershipRemoval(stash);
+      await openappaBatteriesService.recompileOrganizations([
+        stash.organizationId,
+      ]);
     }
   }
 
@@ -2034,6 +2119,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
       await cleanupAfterMembershipRemoval(stash);
+      await openappaBatteriesService.recompileOrganizations([
+        stash.organizationId,
+      ]);
     }
   }
 
@@ -2249,6 +2337,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
           );
           await InvitationModel.accept(session, user, pendingInvitation.id);
+          await openappaBatteriesService.recompileOrganizations([
+            pendingInvitation.organizationId,
+          ]);
           return;
         }
         logger.debug(
@@ -2340,6 +2431,26 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       // SPDX-SnippetEnd
     }
   }
+}
+
+function isSsoCallbackPath(path: string): boolean {
+  return ["/sso/callback/", "/sso/saml2/callback/", "/sso/saml2/sp/acs/"].some(
+    (prefix) => path.startsWith(prefix),
+  );
+}
+
+async function recomposeOrganizationsOf(userId: string): Promise<void> {
+  await openappaBatteriesService.recompileOrganizations(
+    await MemberModel.findOrganizationIdsByUserId(userId),
+  );
+}
+
+async function recomposeOrganizationOf(params: {
+  member: { organizationId: string };
+}): Promise<void> {
+  await openappaBatteriesService.recompileOrganizations([
+    params.member.organizationId,
+  ]);
 }
 
 // SPDX-SnippetBegin

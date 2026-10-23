@@ -1,3 +1,4 @@
+import { resourcePermissionPresetsFor } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
@@ -5,6 +6,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
@@ -38,6 +40,58 @@ describe("resource permission routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("a member who manages an agent cannot make it org-wide, while an admin can", async ({
+    makeAgent,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const admin = user;
+    const team = await makeTeam(organizationId, admin.id);
+    await makeTeamMember(team.id, admin.id);
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      access: "personal",
+    });
+    const url = `/api/resource-permissions/agent/${agent.id}`;
+    const own = {
+      subject: { type: "user", id: admin.id },
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    };
+    const everyone = {
+      subject: { type: "organization", id: "*" },
+      actions: ["read", "use"],
+    };
+    const put = async (grants: unknown[]) => {
+      const current = await app.inject({ method: "GET", url });
+      return app.inject({
+        method: "PUT",
+        url,
+        payload: { revision: current.json().revision, grants },
+      });
+    };
+    expect((await put([own])).statusCode).toBe(200);
+
+    await MemberModel.updateRole(admin.id, organizationId, "member");
+    const policy = await app.inject({ method: "GET", url });
+    expect(policy.json().canShareOrganizationWide).toBe(false);
+    const refused = await put([own, everyone]);
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect(refused.json().error.message).toBe(
+      "Only someone with Full access to every agent can share it with everyone in the organization or with a role.",
+    );
+    const shared = await put([
+      own,
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ]);
+    expect(shared.statusCode, shared.body).toBe(200);
+
+    await MemberModel.updateRole(admin.id, organizationId, "admin");
+    const published = await put([own, everyone]);
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json().canShareOrganizationWide).toBe(true);
   });
 
   test("saves and audits mixed chat recipients and denies changes from a viewer", async ({
@@ -144,7 +198,6 @@ describe("resource permission routes", () => {
     "agent",
     "mcpGateway",
     "skill",
-    "scheduledTask",
     "log",
     "auditLog",
   ] as const)("%s rejects retired team-relative scope", async (resource) => {
@@ -314,6 +367,29 @@ describe("resource permission routes", () => {
     }
   });
 
+  test("names the object's owner, and no owner for the all-objects policy", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      access: "personal",
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/resource-permissions/agent/${agent.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().ownerId).toBe(user.id);
+    const global = await app.inject({
+      method: "GET",
+      url: "/api/resource-permissions/agent/*",
+    });
+    expect(global.statusCode, global.body).toBe(200);
+    expect(global.json().ownerId).toBeNull();
+  });
+
   test("a permission manager who is not the owner can revoke access while preserving the owner's grant", async ({
     makeAgent,
     makeUser,
@@ -458,6 +534,11 @@ describe("resource permission routes", () => {
       payload: {
         revision: 1,
         grants: [
+          // Somebody must keep Full access on every agent.
+          {
+            subject: { type: "role", id: "admin" },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
           { subject: { type: "user", id: recipient.id }, actions: ["read"] },
         ],
       },
@@ -472,13 +553,13 @@ describe("resource permission routes", () => {
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json()).toMatchObject({
       grants: [],
-      inheritedGrants: [
-        {
+      inheritedGrants: expect.arrayContaining([
+        expect.objectContaining({
           name: "Resource reader",
           subject: { type: "user", id: recipient.id },
           actions: ["read"],
-        },
-      ],
+        }),
+      ]),
     });
   });
 
@@ -542,6 +623,56 @@ describe("resource permission routes", () => {
         scope: ownKey.id,
       }),
     ).toEqual(before);
+  });
+
+  test("a personal MCP gateway cannot be shared beyond its owner", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId);
+    const gateway = await AgentModel.ensurePersonalMcpGateway({
+      userId: user.id,
+      organizationId,
+    });
+    const url = `/api/resource-permissions/mcpGateway/${gateway.id}`;
+    const { revision } = (await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpGateway",
+      scope: gateway.id,
+    })) ?? { revision: 0 };
+    const [narrowest] = Object.values(
+      resourcePermissionPresetsFor("mcpGateway"),
+    );
+    const ownerOnly = [
+      { subject: { type: "user", id: user.id }, actions: narrowest.actions },
+    ];
+
+    const shared = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision,
+        grants: [
+          ...ownerOnly,
+          {
+            subject: { type: "user", id: colleague.id },
+            actions: narrowest.actions,
+          },
+        ],
+      },
+    });
+    expect(shared.json().error.message).toBe(
+      "Personal MCP gateways cannot be shared",
+    );
+    expect(shared.statusCode).toBe(400);
+
+    const kept = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision, grants: ownerOnly },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
   });
 
   test("rejects duplicate recipient rows without saving an ambiguous policy", async ({

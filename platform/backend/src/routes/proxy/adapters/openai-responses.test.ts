@@ -359,8 +359,8 @@ function parseSse(data: string | Uint8Array | null): unknown {
 
 describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   // The AI SDK emits Responses "easy input" messages: role/content with no
-  // `type`. getMessages() feeds trusted-data / Dual LLM policy evaluation, so
-  // dropping these would silently bypass those policies for routed chats.
+  // `type`. Dropping these would leave getMessages() without the user's
+  // prompt for routed chats.
   test("includes easy-input message items that omit a top-level type", () => {
     const request = {
       model: "gpt-5.5-pro",
@@ -396,8 +396,8 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   });
 
   // Tool results ride as function_call_output items paired to a function_call
-  // by call_id. Trusted-data / Dual LLM evaluation reads CommonMessage.toolCalls,
-  // so results that don't surface there silently bypass sanitization policies.
+  // by call_id. Common-format readers see CommonMessage.toolCalls, so results
+  // that don't surface there are silently lost.
   test("surfaces function_call_output items as tool calls paired by call_id", () => {
     const request = {
       model: "gpt-5.6-sol",
@@ -471,6 +471,7 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
         name: "apply_patch",
         arguments: { input: "*** Begin Patch" },
         content: "raw patch result",
+        structured: false,
         isError: false,
       },
     ]);
@@ -490,8 +491,7 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   });
 
   // Codex calls a namespaced tool by its bare name and names the namespace
-  // beside it; the pair is the tool's identity, so trusted-data evaluation
-  // and the plugins must see both.
+  // beside it; the pair is the tool's identity, so the plugins must see both.
   test("carries the namespace a paired history call named", () => {
     const request = {
       model: "gpt-5.5",
@@ -521,7 +521,9 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);
@@ -639,7 +641,7 @@ describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
     }
   });
 
-  // Sanitized Dual LLM summaries flow back through applyToolResultUpdates and
+  // Plugin-approved replacements flow back through applyToolResultUpdates and
   // must replace the raw output the upstream model would otherwise read.
   test("replaces function_call_output content for updated tool call ids", () => {
     const request = {
@@ -2575,6 +2577,58 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
       expect(recordedResponse.output).toContainEqual(compaction);
     } else {
       expect(recordedResponse.output).not.toContainEqual(compaction);
+    }
+  });
+});
+
+describe("OpenAiResponsesRequestAdapter replayed tool-call ids", () => {
+  // A Gemini call id as the model router hands it to a client: the thought
+  // signature rides inside it (encodeSignedToolCallId).
+  const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+
+  test("fits a Gemini call id after the result update looked it up", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        {
+          type: "function_call",
+          id: `fc_${geminiCallId}`,
+          call_id: geminiCallId,
+          name: "read",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: geminiCallId,
+          output: "SECRET",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    for (const factory of [
+      openAiResponsesAdapterFactory,
+      openAiResponsesCompactAdapterFactory,
+    ]) {
+      const adapter = factory.createRequestAdapter(request);
+      adapter.applyToolResultUpdates({ [geminiCallId]: "sanitized" });
+      const [call, output] = adapter.toProviderRequest().input as Array<{
+        id?: string;
+        call_id: string;
+        output?: string;
+      }>;
+
+      expect(call.call_id).toMatch(/^call_[0-9a-f]{32}$/);
+      // OpenAI did not mint the item id and accepts the item without one.
+      expect(call).not.toHaveProperty("id");
+      expect(output).toMatchObject({
+        call_id: call.call_id,
+        output: "sanitized",
+      });
+      // The client's history and the policy view keep the id as sent.
+      expect(adapter.getToolResults()[0].id).toBe(geminiCallId);
+      expect((request.input as Array<{ call_id: string }>)[1].call_id).toBe(
+        geminiCallId,
+      );
     }
   });
 });

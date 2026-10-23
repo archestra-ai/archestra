@@ -1,9 +1,9 @@
 "use client";
 
 import { Check, Plus } from "lucide-react";
-import Link from "next/link";
 import { useId } from "react";
 import { TerminalBlock } from "@/app/connection/terminal-block";
+import { SettingsLink } from "@/components/settings-link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +14,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -157,13 +159,16 @@ export function AuthMethodPicker<T extends string>({
               </span>
             </Label>
             {method.manage && (
-              <Link
+              // Every manage page is in Settings; a reader who cannot see
+              // Settings gets no link rather than a bounce.
+              <SettingsLink
                 href={method.manage.href}
                 // Text-wide, 24px tall (WCAG 2.5.8), aligned under the title.
                 className="-mt-2 mb-2 ml-10 self-start py-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                fallback={null}
               >
                 {method.manage.label} →
-              </Link>
+              </SettingsLink>
             )}
           </div>
         );
@@ -198,12 +203,24 @@ export function CredentialSelect({
   createLabel: string;
   canCreate: boolean;
   onCreate: () => void;
-  options: Array<{ id: string; label: string }>;
+  /**
+   * In display order. Options with a `group` are listed under that heading;
+   * the headings appear only when the options fall into more than one group.
+   */
+  options: Array<{ id: string; label: string; group?: string }>;
   value: string | undefined;
   onChange: (id: string | null) => void;
   /** Offered when picking nothing is valid. */
   noneLabel?: string;
 }) {
+  const groups: Array<{ heading: string | undefined; items: typeof options }> =
+    [];
+  for (const option of options) {
+    const last = groups.at(-1);
+    if (last && last.heading === option.group) last.items.push(option);
+    else groups.push({ heading: option.group, items: [option] });
+  }
+  const showHeadings = groups.length > 1;
   if (options.length === 0) {
     return canCreate ? (
       <Button onClick={onCreate}>
@@ -222,10 +239,17 @@ export function CredentialSelect({
       </SelectTrigger>
       <SelectContent>
         {noneLabel && <SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>}
-        {options.map((option) => (
-          <SelectItem key={option.id} value={option.id}>
-            {option.label}
-          </SelectItem>
+        {groups.map((group, index) => (
+          <SelectGroup key={group.heading ?? `group-${index}`}>
+            {showHeadings && group.heading && (
+              <SelectLabel>{group.heading}</SelectLabel>
+            )}
+            {group.items.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         ))}
       </SelectContent>
     </Select>

@@ -36,6 +36,11 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
     isPending: false,
   }),
   useDeleteMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 type Props = Parameters<typeof McpServerIssueNotice>[0];
@@ -448,5 +453,29 @@ describe("McpServerIssueNotice", () => {
     expect(screen.getByText("exit code 1")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Hide details" }));
     expect(screen.queryByText("exit code 1")).toBeNull();
+  });
+  it("panel: reports a colleague's lapsed sign-in as a count, not as the viewer's to fix", () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        item={item}
+        issues={[
+          needsReauth({ audience: "others", onViewerConnection: false }),
+        ]}
+        servers={[otherOwnerServer]}
+        hideName
+        panelActions="dismiss-only"
+      />,
+    );
+
+    expect(
+      screen.getByText(/^1 other connection needs re-authentication\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/rejected the stored token/)).toBeNull();
+    expect(screen.queryByText(/Sign in to the provider again/)).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Dismiss alert for crashy-test-server",
+      }),
+    ).toBeInTheDocument();
   });
 });

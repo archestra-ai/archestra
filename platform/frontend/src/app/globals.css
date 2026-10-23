@@ -34,6 +34,7 @@
   --color-sidebar-emphasis: var(--sidebar-emphasis);
   --color-sidebar-chip: var(--sidebar-chip);
   --color-sidebar-track: var(--sidebar-track);
+  --color-sidebar-raised: var(--sidebar-raised);
   --color-raised: var(--raised);
   --color-sidebar-attention: var(--sidebar-attention);
   --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
@@ -103,6 +104,8 @@
 
 /* Base styles and defaults - theme classes override --radius */
 :root {
+  /* Inter's latin subset first; the full file covers other scripts. */
+  --font-inter: var(--font-inter-latin), var(--font-inter-full);
   --radius: 0.5rem;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -173,6 +176,10 @@
   /* Track of the sidebar's segmented AI/Studio toggle: pulled toward the
      sidebar text so it never matches the sidebar, whatever --muted is. */
   --sidebar-track: color-mix(in oklab, var(--sidebar-foreground) 10%, var(--sidebar));
+  /* Fill for an outlined button on the sidebar (New chat). It must read as
+     raised: the page color does in light mode, but in dark mode the page is
+     darker than the sidebar, so dark mode uses the track fill instead. */
+  --sidebar-raised: var(--background);
   /* Sidebar "needs action" signals (attention count, onboarding dot), drawn
      from the theme's --destructive hue instead of a fixed red. The ink is
      pushed toward the far end of the range so it clears 4.5:1 on the tinted
@@ -187,6 +194,7 @@ html.dark {
   --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
   --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
+  --sidebar-raised: var(--sidebar-track);
   --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }
 
@@ -484,107 +492,6 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   pointer-events: none;
 }
 
-
-/* ── Apps Hackathon recorder flair ──
-   Draws the eye to the hackathon recorder cluster and its "submit to
-   Archestra" (GitHub PR) button. Two composable effects:
-   • .hackathon-glitter — a periodic linear glint that sweeps across the
-     surface once every few seconds, then rests (slight, not a constant shine).
-   • .hackathon-edge-shimmer — a soft highlight that travels around the border.
-   Colors derive from theme tokens so white-label + dark mode are respected,
-   and both self-disable under prefers-reduced-motion. */
-
-.hackathon-glitter {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.hackathon-glitter::after {
-  content: "";
-  position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: -50%;
-  width: 50%;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, white 75%, var(--primary)) 50%,
-    transparent
-  );
-  opacity: 0;
-  transform: translateX(0) skewX(-16deg);
-  /* Sweep occupies only the first ~20% of the cycle, so the surface rests
-     between glints — a periodic glitter rather than a continuous shine. */
-  animation: hackathon-glitter-sweep 5s ease-in-out infinite;
-}
-
-@keyframes hackathon-glitter-sweep {
-  0% {
-    transform: translateX(0) skewX(-16deg);
-    opacity: 0;
-  }
-  4% {
-    opacity: 0.5;
-  }
-  20% {
-    transform: translateX(320%) skewX(-16deg);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(320%) skewX(-16deg);
-    opacity: 0;
-  }
-}
-
-@property --hackathon-edge-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-.hackathon-edge-shimmer {
-  position: relative;
-}
-
-.hackathon-edge-shimmer::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: conic-gradient(
-    from var(--hackathon-edge-angle),
-    transparent 0deg,
-    color-mix(in oklab, var(--primary) 70%, white) 40deg,
-    transparent 90deg,
-    transparent 360deg
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: hackathon-edge-shimmer 4s linear infinite;
-}
-
-@keyframes hackathon-edge-shimmer {
-  to {
-    --hackathon-edge-angle: 360deg;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hackathon-glitter::after,
-  .hackathon-edge-shimmer::before {
-    animation: none;
-    opacity: 0;
-  }
-}
 
 /* ── Feedback pop-up ──
    Friendly greeting: the hand waves twice when the pop-up opens, then rests. */

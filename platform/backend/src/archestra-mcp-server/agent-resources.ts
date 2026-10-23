@@ -15,6 +15,7 @@ import {
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
@@ -35,6 +36,7 @@ import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
@@ -53,6 +55,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { archestraMcpBranding } from "./branding";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
@@ -125,7 +128,7 @@ export const CreateBaseToolArgsSchema = z
         "Optional key-value labels for organization and categorization.",
       ),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. MCP gateways defer skill, file, sandbox, run lifecycle and policy-management capabilities in this mode; questions and guardrails session/peer-message controls remain directly available. search_tools summarizes the caller's available built-in capability groups as well as connected MCP servers. Manual gateways also keep explicitly assigned MCP App UI tools available for client rendering. Internal chat keeps assigned skill discovery/loading, file, sandbox and run lifecycle tools directly available for its skill activation and file guidance. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
     ),
     accessAllTools: z
       .boolean()
@@ -186,6 +189,12 @@ export const AgentModelToolInputSchemas = {
   ),
   modelId: UuidIdSchema.describe(
     `Model the agent uses: the model's id from ${TOOL_LIST_LLM_MODELS_SHORT_NAME}, not its provider name. Set together with llmApiKeyId.`,
+  ),
+  fastModelId: UuidIdSchema.describe(
+    "Optional faster model on the same llmApiKeyId, used when the agent forks itself with tier fast. Omit to use the provider default.",
+  ),
+  smartModelId: UuidIdSchema.describe(
+    "Optional stronger model on the same llmApiKeyId, used when the agent forks itself with tier smart. Omit to use the provider default.",
   ),
 };
 
@@ -279,6 +288,16 @@ export const AgentDetailOutputSchema = ResourceDetailOutputSchema.extend({
     .nullable()
     .optional()
     .describe("The pinned model ID, or null for the default."),
+  fastModelId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned fast-tier model ID, or null for the default."),
+  smartModelId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned smart-tier model ID, or null for the default."),
   skillsEnabled: z
     .boolean()
     .optional()
@@ -349,6 +368,8 @@ export async function handleCreateResource<
     runtime?: AgentRuntimeToolInput;
     llmApiKeyId?: string;
     modelId?: string;
+    fastModelId?: string;
+    smartModelId?: string;
   },
 >(params: {
   args: TArgs;
@@ -391,6 +412,8 @@ export async function handleCreateResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
+      fastModelId: args.fastModelId,
+      smartModelId: args.smartModelId,
       existing: null,
     });
 
@@ -717,6 +740,8 @@ export async function handleEditResource<
     runtime?: AgentRuntimeToolInput | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
+    fastModelId?: string | null;
+    smartModelId?: string | null;
   },
 >(params: {
   args: TArgs;
@@ -775,6 +800,8 @@ export async function handleEditResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
+      fastModelId: args.fastModelId,
+      smartModelId: args.smartModelId,
       existing: existingAgent,
     });
 
@@ -830,6 +857,8 @@ export async function handleEditResource<
     if (!updated) {
       return errorResult(`failed to update ${toolLabel}.`);
     }
+    // A Slack bot of this agent follows its name and icon (best effort).
+    void slackAppFactory.syncAgentIdentity(args.id);
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
@@ -895,15 +924,22 @@ async function resolveRuntimeAndModelForWrite(params: {
   runtimeInput: AgentRuntimeToolInput | null | undefined;
   llmApiKeyId: string | null | undefined;
   modelId: string | null | undefined;
-  existing: Pick<Agent, "runtime" | "llmApiKeyId" | "modelId"> | null;
-}): Promise<Partial<Pick<Agent, "runtime" | "llmApiKeyId" | "modelId">>> {
+  fastModelId: string | null | undefined;
+  smartModelId: string | null | undefined;
+  existing: Pick<Agent, AgentModelField> | null;
+}): Promise<Partial<Pick<Agent, AgentModelField>>> {
   const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
+  const { fastModelId, smartModelId } = params;
   const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
-  if (runtimeInput === undefined && !touchesModel) return {};
+  const touchesTiers =
+    llmApiKeyId !== undefined ||
+    fastModelId !== undefined ||
+    smartModelId !== undefined;
+  if (runtimeInput === undefined && !touchesModel && !touchesTiers) return {};
   if (params.agentType !== "agent") {
     throw new ApiError(
       400,
-      "runtime, llmApiKeyId, and modelId apply only to agents.",
+      "runtime, llmApiKeyId, modelId, fastModelId, and smartModelId apply only to agents.",
     );
   }
   if (!context.userId || !context.organizationId) {
@@ -922,6 +958,12 @@ async function resolveRuntimeAndModelForWrite(params: {
     runtime,
     isAdmin: params.isAgentAdmin,
   });
+  await assertCanBindRuntimeCredentials({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
+    next: runtime,
+  });
 
   const merged = {
     runtime: runtime !== undefined ? runtime : (existing?.runtime ?? null),
@@ -939,6 +981,19 @@ async function resolveRuntimeAndModelForWrite(params: {
   if (touchesModel) {
     await assertAgentModelSelectionAvailable({ ...scope, agent: merged });
   }
+  if (touchesTiers) {
+    await assertModelTrioTiers({
+      apiKeyId: merged.llmApiKeyId,
+      fastModelId:
+        fastModelId !== undefined
+          ? fastModelId
+          : (existing?.fastModelId ?? null),
+      smartModelId:
+        smartModelId !== undefined
+          ? smartModelId
+          : (existing?.smartModelId ?? null),
+    });
+  }
   await assertAgentRuntimeModelCompatibility({
     ...scope,
     runtime: merged.runtime,
@@ -949,8 +1004,17 @@ async function resolveRuntimeAndModelForWrite(params: {
     ...(runtime !== undefined && { runtime }),
     ...(llmApiKeyId !== undefined && { llmApiKeyId }),
     ...(modelId !== undefined && { modelId }),
+    ...(fastModelId !== undefined && { fastModelId }),
+    ...(smartModelId !== undefined && { smartModelId }),
   };
 }
+
+type AgentModelField =
+  | "runtime"
+  | "llmApiKeyId"
+  | "modelId"
+  | "fastModelId"
+  | "smartModelId";
 
 function describeRuntime(runtime: AgentRuntime | null): string {
   if (!runtime) return "built-in chat harness";

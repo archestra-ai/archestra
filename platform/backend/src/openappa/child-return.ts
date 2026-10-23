@@ -53,12 +53,18 @@ export function mintChildReturnMarker(params: {
  * Records each structured completion leaf separately; every leaf is then
  * verified against the child returns the runtime durably crossed, so one
  * genuine return cannot cover a sibling return.
+ *
+ * A return this cannot read is withheld with a 409. With `onRefusal`, that
+ * refusal goes there instead, the return stays as the client sent it, and the
+ * rest of the body is still stripped. A malformed marker or envelope is a 400
+ * and is thrown in both cases.
  */
 export function collectAndStripChildReturns(
   body: unknown,
   options: {
     openCodeBackgroundReturns?: boolean;
     codexMailboxReturns?: boolean;
+    onRefusal?: RefusalSink;
   } = {},
 ): CollectedChildReturns {
   const collected: CollectedChildReturns = {
@@ -66,14 +72,29 @@ export function collectAndStripChildReturns(
   };
   const nativeResultCallIds = collectNativeResultCallIds(body);
   if (options.codexMailboxReturns) {
-    collectCodexMailboxReturns(body, collected);
+    collectCodexMailboxReturns(body, collected, options.onRefusal);
   }
 
   const walk = (
     value: unknown,
     context: WalkContext = DEFAULT_CONTEXT,
-  ): unknown => {
+  ): unknown =>
+    readOrReport(options.onRefusal, value, () => rewrite(value, context));
+  const rewrite = (value: unknown, context: WalkContext): unknown => {
     if (typeof value === "string") {
+      // OpenCode and Kilo Code acknowledge a background launch in the task's
+      // own framing, and Kilo Code wraps the notice in <task_result>. The
+      // acknowledgement returns nothing, so it stays as the client sent it
+      // and its state still says so. One that carries a return marker is
+      // read as a return.
+      if (
+        options.openCodeBackgroundReturns &&
+        context.nativeResultSite &&
+        isOpenCodeBackgroundLaunch(value) &&
+        !hasMarker(value)
+      ) {
+        return value;
+      }
       if (
         context.nativeResultSite &&
         isOpenCodeBackgroundCompletion(value) &&
@@ -180,12 +201,7 @@ export function collectAndStripChildReturns(
     }
 
     for (const [key, entry] of Object.entries(record)) {
-      if (
-        key === "__proto__" ||
-        key === "constructor" ||
-        key === "prototype" ||
-        (key === "status" && canonicalStatus)
-      ) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
         continue;
       }
       const entryContext: WalkContext = {
@@ -288,7 +304,7 @@ const MARKER_PHRASE =
   "(?:finished subagent|finished protected subagent|protected subagent session|protected subagent return|protected delegated return)";
 // Inspects indentation only at line starts to keep text scanning linear.
 const MARKER = new RegExp(
-  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM}[\\t ]{1,8})?${MARKER_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${MARKER_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*(?=\\r?\\n|$)`,
+  `(?:^|(?<=\\n))[\\t ]*(?:${MARK_TOP}(?:(?:\\r?\\n|[\\t ]{1,8})${MARK_BOTTOM})?[\\t ]{1,8})?${MARKER_PHRASE}[\\t ]+(?:([A-Za-z0-9_:-]{1,512})[\\t ]+)?(${MARKER_CODE})(?![0-9A-HJKMNP-TV-Z])[\\t ]*(?=\\r?\\n|$)`,
   "gm",
 );
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
@@ -720,7 +736,7 @@ function formatMarker(params: {
 }): string {
   return params.format === "inline"
     ? `finished subagent ${params.displayCode}`
-    : `${MARK_TOP}\n${MARK_BOTTOM}  finished subagent ${params.displayCode}`;
+    : `${MARK_TOP}  finished subagent ${params.displayCode}`;
 }
 
 function hashValue(value: string): string {
@@ -746,11 +762,35 @@ function encodeCrockford35(value: bigint): string {
   return `${code.slice(0, 3)}-${code.slice(3)}`;
 }
 
+/** Takes a withheld return's refusal in place of a throw. */
+type RefusalSink = (refusal: ApiError) => void;
+
+/**
+ * Reads one return. With a sink, the 409 of a withheld return goes to the
+ * sink and `unchanged` comes back. Every other error is thrown, and so is
+ * the 409 when there is no sink.
+ */
+function readOrReport<T>(
+  onRefusal: RefusalSink | undefined,
+  unchanged: T,
+  read: () => T,
+): T {
+  try {
+    return read();
+  } catch (error) {
+    if (!onRefusal || !(error instanceof ApiError) || error.statusCode !== 409)
+      throw error;
+    onRefusal(error);
+    return unchanged;
+  }
+}
+
 // === Shape helpers ===
 
 function collectCodexMailboxReturns(
   body: unknown,
   collected: CollectedChildReturns,
+  onRefusal: RefusalSink | undefined,
 ): void {
   const input = asRecord(body)?.input;
   if (!Array.isArray(input)) return;
@@ -786,103 +826,111 @@ function collectCodexMailboxReturns(
   for (const value of input) {
     const item = asRecord(value);
     if (item?.type !== "agent_message") continue;
-    const { author, recipient } = item;
-    const parts = Array.isArray(item.content) ? item.content : [];
-    const first = asRecord(parts[0]);
-    const text =
-      first?.type === "input_text" ? stringField(first.text) : undefined;
-    const kind = text?.match(/^Message Type: ([A-Z_]+)\r?\n/)?.[1];
-    if (
-      !text ||
-      !isBoundedNativeMetadata(author) ||
-      !isBoundedNativeMetadata(recipient) ||
-      (kind !== "NEW_TASK" && kind !== "FINAL_ANSWER")
-    ) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an unsupported Codex mailbox message",
-      );
-    }
-    const header = ["\n", "\r\n"]
-      .map((newline) =>
-        [
-          `Message Type: ${kind}`,
-          `Task name: ${recipient}`,
-          `Sender: ${author}`,
-          "Payload:",
-          "",
-        ].join(newline),
-      )
-      .find((prefix) => text.startsWith(prefix));
-    if (!header)
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld a malformed Codex mailbox message",
-      );
-    // NEW_TASK input is governed by the prepared fork and its delegation marker.
-    if (kind === "NEW_TASK") {
-      const payload = asRecord(parts[1]);
-      if (
-        text !== header ||
-        parts.length !== 2 ||
-        payload?.type !== "encrypted_content" ||
-        typeof payload.encrypted_content !== "string" ||
-        !payload.encrypted_content
-      ) {
-        throw new ApiError(
-          409,
-          "OpenAPPA withheld an unsupported Codex task payload",
-        );
-      }
-      continue;
-    }
-    if (
-      parts.some(
-        (part) =>
-          asRecord(part)?.type !== "input_text" ||
-          typeof asRecord(part)?.text !== "string",
-      )
-    ) {
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an unsupported child completion payload",
-      );
-    }
-    const spawnCallId = taskCalls.get(author);
-    if (spawnCallId === null)
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld an ambiguous child completion",
-      );
-    const id = stringField(item.id);
-    if (id && !isBoundedNativeMetadata(id))
-      throw new ApiError(
-        409,
-        "OpenAPPA withheld a malformed child completion id",
-      );
-    const context: WalkContext = {
-      ...DEFAULT_CONTEXT,
-      nativeResultSite: true,
-      ...(spawnCallId ? { spawnCallId } : {}),
-      ...(id ? { envelopeId: id } : {}),
-    };
-    const payload = parts
-      .map((part) => String(asRecord(part)?.text))
-      .join("")
-      .slice(header.length);
-    const parsed = stripMarker(payload, context, true);
-    recordCompletion(parsed, context, collected);
-    // Paths are display/correlation hints, not child IDs or return authority.
-    // The plugin must match these exact bytes against a retained ChildEnd.
-    for (const key of Object.keys(item)) delete item[key];
-    Object.assign(item, {
-      type: "agent_message",
-      ...(id ? { id } : {}),
-      author,
-      recipient,
-      content: [{ type: "input_text", text: header + parsed.value }],
-    });
+    readOrReport(onRefusal, undefined, () =>
+      collectCodexMailboxMessage(item, taskCalls, collected),
+    );
   }
+}
+
+/** Reads one mailbox message. A message it refuses is not changed. */
+function collectCodexMailboxMessage(
+  item: Record<string, unknown>,
+  taskCalls: Map<string, string | null>,
+  collected: CollectedChildReturns,
+): void {
+  const { author, recipient } = item;
+  const parts = Array.isArray(item.content) ? item.content : [];
+  const first = asRecord(parts[0]);
+  const text =
+    first?.type === "input_text" ? stringField(first.text) : undefined;
+  const kind = text?.match(/^Message Type: ([A-Z_]+)\r?\n/)?.[1];
+  if (
+    !text ||
+    !isBoundedNativeMetadata(author) ||
+    !isBoundedNativeMetadata(recipient) ||
+    (kind !== "NEW_TASK" && kind !== "FINAL_ANSWER")
+  ) {
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+    );
+  }
+  const header = ["\n", "\r\n"]
+    .map((newline) =>
+      [
+        `Message Type: ${kind}`,
+        `Task name: ${recipient}`,
+        `Sender: ${author}`,
+        "Payload:",
+        "",
+      ].join(newline),
+    )
+    .find((prefix) => text.startsWith(prefix));
+  if (!header)
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld a malformed Codex mailbox message",
+    );
+  // NEW_TASK input is governed by the prepared fork and its delegation marker.
+  if (kind === "NEW_TASK") {
+    const payload = asRecord(parts[1]);
+    if (
+      text !== header ||
+      parts.length !== 2 ||
+      payload?.type !== "encrypted_content" ||
+      typeof payload.encrypted_content !== "string" ||
+      !payload.encrypted_content
+    ) {
+      throw new ApiError(
+        409,
+        "OpenAPPA withheld an unsupported Codex task payload",
+      );
+    }
+    return;
+  }
+  if (
+    parts.some(
+      (part) =>
+        asRecord(part)?.type !== "input_text" ||
+        typeof asRecord(part)?.text !== "string",
+    )
+  ) {
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld an unsupported child completion payload",
+    );
+  }
+  const spawnCallId = taskCalls.get(author);
+  if (spawnCallId === null)
+    throw new ApiError(409, "OpenAPPA withheld an ambiguous child completion");
+  const id = stringField(item.id);
+  if (id && !isBoundedNativeMetadata(id))
+    throw new ApiError(
+      409,
+      "OpenAPPA withheld a malformed child completion id",
+    );
+  const context: WalkContext = {
+    ...DEFAULT_CONTEXT,
+    nativeResultSite: true,
+    ...(spawnCallId ? { spawnCallId } : {}),
+    ...(id ? { envelopeId: id } : {}),
+  };
+  const payload = parts
+    .map((part) => String(asRecord(part)?.text))
+    .join("")
+    .slice(header.length);
+  const parsed = stripMarker(payload, context, true);
+  recordCompletion(parsed, context, collected);
+  // Paths are display/correlation hints, not child IDs or return authority.
+  // The plugin must match these exact bytes against a retained ChildEnd.
+  for (const key of Object.keys(item)) delete item[key];
+  Object.assign(item, {
+    type: "agent_message",
+    ...(id ? { id } : {}),
+    author,
+    recipient,
+    content: [{ type: "input_text", text: header + parsed.value }],
+  });
 }
 
 const NATIVE_COMPLETION_TOOLS = new Set([
@@ -1004,6 +1052,12 @@ function isCompleteTaskResultFraming(value: string): boolean {
     prefix === "" ||
     /^<task\b[^>]*>(?:\s*<summary>[\s\S]*?<\/summary>)?$/.test(prefix);
   return validPrefix && (suffix === "" || suffix === "</task>");
+}
+
+function isOpenCodeBackgroundLaunch(value: string): boolean {
+  return /^\s*<task\b[^>]*\bstate\s*=\s*(["'])(?:running|pending|queued)\1[^>]*>/.test(
+    value,
+  );
 }
 
 function isOpenCodeBackgroundCompletion(value: unknown): value is string {

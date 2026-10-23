@@ -1,3 +1,10 @@
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -8,14 +15,22 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  useDefaultMcpGateway,
-  useProfile,
-  useProfiles,
-} from "@/lib/agent.query";
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
@@ -26,8 +41,9 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
+import { markShellSeeded } from "@/lib/shell-deferral";
 import { saveConnectChoices } from "./connect-choices";
 import ConnectionPage from "./page";
 
@@ -38,9 +54,36 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 ));
 const refetchOrganizationMock = vi.fn();
 
+const { catalogHookMock, rowsByIdsCache } = vi.hoisted(() => ({
+  catalogHookMock: vi.fn(),
+  rowsByIdsCache: new WeakMap<object, Map<string, unknown>>(),
+}));
+
 vi.mock("next/navigation");
+// The page loads each view as its own chunk. Resolve both before the tests
+// render, so a test sees the view on its first render, as a server-rendered
+// document does.
+const dynamicViews = vi.hoisted(() => [] as Promise<unknown>[]);
+vi.mock("next/dynamic", () => ({
+  default: (load: () => Promise<React.ComponentType<object>>) => {
+    let View: React.ComponentType<object> | null = null;
+    dynamicViews.push(
+      load().then((loaded) => {
+        View = loaded;
+      }),
+    );
+    return (props: object) => (View ? <View {...props} /> : null);
+  },
+}));
+beforeAll(async () => {
+  await Promise.all(dynamicViews);
+});
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: vi.fn(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/guardrails-deployment.query");
@@ -50,7 +93,36 @@ vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
 }));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/mcp/internal-mcp-catalog.query")
+  >()),
+  useAllCatalogTools: vi.fn(),
+  useInternalMcpCatalog: catalogHookMock,
+}));
+// A gateway's own catalogs are read by id; answer from the catalog mock.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  useMcpRegistryRowsByIds: (ids: string[]) => {
+    // Stable for the same rows and ids, as the real hook's result is.
+    const rows = (catalogHookMock().data ?? []) as Array<{ id: string }>;
+    const key = ids.join(",");
+    let byIds = rowsByIdsCache.get(rows);
+    if (!byIds) {
+      byIds = new Map();
+      rowsByIdsCache.set(rows, byIds);
+    }
+    let result = byIds.get(key);
+    if (!result) {
+      result = {
+        data: rows.filter((row) => ids.includes(row.id)),
+        isPending: false,
+        isError: false,
+      };
+      byIds.set(key, result);
+    }
+    return result;
+  },
+}));
 vi.mock("@/lib/organization.query");
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -105,6 +177,14 @@ function render(ui: ReactElement) {
   });
 }
 
+/** Tool definitions and token counting start only after opening server details. */
+async function requestToolCounts() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /^\d+ MCP servers?$/ }),
+  );
+  await userEvent.keyboard("{Escape}");
+}
+
 function mockOrganization(overrides: Record<string, unknown>) {
   vi.mocked(useOrganization).mockReturnValue({
     data: {},
@@ -146,9 +226,9 @@ beforeEach(() => {
   vi.mocked(useAllCatalogTools).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useAllCatalogTools>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
   vi.mocked(useConfig).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useConfig>);
@@ -158,6 +238,212 @@ beforeEach(() => {
   vi.mocked(useGuardrailsDeployment).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useGuardrailsDeployment>);
+});
+
+describe("ConnectPage gateway footprint", () => {
+  const api = setupServer();
+  const previewUrl = "http://localhost:9000/api/agents/gw-1/mcp-tool-preview";
+
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  function show(progressive = false) {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        id: "gw-1",
+        name: "Team gateway",
+        slug: "team",
+        accessAllTools: progressive,
+        toolExposureMode: progressive ? "search_and_run_only" : "full",
+        tools: ["read", "write", "hidden"].map((name) => ({
+          name: `example__${name}`,
+          catalogId: "catalog-1",
+          description: name,
+        })),
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Example server",
+          serverType: "remote",
+          toolCount: 3,
+        },
+      ],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    mockOrganization({
+      data: {
+        connectionDefaultMcpGatewayId: "gw-1",
+        connectionShownClientIds: ["claude-code", "codex"],
+      },
+    });
+    return render(<ConnectionPage />);
+  }
+
+  const listed = (tokens: number) => ({
+    toolExposureMode: "full",
+    tools: [
+      {
+        name: "example__read",
+        catalogId: "catalog-1",
+        description: "Read items",
+        tokens,
+      },
+      {
+        name: "example__write",
+        catalogId: "catalog-1",
+        description: "Write items",
+        tokens,
+      },
+    ],
+  });
+
+  it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    let requests = 0;
+    api.use(
+      http.get(previewUrl, ({ request }) => {
+        requests++;
+        return HttpResponse.json(
+          listed(
+            new URL(request.url).searchParams.get("client") === "claude-code"
+              ? 1200
+              : 550,
+          ),
+        );
+      }),
+    );
+    show();
+    expect(screen.getByText("View tool counts and context cost")).toBeVisible();
+    expect(requests).toBe(0);
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText("2 tools")).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+    expect(within(summary).queryByText("3 tools")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await requestToolCounts();
+    expect(await screen.findByText("~1.1K tokens")).toBeVisible();
+  });
+
+  it("uses the preview's loading mode even when the cached profile has the old mode", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(1200),
+          toolExposureMode: "search_and_run_only",
+        }),
+      ),
+    );
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(
+      await within(summary).findByText("2 tools loaded, more on demand"),
+    ).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+  });
+
+  it.each([
+    [11732, "~11.7K tokens"],
+    [0, "~0 tokens"],
+  ])("shows provider total %i instead of summing fallback estimates", async (total, label) => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(8443),
+          tokenCount: {
+            total,
+            source: "claude-provider",
+            model: "claude-sonnet-5-5",
+            observedAt: "2026-10-09T12:00:00.000Z",
+          },
+        }),
+      ),
+    );
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText(label)).toBeVisible();
+    await userEvent.hover(
+      within(summary).getByRole("button", { name: "How tools load" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Last matching provider count for claude-sonnet-5-5",
+    );
+    await userEvent.click(
+      within(summary).getByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Example server")).toBeVisible();
+    expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
+  });
+
+  it("links each server name to its registry page and lists no tool names", async () => {
+    api.use(http.get(previewUrl, () => HttpResponse.json(listed(1200))));
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    await userEvent.click(
+      await within(summary).findByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const row = within(dialog).getByRole("listitem");
+    expect(
+      within(row).getByRole("link", { name: "Example server" }),
+    ).toHaveAttribute("href", "/mcp/registry/catalog-1");
+    expect(within(row).getByText("2 tools")).toBeVisible();
+    // The server page lists the tools; the dialog stays one line per server.
+    expect(within(dialog).queryByText("example__read")).toBeNull();
+  });
+
+  it("shows an empty gateway instead of retaining catalog counts", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({ toolExposureMode: "full", tools: [] }),
+      ),
+    );
+    show();
+    await requestToolCounts();
+    expect(await screen.findByText("0 tools")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+    expect(screen.queryByText("Example server")).toBeNull();
+  });
+
+  it("does not substitute catalog totals when the preview fails", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    );
+    show();
+    await requestToolCounts();
+    expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+  });
 });
 
 describe("ConnectPage saved agent order", () => {
@@ -233,6 +519,12 @@ describe("ConnectPage saved agent order", () => {
           .getAllByRole("option")
           .map((option) => option.getAttribute("data-value")),
       ).toEqual(["openclaw", "claude-code", "generic"]);
+      await user.click(screen.getByRole("option", { name: /Claude Code/ }));
+      expect(
+        within(
+          screen.getByRole("button", { name: "Claude Code, change agent" }),
+        ).getByRole("img", { name: "Supports LLM proxy guardrails" }),
+      ).toBeVisible();
     } finally {
       width.mockRestore();
     }
@@ -301,6 +593,73 @@ describe("ConnectPage guardrails chip", () => {
     expect(
       setup("claude-code", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Enforced");
+  });
+
+  it.each(
+    Object.entries(NATIVE_SESSION_CLIENT_LABELS),
+  )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
+    setup(clientId, { active: false, unsupportedClientAction: "block" });
+    const badge = within(
+      screen.getByRole("button", { name: new RegExp(`${label}$`) }),
+    ).getByRole("img", { name: "Supports LLM proxy guardrails" });
+    expect(badge).toBeVisible();
+    await userEvent.hover(badge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Enforcement depends on your organization's settings.",
+    );
+  });
+
+  it("does not mark an unsupported client as supporting guardrails", () => {
+    setup("cursor", { active: true, unsupportedClientAction: "block" });
+    expect(
+      screen.queryByRole("img", { name: "Supports LLM proxy guardrails" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the selected client button name concise when it has a support hint", () => {
+    setup("codex", { active: true, unsupportedClientAction: "block" });
+    const tile = screen.getByRole("button", { name: "Codex" });
+    expect(tile).toHaveAttribute("aria-pressed", "true");
+    expect(tile).toHaveAccessibleDescription("Supports LLM proxy guardrails");
+  });
+
+  it.each(
+    Object.keys(NATIVE_SESSION_CLIENT_LABELS),
+  )("omits the supported-client notice for %s", async (clientId) => {
+    setup(clientId, { active: true, unsupportedClientAction: "block" });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).not.toHaveTextContent(
+      "LLM proxy guardrails support only",
+    );
+  });
+
+  it.each([
+    "block",
+    "bypass",
+  ] as const)("lists the supported clients for an unrecognized agent (%s)", async (unsupportedClientAction) => {
+    setup("cursor", { active: true, unsupportedClientAction });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("LLM proxy guardrails support only");
+    for (const label of Object.values(NATIVE_SESSION_CLIENT_LABELS)) {
+      expect(tooltip).toHaveTextContent(label);
+    }
+    expect(within(tooltip).getAllByRole("link")[0]).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients),
+    );
+    expect(
+      within(tooltip).getByRole("link", {
+        name: "add APPA session headers",
+      }),
+    ).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients, "session-headers"),
+    );
   });
 
   it("says guardrails are not enforced for an allowed unrecognized agent", () => {
@@ -392,7 +751,7 @@ describe("ConnectPage (no connect request)", () => {
     expect(connectionFlowMock).not.toHaveBeenCalled();
   });
 
-  it("carries what the user left out in the installer prompt", () => {
+  it("carries what the user left out in the installer command", () => {
     window.localStorage.clear();
     saveConnectChoices("cursor", {
       tools: false,
@@ -404,10 +763,11 @@ describe("ConnectPage (no connect request)", () => {
     render(<ConnectionPage />);
     // Tools are always included, whatever was saved.
     expect(
-      screen.getByText(
-        /connect\.md\?client=cursor&exclude=skills,plugins and connect Cursor\./,
-      ),
+      screen.getByText(/--client cursor --exclude skills,plugins$/),
     ).toBeVisible();
+    expect(screen.getByText("Run the command in your terminal")).toBeVisible();
+    // The installer is the only way in: no prompt to switch to.
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
   });
 
   it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
@@ -447,6 +807,55 @@ describe("ConnectPage (no connect request)", () => {
     expect(screen.getByText("Not active")).toBeVisible();
   });
 
+  it("Pi keeps model routing required and includes shared skills while excluding plugins", async () => {
+    window.localStorage.clear();
+    saveConnectChoices("pi", {
+      tools: true,
+      proxy: false,
+      skills: true,
+      plugins: true,
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=pi") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["pi"],
+        connectionLlmProxyEnabled: true,
+        connectionSkillsEnabled: true,
+        connectionPluginsEnabled: true,
+      },
+    });
+    vi.mocked(archestraApiSdk.getSkills).mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: "native-checks",
+            name: "native-checks",
+            description: "Check arithmetic",
+            usageCount: 0,
+          },
+        ],
+        pagination: { total: 1, limit: 10, offset: 0 },
+      },
+    } as unknown as Awaited<ReturnType<typeof archestraApiSdk.getSkills>>);
+    render(<ConnectionPage />);
+    expect(screen.getByText(/--client pi --exclude plugins$/)).toBeVisible();
+    expect(screen.getByText(/Open a new terminal and run arcpi/)).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Choose what to include/ }),
+    );
+    expect(screen.getByRole("switch", { name: /LLM proxy/ })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: /LLM proxy/ })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: /Skills/ })).toBeChecked();
+  });
+
   it("lets any agent leave the LLM proxy out", async () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -473,10 +882,13 @@ describe("ConnectPage (no connect request)", () => {
       );
       await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
       expect(screen.getByText("Off")).toBeVisible();
+      expect(
+        screen.getByText(/^Off\. .+ calls its model provider directly\.$/),
+      ).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
-          screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+          screen.getByText(/--client claude-code --exclude proxy$/),
         ).toBeVisible();
       unmount();
     }
@@ -493,30 +905,29 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useProfile>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["generic"],
+        connectionShownClientIds: ["hermes-agent"],
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
     render(<ConnectionPage />);
     expect(
       screen.getByText(
-        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect /,
+        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect Hermes Agent\./,
       ),
     ).toBeVisible();
   });
 
-  it("opens a linked agent on its manual setup", () => {
+  it("sets the generic client up by hand", () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("clientId=generic&mode=manual") as ReturnType<
+      new URLSearchParams("clientId=generic") as ReturnType<
         typeof useSearchParams
       >,
     );
     mockOrganization({});
     render(<ConnectionPage />);
-    expect(
-      screen.getByRole("button", { name: "Manual setup", pressed: true }),
-    ).toBeVisible();
     expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
   });
 
   it("gives other agents the prompt only, even when linked to manual setup", () => {
@@ -579,6 +990,25 @@ describe("ConnectPage (no connect request)", () => {
     expect(band).toHaveAttribute("inert");
     const tile = screen.getByRole("button", { name: /Cursor/ });
     expect(tile.closest("[inert]")).toBeNull();
+  });
+
+  it("does not wait on the gateway reference lookup when there is no gateway to resolve", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    // A disabled query without IDs stays pending forever.
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: undefined,
+          isPending: params.ids.length === 0,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    render(<ConnectionPage />);
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [] }),
+    );
+    expect(screen.getByRole("button", { name: /Cursor/ })).toBeVisible();
   });
 
   it("waits for the organization settings before offering agents", () => {
@@ -656,6 +1086,43 @@ describe("ConnectionPage (connect request approval)", () => {
     expect(
       screen.getByRole("status", { name: "Checking connection settings" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the flow at once from the settings the server read for this document", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "connectRequest=request&clientId=opencode",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    const settings = {
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+      connectionPluginsEnabled: true,
+    };
+    // No read has happened since mount: only the server seed holds the data.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: settings,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    const seeded = new QueryClient();
+    markShellSeeded(seeded);
+    seeded.setQueryData(organizationKeys.details(), settings);
+
+    rtlRender(<ConnectionPage />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={seeded}>{children}</QueryClientProvider>
+      ),
+    });
+
+    expect(
+      screen.queryByRole("status", { name: "Checking connection settings" }),
+    ).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ skillsEnabled: true, llmProxyEnabled: true }),
+    );
   });
 
   it("keeps the flow visible during revalidation without dropping selections", () => {
@@ -763,6 +1230,111 @@ describe("ConnectPage guardrails for members", () => {
   });
 });
 
+describe("ConnectPage gateway pick", () => {
+  const api = setupServer();
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  it("connects through a picked gateway outside the bounded preview and counts its tools", async () => {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    let previewRequests = 0;
+    api.use(
+      http.get(
+        "http://localhost:9000/api/agents/options/page",
+        ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          expect(query.get("limit")).toBe("20");
+          expect(query.has("cursor")).toBe(false);
+          previewRequests++;
+          return HttpResponse.json({
+            data: [
+              {
+                id: "default-gateway",
+                name: "Default gateway",
+                slug: "default-gateway",
+                agentType: "mcp_gateway",
+              },
+            ],
+            pagination: { limit: 20, nextCursor: "later", hasNext: true },
+          });
+        },
+      ),
+      http.get(
+        "http://localhost:9000/api/agents/:id/mcp-tool-preview",
+        ({ params, request }) => {
+          expect(new URL(request.url).searchParams.get("client")).toBe(
+            "claude-code",
+          );
+          return HttpResponse.json({
+            toolExposureMode: "full",
+            tools: [
+              {
+                name: "example__read",
+                catalogId: null,
+                description: "Read",
+                tokens: params.id === "coding-gateway" ? 2300 : 100,
+              },
+            ],
+          });
+        },
+      ),
+    );
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const gateway = (id: string, name: string) => ({
+      id,
+      name,
+      slug: id,
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    });
+    const gateways = [
+      gateway("default-gateway", "Default gateway"),
+      gateway("coding-gateway", "Coding gateway"),
+    ];
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateways[0],
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: gateways.filter((gateway) => params.ids.includes(gateway.id)),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    vi.mocked(useProfile).mockImplementation(
+      (id) =>
+        ({
+          data: gateways.find((g) => g.id === id),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useProfile>,
+    );
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    saveConnectChoices(
+      "claude-code",
+      { tools: true, skills: true, proxy: true, plugins: true },
+      { gatewayId: "coding-gateway", pluginIds: null },
+    );
+    render(<ConnectionPage />);
+    expect(
+      await screen.findByText(/--client claude-code --gateway coding-gateway$/),
+    ).toBeVisible();
+    await requestToolCounts();
+    expect(await screen.findByText("~2.3K tokens")).toBeVisible();
+    expect(previewRequests).toBe(1);
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: ["coding-gateway", "default-gateway"] }),
+    );
+  });
+});
+
 describe("ConnectPage plugins", () => {
   const plugin = (
     id: string,
@@ -770,6 +1342,7 @@ describe("ConnectPage plugins", () => {
     supportedPlatforms: string[],
   ) => ({
     id,
+    pluginSlug: `plugin-${id}`,
     displayName: `Plugin ${id}`,
     description: null,
     clientType,
@@ -779,7 +1352,7 @@ describe("ConnectPage plugins", () => {
     approvedContentHash: "h",
   });
 
-  function setup(clientId: string) {
+  function setup(clientId: string, extra: ReturnType<typeof plugin>[] = []) {
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -795,6 +1368,7 @@ describe("ConnectPage plugins", () => {
         plugin("a", "claude-code", ["posix", "windows"]),
         plugin("b", "claude-code", ["windows"]),
         plugin("c", "codex", ["posix"]),
+        ...extra,
       ],
     } as unknown as ReturnType<typeof usePlugins>);
     mockOrganization({
@@ -813,7 +1387,7 @@ describe("ConnectPage plugins", () => {
     expect(screen.queryByText("Plugin b")).toBeNull();
   });
 
-  it("leaves plugins out of the prompt when switched off", async () => {
+  it("leaves plugins out of the command when switched off", async () => {
     setup("claude-code");
     await userEvent.click(
       screen.getByRole("button", { name: "Choose what to include" }),
@@ -821,9 +1395,42 @@ describe("ConnectPage plugins", () => {
     await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
     expect(screen.getByText("Plugins off")).toBeVisible();
     expect(
-      screen.getByText(
-        /connect\.md\?client=claude-code&exclude=plugins and connect Claude Code\./,
-      ),
+      screen.getByText(/--client claude-code --exclude plugins$/),
+    ).toBeVisible();
+  });
+
+  it("keeps only the plugins picked in the dialog", async () => {
+    setup("claude-code", [plugin("d", "claude-code", ["posix", "windows"])]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose what to include" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(/All 2 plugins your org approved/),
+    ).toBeVisible();
+    // Only these starts from nothing picked, in the pane over the dialog.
+    await userEvent.click(
+      within(dialog).getByRole("radio", { name: /Only these/ }),
+    );
+    const pane = screen.getByRole("region", { name: "Pick plugins" });
+    await userEvent.click(
+      within(pane).getByRole("checkbox", { name: /Plugin a/ }),
+    );
+    await userEvent.click(within(pane).getByRole("button", { name: "Done" }));
+    expect(within(dialog).getByText(/1 of 2 plugins/)).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --plugins plugin-a$/),
+    ).toBeVisible();
+    // Removing the last pick is leaving plugins out.
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove Plugin a" }),
+    );
+    expect(within(dialog).getByText("No plugins picked")).toBeVisible();
+    expect(
+      within(dialog).getByText(/^Off\. Claude Code gets none of the 2 plugins/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --exclude plugins$/),
     ).toBeVisible();
   });
 
@@ -889,8 +1496,12 @@ describe("ConnectPage loading", () => {
   });
 });
 
-describe("ConnectPage after copying the prompt", () => {
+describe("ConnectPage after copying the command", () => {
+  // Cursor's installer registers the gateway under its name; Generic client
+  // picks its own, so its prompt names no server.
   const welcome =
+    "Read http://localhost:3000/welcome.md?server=team_gateway and show me what I can do with Example Platform. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.";
+  const genericWelcome =
     "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
 
   beforeEach(() => {
@@ -915,13 +1526,11 @@ describe("ConnectPage after copying the prompt", () => {
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
-    render(<ConnectionPage />);
+    return render(<ConnectionPage />);
   }
 
-  const copyPrompt = () =>
-    userEvent.click(
-      screen.getByRole("button", { name: /^(Copy prompt|Copied)$/ }),
-    );
+  const copyCommand = () =>
+    userEvent.click(screen.getByRole("button", { name: /^(Copy|Copied)$/ }));
   const status = () =>
     screen.queryByRole("region", { name: "Connection status" });
   const approveElsewhere = async () => {
@@ -929,12 +1538,12 @@ describe("ConnectPage after copying the prompt", () => {
     await screen.findByText(/^Connected\./);
   };
 
-  it("waits for approval once the prompt is copied, then offers the welcome prompt", async () => {
+  it("waits for approval once the command is copied, then offers the welcome prompt", async () => {
     show(["cursor"]);
     expect(status()).toBeNull();
-    await copyPrompt();
+    await copyCommand();
     expect(status()).toHaveTextContent(
-      "Waiting for approvalCursor opens a browser page. Approve there and this card moves on by itself.",
+      "Waiting for approvalThe command opens a browser page. Approve there and this card moves on by itself.",
     );
 
     await approveElsewhere();
@@ -942,7 +1551,7 @@ describe("ConnectPage after copying the prompt", () => {
       "Connected. Next, ask Cursor what it can do now",
     );
     expect(status()).toHaveTextContent(
-      "Once Cursor says setup is done, paste this into a new Cursor session.",
+      "Once your terminal says setup is done, paste this into a new Cursor session.",
     );
     expect(screen.getByText(welcome)).toBeVisible();
     // The connect band steps back.
@@ -964,19 +1573,19 @@ describe("ConnectPage after copying the prompt", () => {
     ).toBeVisible();
   });
 
-  it("starts waiting when the prompt text is copied by hand", () => {
+  it("starts waiting when the command text is copied by hand", () => {
     show(["cursor"]);
-    fireEvent.copy(screen.getByText(/connect\.md\?client=cursor/));
+    fireEvent.copy(screen.getByText(/--client cursor$/));
     expect(status()).toHaveTextContent("Waiting for approval");
   });
 
   it("moves on with Done, and goes back to the link on Cancel", async () => {
     show(["cursor"]);
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(status()).toBeNull();
 
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(
       screen.getByRole("button", { name: "Done? Show the next step" }),
     );
@@ -985,17 +1594,41 @@ describe("ConnectPage after copying the prompt", () => {
 
   it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
     show(["cursor", "codex"]);
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
     expect(status()).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
-    await copyPrompt();
+    await copyCommand();
     await approveElsewhere();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
     expect(status()).toHaveTextContent(
       "Connected. Next, ask Cursor what it can do now",
     );
+  });
+
+  it("stops waiting when the gateway server name changes, but keeps a connected prompt", async () => {
+    const view = show(["cursor"]);
+    await copyCommand();
+    expect(status()).toHaveTextContent("Waiting for approval");
+
+    const rename = (name: string) => {
+      vi.mocked(useProfile).mockReturnValue({
+        data: { id: "gw-1", name, slug: "team", tools: [] },
+        isPending: false,
+      } as unknown as ReturnType<typeof useProfile>);
+      view.rerender(<ConnectionPage />);
+    };
+    rename("Renamed gateway");
+    expect(status()).toBeNull();
+
+    await copyCommand();
+    await approveElsewhere();
+    const renamedWelcome = welcome.replace("team_gateway", "renamed_gateway");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
+
+    rename("Another gateway name");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
   });
 
   it("shows the starter prompt from the link", async () => {
@@ -1005,15 +1638,15 @@ describe("ConnectPage after copying the prompt", () => {
     );
     const card = screen.getByRole("region", { name: "Starter prompt" });
     expect(card).toHaveTextContent(
-      "Works once your agent is connected. If it isn't yet, it points you back to the connect prompt.",
+      "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
     );
-    expect(within(card).getByText(welcome)).toBeVisible();
+    expect(within(card).getByText(genericWelcome)).toBeVisible();
     await userEvent.click(within(card).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
   });
 
   it("offers the starter prompt in manual setup, but not for n8n", () => {
-    show(["generic"], "clientId=generic&mode=manual");
+    show(["generic"]);
     expect(
       screen.getByRole("button", { name: "Show the starter prompt" }),
     ).toBeVisible();
@@ -1022,5 +1655,41 @@ describe("ConnectPage after copying the prompt", () => {
     expect(
       screen.queryByRole("button", { name: "Show the starter prompt" }),
     ).toBeNull();
+  });
+});
+
+describe("Connect skill catalogue preview", () => {
+  it("shows the full count while fetching only one preview page", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    mockOrganization({ data: { connectionSkillsEnabled: true } });
+    const skills = Array.from({ length: 10 }, (_, index) => ({
+      id: `preview-${index}`,
+      name: `Preview skill ${index}`,
+      description: "Useful instructions",
+      scope: "org",
+      usageCount: 10 - index,
+    }));
+    vi.mocked(archestraApiSdk.getSkills).mockResolvedValueOnce({
+      data: {
+        data: skills,
+        pagination: { total: 10000, limit: 10, offset: 0 },
+      },
+    } as never);
+    render(<ConnectionPage />);
+    expect(await screen.findByText("+10,000 skills")).toBeVisible();
+    expect(screen.getByText("Preview skill 0")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledTimes(1);
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledWith({
+      query: { limit: 10, offset: 0, includeContent: false },
+    });
   });
 });

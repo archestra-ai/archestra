@@ -28,6 +28,10 @@ export {
 };
 
 export const ChatCompletionsHeadersSchema = z.object({
+  "api-key": z
+    .string()
+    .optional()
+    .describe("Virtual API key for native Azure SDK clients"),
   "user-agent": z.string().optional().describe("The user agent of the client"),
   authorization: z
     .string()
@@ -40,3 +44,43 @@ export const ChatCompletionsHeadersSchema = z.object({
 
 export const ChatCompletionResponseSchema =
   OpenAIChatCompletionResponseSchema.passthrough();
+
+/** Native image generation. Chat streams the completed artifact to the UI. */
+export {
+  ImageEditFieldsSchema,
+  ImageGenerationRequestSchema,
+} from "./image-parameters";
+
+export const ImageGenerationResponseSchema = z
+  .object({
+    created: z.number(),
+    model: z.string().optional(),
+    data: z
+      .array(
+        z.object({
+          b64_json: z.string().optional(),
+          url: z.string().optional(),
+          revised_prompt: z.string().optional(),
+        }),
+      )
+      .optional(),
+    usage: z
+      .object({
+        input_tokens: z.number(),
+        output_tokens: z.number(),
+        total_tokens: z.number(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+/** Finite media turns; the backend uses native Realtime WebSockets upstream. */
+export const RealtimeTurnRequestSchema = ChatCompletionRequestSchema.extend({
+  target_language: z
+    .string()
+    .regex(/^[a-z]{2,3}(?:-[A-Za-z]{2,8})?$/)
+    .optional(),
+}).describe(
+  "A bounded realtime audio turn. Translation requires WAV input and target_language; tools are not supported.",
+);

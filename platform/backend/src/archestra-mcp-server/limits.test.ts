@@ -3,8 +3,11 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
+import { LimitCleanupIntervalSchema } from "@/types/limit";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("limit tool execution", () => {
@@ -38,6 +41,127 @@ describe("limit tool execution", () => {
     },
   );
 
+  test("creates and updates all thirty combinations through the MCP contract", async () => {
+    const name = (tool: string) =>
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`;
+    for (const limit_type of ["token_cost", "requests", "tokens"]) {
+      for (const cleanup_interval of LimitCleanupIntervalSchema.options) {
+        const created = await executeArchestraTool(
+          name("create_limit"),
+          {
+            entity_type: "organization",
+            entity_id: mockContext.organizationId,
+            limit_type,
+            cleanup_interval,
+            limit_value: 10,
+          },
+          mockContext,
+        );
+        expect(created.isError).toBe(false);
+        const id = (created.structuredContent as { limit: { id: string } })
+          .limit.id;
+        const updated = await executeArchestraTool(
+          name("update_limit"),
+          { id, limit_value: 11 },
+          mockContext,
+        );
+        expect(updated.isError).toBe(false);
+        expect(updated.structuredContent).toMatchObject({
+          limit: {
+            limitType: limit_type,
+            cleanupInterval: cleanup_interval,
+            limitValue: 11,
+          },
+        });
+      }
+    }
+  });
+
+  test("manages scoped throughput through MCP and keeps another organization's rules private", async ({
+    makeOrganization,
+  }) => {
+    const name = (tool: string) =>
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`;
+    const orgId = mockContext.organizationId;
+    if (!orgId) throw new Error("Missing organization");
+    const created = await executeArchestraTool(
+      name("create_limit"),
+      {
+        entity_type: "organization",
+        entity_id: orgId,
+        limit_type: "requests_per_minute",
+        limit_value: 10,
+      },
+      mockContext,
+    );
+    expect(created.isError).toBe(false);
+    const [rule] = await LimitModel.findAll("organization", orgId);
+    expect(rule.cleanupInterval).toBe("minute");
+    await LlmThroughputModel.admit({
+      entities: [{ entityType: "organization", entityId: orgId }],
+      model: "model-a",
+    });
+    const updated = await executeArchestraTool(
+      name("update_limit"),
+      {
+        id: rule.id,
+        limit_value: 5,
+        model: ["model-a"],
+      },
+      mockContext,
+    );
+    expect(updated.isError).toBe(false);
+    const listed = await executeArchestraTool(
+      name("get_limits"),
+      {},
+      mockContext,
+    );
+    expect(listed.structuredContent).toMatchObject({
+      limits: [
+        expect.objectContaining({
+          id: rule.id,
+          model: ["model-a"],
+          limitValue: 5,
+          throughputUsage: {
+            currentUsage: expect.any(Number),
+            resetsAt: expect.any(String),
+          },
+        }),
+      ],
+    });
+    const usage = (await LlmThroughputModel.usage([rule])).get(rule.id);
+    expect(usage?.currentUsage).toBeGreaterThan(0.9);
+    expect(usage?.currentUsage).toBeLessThanOrEqual(1);
+    const other = await makeOrganization();
+    const privateRule = await LimitModel.create({
+      entityType: "organization",
+      entityId: other.id,
+      limitType: "requests_per_minute",
+      limitValue: 1,
+    });
+    expect(
+      (
+        await executeArchestraTool(
+          name("update_limit"),
+          {
+            id: privateRule.id,
+            limit_value: 100,
+          },
+          mockContext,
+        )
+      ).isError,
+    ).toBe(true);
+    const hidden = await executeArchestraTool(
+      name("get_limits"),
+      {
+        entity_type: "organization",
+        entity_id: other.id,
+      },
+      mockContext,
+    );
+    expect(hidden.structuredContent).toMatchObject({ limits: [] });
+  });
+
   test("create_limit returns error when required fields are missing", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
@@ -70,6 +194,32 @@ describe("limit tool execution", () => {
       "Successfully created limit",
     );
     expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit rejects an LLM Proxy cost budget", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId: mockContext.organizationId,
+      agentType: "llm_proxy",
+    });
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: proxy.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining("Use an organization limit instead"),
+      }),
+    ]);
+    expect(await LimitModel.findAll("agent", proxy.id)).toEqual([]);
   });
 
   test("create_limit succeeds with null model (all models)", async () => {

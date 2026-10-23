@@ -14,8 +14,8 @@ import {
  * - sharing: scope, teams, labels
  * - identity/singletons: slug, isDefault, isPersonalGateway, isPersonalProxy
  * - ownership/lifecycle: organizationId, authorId, timestamps, deletedAt
- * - limits and per-tool policies (separate entities keyed by agent/tool id,
- *   not owned by the agent's config surface)
+ * - limits (separate entities keyed by agent id, not owned by the agent's
+ *   config surface)
  *
  * Enum-ish fields are plain strings on purpose: snapshots are immutable
  * historical data and must keep parsing after an enum gains or loses values.
@@ -26,13 +26,17 @@ import {
  * Referenced entities are captured as id + human-readable name so history
  * stays legible after the referent is renamed or deleted.
  */
+const ModelIdentitySchema = z.object({
+  id: z.string(),
+  externalId: z.string(),
+});
+
 export const AgentConfigSnapshotSchema = z.object({
   agentType: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   icon: z.string().nullable(),
   systemPrompt: z.string().nullable(),
-  considerContextUntrusted: z.boolean(),
   toolExposureMode: z.string(),
   // Snapshots created before credential-readiness controls preserve the
   // historical behavior: missing credentials did not block execution.
@@ -55,7 +59,13 @@ export const AgentConfigSnapshotSchema = z.object({
   incomingEmailAllowedDomain: z.string().nullable(),
   builtInAgentConfig: z.unknown(),
   /** Resolved model identity (modelId FK + human-readable externalId). */
-  model: z.object({ id: z.string(), externalId: z.string() }).nullable(),
+  model: ModelIdentitySchema.nullable(),
+  /**
+   * Optional `fast` / `smart` trio tiers on `llmApiKey`. Snapshots taken
+   * before tiers existed carry neither, and that agent had no tiers set.
+   */
+  fastModel: ModelIdentitySchema.nullable().default(null),
+  smartModel: ModelIdentitySchema.nullable().default(null),
   /** Redacted key identity — never key material (secret ids are excluded). */
   llmApiKey: z
     .object({ id: z.string(), name: z.string(), provider: z.string() })

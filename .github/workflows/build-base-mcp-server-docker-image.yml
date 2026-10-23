@@ -22,6 +22,10 @@ on:
         type: string
         default: ""
     secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -51,16 +55,16 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Setup uv
-        uses: ./.github/actions/setup-uv
+        uses: $/.github/actions/setup-uv
         with:
           version: "0.9.26"
 
       - name: Regenerate lockfile and verify it is committed
         run: |
-          make -C mcp_server_docker_image update-python-lockfile
+          make -C docker_images/mcp_server update-python-lockfile
 
-          if ! git diff --exit-code -- mcp_server_docker_image/requirements.lock; then
-            echo "::error::mcp_server_docker_image/requirements.lock is out of date. Regenerate it with uv pip compile."
+          if ! git diff --exit-code -- docker_images/mcp_server/requirements.lock; then
+            echo "::error::docker_images/mcp_server/requirements.lock is out of date. Regenerate it with uv pip compile."
             exit 1
           fi
 
@@ -71,10 +75,10 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
-      image_directory: ./platform/mcp_server_docker_image
-      dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+      image_directory: ./platform/docker_images/mcp_server
+      dockerfile: ./platform/docker_images/mcp_server/Dockerfile
       image_name: mcp-server-base
       image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
       version: ${{ inputs.version }}
@@ -82,7 +86,9 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
-      reuse_paths: '["platform/mcp_server_docker_image", ".github/workflows/build-base-mcp-server-docker-image.yml"]'
+      reuse_paths: '["platform/docker_images/mcp_server", ".github/workflows/build-base-mcp-server-docker-image.yml"]'
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

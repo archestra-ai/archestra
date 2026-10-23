@@ -90,11 +90,13 @@ describe("GET /api/openappa/remedies/activity", () => {
     expect(body.days.at(-1)?.date).toBe(utcDate(new Date()));
     expect(body.days.at(0)?.date).toBe(utcDate(daysAgo(6, 0)));
     expect(
-      body.days.every((day) => day.blocked === 0 && day.remedied === 0),
+      body.days.every(
+        (day) => day.blocked === 0 && day.approved === 0 && day.cleaned === 0,
+      ),
     ).toBe(true);
   });
 
-  test("counts denied tool calls per day and the ones a remedy let through", async ({
+  test("counts denied tool calls per day by how each ended", async ({
     makeOrganization,
   }) => {
     const otherOrganizationId = (await makeOrganization()).id;
@@ -197,10 +199,18 @@ describe("GET /api/openappa/remedies/activity", () => {
 
     const body = await activity();
     const byDate = Object.fromEntries(
-      body.days.map((day) => [day.date, [day.blocked, day.remedied]]),
+      body.days.map((day) => [
+        day.date,
+        [day.blocked, day.approved, day.cleaned],
+      ]),
     );
-    expect(byDate[utcDate(twoDaysAgo)]).toEqual([3, 1]);
-    expect(byDate[utcDate(today)]).toEqual([2, 1]);
-    expect(body.days.reduce((total, day) => total + day.blocked, 0)).toBe(5);
+    expect(byDate[utcDate(twoDaysAgo)]).toEqual([2, 1, 0]);
+    expect(byDate[utcDate(today)]).toEqual([1, 0, 1]);
+    expect(
+      body.days.reduce(
+        (total, day) => total + day.blocked + day.approved + day.cleaned,
+        0,
+      ),
+    ).toBe(5);
   });
 });

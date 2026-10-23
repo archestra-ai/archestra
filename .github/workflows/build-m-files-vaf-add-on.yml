@@ -56,14 +56,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "platform/integrations/m-files-vaf-add-on/**"
-      - "!platform/integrations/m-files-vaf-add-on/**.md"
+      - "platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/**"
+      - "!platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/**.md"
       - ".github/workflows/build-m-files-vaf-add-on.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "platform/integrations/m-files-vaf-add-on/**"
-      - "!platform/integrations/m-files-vaf-add-on/**.md"
+      - "platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/**"
+      - "!platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/**.md"
       - ".github/workflows/build-m-files-vaf-add-on.yml"
   workflow_dispatch: {}
 
@@ -93,8 +93,8 @@ jobs:
         id: build
         shell: pwsh
         run: |
-          dotnet build platform/integrations/m-files-vaf-add-on/Archestra.MFiles.VAFAddOn.csproj -c Release
-          $versioned = Get-Item platform/integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on-*.mfappx
+          dotnet build platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/Archestra.MFiles.VAFAddOn.csproj -c Release
+          $versioned = Get-Item platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/bin/Release/archestra-m-files-vaf-add-on-*.mfappx
           if (-not $versioned) { throw "No .mfappx produced by the build" }
           if ($versioned.Name -notmatch '^archestra-m-files-vaf-add-on-(.+)\.mfappx$') {
             throw "Unexpected package name: $($versioned.Name)"
@@ -102,7 +102,7 @@ jobs:
           $version = $Matches[1]
           # Stable-name copy: the backend and the installer reference the
           # package by the version-independent asset name.
-          $stable = "platform/integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on.mfappx"
+          $stable = "platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on/bin/Release/archestra-m-files-vaf-add-on.mfappx"
           Copy-Item $versioned.FullName $stable
           "STABLE_PACKAGE_PATH=$stable" | Out-File -FilePath $env:GITHUB_ENV -Append
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append

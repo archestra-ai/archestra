@@ -7,7 +7,7 @@ import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
@@ -60,9 +60,6 @@ export function SaveToKnowledgeDialog({
   const [knowledgeBaseId, setKnowledgeBaseId] = useState(NO_KNOWLEDGE_BASE);
   const [failures, setFailures] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>();
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
 
   const { data: directories = [] } = useKnowledgeDirectories();
   const { data: knowledgeBases } = useKnowledgeBases();
@@ -71,7 +68,6 @@ export function SaveToKnowledgeDialog({
   // Re-seed on open so saving a second file never shows the first one's name.
   useEffect(() => {
     if (!open) return;
-    setActiveSection("general");
     setFilename(single?.name ?? "");
     setDirectoryId(ROOT_VALUE);
     setInitialGrants([]);
@@ -121,23 +117,13 @@ export function SaveToKnowledgeDialog({
   };
 
   return (
-    <TabbedDialogShell
+    <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={single ? "Save to knowledge" : `Save ${attachments.length} files`}
       description="Keeps a copy in the knowledge repository, where it outlives this conversation."
-      sidebarLabel={
-        single ? filename || "Document" : `${attachments.length} documents`
-      }
-      sidebarDescription="Knowledge files"
-      sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
-      activeSection={activeSection}
-      navItems={[
-        { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
-      ]}
-      onActiveSectionChange={setActiveSection}
       onSubmit={() => void handleSubmit()}
+      bodyClassName="space-y-4"
       footer={
         <>
           <Button
@@ -159,93 +145,86 @@ export function SaveToKnowledgeDialog({
         </>
       }
     >
-      <div hidden={activeSection !== "general"} className="space-y-4">
-        {single ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="save-filename">Name</Label>
-            <Input
-              id="save-filename"
-              value={filename}
-              onChange={(event) => setFilename(event.target.value)}
-            />
-          </div>
-        ) : (
-          <ul className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
-            {attachments.map((attachment) => (
-              <li
-                key={attachment.id}
-                className="flex items-center gap-2 px-1 py-1 text-sm"
-              >
-                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">
-                  {attachment.name}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
+      {single ? (
         <div className="space-y-1.5">
-          <Label htmlFor="save-directory">Directory</Label>
-          <Select value={directoryId} onValueChange={setDirectoryId}>
-            <SelectTrigger id="save-directory" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
-              {directories.map((directory) => (
-                <SelectItem key={directory.id} value={directory.id}>
-                  {directory.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="save-knowledge-base">Knowledge base</Label>
-          {/* Optional, and empty by default: saving a document and making it
-              retrievable by agents are separate decisions, and the second one
-              is the one that changes who can see it in an answer. */}
-          <SingleSelectCombobox
-            options={[
-              { value: NO_KNOWLEDGE_BASE, label: "Don't index yet" },
-              ...(knowledgeBases ?? []).map((knowledgeBase) => ({
-                value: knowledgeBase.id,
-                label: knowledgeBase.name,
-              })),
-            ]}
-            value={knowledgeBaseId}
-            onChange={setKnowledgeBaseId}
-            placeholder="Don't index yet"
-            searchPlaceholder="Search knowledge bases"
-            emptyMessage="No knowledge bases yet"
-            className="w-full"
+          <Label htmlFor="save-filename">Name</Label>
+          <Input
+            id="save-filename"
+            value={filename}
+            onChange={(event) => setFilename(event.target.value)}
           />
         </div>
+      ) : (
+        <ul className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
+          {attachments.map((attachment) => (
+            <li
+              key={attachment.id}
+              className="flex items-center gap-2 px-1 py-1 text-sm"
+            >
+              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {failures.length > 0 && (
-          <InlineNotice variant="error">
-            <span className="font-medium">
-              Could not save {failures.length}{" "}
-              {failures.length === 1 ? "file" : "files"}
-            </span>
-            <InlineNoticeText>
-              {failures.join(", ")}. A file the repository cannot read — a
-              scanned PDF with no text layer, or an image — has nothing to
-              index. A name already in use needs a different one.
-            </InlineNoticeText>
-          </InlineNotice>
-        )}
+      <div className="space-y-1.5">
+        <Label htmlFor="save-directory">Directory</Label>
+        <Select value={directoryId} onValueChange={setDirectoryId}>
+          <SelectTrigger id="save-directory" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
+            {directories.map((directory) => (
+              <SelectItem key={directory.id} value={directory.id}>
+                {directory.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <div hidden={activeSection !== "permissions"}>
-        <InitialResourcePermissions
-          resource="knowledgeFile"
-          grants={initialGrants}
-          onChange={setInitialGrants}
-          standalone
+
+      <div className="space-y-1.5">
+        <Label htmlFor="save-knowledge-base">Knowledge base</Label>
+        {/* Optional, and empty by default: saving a document and making it
+              retrievable by agents are separate decisions, and the second one
+              is the one that changes who can see it in an answer. */}
+        <SingleSelectCombobox
+          options={[
+            { value: NO_KNOWLEDGE_BASE, label: "Don't index yet" },
+            ...(knowledgeBases ?? []).map((knowledgeBase) => ({
+              value: knowledgeBase.id,
+              label: knowledgeBase.name,
+            })),
+          ]}
+          value={knowledgeBaseId}
+          onChange={setKnowledgeBaseId}
+          placeholder="Don't index yet"
+          searchPlaceholder="Search knowledge bases"
+          emptyMessage="No knowledge bases yet"
+          className="w-full"
         />
       </div>
-    </TabbedDialogShell>
+
+      {failures.length > 0 && (
+        <InlineNotice variant="error">
+          <span className="font-medium">
+            Could not save {failures.length}{" "}
+            {failures.length === 1 ? "file" : "files"}
+          </span>
+          <InlineNoticeText>
+            {failures.join(", ")}. A file the repository cannot read — a scanned
+            PDF with no text layer, or an image — has nothing to index. A name
+            already in use needs a different one.
+          </InlineNoticeText>
+        </InlineNotice>
+      )}
+      <InitialResourcePermissions
+        resource="knowledgeFile"
+        grants={initialGrants}
+        onChange={setInitialGrants}
+      />
+    </StandardFormDialog>
   );
 }

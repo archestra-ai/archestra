@@ -1,4 +1,10 @@
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
+import config from "@/config";
+import logger from "@/logging";
+import {
+  type AgentRuntimeCrossingRefusalReason,
+  reportAgentRuntimeCrossingRefusal,
+} from "@/observability/metrics/agent-runtime";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   addressRuntimeChild,
@@ -6,7 +12,11 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { isUnenforcedSession } from "@/openappa/unenforced";
+import {
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import type { AgentRunActorKind } from "@/types";
 import { ApiError } from "@/types";
 import {
@@ -30,11 +40,21 @@ export type RuntimeCrossing = {
   spawn: boolean;
 };
 
-class RuntimeCrossingRefusal extends Error {
+/**
+ * A refusal the caller is meant to read. Tool handlers surface it verbatim
+ * through `crossingRefusal`; HTTP routes answer it as a conflict rather than
+ * an internal error, because nothing on the server went wrong.
+ */
+class RuntimeCrossingRefusal extends ApiError {
   constructor(message: string) {
-    super(message);
+    super(409, message);
     this.name = "RuntimeCrossingRefusal";
   }
+}
+
+/** Shared with protected transfers so a held export refuses the same way a held read does. */
+export function runtimeCrossingRefusal(message: string): Error {
+  return new RuntimeCrossingRefusal(message);
 }
 
 function crossingFromContext(
@@ -49,23 +69,74 @@ function crossingFromContext(
   };
 }
 
+/**
+ * A call without a proof comes from a client whose model requests did not pass
+ * the proxy. The organization's setting for unrecognized clients decides it
+ * here as it does there: such a caller has no session to bind, so it may only
+ * open and use runtimes that have no parent (see `refuseUnrecognizedCaller`).
+ */
 export async function guardRuntimeCrossing(
   context: Pick<ArchestraContext, "openappaRuntimeCall">,
 ): Promise<
   | { kind: "inactive" }
   | { kind: "proof"; crossing: RuntimeCrossing }
+  | { kind: "unrecognized" }
   | { kind: "refused"; reason: string }
 > {
   if (!(await isGuardrailsV2Active())) return { kind: "inactive" };
   const crossing = crossingFromContext(context);
-  if (!crossing) {
+  if (crossing) return { kind: "proof", crossing };
+  const { unsupportedClientAction } = await getGuardrailsDeployment();
+  if (unsupportedClientAction === "block") {
     return {
       kind: "refused",
-      reason:
-        "This runtime crossing has no verified source. The request was not sent.",
+      reason: reportCrossingRefusal({
+        reason: "client_blocked",
+        message:
+          "Guardrails do not recognize this client, so the request was not sent. Send the client's model requests through the LLM Proxy, or ask an administrator to allow unrecognized clients.",
+      }),
     };
   }
-  return { kind: "proof", crossing };
+  return { kind: "unrecognized" };
+}
+
+/**
+ * A runtime bound to a parent answers only to that parent's proof. Returns the
+ * refusal for a caller without one, or undefined when the runtime has no
+ * parent or OpenAPPA no longer governs its session. A runtime whose session
+ * cannot be resolved is refused, not assumed to be unbound. Without a proof
+ * the gateway cannot tell the parent from a stranger, so the refusal names the
+ * missing proof, not a different session.
+ *
+ * A session that was superyelled, whose parent was, or that started while
+ * enforcement was off gets no proof from the proxy, so its own calls and its
+ * parent's carry none. The gateway asks the same question the proxy does, but
+ * only reads: the proxy records the session on its own next request.
+ */
+export async function refuseUnrecognizedCaller(params: {
+  organizationId: string;
+  workspaceId: string | undefined;
+}): Promise<string | undefined> {
+  const resolved = params.workspaceId
+    ? await resolveRuntimeSessionForWorkspace({
+        organizationId: params.organizationId,
+        workspaceId: params.workspaceId,
+      })
+    : null;
+  if (!resolved) {
+    return reportCrossingRefusal({
+      reason: "unverified_session",
+      message: UNVERIFIED_RUNTIME_SESSION,
+      workspaceId: params.workspaceId,
+    });
+  }
+  if (!resolved.session.parent_id) return undefined;
+  if (await isUnenforcedSession(resolved.session)) return undefined;
+  return reportCrossingRefusal({
+    reason: "proof_missing",
+    message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
+    workspaceId: params.workspaceId,
+  });
 }
 
 export function promptWithContract(
@@ -92,12 +163,21 @@ export async function bindRuntimeChild(params: {
 }): Promise<string | undefined> {
   if (params.crossing.source.organization_id !== params.organizationId) {
     throw new RuntimeCrossingRefusal(
-      "The source belongs to another organization.",
+      reportCrossingRefusal({
+        reason: "other_organization",
+        message: OTHER_ORGANIZATION,
+        workspaceId: params.workspaceId,
+      }),
     );
   }
   if (!params.crossing.spawn) {
     throw new RuntimeCrossingRefusal(
-      "This start was not classified as a protected spawn. No runtime was started.",
+      reportCrossingRefusal({
+        reason: "not_a_spawn",
+        message: NOT_A_SPAWN,
+        workspaceId: params.workspaceId,
+        parentSessionId: params.crossing.source.session_id,
+      }),
     );
   }
   const session = runtimeOpenAppaSession({
@@ -118,7 +198,13 @@ export async function bindRuntimeChild(params: {
     if (error instanceof RuntimeCrossingRefusal) throw error;
     if (error instanceof ApiError) {
       throw new RuntimeCrossingRefusal(
-        "The protected runtime could not be bound. No input was delivered; inspect the guardrail decision before requesting a new launch.",
+        reportCrossingRefusal({
+          reason: "unbindable",
+          message:
+            "The protected runtime could not be bound. No input was delivered; inspect the guardrail decision before requesting a new launch.",
+          workspaceId: params.workspaceId,
+          parentSessionId: params.crossing.source.session_id,
+        }),
       );
     }
     throw error;
@@ -147,7 +233,14 @@ export async function admitRuntimeSteer(params: {
     });
   } catch (error) {
     if (error instanceof ApiError) {
-      throw new RuntimeCrossingRefusal(error.message);
+      throw new RuntimeCrossingRefusal(
+        reportCrossingRefusal({
+          reason: "address_refused",
+          message: error.message,
+          workspaceId: params.workspaceId,
+          parentSessionId: params.crossing.source.session_id,
+        }),
+      );
     }
     throw error;
   }
@@ -163,10 +256,18 @@ export async function classifyRuntimeCaller(params: {
   | { kind: "parent"; child: OpenAppaSession }
   | { kind: "refused"; reason: string }
 > {
+  const report = {
+    workspaceId: params.workspaceId,
+    parentSessionId: params.crossing.source.session_id,
+  };
   if (params.crossing.source.organization_id !== params.organizationId) {
     return {
       kind: "refused",
-      reason: "The source belongs to another organization.",
+      reason: reportCrossingRefusal({
+        reason: "other_organization",
+        message: OTHER_ORGANIZATION,
+        ...report,
+      }),
     };
   }
   const resolved = await resolveRuntimeSessionForWorkspace({
@@ -176,8 +277,11 @@ export async function classifyRuntimeCaller(params: {
   if (!resolved) {
     return {
       kind: "refused",
-      reason:
-        "This runtime session could not be verified. The request was refused.",
+      reason: reportCrossingRefusal({
+        reason: "unverified_session",
+        message: UNVERIFIED_RUNTIME_SESSION,
+        ...report,
+      }),
     };
   }
   if (
@@ -189,15 +293,21 @@ export async function classifyRuntimeCaller(params: {
   if (!resolved.session.parent_id) {
     return {
       kind: "refused",
-      reason:
-        "This runtime was opened without a parent. Its raw result was not returned.",
+      reason: reportCrossingRefusal({
+        reason: "unparented",
+        message: `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
+        ...report,
+      }),
     };
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {
     return {
       kind: "refused",
-      reason:
-        "This runtime is bound to a different session. The request was refused.",
+      reason: reportCrossingRefusal({
+        reason: "different_session",
+        message: BOUND_TO_ANOTHER_SESSION,
+        ...report,
+      }),
     };
   }
   return { kind: "parent", child: resolved.session };
@@ -231,38 +341,92 @@ export async function crossRuntimeOutput(params: {
   );
   // Native lookup is newest-first and returns the latest matching admitted row.
   const last = matches[0];
+  const withheld = (message: string) => ({
+    kind: "withheld" as const,
+    reason: reportCrossingRefusal({
+      reason: "withheld",
+      message,
+      workspaceId: params.workspaceId,
+      parentSessionId: params.crossing.source.session_id,
+    }),
+  });
   if (!last) {
-    return {
-      kind: "withheld",
-      reason:
-        "This turn has no admitted result yet. The raw output was not returned.",
-    };
+    return withheld(
+      "This turn has no admitted result yet. The raw output was not returned.",
+    );
   }
   if (last.value.length > RUNTIME_OUTPUT_INLINE_LIMIT) {
-    return {
-      kind: "withheld",
-      reason:
-        "The admitted result is too large to inline. It was not truncated.",
-    };
+    return withheld(
+      "The admitted result is too large to inline. It was not truncated.",
+    );
   }
   return { kind: "admitted", value: last.value };
 }
 
-/** Crosses exact file bytes. Held or unavailable does not release the original. */
+/**
+ * Crosses exact file bytes. Held or unavailable does not release the original.
+ * The ruling travels with the refusal: it is the same model-facing text a
+ * blocked tool call gets, and it carries the remedy offers the caller can act on.
+ * A runtime that is mid-call cannot return anything yet: `busy` lets the caller
+ * keep the bytes and cross them once the runtime is idle, instead of refusing.
+ */
 export async function crossRuntimeFile(params: {
   child: OpenAppaSession;
   operationId: string;
   value: string;
-}): Promise<string> {
+}): Promise<{ kind: "admitted"; value: string } | { kind: "busy" }> {
   const result = await returnRuntimeValue({
     session: params.child,
     operationId: params.operationId,
     value: params.value,
   });
-  if (result.kind !== "admitted") {
-    throw new RuntimeCrossingRefusal(
-      "The protected file could not be admitted. No original bytes were returned.",
-    );
-  }
-  return result.value;
+  if (result.kind === "admitted") return result;
+  if (result.busy) return { kind: "busy" };
+  throw new RuntimeCrossingRefusal(
+    reportCrossingRefusal({
+      reason: "held",
+      message: heldFileRefusal(result.reason),
+      childSessionId: params.child.session_id,
+      parentSessionId: params.child.parent_id,
+    }),
+  );
 }
+
+/** Shared with protected transfers so both file paths explain a hold the same way. */
+export function heldFileRefusal(reason: string): string {
+  return `The protected file could not be admitted. No original bytes were returned.\n\nGuardrails ruling: ${reason.trim()}`;
+}
+
+/**
+ * Logs and counts one refused or held runtime crossing, then returns the text
+ * the caller sees. Every refusal at the runtime boundary goes through here
+ * once, so a refusal is never silent in the backend log.
+ */
+export function reportCrossingRefusal(params: {
+  reason: AgentRuntimeCrossingRefusalReason;
+  message: string;
+  workspaceId?: string;
+  childSessionId?: string;
+  parentSessionId?: string;
+}): string {
+  const { message, ...fields } = params;
+  logger.info(fields, "Guardrails refused an Agent Runtime crossing");
+  reportAgentRuntimeCrossingRefusal(params.reason);
+  return message;
+}
+
+/** Shared with the gateway's start path, which refuses the same case. */
+export const NOT_A_SPAWN =
+  "This start was not classified as a protected spawn. No runtime was started.";
+
+/** Shared with the gateway's steer path, which refuses the same case. */
+export const UNVERIFIED_RUNTIME_SESSION =
+  "This runtime session could not be verified. The request was refused.";
+
+const OTHER_ORGANIZATION = "The source belongs to another organization.";
+
+const BOUND_TO_ANOTHER_SESSION =
+  "This runtime is bound to a different session. The request was refused.";
+
+const UNPROVEN_CALLER_ON_BOUND_RUNTIME =
+  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Only a tool call from the run's own model, or from the conversation that started the run, carries that proof when its model requests go through the LLM Proxy. A script cannot make this call.";

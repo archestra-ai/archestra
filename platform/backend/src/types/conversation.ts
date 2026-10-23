@@ -134,8 +134,14 @@ export const SelectConversationSchema = createSelectSchema(
     /** Has a message landed since the owner last read it; populated by list queries only. */
     unread: z.boolean().optional(),
     messages: z.array(z.any()), // UIMessage[] from AI SDK
+    /**
+     * Set only on a tail read: how many earlier messages were left out.
+     */
+    olderMessageCount: z.number().int().nonnegative().optional(),
     chatErrors: z.array(SelectConversationChatErrorSchema),
     compactions: z.array(SelectConversationCompactionSchema),
+    /** Prompt size of the latest turn (or a later compaction); single-chat reads only. */
+    contextTokensUsed: z.number().int().nullable().optional(),
     ...selectExtendedFields,
   });
 

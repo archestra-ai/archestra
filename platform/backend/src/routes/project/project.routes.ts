@@ -1,17 +1,23 @@
 import { randomUUID } from "node:crypto";
 import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
   MAX_PROJECT_UPLOAD_BYTES,
+  PaginationQuerySchema,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ProjectLabelModel, ProjectModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
@@ -249,9 +255,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
           "description. `status=deleted` returns the org-wide soft-deleted " +
           "projects for a project admin (empty for everyone else); the other " +
-          "filters do not apply to that slice.",
+          "filters do not apply to that slice. Paginated: owner-first, then " +
+          "newest, then id.",
         tags: ["Projects"],
-        querystring: z.object({
+        querystring: PaginationQuerySchema.extend({
           scope: ProjectListScopeSchema.optional(),
           search: z.string().optional(),
           labels: z
@@ -274,8 +281,23 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "only; org-wide soft-deleted projects for the restore view).",
           ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
+          pinned: z
+            .preprocess(
+              (value) =>
+                value === "false" ? false : value === "true" ? true : value,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Only return projects the current user has pinned (true) or " +
+                "has not pinned (false). Omit for both.",
+            ),
         }),
-        response: constructResponseSchema(z.array(ProjectListItemSchema)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(ProjectListItemSchema),
+        ),
       },
     },
     async ({ query, organizationId, user }) => {
@@ -290,7 +312,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const labelFilteredIds = parsedLabels
         ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
         : undefined;
-      return projectService.list({
+      const { data, total } = await projectService.list({
         organizationId,
         userId: user.id,
         isProjectAdmin,
@@ -302,8 +324,18 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         status: query.status,
         labelFilteredIds,
-        access: query.access,
+        access: resourceAccessSelection(query),
+        pinned: query.pinned,
+        limit: query.limit,
+        offset: query.offset,
       });
+      return {
+        data,
+        pagination: calculatePaginationMeta(total, {
+          limit: query.limit,
+          offset: query.offset,
+        }),
+      };
     },
   );
 

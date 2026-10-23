@@ -2,6 +2,8 @@ import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LimitLabelModel, LimitModel } from "@/models";
+import LlmThroughputModel from "@/models/llm-throughput";
+import { createLimit, limitReadCleanup } from "@/services/limit";
 import {
   ApiError,
   CreateLimitSchema,
@@ -61,9 +63,9 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { query: { entityType, entityId, limitType, labels }, organizationId },
       reply,
     ) => {
-      // Cleanup limits if needed before fetching
-      await LimitModel.cleanupLimitsIfNeeded({
-        allForOrganizationId: organizationId,
+      // Reset elapsed windows before reporting usage.
+      await limitReadCleanup.run({
+        organizationId,
         entityType,
         entityId,
         limitType,
@@ -78,19 +80,23 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Add per-model usage breakdown for token_cost limits
-      const limitsWithUsage = await Promise.all(
-        limits.map(async (limit) => {
-          if (limit.limitType === "token_cost") {
-            const modelUsage = await LimitModel.getModelUsageBreakdown(
-              limit.id,
-            );
-            return { ...limit, modelUsage };
-          }
-          return limit;
-        }),
+      const breakdowns = await LimitModel.getModelUsageBreakdowns(
+        limits
+          .filter((limit) => limit.limitType === "token_cost")
+          .map((limit) => limit.id),
       );
 
-      return reply.send(limitsWithUsage);
+      const throughput = await LlmThroughputModel.usage(limits);
+      return reply.send(
+        limits.map((limit) => {
+          const modelUsage = breakdowns.get(limit.id);
+          return {
+            ...limit,
+            modelUsage,
+            throughputUsage: throughput.get(limit.id),
+          };
+        }),
+      );
     },
   );
 
@@ -118,7 +124,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `${body.entityType} not found`);
       }
 
-      return reply.send(await LimitModel.create(body));
+      return reply.send(await createLimit(body));
     },
   );
 
@@ -138,9 +144,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId }, reply) => {
       // Same cleanup the list read performs, so an elapsed reset window is
       // applied before the usage counters are reported either way.
-      await LimitModel.cleanupLimitsIfNeeded({
-        allForOrganizationId: organizationId,
-      });
+      await limitReadCleanup.run({ organizationId });
 
       const limit = await LimitModel.findByIdInOrganization(id, organizationId);
 
@@ -148,12 +152,19 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Limit not found");
       }
 
-      if (limit.limitType !== "token_cost") {
-        return reply.send(limit);
+      if (
+        limit.limitType !== "token_cost" ||
+        limit.cleanupInterval === "minute"
+      ) {
+        const throughput = await LlmThroughputModel.usage([limit]);
+        return reply.send({
+          ...limit,
+          throughputUsage: throughput.get(limit.id),
+        });
       }
 
-      const modelUsage = await LimitModel.getModelUsageBreakdown(limit.id);
-      return reply.send({ ...limit, modelUsage });
+      const breakdowns = await LimitModel.getModelUsageBreakdowns([limit.id]);
+      return reply.send({ ...limit, modelUsage: breakdowns.get(limit.id) });
     },
   );
 

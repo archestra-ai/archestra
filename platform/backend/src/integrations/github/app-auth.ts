@@ -82,7 +82,10 @@ export async function resolveInstallationCredential(
         "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
       );
     }
-    throw new Error(
+    // GitHub's own failure, relayed as such so a caller can tell an outage
+    // from a fault of ours.
+    throw new ApiError(
+      502,
       [
         `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
         responseMessage,
@@ -113,6 +116,56 @@ export async function resolveInstallationCredential(
     Math.min(GITHUB_APP_INSTALLATION_TOKEN_TTL_MS, expiresAt - Date.now()),
   );
   return { token: body.token, expiresAt };
+}
+
+export const GITHUB_APP_NOT_FOUND = "github_app_not_found";
+
+/**
+ * Call an App-level GitHub endpoint (`/app/...`) authenticated as the App
+ * itself rather than one of its installations, e.g. to find where it is installed.
+ */
+export async function fetchAsGithubApp<T>(
+  params: {
+    githubUrl: string;
+    appId: string;
+    privateKey: string;
+    path: `/app${string}`;
+  },
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<T> {
+  const { privateKey } = parseGitHubAppSecrets(params.privateKey);
+  const jwt = await signAppJwt({
+    appId: params.appId,
+    signingKey: parseSigningKey(privateKey),
+  });
+  const response = await fetchImpl(
+    `${params.githubUrl.replace(/\/+$/, "")}${params.path}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${jwt}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) {
+    const error = new ApiError(
+      502,
+      [
+        `GitHub returned HTTP ${response.status} for the App`,
+        await readGithubErrorResponse(response),
+      ]
+        .filter(Boolean)
+        .join(": "),
+    );
+    // GitHub answers 401 or 404 once the App itself has been deleted.
+    if (response.status === 401 || response.status === 404)
+      error.internalCode = GITHUB_APP_NOT_FOUND;
+    throw error;
+  }
+  return (await response.json()) as T;
 }
 
 // ===== Internal helpers =====

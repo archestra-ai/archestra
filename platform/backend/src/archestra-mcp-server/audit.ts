@@ -24,8 +24,6 @@ import PluginModel from "@/models/plugin";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { parseSkillManifest, SkillParseError } from "@/skills/parser";
@@ -311,6 +309,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   create_schedule_trigger: {
     resourceType: "scheduleTrigger",
     action: "scheduleTrigger.created",
+    recordWhen: (result) => result.structuredContent?.created !== false,
     idFromResult: (s) => str(s?.id),
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
   },
@@ -384,10 +383,17 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  sync_guardrails_repository: {
+    resourceType: "organization",
+    action: "organization.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
   write_workspace_file: {
     resourceType: "agentRun",
     action: "agentRun.updated",
-    idFromArgs: (args) => str(args.task_id),
+    idFromArgs: (args) => str(args.run_id),
     beforeFromArgs: (args) => ({
       workspaceFile: { path: args.path, writeApplied: false },
     }),
@@ -403,7 +409,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   delete_workspace: {
     resourceType: "agentRun",
     action: "agentRun.updated",
-    idFromArgs: (args) => str(args.task_id),
+    idFromArgs: (args) => str(args.run_id),
     fetchById: async (id, organizationId) => {
       const run = await AgentRunModel.findByTaskId(id);
       if (run?.organizationId !== organizationId) return null;
@@ -415,17 +421,20 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
         : null;
     },
   },
-  steer_run: {
+  steer_agent_run: {
     resourceType: "agentRun",
     action: "agentRun.created",
-    // Steering a live terminal creates no run. A retained-workspace
-    // continuation returns both the old and newly created task IDs.
+    // Steering a live terminal creates no run turn; continuing a finished
+    // run in its retained workspace does.
     recordWhen: (result) =>
-      !result.isError &&
-      typeof result.structuredContent?.previous_task_id === "string",
-    idFromResult: (result) => str(result?.task_id),
+      !result.isError && result.structuredContent?.status === "continued",
+    idFromResult: (result) => str(result?.run_id),
     fetchById: async (id, organizationId) => {
-      const task = await A2ATaskModel.findById(id);
+      const taskId = await AgentRunModel.findCurrentTurnTaskId({
+        runId: id,
+        organizationId,
+      });
+      const task = taskId ? await A2ATaskModel.findById(taskId) : null;
       if (!task?.agentId) return null;
       const agent = await AgentModel.findById(task.agentId);
       if (agent?.organizationId !== organizationId) return null;
@@ -535,52 +544,6 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     action: "plugin.deleted",
     idFromArgs: (a) => str(a.id),
     fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
-  },
-
-  // Autonomy policies.
-  create_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.created",
-    idFromResult: (s) =>
-      str((s?.policy as Record<string, unknown> | undefined)?.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  update_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.updated",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  delete_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.deleted",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  create_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.created",
-    idFromResult: (s) =>
-      str((s?.policy as Record<string, unknown> | undefined)?.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  update_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.updated",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  delete_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.deleted",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
   },
 
   // Limits.

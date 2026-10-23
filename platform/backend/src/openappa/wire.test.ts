@@ -1912,6 +1912,70 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test.each([
+    ["truncated text", '{"question":"Pick one'],
+    ["two concatenated objects", '{"a":1}{"b":2}'],
+    ["an array", "[]"],
+    ["null", "null"],
+    ["a string", '"x"'],
+  ])("records a denied call whose arguments are %s with no arguments, and restores it", (_, args) => {
+    // Streamed tool input can end as text that is not a JSON object. The call
+    // is denied before evaluation; its notice must still reach the client.
+    const input = buildNoticeArguments({
+      id: "toolu_4",
+      tool: "ask_user",
+      arguments: args,
+      result: "[appa] Blocked: this call cannot run yet.",
+    });
+    expect(NoticeArguments.safeParse(input).success).toBe(true);
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }],
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_4", name: NOTICE, input }],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "toolu_4", content: "seen" },
+          ],
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+
+    expect(body.messages[0].content[0]).toEqual({
+      type: "tool_use",
+      id: "toolu_4",
+      name: "ask_user",
+      input: {},
+    });
+    expect(body.messages[1].content[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "toolu_4",
+      content: "[appa] Blocked: this call cannot run yet.",
+      is_error: true,
+    });
+  });
+
+  test("still refuses to record a custom call without a string input", () => {
+    expect(() =>
+      buildNoticeArguments({
+        id: "call_5",
+        tool: "apply_patch",
+        arguments: "*** Begin Patch",
+        result: "[appa] Blocked: this call cannot run yet.",
+        custom: true,
+      }),
+    ).toThrow("OpenAPPA custom notice requires a string input");
+  });
+
   test("restores a legacy custom notice whose arguments are JSON-object text", () => {
     const legacyArguments = JSON.stringify({ input: "*** Begin Patch\n" });
     const body = {
@@ -2161,6 +2225,334 @@ describe("APPA request preflight", () => {
       }),
     ).toThrow(
       "declares both mcp__gw__archestra__execute_remedy_plan and mcp__other__archestra__execute_remedy_plan",
+    );
+  });
+
+  test.each([
+    false,
+    true,
+  ])("accepts only client-authorized alias members and selects stable presentation (reversed=%s)", async (reversed) => {
+    const tools = ["current", "legacy"].flatMap((alias) =>
+      [
+        [ADVERTISED_NOTICE, "get_remedy_plans"],
+        [ADVERTISED_CONTROL, "execute_remedy_plan"],
+        [ADVERTISED_ASK_USER, "ask_user"],
+      ].map(([advertisedName, short]) => ({
+        ...attestedTool({
+          name: `${alias}_archestra__${short}`,
+          advertisedName,
+        }),
+        input_schema: {
+          type: "object",
+          properties: {
+            offer_id: { type: "string" },
+            trajectory: { type: "object" },
+            execution: { type: "object" },
+          },
+          required: ["trajectory"],
+        },
+      })),
+    );
+    const copied = attestedTool({
+      name: "foreign_archestra__execute_remedy_plan",
+      advertisedName: ADVERTISED_CONTROL,
+    });
+    const body = {
+      tools: [...(reversed ? [...tools].reverse() : tools), copied],
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "search",
+              content: [
+                {
+                  type: "tool_reference",
+                  tool_name: "current_archestra__get_remedy_plans",
+                },
+                {
+                  type: "tool_reference",
+                  tool_name: "legacy_archestra__get_remedy_plans",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const authorized = await authorizedAliasIdentity(
+      body,
+      tools.map((tool) => tool.name),
+    );
+    const request = prepareAppaRequest({
+      body,
+      identity: authorized,
+      interactionType: "anthropic:messages",
+    });
+    expect(request.tools?.control.name).toBe(
+      "current_archestra__execute_remedy_plan",
+    );
+    expect(request.tools?.notice.name).toBe(
+      "current_archestra__get_remedy_plans",
+    );
+    expect(
+      request.tools?.controlAliases?.map((member) => member.name).sort(),
+    ).toEqual([
+      "current_archestra__execute_remedy_plan",
+      "legacy_archestra__execute_remedy_plan",
+    ]);
+    expect(request.tools?.askUserAliases).toHaveLength(2);
+    expect(
+      body.tools.some((tool) => tool.name.endsWith("get_remedy_plans")),
+    ).toBe(false);
+    expect(JSON.stringify(body.messages)).not.toContain("tool_reference");
+    for (const tool of tools.filter(
+      (tool) => !tool.name.endsWith("get_remedy_plans"),
+    )) {
+      expect(tool.input_schema.properties).not.toHaveProperty("trajectory");
+      if (tool.name.endsWith("execute_remedy_plan"))
+        expect(tool.input_schema.properties).not.toHaveProperty("execution");
+    }
+    expect(request.tools?.controlAliases).not.toContainEqual({
+      name: copied.name,
+    });
+    expect(authorized.attestationOf(copied.name)).toBeUndefined();
+  });
+
+  test("holds every accepted incomplete remedy group member while tools are deferred", async () => {
+    const body = {
+      tools: [
+        { type: "tool_search_tool_regex_20251119", name: "search" },
+        ...["current", "legacy"].flatMap((alias) =>
+          [ADVERTISED_CONTROL, ADVERTISED_ASK_USER].map((advertisedName) =>
+            attestedTool({
+              name: `${alias}_${advertisedName}`,
+              advertisedName,
+            }),
+          ),
+        ),
+      ],
+      messages: [],
+    };
+    const request = prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "anthropic:messages",
+    });
+    expect(request.tools).toBeUndefined();
+    expect(request.heldTools).toHaveLength(4);
+    expect(body.tools).toHaveLength(1);
+  });
+
+  test("accepts an authorized singleton after a copied outside-binding alias is demoted", async () => {
+    const body = {
+      tools: [
+        attestedTool({
+          name: "current_notice",
+          advertisedName: ADVERTISED_NOTICE,
+        }),
+        attestedTool({
+          name: "current_control",
+          advertisedName: ADVERTISED_CONTROL,
+        }),
+        attestedTool({
+          name: "foreign_control",
+          advertisedName: ADVERTISED_CONTROL,
+        }),
+      ],
+      messages: [],
+    };
+    const identity = await authorizedAliasIdentity(body, [
+      "current_notice",
+      "current_control",
+    ]);
+    const prepared = prepareAppaRequest({
+      body,
+      identity,
+      interactionType: "anthropic:messages",
+    });
+    expect(prepared.tools?.control).toEqual({ name: "current_control" });
+    expect(prepared.tools?.controlAliases).toBeUndefined();
+    expect(body.tools.map((tool) => tool.name)).toEqual([
+      "current_control",
+      "foreign_control",
+    ]);
+    expect(identity.attestationOf("foreign_control")).toBeUndefined();
+    expect(identity.canonicalize("foreign_control")).toBe(
+      "foreign:foreign_control",
+    );
+  });
+
+  test("hides both Codex notice namespaces and retains exact control declarations", async () => {
+    const body = {
+      tools: ["legacy", "current"].map((alias) => ({
+        type: "namespace",
+        name: `mcp__${alias}`,
+        tools: [ADVERTISED_NOTICE, ADVERTISED_CONTROL, ADVERTISED_ASK_USER].map(
+          (advertisedName) => ({
+            ...attestedTool({
+              name: advertisedName,
+              advertisedName,
+              type: "function",
+            }),
+            parameters: {
+              type: "object",
+              properties: {
+                trajectory: { type: "object" },
+                execution: { type: "object" },
+              },
+            },
+          }),
+        ),
+      })),
+      input: [],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "openai:responses",
+    });
+    expect(prepared.tools?.control).toEqual({
+      name: ADVERTISED_CONTROL,
+      namespace: "mcp__current",
+    });
+    expect(prepared.tools?.controlAliases).toHaveLength(2);
+    for (const group of body.tools) {
+      expect(group.tools.map((tool) => tool.name)).toEqual([
+        ADVERTISED_CONTROL,
+        ADVERTISED_ASK_USER,
+      ]);
+      expect(group.tools[0].parameters.properties).toEqual({});
+      expect(group.tools[1].parameters.properties).toEqual({
+        execution: { type: "object" },
+      });
+    }
+  });
+
+  test("restores every accepted alias receipt without renaming history calls or IDs", async () => {
+    const tools = ["current", "legacy"].flatMap((alias) =>
+      [ADVERTISED_CONTROL, ADVERTISED_NOTICE, ADVERTISED_ASK_USER].map(
+        (advertisedName) =>
+          attestedTool({ name: `${alias}_${advertisedName}`, advertisedName }),
+      ),
+    );
+    const body = {
+      tools,
+      messages: [
+        {
+          role: "assistant",
+          content: ["current", "legacy"].flatMap((alias) => [
+            {
+              type: "tool_use",
+              id: `${alias}-control`,
+              name: `${alias}_${ADVERTISED_CONTROL}`,
+              input: stampedRemedyArguments({
+                callId: `${alias}-control`,
+                toolName: `${alias}_${ADVERTISED_CONTROL}`,
+                original: '{"offer_id":"offer"}',
+              }),
+            },
+            {
+              type: "tool_use",
+              id: `${alias}-question`,
+              name: `${alias}_${ADVERTISED_ASK_USER}`,
+              input: {
+                question: "Choose",
+                trajectory: { v: 1, session_id: "untrusted" },
+              },
+            },
+          ]),
+        },
+        {
+          role: "user",
+          content: ["current", "legacy"].flatMap((alias) => [
+            {
+              type: "tool_result",
+              tool_use_id: `${alias}-control`,
+              content: "done",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: `${alias}-question`,
+              content: "yes",
+            },
+          ]),
+        },
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "anthropic:messages",
+    });
+    expect(body.messages[0].content).toEqual(
+      ["current", "legacy"].flatMap((alias) => [
+        {
+          type: "tool_use",
+          id: `${alias}-control`,
+          name: `${alias}_${ADVERTISED_CONTROL}`,
+          input: { offer_id: "offer" },
+        },
+        {
+          type: "tool_use",
+          id: `${alias}-question`,
+          name: `${alias}_${ADVERTISED_ASK_USER}`,
+          input: { question: "Choose" },
+        },
+      ]),
+    );
+  });
+
+  test.each([
+    "different-gateway",
+    "free-form",
+    "contract-conflict",
+  ])("refuses invalid equivalent special-tool declarations (%s)", async (variant) => {
+    const body = {
+      tools: [
+        attestedTool({
+          name: "current_notice",
+          advertisedName: ADVERTISED_NOTICE,
+        }),
+        {
+          ...attestedTool({
+            name: "current_control",
+            advertisedName: ADVERTISED_CONTROL,
+          }),
+          input_schema: { type: "object" },
+        },
+        {
+          ...attestedTool({
+            name: "legacy_control",
+            advertisedName: ADVERTISED_CONTROL,
+            ...(variant === "different-gateway"
+              ? { gatewayId: randomUUID() }
+              : {}),
+            ...(variant === "free-form" ? { type: "custom" } : {}),
+          }),
+          input_schema:
+            variant === "contract-conflict"
+              ? { type: "object", required: ["different"] }
+              : { type: "object" },
+        },
+      ],
+      messages: [],
+    };
+    const resolved =
+      variant === "contract-conflict"
+        ? await attestedIdentity(body)
+        : await authorizedAliasIdentity(body);
+    expect(() =>
+      prepareAppaRequest({
+        body,
+        identity: resolved,
+        interactionType: "anthropic:messages",
+      }),
+    ).toThrow(
+      variant === "free-form"
+        ? "structured function arguments"
+        : "exactly one declaration",
     );
   });
 
@@ -2502,22 +2894,264 @@ describe("APPA request preflight", () => {
     expect(compat.tools?.notice.name).toBe("archestra__get_remedy_plans");
   });
 
-  test("refuses a session that defers its tools to a tool search", () => {
-    // Codex declares a client-run `tool_search` for MCP tools on models that
-    // support it: the APPA tools are then never on the wire.
+  test("governs a Codex session whose tools sit behind a client-run tool_search", () => {
+    // Codex declares only the search; the tools it loads come back as a
+    // `tool_search_output` input item. The search names no tool and returns no
+    // call to run, so it is neither gated nor refused.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { type: "function", name: "exec_command" },
+          { type: "tool_search", execution: "client", parameters: {} },
+        ],
+        input: [
+          {
+            type: "tool_search_output",
+            tools: [
+              {
+                type: "namespace",
+                name: "mcp__weather",
+                tools: [{ type: "function", name: "get_weather" }],
+              },
+            ],
+          },
+        ],
+      },
+      interactionType: "openai:responses",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([
+      { name: "exec_command" },
+      { name: "get_weather", namespace: "mcp__weather" },
+    ]);
+  });
+
+  test("governs Claude Code's deferred tools: only a placeholder is declared, and ToolSearch is an ordinary client tool", () => {
+    // Shape of the first request of a Claude Code 2.1.285 session with tool
+    // search on: the deferred tools are named in a system reminder, not in
+    // `tools`.
+    const body = {
+      tools: [
+        { name: "Bash" },
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+      ],
+      messages: [{ role: "user", content: "hi" }],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([
+      { name: "Bash" },
+      { name: "ToolSearch" },
+      { name: "DeferredToolPlaceholder" },
+    ]);
+  });
+
+  test("keeps tool_reference results of a Claude Code ToolSearch in history untouched", () => {
+    // Claude Code 2.1.285 after a search: the loaded tool is declared with
+    // `defer_loading` and the search result holds a `tool_reference` block.
+    const messages = [
+      { role: "user", content: "use the probe tool" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_0",
+            name: "ToolSearch",
+            input: { query: "select:mcp__many__probe_tool_0" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_0",
+            content: [
+              { type: "tool_reference", tool_name: "mcp__many__probe_tool_0" },
+            ],
+          },
+        ],
+      },
+    ];
+    const body = {
+      tools: [
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+        { name: "mcp__many__probe_tool_0", defer_loading: true },
+      ],
+      messages: structuredClone(messages),
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(body.messages).toEqual(messages);
+    expect(prepared.declaredTools).toContainEqual({
+      name: "mcp__many__probe_tool_0",
+    });
+    expect(prepared.restoredNoticeCallIds).toBeUndefined();
+  });
+
+  test.each([
+    "tool_search_tool_bm25_20251119",
+    "tool_search_tool_regex_20251119",
+  ])("treats Anthropic's provider-run %s as hosted and governs the deferred tools it searches", (type) => {
+    // Every deferred tool is declared in `tools`, so every callable tool is
+    // on the wire; the search itself returns no call to the client.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { type, name: "tool_search" },
+          { name: "deferred", defer_loading: true },
+        ],
+      },
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([{ name: "deferred" }]);
+  });
+
+  test("names the shape it refuses: an unknown tool_search type", () => {
     expect(() =>
       prepareAppaRequest({
         body: {
-          tools: [
-            { type: "function", name: "exec_command" },
-            { type: "tool_search", execution: "client", parameters: {} },
-          ],
-          input: [],
+          tools: [{ type: "tool_search_tool_future_20990101", name: "s" }],
         },
-        interactionType: "openai:responses",
+        interactionType: "anthropic:messages",
         identity,
       }),
-    ).toThrow("defers its tools to a tool search");
+    ).toThrow("cannot classify tool type `tool_search_tool_future_20990101`");
+  });
+
+  test("removes tool_reference blocks that name the notice tool it withholds, keeping other references and a readable result", () => {
+    const search = (references: string[], id: string) => ({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: id,
+          content: references.map((tool_name) => ({
+            type: "tool_reference",
+            tool_name,
+          })),
+        },
+      ],
+    });
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }, { name: "ToolSearch" }],
+      messages: [
+        { role: "user", content: "load" },
+        search([NOTICE, "other_tool"], "toolu_a"),
+        search([NOTICE], "toolu_b"),
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    const results = body.messages
+      .slice(1)
+      .map((m) => (m.content as Array<{ content: unknown }>)[0].content);
+    expect(results[0]).toEqual([
+      { type: "tool_reference", tool_name: "other_tool" },
+    ]);
+    expect(results[1]).toEqual([
+      { type: "text", text: "[appa] No tools were loaded." },
+    ]);
+  });
+
+  test("removes references to the withheld notice tool from a provider-run search result too", () => {
+    const body = {
+      tools: [
+        { type: "tool_search_tool_regex_20251119", name: "tool_search" },
+        { name: NOTICE, defer_loading: true },
+        { name: CONTROL, defer_loading: true },
+        { name: "Bash" },
+      ],
+      messages: [
+        { role: "user", content: "find" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_search_tool_result",
+              tool_use_id: "srvtoolu_1",
+              content: {
+                type: "tool_search_tool_search_result",
+                tool_references: [
+                  { type: "tool_reference", tool_name: NOTICE },
+                  { type: "tool_reference", tool_name: CONTROL },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    const result = (body.messages[1].content as Array<{ content: unknown }>)[0]
+      .content as { tool_references: unknown[] };
+    expect(result.tool_references).toEqual([
+      { type: "tool_reference", tool_name: CONTROL },
+    ]);
+    // The provider also requires one non-deferred tool, and none with both
+    // defer_loading and cache_control: nothing here adds either problem.
+    expect(
+      (body.tools as Array<{ defer_loading?: boolean }>).some(
+        (tool) => tool.defer_loading !== true,
+      ),
+    ).toBe(true);
+  });
+
+  test("an attested session that defers its remedy tools is governed without remedies, not refused", () => {
+    const attested = {
+      ...identity,
+      mode: "attested" as const,
+      gatewayConnected: true,
+    };
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "ToolSearch" },
+          { name: "DeferredToolPlaceholder", defer_loading: true },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      identity: attested,
+    });
+    expect(prepared.tools).toBeUndefined();
+    expect(prepared.defersTools).toBe(true);
+  });
+
+  test("an attested session without remedy tools and without deferral is still refused", () => {
+    const attested = {
+      ...identity,
+      mode: "attested" as const,
+      gatewayConnected: true,
+    };
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ name: "Bash" }], messages: [] },
+        interactionType: "anthropic:messages",
+        identity: attested,
+      }),
+    ).toThrow("does not declare");
   });
 
   test.each([
@@ -2579,20 +3213,6 @@ describe("APPA request preflight", () => {
     ).toThrow("cannot classify tool type");
   });
 
-  test.each([
-    { type: "tool_search_tool_bm25_20251119" },
-    { type: "tool_search_tool_regex_20251119" },
-    { type: "function", name: "deferred", defer_loading: true },
-  ])("refuses deferred client tools: %j", (tool) => {
-    expect(() =>
-      prepareAppaRequest({
-        body: { tools: [tool] },
-        interactionType: "anthropic:messages",
-        identity,
-      }),
-    ).toThrow("defers its tools to a tool search");
-  });
-
   test("does not accept a provider-hosted tool as the remedy control", () => {
     expect(() =>
       prepareAppaRequest({
@@ -2606,7 +3226,7 @@ describe("APPA request preflight", () => {
         interactionType: "anthropic:messages",
         identity,
       }),
-    ).toThrow("conflicts with the OpenAPPA remedy tools");
+    ).toThrow("conflicts with its remedy tools");
   });
 
   test("rejects a hosted name that collides with a declared client remedy tool", () => {
@@ -4158,6 +4778,57 @@ describe("provider-bound sanitizer", () => {
     expect(functionCall).toEqual(unboundNotice);
     expect(toolFree).toEqual(asSent);
   });
+
+  test("still restores a forwarded body's history after stripping a proxy mark", () => {
+    const stamp = stampToolCallId({
+      callId: "call_1",
+      sessionId: "session-1",
+      organizationId: ORG,
+      callerId: "user:alice",
+      secret: SECRET,
+    });
+    const inputTokens = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: appendSessionReceipt("summary", "AAA-AAAA"),
+            },
+          ],
+        },
+        {
+          type: "function_call",
+          call_id: stamp,
+          name: NOTICE,
+          arguments: JSON.stringify(
+            notice("shell", { command: "ls" }, "call_1"),
+          ),
+        },
+        { type: "function_call_output", call_id: stamp, output: "shown" },
+      ],
+    };
+
+    expect(sanitizeForwardedRequest(inputTokens)).toBe(true);
+
+    expect(inputTokens.input).toEqual([
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "summary" }],
+      },
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "shell",
+        arguments: JSON.stringify({ command: "ls" }),
+      },
+      { type: "function_call_output", call_id: "call_1", output: RULING },
+    ]);
+  });
 });
 
 function notice(
@@ -4482,6 +5153,43 @@ async function attestedIdentity(body: unknown, organizationId = ORG) {
     declarations: extractGatewayToolDeclarations(body),
     internalChat: false,
   });
+}
+
+/** Models the proxy's explicit client-bound group API, never marker equality. */
+async function authorizedAliasIdentity(
+  body: unknown,
+  acceptedNames?: readonly string[],
+) {
+  const identity = await attestedIdentity(body);
+  const accepted = identity.verified.filter(
+    (declaration) =>
+      acceptedNames === undefined || acceptedNames.includes(declaration.name),
+  );
+  const attestationOf = (name: string, namespace?: string) =>
+    accepted.find(
+      (declaration) =>
+        declaration.name === name && declaration.namespace === namespace,
+    );
+  const aliasesOf = (advertisedName: string) =>
+    accepted
+      .filter((declaration) => declaration.advertisedName === advertisedName)
+      .map(({ name, namespace }) => ({
+        name,
+        ...(namespace ? { namespace } : {}),
+      }));
+  return {
+    ...identity,
+    attestationOf,
+    aliasesOf,
+    canonicalize: (name: string, namespace?: string) =>
+      attestationOf(name, namespace)?.advertisedName ?? `foreign:${name}`,
+    spellingOf: (advertisedName: string) =>
+      [...aliasesOf(advertisedName)].sort((a, b) =>
+        `${a.namespace ?? ""}\u0000${a.name}`.localeCompare(
+          `${b.namespace ?? ""}\u0000${b.name}`,
+        ),
+      )[0],
+  };
 }
 
 /** A historical offer object. Not a signature and not verified. */

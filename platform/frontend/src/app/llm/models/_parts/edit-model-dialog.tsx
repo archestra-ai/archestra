@@ -8,10 +8,11 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -65,7 +66,6 @@ import {
  */
 type ModelDialogSection =
   | "availability"
-  | "permissions"
   | "pricing"
   | "limits"
   | "modalities"
@@ -165,6 +165,16 @@ export function EditModelDialog({
   const updateModel = useUpdateModel();
   const [labels, setLabels] = useState<ProfileLabel[]>(model.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   // Model catalog managers restrict models across the whole org, so the
   // picker offers every team (not just the editor's own).
@@ -183,14 +193,11 @@ export function EditModelDialog({
   });
   const fallbackPricing = getFallbackPricing(model);
   const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
-  // The model's provider supports prompt caching when the backend resolved a
-  // cache price for it (synced, custom, or multiplier-derived).
-  const supportsCachePricing = model.cachePriceSource !== null;
   const nonNegativePriceRule = {
     validate: (v: string) => {
-      if (!v) return true;
-      const n = parseFloat(v);
-      if (Number.isNaN(n) || n < 0) return "Must be a non-negative number";
+      if (!v.trim()) return true;
+      if (!isValidModelPrice(v))
+        return "Enter a decimal number between 0 and 99999999.99 (use a dot)";
       return true;
     },
   };
@@ -257,6 +264,7 @@ export function EditModelDialog({
 
   const handleSubmit = async (values: EditModelFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
     const cacheReadPrice = values.customPricePerMillionCacheRead.trim() || null;
@@ -338,9 +346,6 @@ export function EditModelDialog({
       ...(showsParameters
         ? [{ id: "parameters" as const, label: "Parameters" }]
         : []),
-      // Access is about who reaches the model, not about the model itself, so
-      // it sits after every page that configures it.
-      { id: "permissions" as const, label: "Permissions" },
     ],
     [showsParameters],
   );
@@ -381,6 +386,7 @@ export function EditModelDialog({
       navItems={navItems}
       onActiveSectionChange={setActiveSection}
       onSubmit={form.handleSubmit(handleSubmit, showFirstInvalidSection)}
+      isDirty={form.formState.isDirty || permissionsDirty}
       wrapForm={(formContent) => <Form {...form}>{formContent}</Form>}
       footer={
         <>
@@ -446,18 +452,20 @@ export function EditModelDialog({
               </FormItem>
             )}
           />
-
-          <AdvancedLabelsSection
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
         </div>
+        <ResourceAccessSection
+          resource="llmModel"
+          id={model.id}
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
+        />
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
       </DialogSection>
 
-      <DialogSection id="permissions" activeSection={activeSection}>
-        <ResourceAccessSection resource="llmModel" id={model.id} standalone />
-      </DialogSection>
       <DialogSection id="pricing" activeSection={activeSection}>
         {/* Pricing */}
         <div className="space-y-2">
@@ -511,57 +519,55 @@ export function EditModelDialog({
               accurate cost tracking.
             </p>
           )}
-          {supportsCachePricing && (
-            <div className="space-y-2 pt-2">
-              <div className="flex min-h-7 items-center">
-                <span className="text-sm font-medium">
-                  Cache Pricing ($/M tokens)
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheRead"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache read</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheRead}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheWrite"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache write</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheWrite}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              {model.cachePriceSource === "derived_multiplier" && (
-                <p className="text-xs text-muted-foreground">
-                  Cache prices are estimated from the input price. Set a custom
-                  cache price to override.
-                </p>
-              )}
+          <div className="space-y-2 pt-2">
+            <div className="flex min-h-7 items-center">
+              <span className="text-sm font-medium">
+                Cache Pricing ($/M tokens)
+              </span>
             </div>
-          )}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="customPricePerMillionCacheRead"
+                rules={nonNegativePriceRule}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cache read</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={fallbackPricing.cacheRead}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="customPricePerMillionCacheWrite"
+                rules={nonNegativePriceRule}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cache write</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={fallbackPricing.cacheWrite}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            {model.cachePriceSource === "derived_multiplier" && (
+              <p className="text-xs text-muted-foreground">
+                Cache prices are estimated from the input price. Set a custom
+                cache price to override.
+              </p>
+            )}
+          </div>
         </div>
       </DialogSection>
 

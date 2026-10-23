@@ -84,42 +84,7 @@ Before starting, verify the development environment is running:
 
 ---
 
-## Test 4: Tool Invocation Policy (Untrusted Data Blocking)
-
-**Objective**: Verify that tool invocation is blocked when context contains untrusted data.
-
-### Precondition
-
-The previous conversation from Test 3 contains tool results (untrusted data by default).
-
-### Steps
-
-1. **In the same conversation from Test 3**, send another message:
-   "github whoami"
-
-This prompt forces a tool invocation (`get_me`) rather than allowing the LLM to answer from context.
-
-### Expected Result
-
-- Tool invocation is BLOCKED
-- Response indicates tools cannot be invoked due to tool invocation policy
-- Error message mentions "untrusted data" or "tool invocation policy"
-
-### Verification
-
-1. Check LLM Proxy Logs - should show blocked tool invocation
-2. Interaction should be recorded with policy violation
-
-### Alternative Test (if untrusted data policy doesn't exist)
-
-Create a tool invocation policy:
-1. Navigate to the profile's Policies tab
-2. Create a Trusted Data Policy that marks `list_issues` results as untrusted
-3. Retry the conversation
-
----
-
-## Test 5: LLM Proxy Tool Discovery (External MCP Server)
+## Test 4: LLM Proxy Tool Discovery (External MCP Server)
 
 **Objective**: Verify tools can be discovered via LLM Proxy when MCP server runs externally (not in Archestra's K8s).
 

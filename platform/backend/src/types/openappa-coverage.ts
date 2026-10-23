@@ -30,10 +30,15 @@ export type CoverageKind = z.infer<typeof CoverageKindSchema>;
 export const CoverageKindFilterSchema = z.enum(["read", "write", "approval"]);
 export type CoverageKindFilter = z.infer<typeof CoverageKindFilterSchema>;
 
-const CoverageAgentRefSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
+/**
+ * A battery's status as the enforced composition holds it. `pending`: an
+ * earlier composition is enforced, and it did not hold this battery.
+ */
+export const CoverageBatteryStatusSchema = z.union([
+  BatteryInstallStatusSchema,
+  z.literal("pending"),
+]);
+export type CoverageBatteryStatus = z.infer<typeof CoverageBatteryStatusSchema>;
 
 /** One `[[policy.tool]]` entry as the coverage parse read it. */
 export const CoverageRuleSchema = z.object({
@@ -42,8 +47,8 @@ export const CoverageRuleSchema = z.object({
   battery: z.string().nullable(),
   /** The exact include entry that supplies a battery rule; null for a root rule. */
   batteryEntry: z.string().nullable(),
-  /** That battery's status (`refused` while the composition fails); null for a root rule. */
-  batteryStatus: BatteryInstallStatusSchema.nullable(),
+  /** That battery's status in the enforced composition; null for a root rule. */
+  batteryStatus: CoverageBatteryStatusSchema.nullable(),
   /** The rule's header line in its source TOML, when it can be located. */
   line: z.number().int().nullable(),
   /** The tool name as the rule spells it, without its selector. */
@@ -55,6 +60,11 @@ export const CoverageRuleSchema = z.object({
     trust: z.string().optional(),
     audience: z.array(z.string()).optional(),
   }),
+  /** How the content a call sends beyond its arguments is labeled for its requirements. */
+  forwards: z.object({
+    trust: z.string().optional(),
+    audience: z.array(z.string()).optional(),
+  }),
   /** What a call needs before it runs. An object form's `contains` list is flattened. */
   requires: z.object({
     trust: z.string().optional(),
@@ -62,7 +72,7 @@ export const CoverageRuleSchema = z.object({
     attention: z.array(z.string()).optional(),
   }),
   annotator: z.string().nullable(),
-  /** Whether the runtime judges calls by this rule: the composition succeeded and, for a battery rule, the battery is active. */
+  /** Whether the runtime judges calls by this rule: a composition is enforced and, for a battery rule, it composed the battery. */
   enforced: z.boolean(),
 });
 export type CoverageRule = z.infer<typeof CoverageRuleSchema>;
@@ -94,7 +104,6 @@ export const CoverageToolSchema = z.object({
   fallbackLine: z.number().int().nullable(),
   unlisted: z.boolean(),
   enforced: z.boolean(),
-  agents: z.array(CoverageAgentRefSchema),
 });
 export type CoverageTool = z.infer<typeof CoverageToolSchema>;
 
@@ -112,25 +121,21 @@ export const CoverageRuleCountsSchema = z.object({
 });
 export type CoverageRuleCounts = z.infer<typeof CoverageRuleCountsSchema>;
 
-/** A visible agent, MCP gateway, or MCP registry server with tool coverage. */
+/** A visible MCP registry server with tool coverage. */
 export const CoverageEntitySchema = z.object({
   id: z.uuid(),
   name: z.string(),
-  type: z.enum(["agent", "mcp_gateway", "mcp_server"]),
+  type: z.enum(["mcp_server"]),
   scope: ResourceVisibilityScopeSchema,
   icon: z.string().nullable(),
-  /** Assigned tools plus Auto-mode tools discoverable by this viewer. */
+  /** The server's synced tools. */
   toolCount: z.number().int(),
   /** Tools with an active specific or non-noop catch-all rule, including selectors. */
   governedCount: z.number().int(),
   /** Tools without an unconditional specific rule, so calls may use the catch-all. */
   fallbackCount: z.number().int(),
-  /** Assigned Archestra built-in tools, included in toolCount. */
-  builtInCount: z.number().int(),
   /** The same tools split by what judges them; the buckets sum to toolCount. */
   rules: CoverageRuleCountsSchema,
-  /** Counts for this entity include the current viewer's dynamic access. */
-  autoMode: z.boolean(),
 });
 export type CoverageEntity = z.infer<typeof CoverageEntitySchema>;
 
@@ -140,8 +145,6 @@ export const CoverageToolsQuerySchema = PaginationQuerySchema.extend({
   /** Matches the tool name, its selector, the server name or its prefix. */
   search: SearchSchema,
   catalogId: z.uuid().optional(),
-  /** Tools reachable through this agent or MCP gateway, including Auto mode discovery. */
-  entityId: z.uuid().optional(),
   governedBy: z.enum(["battery", "root", "catchall", "not_covered"]).optional(),
   /** Narrow battery rules to one included battery. */
   battery: z.string().trim().min(1).max(100).optional(),
@@ -151,17 +154,13 @@ export type CoverageToolsQuery = z.infer<typeof CoverageToolsQuerySchema>;
 
 export const CoverageEntitiesQuerySchema = PaginationQuerySchema.extend({
   search: SearchSchema,
-  /** Agents are never listed, so `agent` matches nothing. */
   type: CoverageEntitySchema.shape.type.optional(),
   /** Resolve one visible target by its stable row ID. */
   entityId: z.uuid().optional(),
-  /** Only the targets that reach this tool: the agents and gateways that can call it, and its server. */
+  /** Only the server this tool belongs to. */
   toolId: z.uuid().optional(),
-  /**
-   * By name when unset. `type` puts MCP servers before gateways, `tools` is the
-   * tool count; ties by name.
-   */
-  sortBy: z.enum(["name", "type", "tools"]).optional(),
+  /** By name when unset. `tools` is the tool count; ties by name. */
+  sortBy: z.enum(["name", "tools"]).optional(),
   /** Ascending when unset. */
   sortDirection: SortDirectionSchema.optional(),
 });
@@ -170,7 +169,7 @@ export type CoverageEntitiesQuery = z.infer<typeof CoverageEntitiesQuerySchema>;
 export const CoverageToolsPageSchema = createPaginatedResponseSchema(
   CoverageToolSchema,
 ).extend({
-  /** Servers with tools available through the selected agent or gateway. */
+  /** Servers with tools in the visible inventory. */
   servers: z.array(
     z.object({
       id: z.string(),
@@ -178,7 +177,7 @@ export const CoverageToolsPageSchema = createPaginatedResponseSchema(
       icon: z.string().nullable(),
     }),
   ),
-  /** Batteries represented by the selected target, before source filtering. */
+  /** Batteries represented by the selected server, before source filtering. */
   batteries: z.array(z.string()),
 });
 export type CoverageToolsPage = z.infer<typeof CoverageToolsPageSchema>;
@@ -202,7 +201,10 @@ export const CoverageSummarySchema = z.object({
     broken: z.array(
       z.object({
         name: z.string(),
-        status: BatteryInstallStatusSchema.exclude(["active"]),
+        status: z.union([
+          BatteryInstallStatusSchema.exclude(["active"]),
+          z.literal("pending"),
+        ]),
         /** Visible tools a rule of this battery names but does not enforce. */
         tools: z.number().int(),
       }),
@@ -221,6 +223,14 @@ export const CoverageSummarySchema = z.object({
       }),
     ),
   }),
+  /** Which composition the counts describe; see `CompositionView`. */
+  composition: z.object({
+    kind: z.enum(["current", "previous", "root_only"]),
+    servedRootRevision: z.number().int().nullable(),
+    refusedRootRevision: z.number().int().nullable(),
+    /** An earlier composition of another or an unknown revision is enforced, so its rules may differ from the rows. */
+    rulesMayDiffer: z.boolean(),
+  }),
 });
 export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;
 
@@ -231,7 +241,7 @@ export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;
 export const CoverageBatteryFitSchema = z.object({
   mcpServerId: z.string(),
   mcpServerName: z.string(),
-  /** The server's tool prefixes, which `[server_aliases]` points the battery's namespaces at. */
+  /** The server's tool prefixes, which `aliases.mcp` points the battery's namespaces at. */
   toolPrefixes: z.array(z.string()),
   battery: z.string(),
   description: z.string(),

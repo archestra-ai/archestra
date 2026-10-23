@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const queryState = vi.hoisted(() => ({
   value: {
@@ -37,21 +38,6 @@ vi.mock("@/lib/agent-runtime.query", () => ({
   useDeleteAgentWorkspace: () => ({ isPending: false, mutate: vi.fn() }),
   useContinueAgentRun: () => ({ isPending: false, mutate: vi.fn() }),
   useMyAgentRun: () => queryState.value,
-  useAgentRunOpenappaReview: () => ({
-    data: {
-      status: "none",
-      canDecide: false,
-      offerId: null,
-      text: null,
-      tool: null,
-      arguments: null,
-    },
-    isPending: false,
-  }),
-  useDecideAgentRunOpenappaReview: () => ({
-    isPending: false,
-    mutate: vi.fn(),
-  }),
 }));
 
 vi.mock("@/components/agent-run-terminal", () => ({
@@ -84,6 +70,9 @@ describe("AgentRunChatSession", () => {
     cancelState.mutate.mockReset();
     terminalState.props = null;
     shareDialogState.open = false;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     queryState.value = {
       data: undefined,
       isPending: false,
@@ -110,7 +99,8 @@ describe("AgentRunChatSession", () => {
     await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Detach" }));
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Detach" }));
     expect(screen.getByText("Retained run output")).toBeInTheDocument();
     queryState.value.data = {
       ...queryState.value.data,
@@ -239,6 +229,32 @@ describe("AgentRunChatSession", () => {
     expect(
       screen.queryByText("Port forwarding command"),
     ).not.toBeInTheDocument();
+  });
+
+  it("links the owner to the run's LLM trace when they may read logs", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = run({ sessionId: "workspace-1" });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "View trace" }),
+    ).toHaveAttribute("href", "/llm/logs/workspace-1");
+  });
+
+  it("leaves the trace out without log:read", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    queryState.value.data = run({ sessionId: "workspace-1" });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+
+    expect(screen.getByRole("menuitem", { name: "View Agent" })).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "View trace" })).toBeNull();
   });
 
   it("shows a copyable port forwarding command for a configured workspace", async () => {

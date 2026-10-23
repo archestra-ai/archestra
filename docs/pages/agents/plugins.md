@@ -1,16 +1,15 @@
 ---
 title: Plugins
-beta: true
-description: Client-native extensions for Claude Code, Codex, Copilot CLI, and Cursor
+description: Client-native extensions for Claude Code, Claude Desktop, Codex, Copilot CLI, and Cursor
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Give every developer the same coding-agent setup. A plugin packages hooks, subagents, slash commands, skills, and MCP settings for one coding agent. You publish it in Archestra once, and each developer installs it with one command.
+Give every developer the same coding-agent setup. A plugin packages hooks, subagents, slash commands, skills, and MCP settings for one client. You publish it in Archestra once, and each developer installs it with one command.
 
-Import popular plugins, such as Anthropic's [official marketplace](https://github.com/anthropics/claude-plugins-official), [Superpowers](https://github.com/obra/superpowers), and GitHub's [Awesome Copilot](https://github.com/github/awesome-copilot), or write your own. Plugins work with Claude Code, Codex, Copilot CLI, and Cursor.
+Import popular plugins, such as Anthropic's [official marketplace](https://github.com/anthropics/claude-plugins-official), [Superpowers](https://github.com/obra/superpowers), and GitHub's [Awesome Copilot](https://github.com/github/awesome-copilot), or write your own. Plugins work with Claude Code, Claude Desktop, Codex, Copilot CLI, and Cursor.
 
 ![The Plugins catalog with GitHub sources, sync state, supported clients, and visibility](/docs/automated_screenshots/platform-agent-plugins_catalog.webp)
 
@@ -25,18 +24,23 @@ Import popular plugins, such as Anthropic's [official marketplace](https://githu
 
 Archestra stores the files as you write them. It does not convert them between clients.
 
-<span id="importing-a-marketplace"></span>
+<span id="importing-a-marketplace"></span><span id="import-from-github"></span>
 
-## Import From GitHub
+## Import From GitHub or GitLab
 
-1. Go to **Plugins** and click **Add new plugin**.
-2. Pick a popular marketplace, or paste a GitHub marketplace URL.
-3. Select the plugins, preview their files, and import them.
+Bring a team's plugins in from any GitHub or GitLab repository, on the cloud or your own host, and review every update before it installs. A repository without a marketplace file works too: Archestra lists each folder with a `plugin.json`, such as `plugins/<name>/`.
+
+1. Go to **Plugins** and click **Add new plugin**. Pick a popular marketplace, or click **Git repository**.
+2. Pick **GitHub** or **GitLab**, then how to sign in, then the repository.
+3. Click **Find plugins**, select the plugins, preview their files, and import them.
+
+The plugins then show on **Plugins**.
 
 What to know:
 
-- **Private repositories** need a GitHub App or a personal access token from [Credentials](/docs/admin/security/credentials).
-- Imported files are read-only here. Edit them in their repository. The **GitHub source** panel sets the ref, the check schedule, and the credential.
+- Claude Desktop reads Claude Code's plugin format. To import a Claude Code plugin for Desktop, such as one from Anthropic's [knowledge-work plugins](https://github.com/anthropics/knowledge-work-plugins), add **Claude Desktop** under **Clients**.
+- Private and self-hosted repositories need a GitHub App or a GitLab token, as for [skills](/docs/agents/skills/importing#private-repositories).
+- Imported files are read-only here. Edit them in their repository. The **Source** section on the plugin's page sets the **Branch**, **Keep in sync**, and **Access**.
 - Updates wait for you. A new commit shows **Review update**. Compare the files and click **Approve and apply**. Until then, the current files stay in use.
 
 <span id="reviewing-updates"></span><span id="installing-plugins"></span>
@@ -48,5 +52,6 @@ Developers install plugins from a plugin's page, or pick several for one command
 What to know:
 
 - Each install skips plugins for another client or platform.
+- Claude Desktop installs its plugins only through its setup on **Connect**, which also sets its gateway and proxy. Rerun it there to add new plugins.
 - Codex asks before hooks run. Open `/hooks` in Codex to approve them.
 - **Cursor lists installed plugins** under **Customize → Plugins**.

@@ -3,6 +3,7 @@ import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -12,6 +13,7 @@ import type {
   AppaSpawnPromptField,
   AppaTeammateLaunch,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import {
@@ -21,7 +23,6 @@ import {
 } from "./claude-code-relay";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
-  asRecord,
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
@@ -50,6 +51,10 @@ const CHILD_PATHS = [
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
+// Claude returns this client status when its handback retries are exhausted.
+// No child output crossed, and SendMessage can still resume the child.
+const NO_HANDBACK_STATUS =
+  "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.";
 /**
  * The Agent tool also acknowledges a teammate and a cloud agent when they
  * start. Like the background launch, these carry no child output: the child
@@ -79,22 +84,40 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          // Claude Code's AskUserQuestion tab label is at most 12 characters.
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
-    rulingFromResult: structuredQuestionRuling,
+    // A review shows its call in each option's preview, inside the form, and
+    // asks one line about it.
+    fromAskUser: (args: AskUserArguments) => {
+      const previews = showsCallPreview(args);
+      return {
+        questions: [
+          {
+            question: shownQuestion(args),
+            // Claude Code's AskUserQuestion tab label is at most 12 characters.
+            header: questionHeader(args.header, 12),
+            options: args.options.map((option) => ({
+              label: option.label,
+              description: option.description ?? option.label,
+              ...(previews
+                ? { preview: option.preview ?? args.callPreview }
+                : {}),
+            })),
+            multiSelect: args.allowMultiple === true,
+          },
+        ],
+      };
+    },
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, shownQuestion(asked)),
+    formFallback: true,
   };
+  // Claude Code connects MCP servers in the background and declares this tool
+  // in the requests it sends before they are ready.
+  readonly pendingServersTool = "WaitForMcpServers";
+  // A gateway that needs a sign-in is not pending, so the wait tool is not
+  // declared and never carries the denial: /mcp is where the person sees that.
+  gatewayToolsHint(serverName: string): string {
+    return `Run /mcp in Claude Code. If "${serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in. If it is not listed, connect Claude Code again and start a new session. Then send your message again.`;
+  }
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
@@ -258,8 +281,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     if (!CHILD_SPAWN_TOOLS.has(localToolName(result.name)) || result.isError)
       return undefined;
     const identifier = childLaunchIdentifier(result.content);
+    const status = launchText(result.content)?.startsWith(NO_HANDBACK_STATUS)
+      ? NO_HANDBACK_STATUS
+      : ASYNC_LAUNCH_STATUS;
     return identifier
-      ? `${ASYNC_LAUNCH_STATUS}\n${identifier.label}: ${identifier.value}`
+      ? `${status}\n${identifier.label}: ${identifier.value}`
       : launchAcknowledgement(result.content);
   }
 
@@ -391,6 +417,45 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 }
 
+/**
+ * A review whose call each option previews, so the form can ask in one line.
+ * AskUserQuestion shows previews for single-select questions only, and the
+ * terminal withholds a preview that is too long or has control characters.
+ * If any preview would be withheld, the review asks the full question, which
+ * carries the call itself.
+ */
+function showsCallPreview(
+  args: AskUserArguments,
+): args is AskUserArguments & { callPreview: string; shortQuestion: string } {
+  return (
+    args.allowMultiple !== true &&
+    typeof args.callPreview === "string" &&
+    showablePreview(args.callPreview) &&
+    args.options.every(
+      (option) =>
+        option.preview === undefined || showablePreview(option.preview),
+    ) &&
+    typeof args.shortQuestion === "string"
+  );
+}
+
+function showablePreview(preview: string): boolean {
+  return (
+    preview.length <= PREVIEW_MAX_LENGTH && !CONTROL_CHARACTERS.test(preview)
+  );
+}
+
+/** The longest option preview Claude Code shows instead of withholding it. */
+const PREVIEW_MAX_LENGTH = 2000;
+/** Control characters other than tab and newline. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the characters are what this matches
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
+
+/** The question text Claude Code shows, and repeats before the answer. */
+function shownQuestion(args: AskUserArguments): string {
+  return showsCallPreview(args) ? args.shortQuestion : args.question;
+}
+
 function parentSessionId(context: AppaMatchContext): string | undefined {
   const metadata = claudeUserMetadata(context);
   const description = "Claude Code parent session id";
@@ -466,7 +531,12 @@ function childLaunchIdentifier(
   if (record?.status === "async_launched") {
     return launchIdentifierFromRecord(record);
   }
-  if (!text || !text.startsWith(ASYNC_LAUNCH_STATUS)) return undefined;
+  if (
+    !text ||
+    (!text.startsWith(ASYNC_LAUNCH_STATUS) &&
+      !text.startsWith(NO_HANDBACK_STATUS))
+  )
+    return undefined;
   const match =
     /^(agentId|agent_id|taskId|task_id):[ \t]*([^\s()]+)(?:[ \t]+\([^\r\n]*\))?[ \t]*$/im.exec(
       text,

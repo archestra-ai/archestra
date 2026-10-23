@@ -10,10 +10,11 @@
 
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
-4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the `archestra-docs-writer` skill for all docs writing and editing.
+4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.
 5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default. Load the `archestra-dev-testing` skill to choose the level and to avoid the "fluff test" anti-pattern
 6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: the Licensing section of docs/pages/get-started/index.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
 7. **Commit Freely, Push With Approval** - Committing locally as you land reviewable slices is fine. Never push, open, or update a PR without explicit user approval, and never amend commits
+   Before requesting merge-queue entry, run the relevant focused tests, then use `pnpm enqueue <PR-number>` from a clean checkout of the exact PR head. The command runs preflight and queues only that checked revision; do not run preflight separately before it. Run enqueue once on the finished revision, not on every intermediate commit or push. It uses `origin`; pass `--repo [HOST/]OWNER/REPO` for a different target repository. Load `archestra-merge-queue` for the complete enqueue/monitor workflow. Direct GitHub queueing can bypass this local command; it is not a GitHub-enforced admission gate.
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
@@ -60,8 +61,7 @@ Load these project skills when the task matches their domain:
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; GET with Accept: text/event-stream opens the legacy HTTP+SSE stream, other GETs return 405; requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
-- **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
-- **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
+- **MCP Reinstall**: <http://localhost:9000/api/mcp_server/:id/reinstall> (POST to recreate the server's pod)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
@@ -109,6 +109,17 @@ tilt logs pnpm-dev-frontend          # Get frontend logs
 tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
 ```
 
+### Fresh Git Worktree
+
+A new worktree has no dependencies or native bindings. Before tests or type-check:
+
+```bash
+pnpm install --frozen-lockfile                  # from platform/
+pnpm --dir archestra-rs/<crate> build:dev       # each NAPI crate the tests load
+```
+
+A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
+
 ## Environment Variables
 
 **Naming Convention**: All env vars MUST follow the pattern `ARCHESTRA_<PRODUCT_AREA>_<THING>` (e.g., `ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`, `ARCHESTRA_OTEL_VERBOSE_TRACING`).
@@ -117,7 +128,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
 2. **Add to `platform/.env.example`** - Every new env var MUST be listed here with a short comment, so local setups and deployments discover it
-3. **Document in `../docs/pages/reference/configuration.md`** - All new env vars MUST be documented there, under the matching section. Use best judgement on whether it warrants a new section
+3. **Document in `../docs/pages/admin/deployment/configuration.md`** - All new env vars MUST be documented there, under the matching section. Use best judgement on whether it warrants a new section
 4. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via the `useFeature()` hook
 
 ## Architecture
@@ -126,7 +137,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 **Single-Tenant Organization Model**: Archestra currently provisions exactly one organization per deployment. Better Auth's organization plugin supplies the organization-scoped data model and RBAC primitives, but the product does not support creating or operating multiple organizations in one deployment today. Preserve organization scoping in code for consistency and possible future multi-organization support; do not design current runtime topology or user flows around multiple organizations unless that support is explicitly introduced.
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
+**Key Features**: MCP tool execution, OpenAPPA guardrails policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
 
 **Workspaces**:
 
@@ -144,7 +155,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 3. Send tool results back to LLM proxy
 4. Receive final answer
 
-Tool invocation policies and trusted data policies are still enforced by the proxy.
+OpenAPPA guardrails policies are still enforced by the proxy.
 
 ## Authentication
 
@@ -277,14 +288,14 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Backend**:
 
-- Refer to backend/architecture.md for backend architecture guidelines.
+- Refer to the `archestra-dev-backend` skill in `../.agents/skills/` for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - **Audit logging**: When you add or change a state-mutating route, ensure it produces a correct audit record — registered with the right action, non-secret, and a non-empty before/after diff — and assert on that record in the route's existing integration test.
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
-- **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `standalone-scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
+- **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
 - **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing. For module mocking and global stubs, read `archestra-dev-testing/references/backend-tests.md`: mock-free files run in a shared-worker fast path, `@/auth`/`@/logging` mocks go through their `__mocks__` dirs (bare `vi.mock("@/auth")`), `@/config` through `configModuleMock(overrides)`, and `vi.stubGlobal` must be (re-)applied in `beforeEach` because stubs auto-revert after every test
@@ -358,9 +369,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
   - **streamable-http**: Native HTTP/SSE transport using K8s Service (better performance, concurrent requests)
-- Pod logs available via `/api/mcp_server/:id/logs` endpoint
-  - Query parameters: `?lines=N` to limit output, `?follow=true` for real-time streaming
-  - Streaming uses chunked transfer encoding similar to `kubectl logs -f`
+- Pod logs stream to the server page's Logs tab over the WebSocket; there is no REST logs endpoint
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - When using Docker image, command is optional (uses image's default CMD if not specified)
@@ -399,7 +408,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
 - Security:
-  - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
 **Skill Sandbox Runtime** (gated behind the sandbox feature flag):
@@ -420,7 +428,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **Database-free test imports**: `*.unit.test.ts` files must keep their runtime import graph free of database, config, model, server, and fixture modules. Import Vitest APIs from `vitest` and shared values/types from focused `@archestra/shared/*` exports, not the shared root barrel. `pnpm --dir backend check:test-imports` and Biome enforce these boundaries; inspect imports of the code under test before moving a file to the database-free project.
 - **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
 - **E2E Tests**: Load the `archestra-dev-e2e` skill for Playwright tests, fixtures, WireMock setup, local/CI behavior, and locator guidance.
-- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
+- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
 
 **Backend Test Fixtures Usage**:
 

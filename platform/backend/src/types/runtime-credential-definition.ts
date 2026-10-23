@@ -10,6 +10,7 @@ export const CredentialKindSchema = z.enum([
   "secret",
   "github_app",
   "github_app_user",
+  "gitlab_token",
 ]);
 export type CredentialKind = z.infer<typeof CredentialKindSchema>;
 
@@ -65,6 +66,7 @@ export const UpdateRuntimeCredentialDefinitionSchema = createUpdateSchema(
   .pick({
     name: true,
     githubUrl: true,
+    gitlabUrl: true,
     appId: true,
     installationId: true,
     githubClientId: true,
@@ -78,6 +80,7 @@ export const RuntimeCredentialDefinitionViewSchema = z.object({
   id: z.string().uuid(),
   kind: CredentialKindSchema,
   githubUrl: z.string().nullable(),
+  gitlabUrl: z.string().nullable(),
   appId: z.string().nullable(),
   installationId: z.string().nullable(),
   githubClientId: z.string().nullable(),

@@ -7,7 +7,10 @@
  * @see https://github.com/brianc/node-postgres/issues/434
  * @see https://neon.com/guides/building-resilient-applications-with-postgres
  */
+import { isIP } from "node:net";
+import config from "@/config";
 import logger from "@/logging";
+import { getConnectionFailureTarget } from "@/utils/network-errors";
 
 /**
  * Maximum number of retry attempts for transient database errors.
@@ -125,6 +128,9 @@ const TRANSIENT_NETWORK_CODES = new Set<string>([
   ).map(({ code }) => code),
   ...CONNECT_SYSCALL_ERRNOS,
 ]);
+
+/** Port PostgreSQL listens on when the connection URL names none. */
+const DEFAULT_POSTGRES_PORT = 5432;
 
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
@@ -301,6 +307,45 @@ export function getTransientDbErrorCode(
 }
 
 /**
+ * Name the endpoint a connection failure was dialing when it is clearly not
+ * the database, e.g. `api.example.com` or `203.0.113.10:443`. Returns null
+ * when the failure names no target or the target may be the database.
+ *
+ * {@link getTransientDbErrorCode} matches socket errnos without knowing which
+ * connection failed, so an outbound call blocked by a network policy would
+ * otherwise read as a database outage. A connect target is compared by port
+ * (its address is already resolved, so it rarely equals the configured host
+ * name), a DNS target by host name.
+ */
+export function getNonDatabaseConnectionTarget(error: unknown): string | null {
+  const target = getConnectionFailureTarget(error);
+  if (!target) return null;
+
+  let databaseUrl: URL;
+  try {
+    databaseUrl = new URL(config.database.url);
+  } catch {
+    return null;
+  }
+  const databaseHost = databaseUrl.hostname
+    .replace(/^\[(.*)\]$/, "$1")
+    .toLowerCase();
+  if (!databaseHost) return null;
+  const host = target.host.toLowerCase();
+
+  if (target.port === null) {
+    return host === databaseHost ? null : target.host;
+  }
+  const databasePort = Number(databaseUrl.port || DEFAULT_POSTGRES_PORT);
+  const label = isIP(target.host) === 6 ? `[${target.host}]` : target.host;
+  if (target.port !== databasePort) return `${label}:${target.port}`;
+  if (isIP(databaseHost) && host !== databaseHost) {
+    return `${label}:${target.port}`;
+  }
+  return null;
+}
+
+/**
  * Calculate exponential backoff delay with jitter.
  *
  * Formula: min(BASE_DELAY * 2^attempt + jitter, MAX_DELAY)
@@ -320,7 +365,8 @@ function sleep(ms: number): Promise<void> {
  * Execute an async function with automatic retry on transient database errors.
  *
  * Uses exponential backoff with jitter between retries.
- * Only retries errors identified as transient by {@link isTransientDbError}.
+ * Retries errors identified as transient by {@link isTransientDbError}.
+ * Deadlock retries require explicit opt-in for a standalone statement.
  *
  * @example
  * ```ts
@@ -332,7 +378,11 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withDbRetry<T>(
   fn: () => Promise<T>,
-  options?: { maxRetries?: number; budgetMs?: number },
+  options?: {
+    maxRetries?: number;
+    budgetMs?: number;
+    retryDeadlocks?: boolean;
+  },
 ): Promise<T> {
   const maxRetries = options?.maxRetries ?? MAX_RETRIES;
   const budgetMs = options?.budgetMs ?? RETRY_BUDGET_MS;
@@ -344,7 +394,10 @@ export async function withDbRetry<T>(
     } catch (error) {
       const delay = calculateBackoff(attempt);
       const withinBudget = Date.now() - startedAt + delay <= budgetMs;
-      if (isTransientDbError(error) && attempt < maxRetries && withinBudget) {
+      const retryable =
+        isTransientDbError(error) ||
+        (options?.retryDeadlocks === true && isDeadlock(error));
+      if (retryable && attempt < maxRetries && withinBudget) {
         logger.warn(
           {
             err: error,
@@ -383,7 +436,7 @@ const RETRY_WRAPPED = Symbol("retryWrapped");
 
 /**
  * Wrap a pg.Pool instance so that its `query()` method automatically retries
- * transient connection errors.
+ * transient connection errors and rolled-back standalone deadlock victims.
  *
  * This is safe for non-transaction queries because `pool.query()` internally
  * checks out a client, runs the query, and releases it — each retry gets a
@@ -410,7 +463,13 @@ export function wrapPoolWithRetry(pool: {
     }
 
     // Promise-style call: wrap with retry logic
-    return withDbRetry(() => originalQuery(...args) as Promise<unknown>);
+    // PostgreSQL rolls back an autocommit statement when it selects it as
+    // a deadlock victim. Repeating that statement cannot duplicate a commit.
+    // Do not enable this for transaction callbacks: they may perform external
+    // work that PostgreSQL cannot roll back.
+    return withDbRetry(() => originalQuery(...args) as Promise<unknown>, {
+      retryDeadlocks: isAutocommitStatement(args[0]),
+    });
   }) as typeof pool.query;
 
   (pool as Record<symbol, unknown>)[RETRY_WRAPPED] = true;
@@ -463,4 +522,26 @@ export function installDbErrorSafetyNet(): void {
     logger.fatal({ err: reason }, "Unhandled promise rejection, exiting");
     process.exit(1);
   });
+}
+
+/** Match the server code only; SQL or parameter text is never a retry signal. */
+function isDeadlock(error: unknown, depth = 0): boolean {
+  if (!(error instanceof Error) || depth > MAX_CAUSE_DEPTH) return false;
+  if ((error as Error & { code?: string }).code === "40P01") return true;
+  return isDeadlock(error.cause, depth + 1);
+}
+
+/** Conservatively exclude batches and explicit transaction-control SQL. */
+function isAutocommitStatement(query: unknown): boolean {
+  const text =
+    typeof query === "string"
+      ? query
+      : query && typeof query === "object" && "text" in query
+        ? query.text
+        : undefined;
+  return (
+    typeof text === "string" &&
+    !text.includes(";") &&
+    /^\s*(?:select|with|insert|update|delete)\b/i.test(text)
+  );
 }

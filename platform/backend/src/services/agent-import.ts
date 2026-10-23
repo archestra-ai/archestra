@@ -105,7 +105,6 @@ export async function importAgentFromPayload(
       systemPrompt: data.agent.systemPrompt,
       icon: data.agent.icon,
       scope: "personal", // Always personal on import
-      considerContextUntrusted: data.agent.considerContextUntrusted,
       toolExposureMode: data.agent.toolExposureMode,
       missingCredentialBehavior:
         data.agent.missingCredentialBehavior ?? "allow",
@@ -370,7 +369,10 @@ async function resolveAndAssignDelegations(
     }
 
     try {
-      await AgentToolModel.assignDelegation(agentId, targetAgentId);
+      await AgentToolModel.assignDelegation({
+        agentId: agentId,
+        targetAgentId: targetAgentId,
+      });
     } catch (error) {
       logger.warn(
         { agentId, targetAgentName: ref.targetAgentName, error: String(error) },

@@ -111,7 +111,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -179,6 +184,8 @@ const ListAppsSchema = z.strictObject({
     ),
   limit: z.number().int().positive().max(100).optional(),
   access: resourceAccessToolArg({ examplePlural: "apps" }),
+  shared_with: resourceSharedWithToolArg,
+  owner_ids: resourceOwnerIdsToolArg,
 });
 
 const GetAppSchema = z.strictObject({
@@ -925,7 +932,7 @@ const registry = defineArchestraTools([
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: auth.organizationId,
         userId: auth.userId,
-        access: args.access,
+        access: toolAccessSelection(args),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,
@@ -1758,46 +1765,27 @@ const registry = defineArchestraTools([
     shortName: TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
     title: "Preview App Tool",
     description:
-      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
+      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
     schema: PreviewAppToolSchema,
     outputSchema: PreviewAppToolOutputSchema,
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
       const { userId, organizationId } = auth;
-      // Server-side approval backstop. The underlying tool was granted to the
-      // app, not the agent, so a preview may run only when the chat harness has
-      // presented the approval gate (it sets approvalRequiredPoliciesHandled
-      // after the click). Every other dispatch path — the raw MCP gateway, A2A,
-      // a run_tool outside chat — lacks the flag and is refused here, so the
-      // carve-out in chat-mcp-client is not the only thing gating it.
-      if (!context.approvalRequiredPoliciesHandled) {
-        return errorResult(
-          "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
-        );
-      }
       const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // The exact runtime gate the rendered app hits (allowlist + visibility +
-      // invocation policy). Preview carries its own human-approval gate, so a
-      // require_approval policy on the target is not treated as a block here;
-      // the chat's real trust is forwarded so a block_when_context_is_untrusted
-      // policy still fires on this authoring path.
+      // The exact runtime gate the rendered app hits (allowlist + environment
+      // + visibility), so preview can never reach a tool the app could not.
       const decision = await gateAppToolCall({
         appId: app.id,
-        organizationId,
-        userId,
         toolName: args.toolName,
-        toolInput: args.args ?? {},
-        isContextTrusted: context.contextIsTrusted ?? true,
-        treatRequireApprovalAsBlock: false,
       });
       if (!decision.allowed) {
         return errorResult(decision.reason);
       }
-      // Run the exact tool the gate resolved policy against (a suffix name could
+      // Run the exact tool the gate resolved (a suffix name could
       // otherwise re-resolve to a different assigned row at execution).
       const resolvedToolName =
         decision.kind === "upstream"
@@ -1810,6 +1798,7 @@ const registry = defineArchestraTools([
         // so preview exercises the same per-(app, viewer) namespace the running
         // app sees, and no agentId so the authoring agent's own assignments
         // don't gate it. Imported lazily: index.ts imports this module.
+        const startedAt = Date.now();
         const { executeArchestraTool } = await import("./index");
         const response = await executeArchestraTool(
           resolvedToolName,
@@ -1830,6 +1819,7 @@ const registry = defineArchestraTools([
             agentId: null,
             mcpServerName: archestraMcpBranding.serverName,
             method: "tools/call",
+            durationMs: Math.max(0, Date.now() - startedAt),
             toolCall: {
               id: `preview-${userId}-${app.id}-${Date.now()}`,
               name: resolvedToolName,
@@ -2393,6 +2383,10 @@ const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
 // the output is truncated to PREVIEW_OUTPUT_MAX_BYTES anyway, and the parse
 // must not burn CPU before that cap applies.
 const PREVIEW_UNWRAP_PARSE_MAX_CHARS = PREVIEW_OUTPUT_MAX_BYTES * 4;
+// Same untrusted-input rule as the SDK: only a strict type/subtype mimeType
+// and base64-alphabet data may enter a data URL.
+const SAFE_MIME_TYPE = /^[\w.+-]+\/[\w.+-]+$/;
+const SAFE_BASE64 = /^[A-Za-z0-9+/=]+$/;
 
 // get_app_diagnostics waits this long for a render of the head to settle,
 // polling at this cadence — well under request timeouts so a single call is
@@ -2505,15 +2499,17 @@ async function buildLiveValidation(params: {
 
 /**
  * Serialize the value `archestra.tools.call` resolves with for a result
- * envelope: structuredContent when it is a non-null object, else JSON parsed
+ * envelope: structuredContent when it is a non-null object, else
+ * {text, resources} when it carries embedded resources, else JSON parsed
  * from the joined text blocks, else the raw text, else {media} for
  * image/audio-only results, else null — re-serialized as JSON so the preview
  * shows exactly what app code receives. Mirrors `unwrapToolResult` in
  * static/archestra-app-sdk.js (injected browser JS, so the two
  * implementations cannot share code) — keep them in step. Two deliberate
  * divergences: text beyond PREVIEW_UNWRAP_PARSE_MAX_CHARS is shown as a
- * string without parsing, and media dataUrls carry an elision marker instead
- * of the base64 payload (the preview truncates far below either anyway).
+ * string without parsing, and media/resource dataUrls carry an elision marker
+ * instead of the base64 payload (the preview truncates far below either
+ * anyway).
  *
  * @public — test seam: apps.test.ts pins the SDK-parity unwrap precedence;
  * formatPreviewResult below is its only production caller.
@@ -2522,6 +2518,8 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
   const sc = result.structuredContent;
   if (sc && typeof sc === "object") return JSON.stringify(sc);
   const text = textPartsOf(result).join("\n");
+  const resources = previewResourcesOf(result);
+  if (resources.length) return JSON.stringify({ text, resources });
   const trimmed = text.trim();
   if (trimmed) {
     if (trimmed.length <= PREVIEW_UNWRAP_PARSE_MAX_CHARS) {
@@ -2544,9 +2542,9 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
         ((part as { type?: unknown }).type === "image" ||
           (part as { type?: unknown }).type === "audio") &&
         typeof (part as { data?: unknown }).data === "string" &&
-        /^[A-Za-z0-9+/=]+$/.test((part as { data: string }).data) &&
+        SAFE_BASE64.test((part as { data: string }).data) &&
         typeof (part as { mimeType?: unknown }).mimeType === "string" &&
-        /^[\w.+-]+\/[\w.+-]+$/.test((part as { mimeType: string }).mimeType),
+        SAFE_MIME_TYPE.test((part as { mimeType: string }).mimeType),
     )
     .map((part) => ({
       type: part.type,
@@ -2627,6 +2625,42 @@ function textPartsOf(result: CommonToolResult): string[] {
         )
         .map((part) => part.text)
     : [];
+}
+
+type PreviewResource = {
+  uri: string | null;
+  mimeType: string | null;
+  text?: string;
+  dataUrl?: string | null;
+};
+
+/**
+ * The embedded-resource blocks of a tool result in the shape the SDK's
+ * `resourcesOf` gives app code: text contents pass through, a blob becomes a
+ * dataUrl (base64 elided here; null when unsafe) typed by the mimeType's
+ * type/subtype essence, or application/octet-stream when that is unsafe.
+ */
+function previewResourcesOf(result: CommonToolResult): PreviewResource[] {
+  if (!Array.isArray(result.content)) return [];
+  return result.content.flatMap((part): PreviewResource[] => {
+    const resource =
+      part && typeof part === "object" && part.type === "resource"
+        ? (part as { resource?: unknown }).resource
+        : null;
+    if (!resource || typeof resource !== "object") return [];
+    const { uri, mimeType, text, blob } = resource as Record<string, unknown>;
+    const entry = {
+      uri: typeof uri === "string" ? uri : null,
+      mimeType: typeof mimeType === "string" ? mimeType : null,
+    };
+    if (typeof text === "string") return [{ ...entry, text }];
+    const essence = entry.mimeType?.split(";")[0].trim() ?? "";
+    const dataUrl =
+      typeof blob === "string" && SAFE_BASE64.test(blob)
+        ? `data:${SAFE_MIME_TYPE.test(essence) ? essence : "application/octet-stream"};base64,…[base64 elided in preview]`
+        : null;
+    return [{ ...entry, dataUrl }];
+  });
 }
 
 /** Truncate to a UTF-8 byte budget without splitting a multi-byte character. */

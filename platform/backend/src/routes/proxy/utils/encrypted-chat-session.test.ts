@@ -104,7 +104,7 @@ describe("resolveEncryptedChatAuditContext", () => {
 
   const chatParams = () => ({
     source: "chat" as const,
-    requestIp: "127.0.0.1",
+    internalCall: true,
     sessionId: encryptedChatConversationId,
     userId,
     dek,
@@ -178,11 +178,11 @@ describe("resolveEncryptedChatAuditContext", () => {
     }
   });
 
-  test("none when the request did not arrive over loopback", async () => {
+  test("none when the request lacks the internal proof", async () => {
     await expect(
       resolveEncryptedChatAuditContext({
         ...chatParams(),
-        requestIp: "203.0.113.7",
+        internalCall: false,
       }),
     ).resolves.toEqual({ kind: "none" });
   });
@@ -344,12 +344,6 @@ describe("redactEncryptedChatInteraction", () => {
       response: {
         content: [{ type: "text", text: "the secret answer" }],
       } as unknown as InteractionResponse,
-      dualLlmAnalyses: [
-        { verdict: "safe", details: "quoted secret content" },
-      ] as unknown as InsertInteraction["dualLlmAnalyses"],
-      unsafeContextBoundary: {
-        messageIndex: 0,
-      } as unknown as InsertInteraction["unsafeContextBoundary"],
     } as InsertInteraction;
 
     const redacted = redactEncryptedChatInteraction(record);
@@ -359,8 +353,6 @@ describe("redactEncryptedChatInteraction", () => {
       request: ENCRYPTED_CHAT_REDACTED_MARKER,
       processedRequest: null,
       response: ENCRYPTED_CHAT_REDACTED_MARKER,
-      dualLlmAnalyses: null,
-      unsafeContextBoundary: null,
     });
     // Nothing content-bearing leaks through the redacted record.
     expect(JSON.stringify(redacted)).not.toContain("secret");

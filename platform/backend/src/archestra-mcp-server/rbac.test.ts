@@ -125,7 +125,7 @@ describe("checkToolPermission", () => {
     ).not.toBeNull();
   });
 
-  test("diagnostics readers can retrieve yells independently of policy and LLM logs", async ({
+  test("log readers can retrieve yells without policy permissions", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -133,7 +133,7 @@ describe("checkToolPermission", () => {
   }) => {
     const org = await makeOrganization();
     const role = await makeCustomRole(org.id, {
-      permission: { openappaDiagnostics: ["read"] },
+      permission: { log: ["read"] },
     });
     const user = await makeUser();
     await makeMember(user.id, org.id, {
@@ -402,7 +402,6 @@ describe("filterToolNamesByPermission", () => {
       t("create_agent"),
       t("create_knowledge_base"),
       t("delete_limit"),
-      t("create_tool_invocation_policy"),
     ];
 
     const result = await filterToolNamesByPermission(

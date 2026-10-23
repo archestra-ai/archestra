@@ -1,150 +1,122 @@
 ---
 title: Access Control
-description: Assign roles and share resources with users, teams, and service accounts
+description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-22
 ---
 
-Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
+Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
+
+<span id="actions-and-scopes"></span>
+
+<span id="agent-access-vs-mcp-server-access"></span>
+
+<span id="api-example"></span>
+
+<span id="available-permissions"></span>
+
+<span id="chat-access-and-optional-ui-controls"></span>
+
+<span id="environments"></span>
+
+<span id="find-resources-by-access"></span>
+
+<span id="granular-access-control"></span>
+
+<span id="llm-api-permissions"></span>
+
+<span id="log-visibility"></span>
+
+<span id="mcp-registry-and-installation-records"></span>
+
+<span id="models"></span>
+
+<span id="oauth-clients"></span>
+
+<span id="resource-specific-rules"></span>
+
+<span id="saved-credentials"></span>
+
+<span id="scoped-resources"></span>
+
+<span id="service-account-creators"></span>
+
+<span id="sharing-level"></span>
+
+<span id="team-access"></span>
+
+<span id="visibility-scoped-credentials"></span>
+
+## Share a Resource
+
+Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
+
+1. Open the item's **Permissions** control.
+2. Add a person, team, role, service account, or **Everyone in the organization**.
+3. Choose their level, then save.
+
+| Level | Allows |
+| --- | --- |
+| Can read | View the item. |
+| Can use | Run or invoke it. |
+| Can update | Edit its configuration. |
+| Full access | Delete it and manage access. |
+
+You need **Manage access** on the item to share it. To share every current and future item of a kind, use **Permissions** beside **Create** or **Add** on its list; this requires [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update).
+
+Sharing with everyone, a role, or a team you do not belong to also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
+
+Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers).
 
 ## Predefined Roles
 
-Built-in roles cannot be edited or deleted. **Admin** has every organization permission. **Platform Admin** manages the platform without organization-wide logs or user impersonation. **Editor** manages core resources without organization settings or user management. **Member** can create agents and chat, with read access to many other sections.
+Roles control organization actions, such as creating resources and managing users. Resource grants determine which individual items a person can use or change.
 
-See the [complete role tables](/docs/reference/permissions#predefined-roles) before choosing a role.
+**Member** is the default. Choose a broader role only when the person needs it:
 
-## Custom Roles
+| Role | Choose it for |
+| --- | --- |
+| Member | Using Chat and creating agents, apps, skills, and gateways. |
+| Editor | Also managing providers, models, budgets, environments, Knowledge, and Guardrails. |
+| Platform Admin | Administering the platform without viewing everyone's logs or impersonating users. |
+| Admin | Full organization administration, including everyone's logs and user impersonation. |
 
-With [`ac:create`](/docs/reference/permissions#ac:create), go to **Settings → Roles** and create a role. Select only the permissions needed for the job, then assign it to members, teams, or service accounts. Editing and deleting custom roles require [`ac:update`](/docs/reference/permissions#ac:update) and [`ac:delete`](/docs/reference/permissions#ac:delete) respectively. The [permission reference](/docs/reference/permissions#available-permissions) describes every action.
+See the [exact permission matrix](/docs/reference/permissions#predefined-roles). To change a member's roles, open **Settings → Users**, choose **Change role** on their row, and save with **Update Roles**.
 
-### Multiple Roles And Team Grants
+<span id="custom-roles"></span>
 
-An account receives the combined permissions of its assigned roles. Members also inherit organization roles assigned to their teams and ancestor teams. Removing one assignment removes its grants only if no other assignment provides them.
+<span id="multiple-roles-and-team-grants"></span>
 
-Organization roles assigned to teams are separate from [team membership roles](#team-roles). The account permissions page shows the sources of each granted action.
+<span id="no-privilege-escalation"></span>
 
-### No Privilege Escalation
+<span id="team-roles"></span>
 
-You can grant only permissions you already hold. This applies when changing roles, inviting members, assigning roles to teams or service accounts, and changing team membership or hierarchy. Role pickers disable roles beyond your authority.
+## Create a Custom Role
 
-[SSO role mapping](/docs/admin/identity/sso-role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
+1. With [`ac:create`](/docs/reference/permissions#ac:create), open **Settings → Roles** and create a role.
+2. Select only the [permissions](/docs/reference/permissions#available-permissions) the job needs.
+3. Assign it to a member, team, or service account.
 
-### Service Account Creators
+Accounts combine their direct roles with roles from their teams and ancestor teams. A team admin manages that team's members and settings; team admin status does not pass to descendant teams.
 
-Service accounts can create resources within their assigned permissions. Creator attribution does not grant team membership. Resources with personal human ownership, including projects, require a user account.
+<span id="delegation-and-concurrent-edits"></span>
 
-### Available Permissions
+<span id="inheritance-and-revocation"></span>
 
-Look up every role action in the [permission reference](/docs/reference/permissions#available-permissions).
+<span id="team-hierarchies"></span>
 
-## Granular Access Control
+## Remove Access
 
-A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator. Disabling the account prevents it from using its grants.
+Open the item's permissions and remove the recipient. Check inherited grants too: removing a direct grant leaves access through teams, roles, or the organization intact. Team grants reach descendant teams, but not parents or siblings.
 
-Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants. Adding or expanding them requires entitlement.
+Keep at least one recipient with **Manage access**. If a role or team change would delegate access you cannot grant, the form identifies the affected resources and missing permissions.
 
-To share a resource:
+<span id="ownership"></span>
 
-1. Open its **Permissions** tab or the **Permissions** section of its settings dialog.
-2. Add a recipient and choose **Can view**, **Can use**, **Can edit**, or **Full access**.
-3. Click **Save permissions**. In a permissions dialog, such as a chat's **Share**, **Add access** saves the recipient at once. Confirm the recipient appears with the intended access.
+## Transfer Ownership
 
-For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
+Choose **Make owner** on another person's row in the permissions editor. You need edit and full access on the item; plugins require edit access to every plugin.
 
-### Actions And Scopes
+The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
-**Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
-
-MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
-
-A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
-
-### Inheritance And Revocation
-
-Access combines direct grants, team grants, effective-role grants, and organization-wide grants. A team grant reaches every member regardless of membership role, including descendant teams. Removing a direct grant does not remove inherited access. Change that grant at its source.
-
-The Permissions editor displays inherited grants separately. A read grant on all chats reaches chats in projects the recipient can open, never private chats.
-
-### Delegation And Concurrent Edits
-
-You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
-
-Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants too. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those.
-
-If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
-
-### API Example
-
-For API-based sharing, read the policy with [`GET /api/resource-permissions/mcpRegistry/<catalog-id>`](/docs/reference/api#/Permissions/getResourcePermissions). Replace direct grants with `PUT` to the same URL, using the returned revision:
-
-```json
-{
-  "revision": 0,
-  "grants": [
-    {
-      "subject": {"type": "serviceAccount", "id": "00000000-0000-4000-8000-000000000001"},
-      "actions": ["read", "use"]
-    }
-  ]
-}
-```
-
-Use the service account ID, not an API-key ID. `PUT` replaces all direct grants: include every existing direct grant you intend to retain. Inherited grants remain.
-
-## Scoped Resources
-
-Creation requires the kind's organization-level create permission. Most resources give their creator full direct access. That grant can be revoked. Ownership does not override revocation.
-
-### Team Roles
-
-A team **member** receives shared access. A team **admin** can manage its members and settings without organization-wide [`team:update`](/docs/reference/permissions#team:update). The creator becomes the first team admin. This role does not authorize creating or deleting teams, managing other teams, or editing shared MCP connections.
-
-### Team Hierarchies
-
-Members inherit resource grants and organization roles from ancestor teams. Access does not flow from a child to its parent or to siblings. Team administrator roles are not inherited. Deleting a parent moves its direct children to the root.
-
-[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
-
-### Environments
-
-Deploying into an [environment](/docs/admin/environments#deploy-permissions) requires a `use` grant there. New environments are shared with the organization. Remove that grant to restrict deployment to selected teams. Default is open to anyone who can create the resource.
-
-### OAuth Clients
-
-MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only what the client configuration allows.
-
-### Visibility-Scoped Credentials
-
-Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership. Team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
-
-### Models
-
-Read grants control model discovery. Use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.
-
-### Chat Access And Optional UI Controls
-
-Chat requires [`chat:read`](/docs/reference/permissions#chat:read) and access to an agent context through [`agent:read`](/docs/reference/permissions#agent:read). [`chat:full-view`](/docs/reference/permissions#chat:full-view) shows the agent picker, model and API-key selectors, and expandable tool calls. It changes the interface without granting access to credentials or models.
-
-### MCP Registry And Installation Records
-
-Registry grants govern catalog entries. Installation permissions govern connections, credentials, and running servers. Team installations also depend on team membership. Organization-wide connections and administration of any team connection require an `update` grant on all MCP registry entries (`*`), alongside each operation's normal installation permission.
-
-Deleting a team retains its connections. Callers with installation administration permission can still manage them.
-
-## Team Access
-
-Team grants reach direct members and descendant-team members. An empty direct-grant list does not make a resource public, and wildcard grants still apply.
-
-### Agent Access vs MCP Server Access
-
-In **Custom** tool mode, sharing an agent shares its assigned tools even if the server is not shared with the caller. [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) determines which connection serves the call.
-
-In **Auto** mode, callers discover tools from servers they can access, plus tools explicitly assigned to the agent. See [Tool Access Modes](/docs/agents#tool-access-modes).
-
-## Log Visibility
-
-[`log:read`](/docs/reference/permissions#log:read) shows your LLM and MCP logs. Add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Guardrail consult logs use [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) and [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin). Resource sharing does not determine log visibility.
-
-## LLM API Permissions
-
-The [LLM API permission table](/docs/reference/permissions#llm-api-permissions) lists access requirements for usage exports, costs, and logs, including service-account exports.
+For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api#/Permissions/getResourcePermissions).

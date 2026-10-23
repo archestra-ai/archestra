@@ -3,8 +3,8 @@ title: Agent Runtime Setup
 sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
-lastUpdated: 2026-10-05
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED)."
+beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-15
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -13,13 +13,13 @@ You install three things:
 
 - **The controller** and its custom resources.
 - **A storage class** with dynamic volume provisioning.
-- **Archestra's access** to the cluster, then the Agent Runtime switch.
+- **Archestra's access** to the cluster.
 
 ## Cluster Prerequisites
 
 Your cluster needs Linux nodes compatible with the runtime images, a storage class with dynamic volume provisioning, and the Helm chart's runtime permissions in every execution namespace. Allow outbound access to the image registry, DNS, and Archestra's API, proxy, and gateway.
 
-The quickstart Docker image installs the controller in its KinD cluster when [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). On other clusters, install the tested version of the controller and its extensions:
+The quickstart Docker image installs the controller in its KinD cluster. On other clusters, install the tested version of the controller and its extensions:
 
 ```bash
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
@@ -35,7 +35,7 @@ kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-sys
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
-Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). Restart Archestra, then check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
+Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
 
 The controller does not install a container isolation runtime. Check image architecture and admission policies before starting workloads.
 
@@ -50,7 +50,7 @@ The controller does not install a container isolation runtime. Check image archi
 
 ## Storage and Placement
 
-Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
+Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
 
 ## EKS With Fargate
 
@@ -68,13 +68,15 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 
 A warm pool keeps spare containers ready, so runs start faster. Agents in the same environment share a pool when their image, resources, storage, placement, and network policy match. Images tagged `:latest` always start fresh. Spares reserve CPU, memory, and storage, but hold no credentials or network access until a run takes them.
 
-After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) to keep one spare per group. Up to four groups are prepared by default; change this with [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS).
+After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) to keep one spare per group. Up to four groups are prepared by default; change this with [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS).
+
+Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
 ## Privileged Containers
 
-Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
+Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
 
 After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 
@@ -83,11 +85,21 @@ After resuming a run, restart Docker and development services. The deployment se
 <!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
 ## Runtime Image Cache
 
-Archestra prefetches maintained catalog images onto runtime nodes. Registry and tag settings follow [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY) and [`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG). Custom images download when a run starts.
+Archestra prefetches maintained catalog images onto runtime nodes. Registry and tag settings follow [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY) and [`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG). Custom images download when a run starts.
 
 Prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Each image consumes disk on every matching node. Fresh nodes still need their first download; an unavailable image does not block other launches.
 
 <!-- SPDX-SnippetEnd -->
+
+## Upgrades
+
+Upgrading Archestra moves every agent made from a catalog template onto the new maintained image. You do not edit agents after an upgrade. An agent runs this deployment's image, whatever tag was current when someone created it.
+
+- **New runs** start on the new image.
+- **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
+- **A turn already running** keeps its image until it ends.
+
+A custom image, or a maintained image pinned by digest, runs exactly as saved.
 
 ## Troubleshooting
 
@@ -98,3 +110,15 @@ When runs do not start:
 - **Image pull fails:** check the image name, registry access, and pull credentials.
 
 Chat shows the reported startup error.
+
+### Scheduled Runs Keep Getting Skipped
+
+A [scheduled task](/docs/chat/projects#scheduled-tasks) skips a tick while its previous run is unfinished.
+
+1. Open the skipped entry in the project's run history. It identifies the blocking run, its elapsed time, and its **Maximum duration** deadline.
+2. Click **Inspect previous run** to inspect it and use **Stop** if needed.
+3. Use **Maximum duration settings** to set the agent's lifetime cap for future runtime sessions. Choose a duration long enough for healthy work to finish.
+
+- Changing the cap does not shorten an existing run's deadline. Skipped entries preserve the deadline and elapsed time recorded at that tick.
+- A queued run gets its runtime deadline after launch. Foreground chat runs do not use the runtime lifetime cap.
+- After a run stops or reaches its deadline, the schedule waits for workload cleanup before starting another run.

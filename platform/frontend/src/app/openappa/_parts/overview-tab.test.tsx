@@ -13,11 +13,20 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { guardrailsPolicyQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewTab } from "./overview-tab";
 
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("./coverage-charts", () => ({
-  CoverageCharts: () => <div>Coverage charts</div>,
+  RulesCard: () => <div>Coverage charts</div>,
+}));
+vi.mock("./trust-audience-card", () => ({ LabelCard: () => null }));
+vi.mock("./remedies-panels", () => ({ RemediesCard: () => null }));
+vi.mock("./openappa-chat-strip", () => ({ OpenAppaChatStrip: () => null }));
+vi.mock("./overview-status-cards", () => ({
+  OverviewStatusCards: () => null,
 }));
 vi.mock("./entities-table", () => ({
   EntitiesTable: () => <div>Entities table</div>,
@@ -34,6 +43,10 @@ let revision: number;
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  // The Guardrails status is read only while OpenAPPA is on.
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "openappaEnabled",
+  );
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -71,20 +84,26 @@ function show() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <OverviewTab />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 test("a fresh instance hides coverage", async () => {
-  show();
-  await waitFor(() =>
-    expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument(),
-  );
+  const client = show();
+  await waitFor(() => {
+    expect(client.getQueryState(["guardrails-deployment"])?.status).toBe(
+      "success",
+    );
+    expect(client.getQueryState(guardrailsPolicyQueryKey)?.status).toBe(
+      "success",
+    );
+  });
+  expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument();
   expect(screen.queryByText("Entities table")).not.toBeInTheDocument();
-  expect(screen.queryByText("Client coverage")).not.toBeInTheDocument();
 });
 
 test.each([

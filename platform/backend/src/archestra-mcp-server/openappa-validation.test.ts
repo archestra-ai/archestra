@@ -1,21 +1,19 @@
 import { createHash } from "node:crypto";
+import type { AddressInfo } from "node:net";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import helperRoutes from "@/routes/openappa-helpers/openappa-helpers.routes";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, expect, test } from "@/test";
+import { beforeEach, expect, onTestFinished, test } from "@/test";
 import { executeArchestraTool } from ".";
 
-const originalPolicy = `[policy]
-version = 2
-[[policy.tool]]
-name = 'files__read'
-delta = {}
-[[policy.tool]]
-name = 'mail__send'
-delta = {}
-`;
 const candidatePolicy = `[policy]
 version = 2
 [[policy.tool]]
@@ -41,7 +39,7 @@ beforeEach(() => {
   config.openappa.enabled = true;
 });
 
-test("the agent previews against a proposed policy and saves the patch without losing unrelated checks", async ({
+test("the agent previews a validation against the saved policy and saves it without touching the policy or other checks", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -53,15 +51,11 @@ test("the agent previews against a proposed policy and saves the patch without l
   await makeMember(user.id, organization.id, { role: "admin" });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
-  const context = {
-    organizationId: organization.id,
-    userId: user.id,
-    agent: { id: agent.id, name: agent.name },
-  };
+  await GuardrailsDeploymentModel.set({ enabled: false });
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
-    content: originalPolicy,
-    contentHash: createHash("sha256").update(originalPolicy).digest("hex"),
+    content: candidatePolicy,
+    contentHash: createHash("sha256").update(candidatePolicy).digest("hex"),
     updatedBy: user.id,
     expectedRevision: 0,
   });
@@ -70,63 +64,52 @@ test("the agent previews against a proposed policy and saves the patch without l
     files: [existing],
     expectedVersion: "empty",
   });
-  const read = await executeArchestraTool(
-    "archestra__get_openappa_policy_tests",
-    {},
-    context,
-  );
-  expect(read.isError).not.toBe(true);
-  expect(read.structuredContent).toMatchObject({
-    source: "local",
-    version: initialSuite?.version,
-    files: [existing],
-  });
+  const context = {
+    organizationId: organization.id,
+    userId: user.id,
+    agent: { id: agent.id, name: agent.name },
+  };
   const request = {
     expectedRevision: 1,
     expectedVersion: initialSuite?.version,
     changes: { upsert: [regression], delete: [] },
-    policyContent: candidatePolicy,
   };
   const preview = await executeArchestraTool(
-    "archestra__preview_openappa_validation_change",
+    "archestra__preview_guardrails_validation_change",
     request,
     context,
   );
   expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  // Only the new file is replayed, against the saved policy.
   expect(preview.structuredContent).toMatchObject({
     stage: "preview",
-    policy: { before: originalPolicy, after: candidatePolicy, changed: true },
-    counts: { passed: 2, failed: 0, cannotRun: 0 },
-    tests: { draft: true },
+    policyRevision: 1,
+    validation: { valid: true },
+    tests: [{ path: regression.path, status: "passed" }],
   });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(originalPolicy);
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [existing],
-  );
-  const publish = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+  const saved = await executeArchestraTool(
+    "archestra__update_guardrails_validation",
     request,
     context,
   );
-  expect(publish.isError, JSON.stringify(publish.content)).not.toBe(true);
-  expect(publish.structuredContent).toMatchObject({
+  expect(saved.isError, JSON.stringify(saved.content)).not.toBe(true);
+  expect(saved.structuredContent).toMatchObject({
     delivery: "revision",
-    revision: 2,
-    policyChanged: true,
-    counts: { passed: 2, failed: 0, cannotRun: 0 },
+    revision: 1,
+    validation: { valid: true },
   });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(candidatePolicy);
+  expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
+    revision: 1,
+    content: candidatePolicy,
+  });
   expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
     [regression, existing],
   );
+  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
   expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
-test("specification-only writes preserve unrelated checks and policy without enabling enforcement", async ({
+test("validations save beside the unsaved starter policy without saving it or enabling enforcement", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -146,7 +129,7 @@ test("specification-only writes preserve unrelated checks and policy without ena
     expectedVersion: "empty",
   });
   const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+    "archestra__update_guardrails_validation",
     {
       expectedRevision: before.revision,
       expectedVersion: initialSuite?.version,
@@ -161,7 +144,6 @@ test("specification-only writes preserve unrelated checks and policy without ena
   expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
   expect(result.structuredContent).toMatchObject({
     delivery: "revision",
-    policyChanged: false,
     revision: 0,
   });
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
@@ -169,10 +151,9 @@ test("specification-only writes preserve unrelated checks and policy without ena
   expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
     [regression, existing],
   );
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
-test("a first combined policy save enables enforcement even with informational failed checks", async ({
+test("the validation tools refuse policy text", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -184,86 +165,44 @@ test("a first combined policy save enables enforcement even with informational f
   await makeMember(user.id, organization.id, { role: "admin" });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
-  const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
-    {
-      expectedRevision: 0,
-      expectedVersion: "empty",
-      policyContent: originalPolicy,
-      changes: { upsert: [regression] },
-    },
-    {
-      organizationId: organization.id,
-      userId: user.id,
-      agent: { id: agent.id, name: agent.name },
-    },
-  );
-  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    revision: 1,
-    policyChanged: true,
-    counts: { passed: 0, failed: 1, cannotRun: 0 },
-    enforcement: { enabled: true, turnedOn: true },
-  });
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(true);
-});
-
-test("explicitly publishing the unchanged first starter with specifications saves and enables it", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-  makeAgent,
-  seedAndAssignArchestraTools,
-}) => {
-  const organization = await makeOrganization();
-  const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "admin" });
-  const agent = await makeAgent({ organizationId: organization.id });
-  await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
-  const starter = await guardrailsPolicyService.get(organization.id);
-  expect(starter.revision).toBe(0);
-  const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
-    {
-      expectedRevision: 0,
-      expectedVersion: "empty",
-      policyContent: starter.content,
-      changes: { upsert: [existing] },
-    },
-    {
-      organizationId: organization.id,
-      userId: user.id,
-      agent: { id: agent.id, name: agent.name },
-    },
-  );
-  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    revision: 1,
-    policyChanged: true,
-    enforcement: { enabled: true, turnedOn: true },
-  });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(starter.content);
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [existing],
-  );
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(true);
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+  for (const name of [
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
+  ]) {
+    const result = await executeArchestraTool(
+      `archestra__${name}`,
+      {
+        expectedRevision: 0,
+        expectedVersion: "empty",
+        changes: { upsert: [existing] },
+        policyContent: candidatePolicy,
+      },
+      {
+        organizationId: organization.id,
+        userId: user.id,
+        agent: { id: agent.id, name: agent.name },
+      },
+    );
+    expect(result.isError).toBe(true);
+  }
+  expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
+  expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
 });
 
 test("readers can inspect and preview but cannot publish specifications", async ({
   makeOrganization,
   makeUser,
   makeMember,
+  makeCustomRole,
   makeAgent,
   seedAndAssignArchestraTools,
 }) => {
   const organization = await makeOrganization();
   const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "member" });
+  const reader = await makeCustomRole(organization.id, {
+    permission: { guardrailsPolicy: ["read"] },
+  });
+  await makeMember(user.id, organization.id, { role: reader.role });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
   const context = {
@@ -283,17 +222,24 @@ test("readers can inspect and preview but cannot publish specifications", async 
     changes: { upsert: [existing] },
   };
   const preview = await executeArchestraTool(
-    "archestra__preview_openappa_validation_change",
+    "archestra__preview_guardrails_validation_change",
     request,
     context,
   );
   expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
   const denied = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+    "archestra__update_guardrails_validation",
     request,
     context,
   );
   expect(denied.isError).toBe(true);
+  const runDenied = await executeArchestraTool(
+    "archestra__run_openappa_policy_tests",
+    {},
+    context,
+  );
+  expect(runDenied.isError).toBe(true);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
 });
 
@@ -310,8 +256,8 @@ test("stale suite versions yield recoverable conflicts and write nothing", async
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
   for (const name of [
-    "preview_openappa_validation_change",
-    "publish_openappa_validation_change",
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
   ]) {
     const result = await executeArchestraTool(
       `archestra__${name}`,
@@ -334,3 +280,171 @@ test("stale suite versions yield recoverable conflicts and write nothing", async
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
 });
+
+test("a policy preview replays the saved validations against the proposed policy without recording a run", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    content: candidatePolicy,
+    contentHash: createHash("sha256").update(candidatePolicy).digest("hex"),
+    updatedBy: user.id,
+    expectedRevision: 0,
+  });
+  await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [existing, regression],
+    expectedVersion: "empty",
+  });
+  // Dropping the trust requirement lets mail go out after a suspicious read.
+  const loosened = candidatePolicy.replace(
+    "requires = { trust = 'trusted' }\n",
+    "",
+  );
+  const preview = await executeArchestraTool(
+    "archestra__preview_guardrails_policy_change",
+    { content: loosened, expectedRevision: 1 },
+    {
+      organizationId: organization.id,
+      userId: user.id,
+      agent: { id: agent.id, name: agent.name },
+    },
+  );
+  expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  expect(preview.structuredContent?.validations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: existing.path, status: "passed" }),
+      expect.objectContaining({ path: regression.path, status: "failed" }),
+    ]),
+  );
+  expect(
+    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
+  ).toBe(candidatePolicy);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+});
+
+test("a policy preview runs the draft's battery helpers for a caller who may change the policy, and only for them", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeCustomRole,
+  makeTeam,
+  makeTeamMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const editor = await makeUser();
+  await makeMember(editor.id, organization.id, { role: "admin" });
+  const viewer = await makeUser();
+  const reader = await makeCustomRole(organization.id, {
+    permission: { guardrailsPolicy: ["read"] },
+  });
+  await makeMember(viewer.id, organization.id, { role: reader.role });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  const team = await makeTeam(organization.id, editor.id);
+  await makeTeamMember(team.id, editor.id);
+  const consulted = await serveHelperBridge();
+  // After reading organization-internal data, sharing a project with a team needs that team's
+  // members, which the archestra battery's audience source answers.
+  const share = {
+    path: "traces/share.appa",
+    content: `mcp/notes/read {}\nexpect allow\nmcp/archestra/set_project_share {\n  visibility: "team"\n  team_ids: ["${team.id}"]\n}\nexpect allow\n`,
+  };
+  await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [share],
+    expectedVersion: "empty",
+  });
+  // Nothing is saved yet, so the draft's battery has no install row.
+  const draft = `include = ["batteries/archestra/appa.toml"]
+
+[aliases.mcp]
+archestra = ["archestra"]
+
+[policy]
+version = 2
+
+[policy.audience]
+internal = ["archestra:members"]
+
+[[policy.tool]]
+name = "notes__read"
+delta = { audience = ["internal"] }
+`;
+  const preview = (userId: string) =>
+    executeArchestraTool(
+      "archestra__preview_guardrails_policy_change",
+      { content: draft, expectedRevision: 0 },
+      {
+        organizationId: organization.id,
+        userId,
+        agent: { id: agent.id, name: agent.name },
+      },
+    );
+
+  const edited = await preview(editor.id);
+  expect(edited.isError, JSON.stringify(edited.content)).not.toBe(true);
+  expect(edited.structuredContent?.validations).toEqual([
+    expect.objectContaining({ path: share.path, status: "passed" }),
+  ]);
+  // Each consult named a temporary install id the bridge answered.
+  expect(consulted.length).toBeGreaterThan(0);
+  for (const { installId, statusCode } of consulted) {
+    expect(installId).not.toBe("checked");
+    expect(statusCode).toBe(200);
+  }
+
+  consulted.length = 0;
+  const viewed = await preview(viewer.id);
+  expect(viewed.isError, JSON.stringify(viewed.content)).not.toBe(true);
+  expect(viewed.structuredContent?.validations).toEqual([
+    expect.objectContaining({ path: share.path, status: "cannot_run" }),
+  ]);
+  // A viewer's replay names only the placeholder, which the bridge refuses.
+  expect(consulted.length).toBeGreaterThan(0);
+  expect(consulted).toEqual(
+    consulted.map(() => ({ installId: "checked", statusCode: 400 })),
+  );
+  expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
+});
+
+/**
+ * This process's loopback endpoints a replay consults: the real battery
+ * helper route, and the no-op annotator. Records each helper consult.
+ */
+async function serveHelperBridge() {
+  const consulted: { installId: string; statusCode: number }[] = [];
+  const app = createFastifyInstance();
+  await app.register(helperRoutes);
+  app.post(GUARDRAILS_NOOP_ANNOTATOR_PATH, async () =>
+    guardrailsPolicyService.annotate(),
+  );
+  app.addHook("onResponse", async (request, reply) => {
+    if (request.url.startsWith(OPENAPPA_HELPERS_PREFIX))
+      consulted.push({
+        installId: request.url
+          .slice(OPENAPPA_HELPERS_PREFIX.length + 1)
+          .split("/")[0],
+        statusCode: reply.statusCode,
+      });
+  });
+  await app.listen({ port: 0, host: "127.0.0.1" });
+  const port = config.api.port;
+  config.api.port = (app.server.address() as AddressInfo).port;
+  onTestFinished(async () => {
+    config.api.port = port;
+    await app.close();
+  });
+  return consulted;
+}

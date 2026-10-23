@@ -42,6 +42,22 @@ export function buildAzureV1DeploymentsUrl(baseUrl: string): string | null {
   }
 }
 
+/**
+ * The resource's data-plane deployment listing, for a Foundry base URL of any
+ * surface (`…/anthropic`, `…/openai/v1`). Foundry serves no model list on its
+ * Anthropic surface, so this is how Claude deployments are discovered.
+ */
+export function buildAzureFoundryDeploymentsUrl(
+  baseUrl: string,
+): string | null {
+  try {
+    const url = new URL(baseUrl);
+    return `${url.origin}/openai/deployments?api-version=${AZURE_DEPLOYMENTS_API_VERSION}`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
@@ -97,6 +113,7 @@ export function buildAzureResponsesBaseUrl(baseUrl: string): string | null {
 export function buildAzureDeploymentBaseUrl(params: {
   baseUrl: string | undefined;
   deploymentName: string;
+  overrideDeployment?: boolean;
 }): string | null {
   if (!params.baseUrl) {
     return null;
@@ -105,11 +122,15 @@ export function buildAzureDeploymentBaseUrl(params: {
   try {
     const url = new URL(params.baseUrl);
     if (isAzureOpenAiV1Url(url)) {
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      const pathname = url.pathname.replace(/\/+$/, "");
+      return params.overrideDeployment
+        ? `${url.origin}${pathname.replace(/\/v1$/, "")}/deployments/${encodeURIComponent(params.deploymentName)}`
+        : `${url.origin}${pathname}`;
     }
 
     if (/\/openai\/deployments\/[^/]+\/?$/.test(url.pathname)) {
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      const pathname = url.pathname.replace(/\/+$/, "");
+      return `${url.origin}${params.overrideDeployment ? pathname.replace(/[^/]+$/, encodeURIComponent(params.deploymentName)) : pathname}`;
     }
 
     const openAiPathname = getAzureOpenAiPathname(url);
@@ -193,6 +214,44 @@ export function normalizeAzureApiKey(
   }
 
   return apiKey.replace(/^Bearer\s+/i, "");
+}
+
+/** Preserve caller query bytes and cancellation without global SDK configuration. */
+export function createAzureFetchWithRequestQuery(params: {
+  rawQuery?: string;
+  fetch?: typeof globalThis.fetch;
+  abortSignal?: AbortSignal;
+}): typeof globalThis.fetch {
+  const incoming = new URLSearchParams(params.rawQuery);
+  const overriddenKeys = new Set(incoming.keys());
+  return (input, init) => {
+    const url = new URL(getRequestUrl(input));
+    if (params.rawQuery) {
+      const retained = url.search
+        .slice(1)
+        .split("&")
+        .filter(
+          (pair) =>
+            pair &&
+            !overriddenKeys.has(
+              new URLSearchParams(pair).keys().next().value ?? "",
+            ),
+        );
+      url.search = [retained.join("&"), params.rawQuery]
+        .filter(Boolean)
+        .join("&");
+    }
+    const signal = params.abortSignal
+      ? init?.signal
+        ? AbortSignal.any([params.abortSignal, init.signal])
+        : params.abortSignal
+      : init?.signal;
+    const fetchFn = params.fetch ?? globalThis.fetch;
+    return fetchFn(
+      input instanceof Request ? new Request(url, input) : url.toString(),
+      { ...init, ...(signal ? { signal } : {}) },
+    );
+  };
 }
 
 /**

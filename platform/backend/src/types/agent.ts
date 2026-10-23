@@ -128,21 +128,6 @@ export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 const OpenAppaConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG),
 });
-// Policy Configuration Subagent config
-const PolicyConfigAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
-  autoConfigureOnToolDiscovery: z.boolean(),
-});
-
-const DualLlmMainAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN),
-  maxRounds: z.number().int().min(1).max(20),
-});
-
-const DualLlmQuarantineAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE),
-});
-
 const ContextCompactionAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
 });
@@ -158,24 +143,12 @@ const AppRuntimeAgentConfigSchema = z.object({
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   OpenAppaConfigAgentConfigSchema,
-  PolicyConfigAgentConfigSchema,
-  DualLlmMainAgentConfigSchema,
-  DualLlmQuarantineAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
-export type PolicyConfigAgentConfig = z.infer<
-  typeof PolicyConfigAgentConfigSchema
->;
-export type DualLlmMainAgentConfig = z.infer<
-  typeof DualLlmMainAgentConfigSchema
->;
-export type DualLlmQuarantineAgentConfig = z.infer<
-  typeof DualLlmQuarantineAgentConfigSchema
->;
 export type ContextCompactionAgentConfig = z.infer<
   typeof ContextCompactionAgentConfigSchema
 >;
@@ -218,6 +191,13 @@ const selectExtendedFields = {
   passthroughHeaders: z.array(z.string()).nullable(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
+  /**
+   * When anything last ran through this agent: the later of its newest MCP
+   * request (any JSON-RPC method) and its newest LLM call. Null when neither
+   * ever happened. Optional, as it was before the column existed, so agent
+   * objects built in code without it still fit.
+   */
+  lastUsedAt: z.date().nullable().optional(),
 };
 
 const insertExtendedFields = {
@@ -382,18 +362,108 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * rows.
    */
   activationSkillsCount: z.number().int().nonnegative().optional(),
-  /**
-   * Timestamp of the most recent MCP request (any JSON-RPC method) routed
-   * through this agent, from the mcp_tool_calls log. Null when nothing was
-   * ever routed through it. Populated on paginated list reads; absent on
-   * other responses.
-   */
-  lastUsedAt: z.date().nullable().optional(),
 });
+
+/** Bootstrap identity and model references; selected-agent details load separately. */
+export const ChatAgentRosterSchema = SelectAgentSchema.pick({
+  id: true,
+  organizationId: true,
+  name: true,
+  description: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  agentType: true,
+  builtIn: true,
+  builtInAgentConfig: true,
+  runtime: true,
+  modelId: true,
+  llmApiKeyId: true,
+});
+export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
+
+/** Fields rendered by resource pickers; editing loads the individual resource. */
+export const AgentOptionSchema = SelectAgentSchema.pick({
+  id: true,
+  name: true,
+  slug: true,
+  agentType: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  authorName: true,
+  authorEmail: true,
+  isPersonalGateway: true,
+  runtime: true,
+  description: true,
+  teams: true,
+}).extend({
+  users: z.array(
+    SelectAgentSchema.shape.users.unwrap().element.pick({ id: true }),
+  ),
+});
+
+export type AgentOption = z.infer<typeof AgentOptionSchema>;
+
+/** Filters applied before a bounded selector page is fetched. */
+export const AgentOptionFiltersSchema = z.object({
+  search: z.string().max(512).optional(),
+  searchMode: z.enum(["name", "selector", "name_or_description"]).optional(),
+  sortBy: z.enum(["createdAt", "name"]).optional(),
+  exactName: z.string().optional(),
+  authorId: z.string().optional(),
+  excludeIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.uuid()),
+    )
+    .optional(),
+  runtimeCommand: z.string().optional(),
+  onlyOwnPersonalAgents: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  excludePersonalGateways: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  audienceVisibility: z
+    .enum(["none", "organization", "team", "user"])
+    .optional(),
+  audienceTeamIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceUserIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceEditorIsOwner: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+});
+export type AgentOptionFilters = z.infer<typeof AgentOptionFiltersSchema>;
 
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),
+  toolsCount: z
+    .number()
+    .int()
+    .describe(
+      "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.",
+    ),
+  subagentsCount: z
+    .number()
+    .int()
+    .describe(
+      "Agents this agent delegates to. Always present, even when `tools` is not requested.",
+    ),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -438,6 +508,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement
@@ -502,6 +574,8 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement
@@ -520,88 +594,7 @@ export type Agent = z.infer<typeof SelectAgentSchema>;
 export type AgentListItem = z.infer<typeof AgentListItemSchema>;
 export type AgentAccessContext = Pick<
   Agent,
-  "id" | "organizationId" | "scope" | "authorId"
+  "id" | "organizationId" | "scope" | "authorId" | "agentType"
 >;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
-
-/**
- * Schema for auto-policy LLM analysis output.
- * Describes security policy recommendations for an MCP tool.
- */
-export const PolicyConfigSchema = z.object({
-  toolInvocationAction: z
-    .enum([
-      "allow_when_context_is_sensitive",
-      "block_when_context_is_sensitive",
-      "require_approval",
-      "block_always",
-    ])
-    .describe(
-      "When should this tool be allowed to be invoked? " +
-        "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
-        "'block_when_context_is_sensitive' - Block when sensitive data is present, allow only when context is safe (tools that could leak data). " +
-        "'require_approval' - Require user confirmation before executing in chat; block in autonomous sessions (write/mutating tools that are not outright destructive: create/update/send/post/charge). " +
-        "'block_always' - Never allow automatic invocation (obviously destructive tools whose name is solely dedicated to deleting or destroying data).",
-    ),
-  trustedDataAction: z
-    .enum([
-      "mark_as_safe",
-      "mark_as_sensitive",
-      "sanitize_with_dual_llm",
-      "block_always",
-    ])
-    .describe(
-      "How should the tool's results be treated? " +
-        "'mark_as_safe' - Results are fully trusted and used directly (internal dev/config metadata, or external action tools that return no third-party content). " +
-        "'mark_as_sensitive' - Results contain organizational data from internal self-hosted systems (Jira, GitHub, databases, internal APIs, file systems) that must not leak to external tools. " +
-        "'sanitize_with_dual_llm' - Results come from untrusted external/third-party sources and may carry injected instructions; they are summarized through the Dual LLM workflow so the raw content never reaches the privileged model (web search, scraping/fetching arbitrary pages, untrusted inbound messages). " +
-        "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
-    ),
-  reasoning: z
-    .string()
-    .describe(
-      "Brief explanation of why these settings were chosen for this tool.",
-    ),
-});
-
-export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
-
-/** Maps LLM-facing PolicyConfig enum values to the database-stored policy values. */
-const TOOL_INVOCATION_ACTION_MAP: Record<
-  PolicyConfig["toolInvocationAction"],
-  | "allow_when_context_is_untrusted"
-  | "block_when_context_is_untrusted"
-  | "require_approval"
-  | "block_always"
-> = {
-  allow_when_context_is_sensitive: "allow_when_context_is_untrusted",
-  block_when_context_is_sensitive: "block_when_context_is_untrusted",
-  require_approval: "require_approval",
-  block_always: "block_always",
-};
-
-const TRUSTED_DATA_ACTION_MAP: Record<
-  PolicyConfig["trustedDataAction"],
-  | "mark_as_trusted"
-  | "mark_as_untrusted"
-  | "sanitize_with_dual_llm"
-  | "block_always"
-> = {
-  mark_as_safe: "mark_as_trusted",
-  mark_as_sensitive: "mark_as_untrusted",
-  sanitize_with_dual_llm: "sanitize_with_dual_llm",
-  block_always: "block_always",
-};
-
-export function mapToolInvocationAction(
-  action: PolicyConfig["toolInvocationAction"],
-) {
-  return TOOL_INVOCATION_ACTION_MAP[action];
-}
-
-export function mapTrustedDataAction(
-  action: PolicyConfig["trustedDataAction"],
-) {
-  return TRUSTED_DATA_ACTION_MAP[action];
-}

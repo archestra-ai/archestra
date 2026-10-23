@@ -13,8 +13,10 @@ import {
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { type MockInstance, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentKnowledgeBaseModel,
   AgentModel,
@@ -23,6 +25,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -590,28 +593,25 @@ describe("agent tool execution", () => {
         idleTimeoutMinutes: null,
       },
     });
-    for (const enabled of [true, false]) {
-      config.agentRuntime.enabled = enabled;
-      const result = await executeArchestraTool(
-        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
-        {},
-        mockContext,
-      );
-      expect(result.isError).toBe(false);
-      const parsed = JSON.parse((result.content[0] as { text: string }).text);
-      expect(parsed.agents).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: runtimeAgent.id,
-            executionMode: enabled ? "runtime" : "foreground",
-          }),
-          expect.objectContaining({
-            id: foregroundAgent.id,
-            executionMode: "foreground",
-          }),
-        ]),
-      );
-    }
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.agents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: runtimeAgent.id,
+          executionMode: "runtime",
+        }),
+        expect.objectContaining({
+          id: foregroundAgent.id,
+          executionMode: "foreground",
+        }),
+      ]),
+    );
   });
 
   test("list_agents filters by provider key and returns its display name", async ({
@@ -943,6 +943,69 @@ describe("agent RBAC visibility", () => {
     ]);
   });
 
+  test("list_agents narrows by shared_with and owner_ids", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, admin.id);
+
+    const mine = await makeAgent({
+      name: "Narrow Mine",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: admin.id,
+    });
+    await makeAgent({
+      name: "Narrow Team",
+      agentType: "agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      name: "Narrow Org",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "org",
+      authorId: otherUser.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: mine.id, name: mine.name },
+      userId: admin.id,
+      organizationId: org.id,
+    };
+    const listNames = async (args: Record<string, string[]>) => {
+      const result = await executeArchestraTool(
+        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+        { name: "Narrow", ...args },
+        context,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      return JSON.parse((result.content[0] as any).text)
+        .agents.map((agent: { name: string }) => agent.name)
+        .sort();
+    };
+
+    expect(await listNames({ shared_with: [`team:${team.id}`] })).toEqual([
+      "Narrow Team",
+    ]);
+    expect(await listNames({ shared_with: ["org"] })).toEqual(["Narrow Org"]);
+    expect(await listNames({ owner_ids: [admin.id] })).toEqual(["Narrow Mine"]);
+    expect(
+      await listNames({ owner_ids: [otherUser.id], shared_with: ["org"] }),
+    ).toEqual(["Narrow Org"]);
+  });
+
   test("get_agent by name does not return inaccessible team-scoped agent", async ({
     makeUser,
     makeOrganization,
@@ -1045,8 +1108,8 @@ describe("edit_agent migrated sharing", () => {
 describe("agent runtime and model tools", () => {
   let mockContext: ArchestraContext;
   let organizationId: string;
-  let previousRuntimeEnabled: boolean;
   let previousAllowPrivileged: boolean;
+  let sandboxInstalled: MockInstance<() => boolean>;
   let secretId: () => Promise<string>;
 
   beforeEach(
@@ -1069,15 +1132,16 @@ describe("agent runtime and model tools", () => {
         userId: user.id,
         organizationId: org.id,
       };
-      previousRuntimeEnabled = config.agentRuntime.enabled;
       previousAllowPrivileged = config.agentRuntime.allowPrivileged;
-      config.agentRuntime.enabled = true;
+      sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
     },
   );
 
   afterEach(() => {
-    config.agentRuntime.enabled = previousRuntimeEnabled;
     config.agentRuntime.allowPrivileged = previousAllowPrivileged;
+    sandboxInstalled.mockRestore();
   });
 
   const call = (
@@ -1178,6 +1242,58 @@ describe("agent runtime and model tools", () => {
     expect(created?.accessAllTools).toBe(false);
   });
 
+  test("create_agent refuses to read a saved credential the caller cannot use", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const define = (key: string, initialGrants?: []) =>
+      createRuntimeCredentialDefinition({
+        organizationId,
+        userId: mockContext.userId as string,
+        definition: {
+          key,
+          name: key === "shared" ? "Shared key" : "Restricted key",
+          kind: "secret",
+          description: "",
+          icon: null,
+          allowPersonal: false,
+          allowOrganization: true,
+        },
+        initialGrants,
+      });
+    // Shared with the organization, as a new credential is by default.
+    await define("shared");
+    // Kept to admins: its value would reach every run of the new Agent.
+    await define("restricted", []);
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    mockContext = { ...mockContext, userId: member.id };
+    const create = (credentialId: string) =>
+      call(TOOL_CREATE_AGENT_SHORT_NAME, {
+        name: `Reads ${credentialId}`,
+        runtime: {
+          template: "claude-code",
+          credentials: [
+            {
+              key: "GITHUB_TOKEN",
+              credentialId,
+              scope: "shared",
+              label: "GitHub token",
+              required: true,
+            },
+          ],
+        },
+      });
+
+    const refused = await create("restricted");
+    expect(refused.isError).toBe(true);
+    expect((refused.content[0] as any).text).toContain(
+      `You don't have access to the "Restricted key" credential, so you can't attach it.`,
+    );
+    const allowed = await create("shared");
+    expect(allowed.isError, (allowed.content[0] as any).text).toBe(false);
+  });
+
   test("create_agent fills a custom image's runtime with the page defaults", async () => {
     const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
       name: "Custom runtime",
@@ -1245,13 +1361,13 @@ describe("agent runtime and model tools", () => {
       "only to the claude-code template",
     );
 
-    config.agentRuntime.enabled = false;
+    sandboxInstalled.mockReturnValue(false);
     const disabled = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
       name: "Runtime off",
       runtime: { template: "claude-code" },
     });
     expect((disabled.content[0] as any).text).toContain(
-      "Agent Runtime is not enabled",
+      "Agent Sandbox controller installed",
     );
 
     const after = await AgentModel.findAllPaginated(

@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AGENT_CATALOG_IMAGE_REGISTRY,
-  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   BM25_B_DEFAULT,
   BM25_B_MAX,
   BM25_B_MIN,
@@ -16,23 +15,26 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_AUTH_COOKIE_PREFIX,
   DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
   DEFAULT_CHUNK_SIZE_TOKENS,
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
-  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
+  type LogContentMode,
+  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  providerSupportsChat,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -44,9 +46,10 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "renderer" | "all";
+type ProcessType = "web" | "worker" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
 
 /**
@@ -208,26 +211,16 @@ const getPortFromUrl = (): number => {
  * Networking & Origin Validation Strategy
  * ========================================
  *
- * Development mode:
- *   - Backend and frontend bind to 127.0.0.1 (loopback only).
- *   - Only local processes can reach the server, so CORS and origin
- *     checks are unnecessary. All origins are accepted.
+ * Unconfigured (dev, quickstart, any deployment without the variables below):
+ *   - Only the request's own origin is allowed, so the app works on whatever
+ *     hostname it is reached by (LAN IP, phone, tunnel) while foreign sites
+ *     cannot make credentialed requests. See resolveAllowedOrigins.
  *
- * Quickstart mode (Docker):
- *   - Inside the container the app binds to 0.0.0.0.
- *   - Quickstart examples bind host ports to 127.0.0.1 by default.
- *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
- *   - Quickstart is designed for quick evaluation, so all origins are
- *     accepted without checks. It's ok if someone will decide to
- *     access Archestra from the mobile phone.
- *
- * Production mode:
- *   - Origin validation is OFF by default. All origins are accepted.
- *   - Origin checks are only enforced when explicitly configured via:
+ * Configured:
+ *   - Origin checks are enforced against:
  *       ARCHESTRA_FRONTEND_URL              — primary frontend origin
  *       ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS — comma-separated extra origins
- *   - Setting either variable signals that origin validation should be
- *     performed. Only the configured origins will be allowed.
+ *   - Only the configured origins will be allowed.
  */
 
 /**
@@ -276,35 +269,6 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
 };
 
 /**
- * Where the offline video renderer reaches this deployment's own frontend to
- * load the replay page it films.
- *
- * Falls back to this deployment's first configured origin before loopback.
- * That set is the same one CORS, auth and the app sandbox are built from, so
- * whichever way a deployment spells its frontend — a public hostname, a
- * tunnel, an extra trusted origin — the renderer targets something already
- * trusted rather than an address nothing was configured for. Defaulting
- * straight to loopback is what makes a tunnelled deployment film an empty app
- * pane: the sandbox declines to be framed by an untrusted origin, and the
- * render cannot tell that apart from an app that drew nothing.
- *
- * The backend's own base URL is deliberately not a candidate: the page being
- * filmed is a frontend route.
- *
- * @public — exported for testability
- */
-export function resolveRenderBaseUrl(params: {
-  explicit: string | undefined;
-  configuredOrigins: string[];
-}): string {
-  return (
-    params.explicit?.trim() ||
-    params.configuredOrigins[0] ||
-    "http://localhost:3000"
-  );
-}
-
-/**
  * Base URL for the `ollama-native` transport.
  *
  * Same Ollama server as the OpenAI-compatible provider, different endpoint: the
@@ -334,45 +298,43 @@ export function stripOllamaV1Suffix(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
 
-const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
-  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
-  // temporary, hackathon-only feature — see the recorder flag below). Do not add
-  // this to .env.example or the deployment docs. It rarely needs setting anyway:
-  // the fallback already targets a trusted configured origin.
-  explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
-  configuredOrigins: getConfiguredOrigins(),
-});
-
 /**
- * Get CORS origin configuration for Fastify.
- * When no origin env vars are set, accepts all origins.
- * When configured, only allows the specified origins.
+ * Explicitly configured origins for CORS and better-auth, with loopback
+ * equivalents. Empty when none are configured; see resolveAllowedOrigins.
  * @public — exported for testability
  */
-export const getCorsOrigins = (): (string | RegExp)[] => {
-  const origins = getConfiguredOrigins();
-
-  if (origins.length === 0) {
-    return [/.*/];
-  }
-
-  return addLoopbackEquivalents(origins);
-};
+export const getCorsOrigins = (): string[] =>
+  addLoopbackEquivalents(getConfiguredOrigins());
 
 /**
- * Get trusted origins for better-auth.
- * When no origin env vars are set, accepts all origins.
- * When configured, only allows the specified origins.
  * @public — exported for testability
  */
-export const getTrustedOrigins = (): string[] => {
-  const origins = getConfiguredOrigins();
+export const getTrustedOrigins = (): string[] =>
+  addLoopbackEquivalents(getConfiguredOrigins());
 
-  if (origins.length === 0) {
-    return ["http://*:*", "https://*:*", "http://*", "https://*"];
+/**
+ * Origins allowed for one request: the configured ones, or — when none are
+ * configured — only the origin the request was addressed to. The frontend
+ * proxy sets X-Forwarded-Host to the browser-facing host; a cross-origin page
+ * cannot set it without a preflight, which this same policy rejects.
+ */
+export const resolveAllowedOrigins = (params: {
+  configuredOrigins: string[];
+  forwardedHost: string | null | undefined;
+  host: string | null | undefined;
+}): string[] => {
+  if (params.configuredOrigins.length > 0) {
+    return params.configuredOrigins;
   }
-
-  return addLoopbackEquivalents(origins);
+  const requestHost =
+    params.forwardedHost?.split(",")[0]?.trim() || params.host?.trim();
+  if (!requestHost) {
+    return [];
+  }
+  return addLoopbackEquivalents([
+    `http://${requestHost}`,
+    `https://${requestHost}`,
+  ]);
 };
 
 /**
@@ -626,6 +588,11 @@ export const getOtelExporterOtlpLogEndpoint = (
     return normalizedUrl;
   }
 
+  // The same variable is accepted as a traces URL; logs share its base.
+  if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
+    return `${normalizedUrl.slice(0, -OTEL_TRACES_PATH.length)}${OTEL_LOGS_PATH}`;
+  }
+
   if (normalizedUrl.endsWith("/v1")) {
     return `${normalizedUrl}/logs`;
   }
@@ -722,6 +689,25 @@ export const parseLogFormat = (
     );
   }
   return "json";
+};
+
+/**
+ * Parse `ARCHESTRA_LOGS_CONTENT_MODE`. Unset means `full`. An unrecognized
+ * value fails closed to `metadata_only`: a typo must never store content an
+ * operator asked the platform to keep out of the logs.
+ * @public — exported for testability
+ */
+export const parseLogContentMode = (
+  envValue?: string | undefined,
+): LogContentMode => {
+  const value = envValue?.toLowerCase().trim();
+  if (!value) return "full";
+  const parsed = LogContentModeSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  logger.warn(
+    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
+  );
+  return "metadata_only";
 };
 
 /** @public — exported for testability */
@@ -1032,6 +1018,23 @@ const parsePositiveInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
+/**
+ * A whole number of milliseconds that `setTimeout` can schedule, or 0 to
+ * disable the timer. Delays above 2^31-1 collapse to 1ms, so invalid and
+ * oversized values use the default instead.
+ */
+const parseBoundedTimeoutMs = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue || !/^[0-9]+$/.test(envValue)) return defaultValue;
+  const parsed = Number(envValue);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 2_147_483_647) {
+    return defaultValue;
+  }
+  return parsed;
 };
 
 /**
@@ -1459,11 +1462,7 @@ export function parseConnectorSyncMaxDuration(
 /** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
-  if (
-    normalized === "web" ||
-    normalized === "worker" ||
-    normalized === "renderer"
-  ) {
+  if (normalized === "web" || normalized === "worker") {
     return normalized;
   }
   return "all";
@@ -1990,12 +1989,11 @@ const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
 
 /**
- * Parses the startup-only allowlist and registers APPA only through its feature flag.
+ * Parses the startup-only allowlist and always registers APPA.
  * @public — exported for testability
  */
 export function parseLlmProxyPlugins(
   value: string | undefined,
-  appaEnabled = false,
 ): LlmProxyPluginName[] {
   const plugins = parseCommaSeparatedList(value ?? "");
   const invalid = plugins.filter(
@@ -2009,11 +2007,6 @@ export function parseLlmProxyPlugins(
   if (new Set(plugins).size !== plugins.length) {
     throw new Error("ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates");
   }
-  if (!appaEnabled) {
-    return plugins.filter(
-      (plugin) => plugin !== "appa",
-    ) as LlmProxyPluginName[];
-  }
   if (!plugins.includes("appa")) plugins.push("appa");
   return plugins as LlmProxyPluginName[];
 }
@@ -2022,17 +2015,33 @@ const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
 const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
 
 /**
- * OpenAPPA follows the ARCHESTRA_BETA master switch; it has no flag of its own.
- * Validates APPA settings only when that switch is explicitly "true".
+ * OpenAPPA is available on every deployment, independently of beta features.
+ * Enforcement is controlled separately by the deployment's Guardrails setting.
  * @public — exported for testability
  */
-export function parseOpenAppaConfig(
-  betaEnabled: string | undefined,
-  yellEnabled?: string,
-  offerSigningSecret?: string,
-  postgresMaxConnections?: string,
-  authSecret?: string,
-) {
+export function parseOpenAppaConfig({
+  yellEnabled,
+  yellForwardingEnabled,
+  offerSigningSecret,
+  postgresMaxConnections,
+  reviewSummaryProvider,
+  reviewSummaryModel,
+  authSecret,
+}: {
+  yellEnabled?: string;
+  yellForwardingEnabled?: string;
+  offerSigningSecret?: string;
+  postgresMaxConnections?: string;
+  reviewSummaryProvider?: string;
+  reviewSummaryModel?: string;
+  authSecret?: string;
+} = {}) {
+  const forwarding = yellForwardingEnabled?.trim() ?? "";
+  if (forwarding !== "" && forwarding !== "true" && forwarding !== "false") {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED must be true or false",
+    );
+  }
   const dedicated = offerSigningSecret ?? "";
   if (
     dedicated.length > 0 &&
@@ -2045,19 +2054,27 @@ export function parseOpenAppaConfig(
   // Derives from the session authentication secret when no dedicated key is set.
   // Uses a domain-separated HMAC so the key never collides with session or MRTR keys.
   const secret = dedicated || deriveOfferSigningSecret(authSecret);
-  const isEnabled = betaEnabled === "true";
-  if (isEnabled && secret.length === 0) {
+  if (secret.length === 0) {
     logger.warn(
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
+  const reviewSummary = parseOpenAppaReviewSummary({
+    provider: reviewSummaryProvider,
+    model: reviewSummaryModel,
+  });
   return {
-    enabled: isEnabled,
-    yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
+    enabled: true,
+    yellEnabled: (yellEnabled ?? "true") === "true",
+    // External diagnostic delivery requires its own opt-in in every environment.
+    yellForwardingEnabled: forwarding === "true",
     offerSigningSecret: secret,
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
     ),
+    // Omitted (not `undefined`) when disabled so exact-shape consumers and
+    // tests do not observe a key for a feature that is off.
+    ...(reviewSummary ? { reviewSummary } : {}),
   };
 }
 
@@ -2081,139 +2098,43 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
 }
 
 /**
- * The hackathon recorder (record/replay/edit app demo sessions).
- *
- * On for every community deployment, and NEVER on for a deployment running an
- * activated enterprise license: a licensed customer must not be shown a
- * temporary community promotion. There is no deployment opt-out flag, because
- * the two gates above this one already cover "when" and "whether" — the
- * hackathon date window keeps it hidden outside the event, and the
- * per-organization toggle lets an admin switch it off — so a community
- * deployment needs no third switch of its own.
- *
- * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging. It affects this deployment gate only — the
- * date window and the organization toggle still apply. It is documented
- * nowhere and named as an enterprise override on purpose, so no customer
- * stumbles onto the enterprise path.
- *
- * This is the DEPLOYMENT gate only. Two more gates sit above it at request
- * time — the organization's own toggle, and the hackathon date window —
- * because neither can be decided once at boot. See `assertAppsHackathonAvailable`.
- *
- * @public — exported for testability
+ * Explicit opt-in model for OpenAPPA review summaries. Both variables must be
+ * set together; both blank keeps summaries disabled. The provider must be a
+ * chat-capable supported provider, and its credentials come from the existing
+ * provider configuration (e.g. ARCHESTRA_CHAT_KIMI_API_KEY) — never inferred
+ * from the organization's default provider. Validation errors name variables
+ * only, never credential values.
  */
-export function parseHackathonRecorderEnabled(params: {
-  enterpriseLicenseActivated: boolean;
-  enterpriseOverride: string | undefined;
-}): boolean {
-  if (params.enterpriseLicenseActivated) {
-    return params.enterpriseOverride === "true";
-  }
-  return true;
-}
-
-/**
- * The longest final cut a recording may be submitted or exported at, in ms.
- *
- * One bound behind every length surface — the submit button, the submission
- * flow's own backstop, the video export, the editor's trim-to-limit control and
- * the tour's "keep it under N" note — so a deployment that raises it raises all
- * of them together and no surface can quote a number the checks disagree with.
- *
- * Rejects a value that is not a positive integer number of milliseconds rather
- * than silently falling back: a typo here would otherwise read as the platform
- * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
- * from making every recording unsubmittable.
- *
- * Undocumented on purpose, like the rest of the recorder — not in .env.example
- * or the deployment docs.
- *
- * @public — exported for testability
- */
-export function parseHackathonRecorderMaxFinalCutMs(
-  value: string | undefined,
-): number {
-  const raw = value?.trim();
-  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
-    throw new Error(
-      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
-    );
-  }
-  return parsed;
-}
-
-/**
- * Floor for the configurable final-cut limit. Below a few seconds nothing is a
- * demo and every recording would be born over the line.
- */
-const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
-
-/**
- * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
- * device-flow OAuth client id and the public gallery repository. Baked in so
- * every non-enterprise deployment (local dev and OSS included) offers sharing
- * to the official gallery out of the box; an env override repoints a fork
- * elsewhere. Enterprise has the whole hackathon recorder disabled, so these
- * never surface there.
- *
- * @public — exported for testability
- */
-export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
-  "Ov23liqkaqAROe7B7ZZ4";
-/** @public — exported for testability (see the client-id default above) */
-export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
-
-/**
- * The App Gallery repository a shared recording is submitted to, as
- * `owner/name` on github.com. Unset means sharing is not offered — the
- * recorder itself works without it (record/replay/download stay local).
- *
- * Undocumented on purpose, like the rest of the recorder — not in
- * .env.example or the deployment docs.
- *
- * @public — exported for testability
- */
-export function parseHackathonGalleryRepo(
-  envValue: string | undefined,
-): { owner: string; name: string } | undefined {
-  const raw = envValue?.trim();
-  if (!raw) {
+function parseOpenAppaReviewSummary({
+  provider,
+  model,
+}: {
+  provider?: string;
+  model?: string;
+}): { provider: SupportedProvider; model: string } | undefined {
+  const trimmedProvider = provider?.trim() ?? "";
+  const trimmedModel = model?.trim() ?? "";
+  if (trimmedProvider.length === 0 && trimmedModel.length === 0) {
     return undefined;
   }
-  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(raw);
-  if (!match) {
+  if (trimmedProvider.length === 0 || trimmedModel.length === 0) {
     throw new Error(
-      `ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO must be "owner/name" (a github.com repository), got "${raw}"`,
+      "ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER and ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL must be set together. Set both to enable review summaries, or unset both to keep them disabled.",
     );
   }
-  return { owner: match[1], name: match[2] };
+  if (!(SupportedProviders as readonly string[]).includes(trimmedProvider)) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${trimmedProvider}" is not a supported provider. Supported values: ${SupportedProviders.join(", ")}`,
+    );
+  }
+  const supportedProvider = trimmedProvider as SupportedProvider;
+  if (!providerSupportsChat(supportedProvider)) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${trimmedProvider}" does not support chat completions. Choose a chat provider such as anthropic, openai, or kimi.`,
+    );
+  }
+  return { provider: supportedProvider, model: trimmedModel };
 }
-
-/**
- * The public App Gallery sharing config: each value is the env override, else
- * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
- * deployment offers sharing to the official gallery out of the box. The
- * explicit optional types are load-bearing: the values are never actually
- * undefined here, but the route's "not configured" guard and its tests still
- * drive them to undefined, and an object-property annotation (unlike an
- * annotated const, which CFA narrows to its string initializer) keeps that
- * assignable.
- */
-const hackathonGallery: {
-  githubClientId: string | undefined;
-  repo: { owner: string; name: string } | undefined;
-} = {
-  githubClientId:
-    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
-    DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID,
-  repo: parseHackathonGalleryRepo(
-    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO?.trim() ||
-      DEFAULT_HACKATHON_GALLERY_REPO,
-  ),
-};
 
 // The code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) runs on a Dagger engine. Two ways it turns on:
@@ -2271,16 +2192,18 @@ const authSessionSecret =
   process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
   process.env.ARCHESTRA_AUTH_SECRET;
 
-const openappa = parseOpenAppaConfig(
-  process.env.ARCHESTRA_BETA,
-  process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
-  process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
-  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
-  authSessionSecret,
-);
+const openappa = parseOpenAppaConfig({
+  yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
+  offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
+  postgresMaxConnections:
+    process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  reviewSummaryProvider: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER,
+  reviewSummaryModel: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL,
+  authSecret: authSessionSecret,
+});
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
-  openappa.enabled,
 );
 
 const config = {
@@ -2331,6 +2254,11 @@ const config = {
   websocket: {
     path: "/ws",
   },
+  mcpOAuth: {
+    // Deployment-operator opt-in; compatibility must remain the default.
+    enforceOutboundValidation:
+      process.env.ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION === "true",
+  },
   mcpGateway: {
     endpoint: "/v1/mcp",
     /**
@@ -2342,6 +2270,15 @@ const config = {
     toolCallTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
+    ),
+    /**
+     * Largest single JSON-RPC message (bytes) accepted from a stdio MCP server
+     * running in Kubernetes. A larger reply fails only the tool call it
+     * answers. The default matches the MCP SDK's stdio buffer limit.
+     */
+    stdioMaxMessageBytes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES,
+      10 * 1024 * 1024,
     ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -2361,6 +2298,20 @@ const config = {
       30_000,
     ),
     // SPDX-SnippetEnd
+    /**
+     * How long (ms) one `subscriptions/listen` stream stays open before the
+     * gateway ends it with a complete result. 0, the default, leaves the
+     * stream open until the client disconnects. A positive value is a limited
+     * mitigation for a proxy hard cap, not a universal fix: a client may open
+     * another listen, but the protocol does not require it, and a client can
+     * stop after repeated ends. This process does not know the proxy maximum.
+     * Keep a positive value strictly below that cap. Invalid and oversized
+     * values fall back to 0 rather than collapsing to 1ms.
+     */
+    subscriptionMaxDurationMs: parseBoundedTimeoutMs(
+      process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
+      0,
+    ),
     /**
      * Both directions of the draft MCP Skills extension: publishing local
      * Skills through gateways and projecting external Skills from installed
@@ -2393,19 +2344,12 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
+  /**
+   * Agent Runtime: delegated Agent tasks run in one Kubernetes pod each and
+   * remain attachable and steerable while they run. Available whenever the
+   * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
+   */
   agentRuntime: {
-    /**
-     * Agent Runtime: delegated Agent tasks run in one Kubernetes pod
-     * each and remain attachable and steerable while they run.
-     *
-     * Deliberately an independent switch rather than `betaFeatureEnabled`:
-     * the feature spawns compute holding a user's personal credentials, so
-     * flipping the ARCHESTRA_BETA master switch must never turn it on by
-     * implication. It also needs the Kubernetes runtime configured — without
-     * that, `orchestratorK8sRuntime` is false and dedicated runtimes stay unavailable
-     * regardless of this value.
-     */
-    enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,
@@ -2533,14 +2477,6 @@ const config = {
       250 * 1024 * 1024,
     ),
   },
-  plugins: {
-    /**
-     * Opaque plugins execute on connected developer machines, so authoring
-     * and automatic connection delivery ship off by default. Plugins have no
-     * flag of their own: the ARCHESTRA_BETA master switch turns them on.
-     */
-    enabled: process.env.ARCHESTRA_BETA === "true",
-  },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
   },
@@ -2606,7 +2542,8 @@ const config = {
      * uses a distinct prefix.
      */
     cookiePrefix:
-      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() ||
+      DEFAULT_AUTH_COOKIE_PREFIX,
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -3047,18 +2984,6 @@ const config = {
     azure: {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
-    defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
-    defaultProvider: ((): SupportedProvider => {
-      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
-      if (
-        provider &&
-        SupportedProviders.includes(provider as SupportedProvider)
-      ) {
-        return provider as SupportedProvider;
-      }
-      return "anthropic";
-    })(),
     activeRun: {
       replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
@@ -3124,92 +3049,6 @@ const config = {
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
-  hackathonRecorder: {
-    enabled: parseHackathonRecorderEnabled({
-      enterpriseLicenseActivated:
-        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
-      // add this to .env.example or the deployment docs.
-      enterpriseOverride:
-        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
-    }),
-    /**
-     * Offering the offline VIDEO export (the player's download button and the
-     * render endpoints behind it). Off unless a deployment opts in: a render
-     * drives a headless Chromium for as long as the cut runs, which is a cost
-     * no deployment should pay by surprise — and the gallery submission, which
-     * is what the hackathon actually needs, does not depend on it.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    videoDownloadEnabled:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
-      "true",
-    /** The longest final cut that may be submitted or exported (see the parser). */
-    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
-      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
-    ),
-    /**
-     * Sharing a recording to the public App Gallery (a PR filed on the
-     * participant's own GitHub account). Both values default to the official
-     * Archestra gallery + its public device-flow OAuth client (see
-     * DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise deployment offers
-     * sharing out of the box; an env override repoints a fork elsewhere.
-     *
-     * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
-     * GitHub OAuth app with the device flow enabled — the device flow needs no
-     * client secret, which is what lets community deployments offer sharing
-     * with nothing but this id. Register a classic OAuth app, not a GitHub
-     * App: a GitHub App's user token cannot write to the participant's fork
-     * unless they also install the app on their account.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    gallery: hackathonGallery,
-    /**
-     * Escape hatch, not a requirement: the renderer finds or installs its own
-     * Chromium (see app-recording-render-runtime). Set this only to pin a
-     * specific browser — it must be a FULL Chromium, since Playwright's
-     * headless shell carries no WebCodecs encoder.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    chromiumPath:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
-      undefined,
-    /**
-     * Where the renderer reaches this deployment's own frontend to load the
-     * replay page it films.
-     */
-    renderBaseUrl: hackathonRecorderRenderBaseUrl,
-    /**
-     * The origins that base URL may be reached as, so the app sandbox can name
-     * them as permitted frame ancestors. Loopback is spelled two ways and they
-     * are distinct origins to a browser: a render that loads `127.0.0.1` is
-     * refused by a policy naming only `localhost`, and the app pane films
-     * empty.
-     */
-    renderFrameAncestors: addLoopbackEquivalents([
-      hackathonRecorderRenderBaseUrl,
-    ]),
-    /**
-     * The in-cluster URL of the dedicated render service, when video rendering
-     * runs as its own single-replica deployment (see startRenderer). Set it and
-     * the web tier stops rendering in-process and proxies render/status/
-     * download/cancel there instead — so a multi-replica web tier no longer
-     * scatters a render's follow-up requests across pods that never held its
-     * (in-memory) job. Unset — the OSS single container, local dev — and the web
-     * process renders in-process exactly as before.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    rendererUrl:
-      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
-  },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
@@ -3232,6 +3071,17 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    /**
+     * How often (in minutes) to check whether a running local MCP server's
+     * mutable image tag (`:latest` or untagged) now points at a different
+     * image in its registry, and roll the server onto it when it does.
+     * Defaults to 15; 0 disables the check.
+     */
+    mcpImageUpdateCheckIntervalMinutes: parseNonNegativeInt(
+      process.env
+        .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+      15,
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3406,6 +3256,15 @@ const config = {
       additionalDeniedCidrs: parseEngineDeniedCidrs(
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
       ),
+      // Steers engines onto a dedicated node pool: a key=value list that
+      // becomes each engine's nodeSelector, plus one matching NoSchedule
+      // toleration per entry. Empty (the default) inherits the platform pod's
+      // nodeSelector and tolerations, like MCP server pods.
+      nodeSelector: parseLabelSelector(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR,
+        {},
+        "ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR",
+      ),
     },
   },
   /**
@@ -3444,6 +3303,14 @@ const config = {
   },
   logging: {
     format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
+  },
+  logs: {
+    /**
+     * What the LLM Logs, MCP Logs and guardrail consult rows record.
+     * `metadata_only` never writes prompts, responses, tool arguments or
+     * results; see `backend/src/log-content`.
+     */
+    contentMode: parseLogContentMode(process.env.ARCHESTRA_LOGS_CONTENT_MODE),
   },
   observability: {
     otel: {
@@ -3543,6 +3410,9 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    usageAccountingMode: parseUsageAccountingMode(
+      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
+    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
@@ -3975,6 +3845,15 @@ const config = {
    * the new connection page the default Connect destination — can key off it.
    */
   beta: process.env.ARCHESTRA_BETA === "true",
+  /**
+   * Internal UI feedback overlay for the team's own deployments: pin a comment
+   * on an element and post it, with a screenshot and an optional screen clip,
+   * to a Slack channel. Slack is the only storage. It posts as a chatops
+   * Slack bot; which one, and the channel, are picked in the UI on first use.
+   */
+  devFeedback: {
+    enabled: process.env.ARCHESTRA_DEV_FEEDBACK_ENABLED === "true",
+  },
   ngrok: {
     // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
     // agent SDK) so the instance is reachable from the Internet for inbound
@@ -4046,15 +3925,11 @@ const config = {
   },
 };
 
-// "all" runs the web server and the worker in one process; "web"/"worker" run
-// exactly one. "renderer" is neither — it runs only the isolated app-recording
-// video render service (see startRenderer), so a multi-replica web tier can
-// offload rendering to a single stable pod that owns every in-memory job.
+// "all" runs both the web server and worker; each can also run separately.
 export const shouldRunWebServer =
   config.processType === "web" || config.processType === "all";
 export const shouldRunWorker =
   config.processType === "worker" || config.processType === "all";
-export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 

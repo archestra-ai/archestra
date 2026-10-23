@@ -1,6 +1,7 @@
 import { SESSION_ID_HEADER } from "@archestra/shared/consts";
 import {
   CODEX_CLIENT_ID,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 import {
@@ -13,6 +14,45 @@ import { extractSessionInfo } from "./session-id";
 const sessionHeaderKey = SESSION_ID_HEADER.toLowerCase();
 
 describe("extractSessionInfo", () => {
+  test("groups Pi requests by the managed policy identity", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-pi-session-id": " retained-session " },
+        body: undefined,
+        externalAgentId: "pi",
+      }),
+    ).toEqual({
+      sessionId: "retained-session",
+      sessionSource: "pi_session",
+    });
+  });
+
+  test.each([
+    undefined,
+    "opencode",
+  ])("does not apply Pi session provenance to %s", (externalAgentId) => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-pi-session-id": "retained-session" },
+        body: undefined,
+        externalAgentId,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("explicit session identity still takes priority over Pi's native header", () => {
+    expect(
+      extractSessionInfo({
+        headers: {
+          [sessionHeaderKey]: "explicit-session",
+          "x-pi-session-id": "retained-session",
+        },
+        body: undefined,
+        externalAgentId: "pi",
+      }),
+    ).toEqual({ sessionId: "explicit-session", sessionSource: "header" });
+  });
+
   test("extracts session ID from X-Archestra-Session-Id header", () => {
     const result = extractSessionInfo({
       headers: { [sessionHeaderKey]: "my-session-123" },
@@ -334,6 +374,23 @@ describe("extractSessionInfo", () => {
         externalAgentId: OPENCODE_CLIENT_ID,
       }),
     ).toEqual({ sessionId: expected, sessionSource: "opencode_session" });
+  });
+
+  test("Kilo Code attribution groups its requests by the same session headers", () => {
+    // The headers Kilo 7.8.8 sends on an Anthropic request.
+    expect(
+      extractSessionInfo({
+        headers: {
+          "x-session-affinity": "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+          "x-session-id": "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+        },
+        body: undefined,
+        externalAgentId: KILO_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+      sessionSource: "kilo_session",
+    });
   });
 
   test("an x-session-id header without OpenCode attribution is not read as a session", () => {

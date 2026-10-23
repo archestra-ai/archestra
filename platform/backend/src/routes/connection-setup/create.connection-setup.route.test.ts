@@ -1,7 +1,11 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
@@ -56,6 +60,508 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("at least one");
+  });
+
+  test.each([
+    { provider: "openai" },
+    { mcpGatewayId: "00000000-0000-4000-8000-000000000001" },
+    {
+      provider: "anthropic",
+      mcpGatewayId: "00000000-0000-4000-8000-000000000001",
+    },
+    {
+      provider: "openai",
+      mcpGatewayId: "00000000-0000-4000-8000-000000000001",
+      pluginIds: ["00000000-0000-4000-8000-000000000002"],
+    },
+  ])("rejects incomplete or unsupported Pi configuration: %j", async (selection) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        ...selection,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("Pi requires");
+  });
+
+  test("Pi refuses unattributed passthrough instead of silently omitting its platform key", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const payload = {
+      clientId: "pi",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      provider: "openai",
+      proxyAuth: "provider-key",
+    };
+    const optedOut = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: { ...payload, attributePassthrough: false },
+    });
+    expect(optedOut.statusCode).toBe(400);
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload,
+    });
+    expect(forbidden.statusCode, forbidden.body).toBe(403);
+  });
+
+  test.for([
+    "linux",
+    "windows",
+  ] as const)("Pi %s passthrough creates a platform key and renders the guarded setup", async (platform, {
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "provider-key",
+        model: "test-model",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    const payload =
+      platform === "windows"
+        ? Buffer.from(
+            script.body.match(
+              /^\$archNodeScript = '([A-Za-z0-9+/=]+)'/m,
+            )?.[1] ?? "",
+            "base64",
+          ).toString("utf8")
+        : script.body;
+    expect(payload).toContain("attributionKey");
+    expect(payload).toContain("--extension");
+    if (platform === "windows") {
+      expect(script.body).toContain("& node $archNodePath");
+      expect(script.body).not.toContain("node -e");
+    } else {
+      expect(script.body).toContain("arcpi");
+    }
+  });
+
+  test.for([
+    undefined,
+    "gpt-5.5",
+  ])("Pi resolves an omitted model from its bound key catalog and preserves explicit %s", async (selectedModel, {
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      isPrimary: true,
+    });
+    for (const modelId of [
+      "gpt-5.5",
+      "openai:gpt-6-sol",
+      "openai:gpt-6.1-sol",
+    ]) {
+      const model = await ModelModel.create({
+        provider: "openai",
+        modelId,
+        externalId: modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "virtual-key",
+        model: selectedModel,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.model).toBe(selectedModel ?? "openai:gpt-6.1-sol");
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("arcpi");
+    expect(script.body).toContain(selectedModel ?? "openai:gpt-6.1-sol");
+  });
+
+  test.for([
+    { provider: undefined, model: undefined, expected: "openai" },
+    { provider: undefined, model: "openai-test-model", expected: "openai" },
+    {
+      provider: "anthropic",
+      model: "anthropic-test-model",
+      expected: "anthropic",
+    },
+    {
+      provider: undefined,
+      model: "anthropic-test-model",
+      expected: "anthropic",
+    },
+    { provider: "anthropic", model: undefined, expected: "anthropic" },
+    { provider: "anthropic", model: "openai-test-model", expected: null },
+  ] as const)("Pi primary setup preserves its authorized selection: %j", async (selection, {
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    for (const provider of ["openai", "anthropic"] as const) {
+      const secret = await makeSecret();
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider,
+        isPrimary: true,
+      });
+      const model = await ModelModel.create({
+        provider,
+        modelId: `${provider}-test-model`,
+        externalId: `${provider}-test-model`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        proxyAuth: "primary-providers",
+        provider: selection.provider,
+        model: selection.model,
+      },
+    });
+    if (!selection.expected) {
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Choose a model served by Pi",
+      );
+      return;
+    }
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.provider).toBe(selection.expected);
+    expect(setup?.model).toBe(`${selection.expected}-test-model`);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("/model-router");
+    expect(script.body).toContain("anthropic-test-model");
+    expect(script.body).toContain("openai-test-model");
+    expect(script.body).toContain("arcpi");
+  });
+
+  test("Pi rejects a model served only by another visible key", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    for (const [isPrimary, modelId] of [
+      [true, "gpt-4o"],
+      [false, "gpt-6.1-sol"],
+    ] as const) {
+      const secret = await makeSecret();
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+        isPrimary,
+      });
+      const model = await ModelModel.create({
+        provider: "openai",
+        modelId,
+        externalId: modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "primary-providers",
+        model: "gpt-6.1-sol",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("configured provider key");
+  });
+
+  test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    for (const [provider, extra] of [
+      ["anthropic", {}],
+      ["vllm", { baseUrl: "https://models.example/v1" }],
+    ] as const) {
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider,
+        isPrimary: true,
+        ...extra,
+      });
+      const model = await ModelModel.create({
+        provider,
+        modelId: `${provider}-model`,
+        externalId: `${provider}-model`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const mappings = await VirtualApiKeyModel.getProviderApiKeys(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(mappings.map((key) => key.provider).sort()).toEqual([
+      "anthropic",
+      "vllm",
+    ]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    // Anthropic maps onto OpenCode's own provider; vLLM has none, so the
+    // installer names it instead of adding a provider.
+    expect(script.body).toContain('"anthropic":["anthropic-model"]');
+    expect(script.body).toContain('"archestra-anthropic":"anthropic"');
+    expect(script.body).not.toContain("archestra-vllm");
+    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
+    expect(script.body).toContain("opencode-primary.key");
+  });
+
+  test("re-running OpenCode primary setup drops a Microsoft 365 Copilot mapping left by an older key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    const anthropic = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const copilot = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "microsoft-365-copilot",
+      isPrimary: true,
+    });
+    const model = await ModelModel.create({
+      provider: "anthropic",
+      modelId: "claude-test",
+      externalId: "claude-test",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(anthropic.id, [
+      model.id,
+    ]);
+    // The key an earlier release created, still mapped to both providers.
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId,
+      authorId: user.id,
+      scope: "personal",
+      name: "OpenCode primary providers",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: anthropic.id },
+        { provider: "microsoft-365-copilot", providerApiKeyId: copilot.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.virtualApiKeyId).toBe(virtualKey.id);
+    expect(
+      (await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).map(
+        (key) => key.provider,
+      ),
+    ).toEqual(["anthropic"]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain('"anthropic":["claude-test"]');
+    expect(script.body).not.toContain("microsoft-365-copilot");
+  });
+
+  test("OpenCode setup creation fails when no primary provider has a tool-capable model", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const key = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic", isPrimary: true },
+    );
+    const model = await ModelModel.create({
+      provider: "anthropic",
+      modelId: "claude-no-tools",
+      externalId: "claude-no-tools",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    for (const payload of [
+      { proxyAuth: "primary-providers" },
+      { proxyAuth: "virtual-key", provider: "anthropic" },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "opencode",
+          baseUrl: "http://localhost:9000/v1",
+          ...payload,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "No model from the selected providers can run in OpenCode",
+      );
+    }
+    expect(
+      await db
+        .select()
+        .from(schema.connectionSetupsTable)
+        .where(eq(schema.connectionSetupsTable.organizationId, organizationId)),
+    ).toEqual([]);
+  });
+
+  test("primary routing is limited to supported clients and requires virtual-key creation permission", async () => {
+    const request = {
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    };
+    for (const clientId of [
+      "claude-code",
+      "claude-desktop",
+      "codex",
+      "copilot-cli",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: { ...request, clientId },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "only supported for OpenCode, Kilo Code, Cursor and Pi",
+      );
+    }
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    for (const clientId of ["opencode", "kilo"]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/connection-setups",
+            payload: { ...request, clientId },
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
   });
 
   test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {
@@ -586,6 +1092,87 @@ describe("POST /api/connection-setups", () => {
     expect(wrongClient.json().error.message).toContain("copilot-cli");
   });
 
+  test.for([
+    "bedrock",
+    "vllm",
+    "azure",
+  ] as const)("OpenCode virtual key installs %s models without leaking other mappings", async (provider, {
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    // Another client's setup gets its own key, so its mapping can't leak in.
+    const previous = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "codex",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(previous.statusCode).toBe(200);
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider,
+      isPrimary: false,
+      baseUrl: "https://models.example/v1",
+    });
+    const model = await ModelModel.create({
+      provider,
+      modelId: "example/coder",
+      externalId: `${provider}-coder`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        provider,
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(
+      await VirtualApiKeyModel.findById(setup?.virtualApiKeyId as string),
+    ).toMatchObject({
+      authorId: user.id,
+      scope: "personal",
+      keyType: "standard",
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toEqual([expect.objectContaining({ provider })]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    // None of these providers has an OpenCode provider of its own, so the
+    // installer carries no route for it and never adds an Archestra one.
+    expect(script.body).not.toContain(`"archestra-${provider}"`);
+    expect(script.body).not.toContain("example/coder");
+    expect(script.body).toContain('"routes":{}');
+    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
+    expect(script.body).not.toContain('"archestra-openai"');
+    expect(script.body).toContain("opencode-primary-state.json");
+  });
+
   test("rejects OpenCode providers without a verified passthrough wire", async ({
     makeAgent,
   }) => {
@@ -604,8 +1191,32 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "not supported by OpenCode local-credential passthrough",
+      "azure is not supported for opencode setups",
     );
+  });
+
+  test.for([
+    "zhipuai",
+    "gemini",
+    "minimax",
+    "kimi",
+  ] as const)("accepts OpenCode passthrough provider %s", async (provider, {
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider,
+        proxyAuth: "provider-key",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 
   test("codex openai virtual-key provisions only a personal standard key (no passthrough key)", async ({
@@ -704,7 +1315,7 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("llmVirtualKey:create");
   });
 
-  test("uses the admin-configured default provider key for auto-provisioning", async ({
+  test("uses the provider key the admin mapped for the client", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -716,30 +1327,98 @@ describe("POST /api/connection-setups", () => {
       (await makeSecret()).id,
       { provider: "anthropic", userId: user.id },
     );
-    // ...and an org key the admin explicitly mapped as the connection default
+    // ...an org key the admin mapped for Claude Code...
     const mappedKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic" },
+    );
+    // ...and one mapped for another client, which must not apply here.
+    const otherClientKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
       { provider: "anthropic" },
     );
     const { OrganizationModel } = await import("@/models");
     await OrganizationModel.patch(organizationId, {
-      connectionDefaultProviderKeys: { anthropic: mappedKey.id },
+      connectionClientProviderKeys: {
+        "claude-code": [
+          { provider: "anthropic", providerApiKeyId: mappedKey.id },
+        ],
+        "claude-desktop": [
+          { provider: "anthropic", providerApiKeyId: otherClientKey.id },
+        ],
+      },
+    });
+
+    const mappingsFor = async (clientId: "claude-code" | "codex") => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId,
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          provider: "anthropic",
+          proxyAuth: "virtual-key",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const rawToken = response
+        .json()
+        .command.match(/script\/([^']+)'/)?.[1] as string;
+      const setup = await ConnectionSetupModel.findByToken(rawToken);
+      return VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      );
+    };
+
+    expect(await mappingsFor("claude-code")).toEqual([
+      expect.objectContaining({ providerApiKeyId: mappedKey.id }),
+    ]);
+    expect(personalKey.id).not.toBe(mappedKey.id);
+  });
+
+  test("Cursor mints one Model Router key with the admin-mapped keys", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // A primary key the user could use, which an admin mapping replaces.
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "openai",
+      isPrimary: true,
+      userId: user.id,
+    });
+    const anthropicKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic" },
+    );
+    const geminiKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "gemini" },
+    );
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionClientProviderKeys: {
+        cursor: [
+          { provider: "anthropic", providerApiKeyId: anthropicKey.id },
+          { provider: "gemini", providerApiKeyId: geminiKey.id },
+        ],
+      },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
       payload: {
-        clientId: "claude-code",
+        clientId: "cursor",
         baseUrl: "http://localhost:9000/v1",
-        llmProxyId: proxy.id,
-        provider: "anthropic",
-        proxyAuth: "virtual-key",
+        proxyAuth: "primary-providers",
       },
     });
-    expect(response.statusCode).toBe(200);
-
+    expect(response.statusCode, response.body).toBe(200);
     const rawToken = response
       .json()
       .command.match(/script\/([^']+)'/)?.[1] as string;
@@ -747,10 +1426,55 @@ describe("POST /api/connection-setups", () => {
     const mappings = await VirtualApiKeyModel.getProviderApiKeys(
       setup?.virtualApiKeyId as string,
     );
-    expect(mappings).toEqual([
-      expect.objectContaining({ providerApiKeyId: mappedKey.id }),
-    ]);
-    expect(personalKey.id).not.toBe(mappedKey.id);
+    expect(mappings.map((mapping) => mapping.providerApiKeyId).sort()).toEqual(
+      [anthropicKey.id, geminiKey.id].sort(),
+    );
+  });
+
+  test("Cursor falls back to the user's primary keys without a mapping", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const primaryKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "openai", isPrimary: true, userId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "cursor",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: primaryKey.id })]);
+  });
+
+  test("Cursor refuses a single-provider proxy setup", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "cursor",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("Model Router");
   });
 
   test("403s a proxy setup when the org has disabled connecting the LLM Proxy", async () => {

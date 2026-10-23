@@ -43,7 +43,7 @@ describe("list_openappa_yells", () => {
       await seedAndAssignArchestraTools(agent.id);
       const user = await makeUser();
       const role = await makeCustomRole(organizationId, {
-        permission: { openappaDiagnostics: ["read"] },
+        permission: { log: ["read"] },
       });
       await makeMember(user.id, organizationId, { role: role.role });
       context = {
@@ -126,14 +126,14 @@ describe("list_openappa_yells", () => {
     ).toBe(21);
   });
 
-  test("refuses a caller without openappaDiagnostics:read", async ({
+  test("refuses a caller without log:read", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const user = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(user.id, organizationId, { role: role.role });
     await seedYell({ sessionId: "chat", toolCallId: "call" });

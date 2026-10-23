@@ -10,6 +10,8 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import KbConnectorDocumentCountModel from "@/models/kb-connector-document-count";
+import KbDocumentModel from "@/models/kb-document";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -397,6 +399,132 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/agent-settings - default trio", () => {
+    async function setupKey(
+      makeLlmProviderApiKey: (
+        organizationId: string,
+        secretId: null,
+        overrides: { provider: "anthropic" },
+      ) => Promise<{ id: string }>,
+    ) {
+      const key = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "anthropic",
+      });
+      const create = (modelId: string, supportsToolCalling = true) =>
+        ModelModel.create({
+          externalId: `anthropic/${modelId}`,
+          provider: "anthropic",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling,
+          lastSyncedAt: new Date(),
+        });
+      const [normal, fast, noTools] = await Promise.all([
+        create("trio-test-normal"),
+        create("trio-test-fast"),
+        create("trio-test-no-tools", false),
+      ]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        normal.id,
+        fast.id,
+        noTools.id,
+      ]);
+      return { key, normal, fast, noTools };
+    }
+
+    test("saves fast and smart on the default key and records the audit change", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal, fast } = await setupKey(makeLlmProviderApiKey);
+      const trio = {
+        defaultLlmApiKeyId: key.id,
+        defaultModelId: normal.id,
+        defaultFastModelId: fast.id,
+        defaultSmartModelId: normal.id,
+      };
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: trio,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject(trio);
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({ defaultFastModelId: null });
+        expect(audit?.after).toMatchObject({
+          defaultFastModelId: fast.id,
+          defaultSmartModelId: normal.id,
+        });
+      });
+    });
+
+    test("rejects a tier the default key does not serve", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal } = await setupKey(makeLlmProviderApiKey);
+      const unlinked = await ModelModel.create({
+        externalId: "anthropic/trio-test-unlinked",
+        provider: "anthropic",
+        modelId: "trio-test-unlinked",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: {
+          defaultLlmApiKeyId: key.id,
+          defaultModelId: normal.id,
+          defaultFastModelId: unlinked.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects a tier that cannot call tools", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal, noTools } = await setupKey(makeLlmProviderApiKey);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: {
+          defaultLlmApiKeyId: key.id,
+          defaultModelId: normal.id,
+          defaultSmartModelId: noTools.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects tiers without a default key", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { fast } = await setupKey(makeLlmProviderApiKey);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultFastModelId: fast.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe("PATCH /api/organization/auth-settings - default member role", () => {
     test("persists multiple default roles and records the audit change", async ({
       makeCustomRole,
@@ -769,7 +897,9 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/connection-settings",
         payload: {
-          connectionDefaultProviderKeys: { "github-copilot": key.id },
+          connectionClientProviderKeys: {
+            cursor: [{ provider: "github-copilot", providerApiKeyId: key.id }],
+          },
         },
       });
 
@@ -792,11 +922,45 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/connection-settings",
         payload: {
-          connectionDefaultProviderKeys: { anthropic: key.id },
+          connectionClientProviderKeys: {
+            "claude-code": [
+              { provider: "anthropic", providerApiKeyId: key.id },
+            ],
+            cursor: [{ provider: "anthropic", providerApiKeyId: key.id }],
+          },
         },
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().connectionClientProviderKeys).toEqual({
+        "claude-code": [{ provider: "anthropic", providerApiKeyId: key.id }],
+        cursor: [{ provider: "anthropic", providerApiKeyId: key.id }],
+      });
+    });
+
+    test("rejects a key for a provider the client can't route", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "OpenAI",
+        provider: "openai",
+        scope: "org",
+        userId: null,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionClientProviderKeys: {
+            "claude-code": [{ provider: "openai", providerApiKeyId: key.id }],
+          },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toMatch(/Claude Code/);
     });
   });
 
@@ -1097,50 +1261,37 @@ describe("organization routes", () => {
       });
     });
 
-    test("stores the Apps Hackathon toggle when the deployment carries it", async () => {
-      config.hackathonRecorder.enabled = true;
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/security-settings",
-        payload: { appsHackathonRecorderEnabled: false },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        appsHackathonRecorderEnabled: false,
-      });
-    });
-
-    test("refuses to store the Apps Hackathon toggle where the feature does not exist", async () => {
-      // An enterprise deployment never carries the hackathon, so it must never
-      // end up recorded as having switched it on — otherwise "never for
-      // enterprise" would hold only for as long as the settings page keeps the
-      // section hidden.
-      config.hackathonRecorder.enabled = true;
-      await app.inject({
-        method: "PATCH",
-        url: "/api/organization/security-settings",
-        payload: { appsHackathonRecorderEnabled: false },
-      });
-
-      config.hackathonRecorder.enabled = false;
+    test("ignores the retired recorder preference and audits active settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          appsHackathonRecorderEnabled: true,
           allowChatFileUploads: false,
+          appsHackathonRecorderEnabled: false,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        // Left where it was, not raised to the value the request asked for...
-        appsHackathonRecorderEnabled: false,
-        // ...while everything else in the same request still applied.
-        allowChatFileUploads: false,
+      expect(response.json().allowChatFileUploads).toBe(false);
+      expect(response.json()).not.toHaveProperty(
+        "appsHackathonRecorderEnabled",
+      );
+      const organization = await app.inject({
+        method: "GET",
+        url: "/api/organization",
       });
+      expect(organization.statusCode).toBe(200);
+      expect(organization.json()).not.toHaveProperty(
+        "appsHackathonRecorderEnabled",
+      );
+
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.action, "organization.updated"));
+      expect(audit?.before).toMatchObject({ allowChatFileUploads: true });
+      expect(audit?.after).toMatchObject({ allowChatFileUploads: false });
+      expect(audit?.after).not.toHaveProperty("appsHackathonRecorderEnabled");
     });
 
     test("persists security settings across reads", async () => {
@@ -2157,6 +2308,49 @@ describe("organization routes", () => {
         success: false,
         error: "Reranker could not be reached.",
       });
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/drop-embedding", () => {
+    test("stores zero documents for every connector it emptied", async ({
+      makeSecret,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      await OrganizationModel.patch(organizationId, {
+        embeddingChatApiKeyId: apiKey.id,
+        embeddingModel: "gemini-embedding-001",
+      });
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await KbDocumentModel.create({
+        organizationId,
+        connectorId: connector.id,
+        sourceId: "dropped",
+        title: "Dropped",
+        content: "dropped",
+        contentHash: "hash-dropped",
+      });
+      await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/drop-embedding",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
+      ).toEqual(new Map([[connector.id, 0]]));
     });
   });
 });

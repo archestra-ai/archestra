@@ -91,7 +91,7 @@ The agent the LLM proxy runs under. It is the `:agentId` path segment in
 
 - UI: **Agents** (`http://localhost:3000/agents`) — open the agent, the id is in
   the URL.
-- API: `GET /api/agents` (paginated) or `GET /api/agents/all`.
+- API: `GET /api/agents`.
 
 ```bash
 export ARCHESTRA_AGENT_ID=<uuid>
@@ -154,7 +154,7 @@ one with the dev auto-login plugin — set
 
 ```bash
 curl -c cookies.txt -X POST http://localhost:9000/api/auth/dev-auto-login
-curl -b cookies.txt http://localhost:9000/api/agents/all
+curl -b cookies.txt "http://localhost:9000/api/agents?agentType=agent"
 ```
 
 It is hard-disabled when `NODE_ENV` is production.
@@ -179,7 +179,7 @@ which is what the proxy reads for new conversations. Install it one of two ways:
   ```
 
   `POST /api/guardrails-policy/validate` checks a policy without applying it.
-  `PUT` requires `toolPolicy:update` and fails on a stale `expectedRevision` —
+  `PUT` requires `guardrailsPolicy:update` and fails on a stale `expectedRevision` —
   re-read and retry rather than forcing.
 
 There is a third path an agent can use: the Archestra MCP tools

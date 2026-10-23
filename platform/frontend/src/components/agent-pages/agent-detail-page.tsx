@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, E2eTestId, getDocsUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+  grantsAudience,
+} from "@archestra/shared";
 import {
   Copy,
   Download,
@@ -10,23 +15,24 @@ import {
   MessageSquare,
   MoreHorizontal,
   PackageX,
+  Pencil,
   TerminalSquare,
   Trash2,
-  UserRoundCog,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { AudienceChip } from "@/components/audience-chip";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
-import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { KebabItem } from "@/components/kebab-item";
@@ -34,7 +40,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
-import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +80,7 @@ import {
 } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
 import {
@@ -81,8 +88,10 @@ import {
   AGENT_SECTION_FORM_GROUPS,
   type AgentDetailSection,
   type AgentPageKind,
+  type AgentSetupStepId,
   agentConfigureHref,
   agentDetailHref,
+  agentEditHref,
   agentListHref,
   agentPageKindForType,
   getAgentSetupSteps,
@@ -90,6 +99,7 @@ import {
   resolveAgentDetailSection,
 } from "./agent-page-config";
 import { AgentRuns } from "./agent-runs";
+import { AgentWorkSources } from "./agent-work-sources";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -239,13 +249,20 @@ function AgentDetails({
     resource,
     canModify,
     canEdit,
-    canTransferOwnership,
     canCreate,
     canDelete,
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
   const runtimeEnabled = useFeature("agentRuntime") === true;
+  const permissionResource =
+    agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+  // The same query as the access block, so the header chip reflects what
+  // is saved and updates once a permissions save lands.
+  const savedPolicy = useResourcePermissions(permissionResource, agent.id);
+  const audience = savedPolicy.data
+    ? grantsAudience(savedPolicy.data.grants)
+    : null;
   const actionModel = getAgentActionModel({
     kind,
     agent,
@@ -308,33 +325,48 @@ function AgentDetails({
   // could change anything. An agent keeps them apart — its configuration is
   // long enough that one tab would be a wall.
   const oneSettingsTab = kind === "mcp_gateway";
-  const sections: AgentDetailSection[] = [
-    ...(connectFirst ? (["connect"] as const) : []),
-    ...(oneSettingsTab
-      ? (["settings"] as const)
-      : [
-          "general" as const,
-          ...(steps.some((step) => step.id === "tools")
-            ? (["tools"] as const)
-            : []),
-          ...(runtimeEnabled && kind === "agent" && !isBuiltIn
-            ? (["runtime"] as const)
-            : []),
-          ...(hasMessagingChannels ? (["messaging"] as const) : []),
-          ...(steps.some((step) => step.id === "advanced")
-            ? (["advanced"] as const)
-            : []),
-        ]),
-    ...(hasRuns ? (["runs"] as const) : []),
-    ...(!isBuiltIn ? (["permissions"] as const) : []),
-    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
-  ];
-  const sectionParam = searchParams.get("section");
+  // An agent's page is an overview of it: what it needs, where it gets work,
+  // what it is told. Its configuration is edited on its own page, and its A2A
+  // details open from the overview rather than taking a tab.
+  const overviewOnly = kind === "agent";
+  const sections: AgentDetailSection[] = overviewOnly
+    ? ["general", ...(hasRuns ? (["runs"] as const) : [])]
+    : [
+        ...(connectFirst ? (["connect"] as const) : []),
+        ...(oneSettingsTab
+          ? (["settings"] as const)
+          : [
+              "general" as const,
+              ...(steps.some((step) => step.id === "tools")
+                ? (["tools"] as const)
+                : []),
+              ...((runtimeEnabled || agent.runtime != null) &&
+              kind === "agent" &&
+              !isBuiltIn
+                ? (["runtime"] as const)
+                : []),
+              ...(hasMessagingChannels ? (["messaging"] as const) : []),
+              ...(steps.some((step) => step.id === "advanced")
+                ? (["advanced"] as const)
+                : []),
+            ]),
+        ...(hasRuns ? (["runs"] as const) : []),
+        ...(showConnect && !connectFirst ? (["connect"] as const) : []),
+      ];
+  // Permissions live at the foot of the configuration tab now. Old links
+  // that ask for them land there.
+  const configurationSection = oneSettingsTab ? "settings" : "general";
+  const rawSectionParam = searchParams.get("section");
+  const sectionParam =
+    rawSectionParam === "permissions" ? configurationSection : rawSectionParam;
   const section = resolveAgentDetailSection(sections, sectionParam);
+  // An agent's overview edits nothing; who can use it is set on its edit page.
+  const showPermissions =
+    !overviewOnly && !isBuiltIn && section === configurationSection;
   // Which form group is on screen, if any. Connect and Runs are not the
   // form's, so they answer undefined and it is not mounted at all.
   const activeFormGroups: readonly AgentFormSection[] =
-    section in AGENT_SECTION_FORM_GROUPS
+    !overviewOnly && section in AGENT_SECTION_FORM_GROUPS
       ? AGENT_SECTION_FORM_GROUPS[
           section as keyof typeof AGENT_SECTION_FORM_GROUPS
         ]
@@ -344,12 +376,27 @@ function AgentDetails({
   // `?section=runs`, or a typo) silently resolves to the first one.
   // Correct the URL to match, so a reload, a copied link or the back button
   // does not keep asking for a section that is not on this page.
+  const [a2aOpen, setA2aOpen] = useState(false);
   useEffect(() => {
-    if (!sectionParam || sectionParam === section) return;
+    if (!rawSectionParam || rawSectionParam === section) return;
+    // Links from before the overview: an agent's settings sections now live
+    // on its edit page, and its A2A details in a dialog here.
+    if (overviewOnly) {
+      const step = LEGACY_AGENT_SECTION_STEPS[rawSectionParam];
+      if (step !== undefined) {
+        router.replace(agentEditHref(agent.id, step ?? undefined));
+        return;
+      }
+      if (rawSectionParam === "connect") {
+        setA2aOpen(showConnect);
+        return;
+      }
+    }
     if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
   }, [
+    rawSectionParam,
     sectionParam,
     section,
     kind,
@@ -357,13 +404,38 @@ function AgentDetails({
     router,
     hasAgentRuntime,
     runsQuery.isPending,
+    overviewOnly,
+    showConnect,
   ]);
 
   // Unsaved edits guard every way off the current tab that is not a save:
   // another tab, the back link, the header's own links. The pending
   // destination is parked here and taken once the guard lets go.
-  const [isDirty, setIsDirty] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const isDirty = formDirty || permissionsDirty;
   useBeforeUnloadWhileDirty(isDirty);
+  // The permissions block saves through the configuration's own footer, so
+  // one "Save changes" covers both. The footer is portaled below the block.
+  const savePermissionsRef = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      savePermissionsRef.current = save;
+    },
+    [],
+  );
+  const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const savePermissions = useCallback(async () => {
+    const save = savePermissionsRef.current;
+    if (!save) return;
+    setSavingPermissions(true);
+    try {
+      await save();
+    } finally {
+      setSavingPermissions(false);
+    }
+  }, []);
   const pendingHrefRef = useRef<string | null>(null);
   const guard = useUnsavedChangesGuard({
     isDirty,
@@ -399,7 +471,6 @@ function AgentDetails({
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
-  const [transferring, setTransferring] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -434,13 +505,15 @@ function AgentDetails({
     : formatPermissionConstraint({ [resource]: ["read"] });
   // `canDelete` is the delete permission AND the scope check AND not built-in,
   // so which of the three refused decides which sentence is the true one.
-  const deleteReason = canDelete
-    ? undefined
-    : isBuiltIn
-      ? `A built-in ${config.singularInSentence} cannot be deleted`
-      : canModify
-        ? formatPermissionConstraint({ [resource]: ["delete"] })
-        : refusalReason;
+  const deleteReason = agent.isPersonalGateway
+    ? "A personal MCP gateway is removed with its owner's account"
+    : canDelete
+      ? undefined
+      : isBuiltIn
+        ? `A built-in ${config.singularInSentence} cannot be deleted`
+        : canModify
+          ? formatPermissionConstraint({ [resource]: ["delete"] })
+          : refusalReason;
 
   const handleExport = () => {
     exportAgent.mutate(agent.id, {
@@ -460,6 +533,26 @@ function AgentDetails({
   };
 
   const formAgentType = agent.agentType === "profile" ? "profile" : kind;
+  // A gateway's settings are short, and who can use it is what someone opens
+  // them to check, so the block sits under the description instead of after
+  // every other field.
+  const accessBesideDescription =
+    showPermissions && kind === "mcp_gateway" && activeFormGroups.length > 0;
+  const permissionsBlock = (
+    <ResourcePermissions
+      embedded
+      standalone
+      resource={permissionResource}
+      scope={agent.id}
+      onDirtyChange={setPermissionsDirty}
+      registerSave={registerPermissionsSave}
+      lockedReason={
+        agent.isPersonalGateway
+          ? "A personal MCP gateway is only for its owner."
+          : undefined
+      }
+    />
+  );
 
   return (
     <PageLayout
@@ -470,11 +563,7 @@ function AgentDetails({
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
       // Runs, need one.
-      contentOverflowX={
-        activeFormGroups.length > 0 || section === "permissions"
-          ? "clip"
-          : "auto"
-      }
+      contentOverflowX={activeFormGroups.length > 0 ? "clip" : "auto"}
       icon={
         <AgentIcon
           icon={agent.icon}
@@ -486,14 +575,17 @@ function AgentDetails({
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
           {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
-          {/* Hidden below sm: the header is one clipped line, and the Start
-              run button below already carries the glyph. */}
-          {hasAgentRuntime && (
-            <RuntimeCapableIndicator
-              variant="pill"
-              runtime={agent.runtime}
-              className="hidden font-normal sm:inline-flex"
+          {audience && (
+            // The owner rides in the chip: who it reaches and who to ask,
+            // read together. A built-in record belongs to nobody.
+            <AudienceChip
+              compact={kind === "agent"}
+              audience={audience}
+              owner={isBuiltIn ? null : agent.createdBy}
             />
+          )}
+          {hasAgentRuntime && (
+            <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
           )}
           {kind === "mcp_gateway" && environmentName && (
             <Badge variant="outline" className="font-normal">
@@ -540,13 +632,13 @@ function AgentDetails({
         // what the page cannot: chatting with the record, and the actions
         // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
-          {!isBuiltIn && agent.createdBy && (
-            // Dropped on phones, where the header has no room to spare beside
-            // the title and the actions that act on the record.
-            <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
-              <span className="shrink-0">Owner</span>
-              <CreatedByCell createdBy={agent.createdBy} />
-            </p>
+          {overviewOnly && !isGone && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={agentEditHref(agent.id)}>
+                <Pencil className="h-4 w-4" />
+                <span>{canEdit ? "Edit" : "View settings"}</span>
+              </Link>
+            </Button>
           )}
           {chatAction.visible && chatAction.href && (
             <Button variant="outline" size="sm" asChild>
@@ -593,23 +685,6 @@ function AgentDetails({
                 reason={historyReason}
                 onSelect={() => setHistoryOpen(true)}
               />
-              {!isBuiltIn &&
-                !agent.isPersonalGateway &&
-                !agent.isPersonalProxy &&
-                agent.agentType !== "llm_proxy" && (
-                  <KebabItem
-                    icon={<UserRoundCog className="h-4 w-4" />}
-                    label="Transfer ownership"
-                    reason={
-                      !canTransferOwnership
-                        ? "Only the owner or a resource admin can transfer ownership"
-                        : isDirty
-                          ? "Save or discard your changes first"
-                          : undefined
-                    }
-                    onSelect={() => setTransferring(true)}
-                  />
-                )}
               <DropdownMenuSeparator />
               <KebabItem
                 variant="destructive"
@@ -628,27 +703,21 @@ function AgentDetails({
           <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
         </div>
       )}
-      {transferring && (
-        <TransferAgentOwnershipDialog
-          agent={agent}
-          onClose={() => setTransferring(false)}
-          onTransferred={() => {
-            setTransferring(false);
-            router.push(backHref);
-          }}
-        />
+      {section === "general" && kind === "agent" && !isBuiltIn && !isGone && (
+        <div className="mb-4">
+          <AgentWorkSources
+            agentId={agent.id}
+            hasRuntime={hasAgentRuntime}
+            runtimeAvailable={runtimeEnabled && canEdit}
+            chatHref={
+              chatAction.visible && chatAction.href ? chatAction.href : null
+            }
+            onShowA2a={showConnect ? () => setA2aOpen(true) : undefined}
+          />
+        </div>
       )}
       <div className="min-w-0">
-        {section === "permissions" ? (
-          <ResourcePermissions
-            layout="settings"
-            resource={
-              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-            }
-            scope={agent.id}
-            onDirtyChange={setIsDirty}
-          />
-        ) : section === "runs" ? (
+        {section === "runs" ? (
           <AgentRuns agentId={agent.id} />
         ) : section === "connect" ? (
           <AgentConnectContent kind={kind} agent={agent} />
@@ -663,6 +732,7 @@ function AgentDetails({
                 </AlertDescription>
               </Alert>
             ) : (
+              !overviewOnly &&
               !canEdit &&
               !isAccessPending && (
                 <Alert>
@@ -675,8 +745,18 @@ function AgentDetails({
               )
             )}
 
+            {overviewOnly && section === "general" && (
+              <AgentInstructionsCard
+                agent={agent}
+                editHref={agentEditHref(agent.id)}
+                canEdit={canEdit}
+              />
+            )}
             {activeFormGroups.length > 0 && (
               <AgentForm
+                afterDescription={
+                  accessBesideDescription ? permissionsBlock : undefined
+                }
                 // A fresh mount per agent and per section: the form seeds
                 // several sets from per-agent reads and would otherwise carry
                 // one section's pending state into the next.
@@ -687,27 +767,39 @@ function AgentDetails({
                 sections={activeFormGroups}
                 readOnly={!canEdit}
                 openToolsCombobox={openToolsCombobox}
-                onDirtyChange={setIsDirty}
+                onDirtyChange={setFormDirty}
+                // The form saves first; its grants follow once it has.
+                onSaved={
+                  showPermissions ? () => void savePermissions() : undefined
+                }
                 footer={({
                   formId,
-                  isSaving,
-                  isDirty: formDirty,
+                  isSaving: formSaving,
+                  isDirty: fieldsDirty,
                   canSubmit,
                   readOnly,
-                }) =>
+                }) => {
+                  const isSaving = formSaving || savingPermissions;
                   // Share the create flow's sticky row and primary-action
                   // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
                   // save row at all — the alert above already says why.
-                  readOnly ? null : (
+                  const row = readOnly ? null : (
                     <WizardFooter className="sm:justify-end">
                       <Button
-                        type="submit"
+                        // With only the grants changed there is no form to
+                        // submit, so the button saves them directly.
+                        type={fieldsDirty ? "submit" : "button"}
                         size="sm"
-                        form={formId}
+                        form={fieldsDirty ? formId : undefined}
+                        onClick={
+                          fieldsDirty ? undefined : () => void savePermissions()
+                        }
                         disabled={
-                          !canSubmit || isGone || isSaving || !formDirty
+                          isGone ||
+                          isSaving ||
+                          (fieldsDirty ? !canSubmit : !permissionsDirty)
                         }
                         data-testid={E2eTestId.AgentSetupSubmitButton}
                       >
@@ -721,8 +813,25 @@ function AgentDetails({
                         )}
                       </Button>
                     </WizardFooter>
-                  )
-                }
+                  );
+                  // Below the permissions block when it is on this tab.
+                  if (showPermissions)
+                    return footerSlot ? createPortal(row, footerSlot) : null;
+                  return row;
+                }}
+              />
+            )}
+            {showPermissions && !accessBesideDescription && (
+              // Just the block, inline with the fields above it. It takes
+              // back the form's bottom padding to sit at field spacing.
+              <div className="-mt-6">{permissionsBlock}</div>
+            )}
+            {showPermissions && (
+              // The slot, not the row inside it, sticks: a sticky element
+              // only sticks within its parent, and the row's parent is this.
+              <div
+                ref={setFooterSlot}
+                className="sm:sticky sm:bottom-0 sm:z-10"
               />
             )}
           </div>
@@ -736,6 +845,24 @@ function AgentDetails({
           declarations={agent.runtime?.credentials ?? []}
           canEditAgent={canEdit}
         />
+      )}
+      {overviewOnly && showConnect && (
+        <StandardDialog
+          open={a2aOpen}
+          onOpenChange={(open) => {
+            setA2aOpen(open);
+            if (!open && rawSectionParam === "connect") {
+              router.replace(agentDetailHref(kind, agent.id), {
+                scroll: false,
+              });
+            }
+          }}
+          title="Send it tasks over A2A"
+          description="Point an A2A client at this agent. Its calls are logged and guarded like any other task."
+          size="large"
+        >
+          <AgentConnectContent kind={kind} agent={agent} />
+        </StandardDialog>
       )}
       <UnsavedChangesDialog
         open={guard.confirmOpen}
@@ -770,7 +897,7 @@ function AgentDetails({
             if (!open) setDeleteRequested(false);
           }}
           title={`Delete ${config.singular}`}
-          description={`Are you sure you want to delete this ${config.singular}? This action cannot be undone.`}
+          description={`Are you sure you want to delete this ${config.singular}? It moves to Deleted, where it can be restored.`}
           isPending={deleteAgent.isPending}
           // `mutate` with callbacks rather than an awaited `mutateAsync`: the
           // query layer rejects on failure (and toasts), and an unhandled
@@ -813,6 +940,7 @@ function sectionLabel(
   kind: AgentPageKind,
 ): string {
   if (section === "connect" && kind === "agent") return "A2A";
+  if (section === "general" && kind === "agent") return "Overview";
   return AGENT_SECTION_LABELS[section];
 }
 
@@ -821,12 +949,62 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   settings: "Settings",
   general: "General",
   tools: "Tools, Skills & Knowledge",
-  messaging: "Messaging Channels",
+  messaging: "Triggers & Channels",
   runtime: "Agent Runtime",
   advanced: "Advanced",
   connect: "Connect",
   runs: "Runs",
 };
+
+/**
+ * Where a `?section=` from before the overview now lands for an agent: its
+ * edit page, on the step that holds that section (`null` is the first step).
+ */
+const LEGACY_AGENT_SECTION_STEPS: Partial<
+  Record<string, AgentSetupStepId | null>
+> = {
+  tools: "tools",
+  messaging: "messaging",
+  advanced: "advanced",
+  runtime: null,
+  permissions: null,
+};
+
+/** The agent's instructions, read-only, with the way to change them. */
+function AgentInstructionsCard({
+  agent,
+  editHref,
+  canEdit,
+}: {
+  agent: Agent;
+  editHref: string;
+  canEdit: boolean;
+}) {
+  return (
+    <section
+      aria-labelledby="agent-instructions"
+      className="overflow-hidden rounded-xl border bg-card"
+    >
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-5 py-3">
+        <h2 id="agent-instructions" className="text-sm font-semibold">
+          Instructions
+        </h2>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={editHref}>{canEdit ? "Edit" : "View settings"}</Link>
+        </Button>
+      </div>
+      {agent.systemPrompt?.trim() ? (
+        <p className="max-h-80 overflow-y-auto whitespace-pre-wrap px-5 py-4 font-mono text-[13px] leading-relaxed text-muted-foreground">
+          {agent.systemPrompt}
+        </p>
+      ) : (
+        <p className="px-5 py-4 text-sm text-muted-foreground">
+          No instructions yet.
+        </p>
+      )}
+    </section>
+  );
+}
 
 function DetailPageSkeleton() {
   return (

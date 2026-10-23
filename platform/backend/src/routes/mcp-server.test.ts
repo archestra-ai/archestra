@@ -4462,6 +4462,7 @@ describe("mcp server core route coverage", () => {
       });
       const tool = await makeTool({ catalogId: catalog.id });
       const agent = await makeAgent({
+        organizationId,
         name: "Server Consumer",
         access: "personal",
         authorId: user.id,
@@ -4470,7 +4471,7 @@ describe("mcp server core route coverage", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/mcp_server",
+        url: "/api/mcp_server?includeAssignedAgents=true",
       });
 
       expect(response.statusCode).toBe(200);
@@ -4484,11 +4485,139 @@ describe("mcp server core route coverage", () => {
           id: agent.id,
           name: "Server Consumer",
           agentType: agent.agentType,
+          accessAllTools: agent.accessAllTools,
+          organizationId,
           scope: "personal",
           ownerId: user.id,
           ownerEmail: user.email,
+          // Unpinned: resolves to an install at call time.
+          pinned: false,
         },
       ]);
+      // Without the explicit opt-in, and with an explicit false, the list
+      // carries no agents.
+      for (const url of [
+        "/api/mcp_server",
+        "/api/mcp_server?includeAssignedAgents=false",
+      ]) {
+        const compact = await app.inject({ method: "GET", url });
+        expect(compact.statusCode).toBe(200);
+        expect(compact.json()).toEqual(
+          servers.map((entry: { assignedAgents: unknown[] }) => ({
+            ...entry,
+            assignedAgents: [],
+          })),
+        );
+      }
+    });
+
+    test("names to a member only the agents they can open, on the list and on one server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+      makeUser,
+      makeMember,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+      const colleague = await makeUser();
+      await makeMember(colleague.id, organizationId);
+      const agents = [
+        await makeAgent({
+          organizationId,
+          name: "Mine",
+          access: "personal",
+          authorId: user.id,
+        }),
+        await makeAgent({
+          organizationId,
+          name: "Shared",
+          access: "org",
+          authorId: colleague.id,
+        }),
+        // Someone else's personal agent: its name and owner are not the
+        // caller's to see, even though it uses the caller's server.
+        await makeAgent({
+          organizationId,
+          name: "Theirs",
+          access: "personal",
+          authorId: colleague.id,
+        }),
+      ];
+      for (const agent of agents) {
+        await makeAgentTool(agent.id, tool.id);
+      }
+      // A member: no shared installations to manage.
+      userHasPermissionMock.mockImplementation(
+        async (_userId, _organizationId, resource, action) =>
+          !(resource === "mcpServerInstallation" && action === "update"),
+      );
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
+      const listed = list
+        .json()
+        .find((s: { id: string }) => s.id === server.id);
+      expect(
+        listed.assignedAgents.map((a: { name: string }) => a.name).sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      // Visibility is checked for the agents the response names, never by
+      // listing every agent the member can reach; a status-only list (the
+      // default) names none and checks nothing.
+      const { default: AgentModel } = await import("@/models/agent");
+      const accessibleIds = vi.spyOn(AgentModel, "findAccessibleIdsForUser");
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=false",
+      });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({ method: "GET", url: "/api/mcp_server" });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
+      expect(accessibleIds).toHaveBeenCalledTimes(1);
+      expect(
+        [...(accessibleIds.mock.calls[0]?.[3]?.among ?? [])].sort(),
+      ).toEqual(agents.map((agent) => agent.id).sort());
+      accessibleIds.mockRestore();
+
+      const single = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        single
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      // Someone who manages shared installations keeps the full list.
+      userHasPermissionMock.mockResolvedValue(true);
+      const managed = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        managed
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared", "Theirs"]);
     });
 
     // The registry lists other members' personal connections to an
@@ -4761,7 +4890,7 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(runtime.id)).resolves.not.toBeNull();
     });
 
-    test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
+    test("uninstalling the last connection retains tools and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
       const { default: AgentModel } = await import("@/models/agent");
@@ -4814,12 +4943,6 @@ describe("mcp server core route coverage", () => {
       expect(assignmentBefore).toHaveLength(1);
       expect(assignmentBefore[0].mcpServerId).toBe(installedServer.id);
 
-      const policiesBefore = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesBefore.length).toBeGreaterThan(0);
-
       const deleteResponse = await app.inject({
         method: "DELETE",
         url: `/api/mcp_server/${installedServer.id}`,
@@ -4836,12 +4959,6 @@ describe("mcp server core route coverage", () => {
         .from(schema.toolsTable)
         .where(eq(schema.toolsTable.catalogId, catalog.id));
       expect(toolsAfter).toHaveLength(1);
-
-      const policiesAfter = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesAfter).toHaveLength(policiesBefore.length);
 
       const assignmentAfter = await db
         .select({ mcpServerId: schema.agentToolsTable.mcpServerId })

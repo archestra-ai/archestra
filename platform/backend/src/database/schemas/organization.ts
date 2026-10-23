@@ -21,14 +21,13 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  BudgetCleanupInterval,
   ConnectionBaseUrl,
-  ConnectionDefaultProviderKeys,
-  LimitCleanupInterval,
+  ConnectionClientFutureProviders,
+  ConnectionClientProviderKeys,
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
-  ToolInvocation,
-  TrustedData,
   TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
@@ -61,6 +60,12 @@ const organizationsTable = pgTable("organization", {
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
+  /** Initial tool mode for automatically provisioned personal agents and gateways. */
+  defaultPersonalAgentAccessAllTools: boolean(
+    "default_personal_agent_access_all_tools",
+  )
+    .notNull()
+    .default(true),
   onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
     .notNull()
     .default(true),
@@ -75,49 +80,6 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(false),
   /**
-   * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
-   * removed — the security engine is always enabled now. This column is inert:
-   * no code reads or writes it, and it is omitted from the API schemas. Retained
-   * (not dropped) for rollout safety — dropping a column older app versions may
-   * still read is not deploy-safe. Safe to drop in a future expand/contract
-   * migration once every supported version no longer references it.
-   */
-  globalToolPolicy: varchar("global_tool_policy")
-    .notNull()
-    .default("permissive"),
-  /**
-   * @deprecated Inert leftover column from the reverted PR #6027 (added by
-   * migration 0316). No code reads or writes it; retained for
-   * backward-compatibility and typed as a plain string so the schema stays
-   * consistent without re-introducing the reverted policy type. Safe to drop in
-   * a future migration.
-   */
-  discoveredToolPolicy: varchar("discovered_tool_policy")
-    .notNull()
-    .default("relaxed"),
-  /**
-   * Admin-configurable default invocation policy applied to every tool the LLM
-   * proxy auto-discovers and persists. Defaults to "allow_when_context_is_untrusted"
-   * ("Allow always") so discovered tools are not blocked by default.
-   */
-  defaultDiscoveredToolInvocationPolicy: varchar(
-    "default_discovered_tool_invocation_policy",
-  )
-    .$type<ToolInvocation.ToolInvocationPolicyAction>()
-    .notNull()
-    .default("allow_when_context_is_untrusted"),
-  /**
-   * Admin-configurable default result policy applied to every tool the LLM proxy
-   * auto-discovers and persists. Defaults to "mark_as_untrusted" ("Mark as
-   * sensitive") so discovered-tool output is treated as untrusted by default.
-   */
-  defaultDiscoveredToolResultPolicy: varchar(
-    "default_discovered_tool_result_policy",
-  )
-    .$type<TrustedData.TrustedDataPolicyAction>()
-    .notNull()
-    .default("mark_as_untrusted"),
-  /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,
    * so admins may want to disable this until file-based policy support is added.
@@ -125,6 +87,18 @@ const organizationsTable = pgTable("organization", {
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()
     .default(true),
+
+  /**
+   * Lets LLM proxy requests run without an Archestra platform credential: a
+   * raw provider key alone is accepted, and catch-all provider routes forward
+   * anonymous requests. Off by default, so every request must present a
+   * platform virtual key, OAuth token, or identity token.
+   */
+  allowUnauthenticatedLlmProxyRequests: boolean(
+    "allow_unauthenticated_llm_proxy_requests",
+  )
+    .notNull()
+    .default(false),
 
   /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
@@ -215,6 +189,16 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
+  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  defaultFastModelId: uuid("default_fast_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+  defaultSmartModelId: uuid("default_smart_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+
   /** Default token-cost limit value applied to every organization member. */
   defaultUserLimitValue: integer("default_user_limit_value"),
 
@@ -226,7 +210,7 @@ const organizationsTable = pgTable("organization", {
   /** Cleanup interval used by default user limits. Null falls back to weekly. */
   defaultUserLimitCleanupInterval: varchar(
     "default_user_limit_cleanup_interval",
-  ).$type<LimitCleanupInterval>(),
+  ).$type<BudgetCleanupInterval>(),
 
   /**
    * Default role assigned to newly provisioned members who don't get an
@@ -352,14 +336,24 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Admin-chosen provider API key per provider for auto-provisioned
-   * connection virtual keys (provider → llm_provider_api_keys.id). When a
-   * provider has no entry, provisioning falls back to the user's
-   * personal → team → org key resolution.
+   * Admin-chosen provider API keys per setup client for the virtual key a
+   * setup command mints (client → provider → llm_provider_api_keys.id). A
+   * client or provider with no entry falls back to the user's own key
+   * resolution.
    */
-  connectionDefaultProviderKeys: jsonb(
-    "connection_default_provider_keys",
-  ).$type<ConnectionDefaultProviderKeys>(),
+  connectionClientFutureProviders: jsonb(
+    "connection_client_future_providers",
+  ).$type<ConnectionClientFutureProviders>(),
+  connectionClientProviderKeys: jsonb(
+    "connection_client_provider_keys",
+  ).$type<ConnectionClientProviderKeys>(),
+  /**
+   * @deprecated Superseded by `connectionClientProviderKeys`, which a migration
+   * backfilled from it. Retained so app versions still reading it keep working
+   * through a rolling deploy; no longer read or written. Drop in a later
+   * release.
+   */
+  connectionDefaultProviderKeys: jsonb("connection_default_provider_keys"),
 
   /**
    * When false, /connection does not offer installing shared skills, and
@@ -512,18 +506,7 @@ const organizationsTable = pgTable("organization", {
     .default(false),
   // SPDX-SnippetEnd
 
-  /**
-   * Whether this organization shows the Apps Hackathon recorder. On by
-   * default, and the way an admin who does not want the promotion turns it and
-   * every part of the feature off without touching deployment configuration.
-   *
-   * It is the middle of three gates: the deployment flag decides whether the
-   * feature exists here at all (and never opens it for a licensed enterprise
-   * deployment), this decides whether the organization wants it, and the
-   * hackathon's closing date overrides both. Enterprise deployments never
-   * reach this column — the flag above them is already off — so it can stay a
-   * plain preference rather than encoding licence rules a second time.
-   */
+  /** @deprecated Retained for rolling upgrades; no longer read or written. */
   appsHackathonRecorderEnabled: boolean("apps_hackathon_recorder_enabled")
     .notNull()
     .default(true),

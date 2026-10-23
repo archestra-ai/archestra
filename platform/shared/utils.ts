@@ -16,6 +16,17 @@ export function formatSecretStorageType(
 }
 
 /**
+ * An MCP server's name as tool names carry it before the separator:
+ * lowercased, whitespace runs as `_`, anything but `[a-z0-9_-]` removed.
+ */
+export function slugifyMcpServerName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+/**
  * Slugify a name to create a URL-safe identifier
  * Used for generating tool names from prompt/agent names
  */
@@ -98,7 +109,15 @@ export function collapseWhitespace(raw: string): string {
  * quotes inside the text are part of the text.
  */
 export function stripWrappingQuotes(value: string): string {
-  return value.replace(/^["'`]+|["'`]+$/g, "").trim();
+  let start = 0;
+  let end = value.length;
+  while (start < end && isWrappingQuote(value[start])) start++;
+  while (end > start && isWrappingQuote(value[end - 1])) end--;
+  return value.slice(start, end).trim();
+}
+
+function isWrappingQuote(char: string | undefined): boolean {
+  return char === '"' || char === "'" || char === "`";
 }
 
 /**

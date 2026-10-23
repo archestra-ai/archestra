@@ -17,7 +17,7 @@ import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 const execFileAsync = promisify(execFile);
 const ATTENTION_ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-agent-attention",
+  "../../../../docker_images/agent/bin/archestra-agent-attention",
 );
 
 describe("Claude Code image entrypoint", () => {

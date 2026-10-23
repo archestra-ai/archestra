@@ -4,6 +4,7 @@ import {
   IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
   OAUTH_TOKEN_ID_PREFIX,
 } from "@archestra/shared";
+import { memberPermissions } from "@archestra/shared/access-control";
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   type ArchestraContext,
@@ -63,8 +64,9 @@ async function listed(params: {
       : {
           tokenId: crypto.randomUUID(),
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
           organizationId: params.organizationId,
+          serviceAccountId: crypto.randomUUID(),
         },
   });
   const handler = (
@@ -153,7 +155,11 @@ describe("implicit OpenAPPA policy read tools", () => {
     };
 
     const names = await listed({ agentId: agent.id, organizationId, userId });
-    expect(names).toEqual(expect.arrayContaining(READ));
+    for (const read of READ) {
+      expect(names.includes(read)).toBe(
+        surface.agentType === "agent" || surface.toolExposureMode === "full",
+      );
+    }
     for (const write of WRITE) expect(names).not.toContain(write);
 
     const found = await searched(context);
@@ -174,8 +180,12 @@ describe("implicit OpenAPPA policy read tools", () => {
       makeOrganization,
       makeUser,
       makeMember,
+      role: "admin",
     });
     const agent = await makeAgent({ organizationId, agentType: "agent" });
+    expect(
+      await listed({ agentId: agent.id, organizationId, userId }),
+    ).toContain(GET_POLICY);
     config.openappa.enabled = false;
     expect(
       await listed({ agentId: agent.id, organizationId, userId }),
@@ -187,12 +197,18 @@ describe("implicit OpenAPPA policy read tools", () => {
     makeUser,
     makeMember,
     makeAgent,
+    makeCustomRole,
     seedAndAssignArchestraTools,
   }) => {
+    const organization = await makeOrganization();
+    const reader = await makeCustomRole(organization.id, {
+      permission: { ...memberPermissions, guardrailsPolicy: ["read"] },
+    });
     const { organizationId, userId } = await contextFor({
-      makeOrganization,
+      makeOrganization: async () => organization,
       makeUser,
       makeMember,
+      role: reader.role,
     });
     const seeder = await makeAgent({ organizationId });
     await seedAndAssignArchestraTools(seeder.id);
@@ -233,6 +249,7 @@ describe("implicit OpenAPPA policy read tools", () => {
       makeOrganization,
       makeUser,
       makeMember,
+      role: "admin",
     });
     const agent = await makeAgent({ organizationId, agentType: "agent" });
     const delegated = {
@@ -250,7 +267,7 @@ describe("implicit OpenAPPA policy read tools", () => {
     ).rejects.toMatchObject({ code: -32601 });
   });
 
-  test("a caller without a user, or without openappaPolicy:read, neither lists nor runs policy reads", async ({
+  test("a caller without a user, or without guardrailsPolicy:read, neither lists nor runs policy reads", async ({
     makeOrganization,
     makeUser,
     makeMember,

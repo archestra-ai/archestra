@@ -1,25 +1,31 @@
-import { RouteId } from "@archestra/shared";
+import {
+  type OpenAppaValidationProgressMessage,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import logger from "@/logging";
 import {
   getOpenAppaPolicyTestRuns,
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
+  type PolicyTestProgressEvent,
   previewOpenAppaPolicyTest,
   runOpenAppaPolicyTests,
   updateOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
-import { constructResponseSchema } from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
 import {
   InspectPolicyTestsSchema,
   PolicyTestCollectionSchema,
   PolicyTestInspectionSchema,
-  PolicyTestPreviewSchema,
+  PolicyTestRunResultSchema,
   PolicyTestRunSchema,
   PreviewPolicyTestSchema,
   RunPolicyTestsSchema,
   UpdatePolicyTestsSchema,
 } from "@/types/openappa-policy-tests";
+import websocketService from "@/websocket";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.post(
@@ -82,11 +88,38 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const run = await runOpenAppaPolicyTests({
-        ...request.body,
-        organizationId: request.organizationId,
-        userId: request.user.id,
+      const { progressToken, ...body } = request.body;
+      const progress = progressToken
+        ? new ValidationProgressSender({
+            token: progressToken,
+            userId: request.user.id,
+            organizationId: request.organizationId,
+          })
+        : null;
+      progress?.send({
+        phase: "started",
+        paths: body.files.map((file) => file.path),
       });
+      let run: Awaited<ReturnType<typeof runOpenAppaPolicyTests>>;
+      try {
+        run = await runOpenAppaPolicyTests({
+          ...body,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          onProgress: progress?.onFileProgress,
+        });
+      } catch (error) {
+        progress?.send({
+          phase: "finished",
+          runId: null,
+          error:
+            error instanceof ApiError
+              ? error.message
+              : "The validation run failed",
+        });
+        throw error;
+      }
+      progress?.send({ phase: "finished", runId: run.id });
       request.auditAfter = {
         runId: run.id,
         fileCount: run.files.length,
@@ -114,7 +147,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.PreviewOpenAppaPolicyTest,
         tags: ["OpenAPPA"],
         body: PreviewPolicyTestSchema,
-        response: constructResponseSchema(PolicyTestPreviewSchema),
+        response: constructResponseSchema(PolicyTestRunResultSchema),
       },
     },
     async (request, reply) =>
@@ -128,3 +161,62 @@ const routes: FastifyPluginAsyncZod = async (app) => {
   );
 };
 export default routes;
+
+// =============================================================================
+// Internal
+// =============================================================================
+
+type ProgressPayload = OpenAppaValidationProgressMessage["payload"];
+type UntokenedProgressPayload = ProgressPayload extends infer Payload
+  ? Payload extends ProgressPayload
+    ? Omit<Payload, "token">
+    : never
+  : never;
+
+/**
+ * Streams one manual run's progress to the sockets of the user who started
+ * it. Progress only observes the run: a delivery failure is logged, never
+ * raised, and nothing waits on it.
+ */
+class ValidationProgressSender {
+  constructor(
+    private readonly target: {
+      token: string;
+      userId: string;
+      organizationId: string;
+    },
+  ) {}
+
+  readonly onFileProgress = (event: PolicyTestProgressEvent) => {
+    if (event.phase === "file_started") {
+      this.send({ phase: "file_started", path: event.path });
+      return;
+    }
+    const { file } = event;
+    this.send({
+      phase: "file_finished",
+      path: file.path,
+      status: file.status,
+      assertionCount: file.assertionCount,
+      durationMs: file.durationMs ?? 0,
+      error: file.error,
+      steps: file.steps,
+    });
+  };
+
+  send(payload: UntokenedProgressPayload) {
+    const { token, userId, organizationId } = this.target;
+    try {
+      websocketService.sendOpenAppaValidationProgress({
+        userId,
+        organizationId,
+        payload: { ...payload, token },
+      });
+    } catch (error) {
+      logger.warn(
+        { err: error, organizationId },
+        "OpenAPPA could not send policy validation progress",
+      );
+    }
+  }
+}

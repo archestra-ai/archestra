@@ -34,9 +34,10 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
-import { markChannelThreadActive } from "./channel-activation";
+import { test as dbTest } from "@/test";
+import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
-import SlackProvider from "./slack-provider";
+import SlackProvider, { plainSlackText } from "./slack-provider";
 
 // =============================================================================
 // Helpers
@@ -91,6 +92,200 @@ function makeEventPayload(
     ...overrides,
   };
 }
+
+// Slack's composer represents quotes and mentions as rich-text elements.
+// Generic data mirrors a quoted report followed by a task request.
+const QUOTED_REPORT =
+  "A user outside the support team is routed to its server.";
+const QUOTE_REQUEST = " create a task from the report above";
+const QUOTED_BLOCKS = [
+  {
+    type: "rich_text",
+    elements: [
+      {
+        type: "rich_text_quote",
+        elements: [{ type: "text", text: QUOTED_REPORT }],
+      },
+      {
+        type: "rich_text_section",
+        elements: [
+          { type: "user", user_id: "UBOT123" },
+          { type: "text", text: QUOTE_REQUEST },
+        ],
+      },
+    ],
+  },
+];
+
+describe("SlackProvider quoted message content", () => {
+  test.each([
+    undefined,
+    "",
+    "   ",
+  ])("keeps the quoted report and request when fallback text is %j", async (text) => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          text,
+          blocks: QUOTED_BLOCKS,
+        },
+      ),
+      {},
+    );
+    expect(result?.text).toContain(QUOTED_REPORT);
+    expect(result?.text).toContain(QUOTE_REQUEST.trim());
+  });
+
+  test("a mention in rich text activates message events and keeps follow-ups addressed", async () => {
+    const provider = createProvider();
+    const root = makeEventPayload(
+      {},
+      { type: "message", text: undefined, blocks: QUOTED_BLOCKS },
+    );
+    const result = await provider.parseWebhookNotification(root, {});
+    expect(result?.text).toContain(QUOTED_REPORT);
+    expect(result?.metadata?.botMentioned).toBe(true);
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "see the report above",
+            thread_ts: root.event.ts,
+          },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
+  });
+
+  test("thread history retains a rich-text quoted root for a plain-text follow-up", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: inject the Slack API boundary
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1234567890.123456",
+              user: "U_SENDER",
+              blocks: QUOTED_BLOCKS,
+            },
+            { ts: "1234567890.123457", user: "U_SENDER", text: "see above" },
+          ],
+        }),
+      },
+    };
+    const history = await provider.getThreadHistory({
+      channelId: "C12345",
+      workspaceId: "T12345",
+      threadId: "1234567890.123456",
+      excludeMessageId: "1234567890.123457",
+    });
+    expect(history).toHaveLength(1);
+    expect(history[0]?.text).toContain(QUOTED_REPORT);
+    expect(history[0]?.text).toContain(QUOTE_REQUEST.trim());
+  });
+
+  test("thread history keeps bot messages that carry content only in attachments or blocks", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: inject the Slack API boundary
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              // Alert webhook: empty `text`, everything in a legacy attachment.
+              ts: "1234567890.100000",
+              subtype: "bot_message",
+              bot_id: "B_ALERTS",
+              username: "Alertmanager",
+              text: "",
+              attachments: [
+                {
+                  id: 1,
+                  color: "a30200",
+                  fallback: "[FIRING:1] HighErrorRate api",
+                  title: "[FIRING:1] HighErrorRate api",
+                  title_link: "https://alerts.example.com/alerting/list",
+                  text: "*Alert:* 5xx rate above 5% on api-gateway",
+                  fields: [
+                    { title: "severity", value: "critical", short: true },
+                  ],
+                  footer: "Alertmanager",
+                },
+              ],
+            },
+            {
+              // Block Kit only: section, header, and context — no rich_text.
+              ts: "1234567890.200000",
+              bot_id: "B_DEPLOY",
+              bot_profile: { name: "Deploy Bot" },
+              text: "",
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "Deploy failed" },
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: "Rollout of *web* halted" },
+                  fields: [{ type: "mrkdwn", text: "*Env:* production" }],
+                },
+                {
+                  type: "context",
+                  elements: [{ type: "mrkdwn", text: "build 4821" }],
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "Retry" },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              // `text` present: the attachment repeating it is not appended.
+              ts: "1234567890.300000",
+              bot_id: "B_ALERTS",
+              text: "[RESOLVED] HighErrorRate api",
+              attachments: [
+                {
+                  fallback: "[RESOLVED] HighErrorRate api",
+                  text: "[RESOLVED] HighErrorRate api",
+                },
+              ],
+            },
+            {
+              ts: "1234567890.400000",
+              user: "U_SENDER",
+              text: "<@UBOT123> why did this fire?",
+            },
+          ],
+        }),
+      },
+    };
+
+    const history = await provider.getThreadHistory({
+      channelId: "C12345",
+      workspaceId: "T12345",
+      threadId: "1234567890.100000",
+      excludeMessageId: "1234567890.400000",
+    });
+
+    expect(history.map((message) => message.text)).toEqual([
+      "[FIRING:1] HighErrorRate api\n*Alert:* 5xx rate above 5% on api-gateway\nseverity: critical",
+      "Deploy failed\nRollout of *web* halted\n*Env:* production\nbuild 4821",
+      "[RESOLVED] HighErrorRate api",
+    ]);
+  });
+});
 
 // =============================================================================
 // validateWebhookRequest
@@ -794,548 +989,540 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     expect(result).toBeNull();
   });
 
-  test("a mute command silences an answer-all thread until it is re-mentioned", async () => {
+  test("the Stop button keeps answer-all enabled for later messages", async () => {
     const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    const apiCall = vi.fn().mockResolvedValue({ ok: true });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    const channel = "C_ANSWER_ALL_MUTE";
+    (provider as any).client = { apiCall };
+    const channel = "C_ANSWER_ALL_STOP";
     const threadTs = "7777777777.000010";
     await seedAnswerAllChannel(channel);
 
+    const message = (text: string, ts: string) =>
+      provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          { type: "message", channel, text, ts, thread_ts: threadTs },
+        ),
+        {},
+      );
+
     // Un-mentioned message flows because the channel answers all.
-    const first = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "hi",
-          ts: "7777777777.000011",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(first).not.toBeNull();
+    expect(await message("hi", "7777777777.000011")).not.toBeNull();
 
-    // A mute command gates the thread. The :mute: reaction is the only
-    // acknowledgement — no confirmation message is posted.
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
+    expect(
+      await provider.parseWebhookNotification(
+        stopPayload({ channel, thread_ts: threadTs }),
         {},
-        {
-          type: "message",
-          channel,
-          text: "mute",
-          ts: "7777777777.000012",
-          thread_ts: threadTs,
-        },
       ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
+    ).toBeNull();
 
-    // Later un-mentioned messages stay quiet despite answer-all.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "still there?",
-          ts: "7777777777.000013",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterMute).toBeNull();
+    // Stop cancels a turn without muting later messages.
+    expect(await message("still there?", "7777777777.000013")).not.toBeNull();
 
-    // A fresh mention lifts the mute...
-    const reMention = await provider.parseWebhookNotification(
-      makeEventPayload(
+    // A new mention still works too.
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            channel,
+            text: "<@UBOT123> back please",
+            ts: "7777777777.000014",
+            thread_ts: threadTs,
+          },
+        ),
         {},
-        {
-          channel,
-          text: "<@UBOT123> back please",
-          ts: "7777777777.000014",
-          thread_ts: threadTs,
-        },
       ),
-      {},
-    );
-    expect(reMention).not.toBeNull();
+    ).not.toBeNull();
+    expect(await message("more", "7777777777.000015")).not.toBeNull();
+  });
+});
 
-    // ...and un-mentioned messages flow again.
-    const afterReMention = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "more",
-          ts: "7777777777.000015",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
+describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
+  const CHANNEL = "C_SHARED";
+  const THREAD = "5555555555.000001";
+  const MAIN_BOT = "UBOT123";
+  const MARKETING_BOT = "UMARKETING";
+
+  // The main app and a bot pinned to the Marketing agent, both in CHANNEL.
+  function createBots() {
+    const main = createProvider({ botUserId: MAIN_BOT });
+    const marketing = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-marketing",
+        signingSecret: SIGNING_SECRET,
+        appId: "A_MARKETING",
+      },
+      { pinnedAgentId: "11111111-1111-4111-8111-111111111111" },
     );
-    expect(afterReMention).not.toBeNull();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (marketing as any).botUserId = MARKETING_BOT;
+    const apiCall = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (marketing as any).client = { apiCall };
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (main as any).client = { apiCall };
+    for (const bot of [main, marketing]) {
+      bot.setSiblingBotUserIds([MAIN_BOT, MARKETING_BOT]);
+    }
+    return { main, marketing };
+  }
+
+  const message = (text: string, ts: string, type = "message") =>
+    makeEventPayload(
+      {},
+      { type, channel: CHANNEL, text, ts, thread_ts: THREAD },
+    );
+
+  test("mentioning one bot wakes only that bot for the rest of the thread", async () => {
+    const { main, marketing } = createBots();
+
+    // Marketing is mentioned: it answers; the main app leaves it to Marketing.
+    const mention = message(
+      `<@${MARKETING_BOT}> draft a launch post`,
+      "5555555555.000002",
+    );
+    expect(
+      await marketing.parseWebhookNotification(mention, {}),
+    ).not.toBeNull();
+    expect(await main.parseWebhookNotification(mention, {})).toBeNull();
+
+    // A follow-up without a mention reaches Marketing only.
+    const followUp = message("make it shorter", "5555555555.000003");
+    expect((await marketing.parseWebhookNotification(followUp, {}))?.text).toBe(
+      "make it shorter",
+    );
+    expect(await main.parseWebhookNotification(followUp, {})).toBeNull();
   });
 
-  async function expectLiteralMuteTokenMutes(
-    text: string,
-    channel: string,
-  ): Promise<void> {
-    const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    const threadTs = "7777777777.000030";
-    await seedAnswerAllChannel(channel);
+  test("a bot already active in a thread stays out of a message for its sibling", async () => {
+    const { main } = createBots();
+    await main.parseWebhookNotification(
+      message(`<@${MAIN_BOT}> hello`, "5555555555.000010"),
+      {},
+    );
 
-    // Un-mentioned message flows because the channel answers all.
-    const first = await provider.parseWebhookNotification(
-      makeEventPayload(
+    expect(
+      await main.parseWebhookNotification(
+        message(`<@${MARKETING_BOT}> your turn`, "5555555555.000011"),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test.each([
+    "stop",
+    "command",
+    "reaction",
+  ])("%s on one bot leaves the other answering the thread", async (control) => {
+    const { main, marketing } = createBots();
+    await main.parseWebhookNotification(
+      message(`<@${MAIN_BOT}> start`, "5555555555.000020"),
+      {},
+    );
+    await marketing.parseWebhookNotification(
+      message(`<@${MARKETING_BOT}> start`, "5555555555.000021"),
+      {},
+    );
+
+    const mutePayload =
+      control === "stop"
+        ? stopPayload({ channel: CHANNEL, thread_ts: THREAD })
+        : control === "command"
+          ? message(`<@${MARKETING_BOT}> mute`, "5555555555.000023")
+          : makeEventPayload(
+              {},
+              {
+                type: "reaction_added",
+                reaction: "mute",
+                item: { type: "message", channel: CHANNEL, ts: THREAD },
+              },
+            );
+    await marketing.parseWebhookNotification(mutePayload, {});
+
+    const next = message("anyone there?", "5555555555.000022");
+    expect(await marketing.parseWebhookNotification(next, {})).toEqual(
+      control === "stop" ? expect.any(Object) : null,
+    );
+    expect(await main.parseWebhookNotification(next, {})).not.toBeNull();
+  });
+
+  dbTest(
+    "only the bot of the channel's agent answers every message",
+    async ({ makeAgent }) => {
+      const [marketingAgent, codingAgent] = [
+        await makeAgent(),
+        await makeAgent(),
+      ];
+      const pinnedBot = (agentId: string, botUserId: string) => {
+        const bot = new SlackProvider(
+          {
+            enabled: true,
+            botToken: `xoxb-${botUserId}`,
+            signingSecret: SIGNING_SECRET,
+            appId: `A_${botUserId}`,
+          },
+          { pinnedAgentId: agentId },
+        );
+        // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+        (bot as any).botUserId = botUserId;
+        // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+        (bot as any).client = {
+          apiCall: vi.fn().mockResolvedValue({ ok: true }),
+          reactions: {
+            get: vi
+              .fn()
+              .mockResolvedValue({ message: { ts: "5555555555.000030" } }),
+          },
+        };
+        return bot;
+      };
+      const marketing = pinnedBot(marketingAgent.id, MARKETING_BOT);
+      const coding = pinnedBot(codingAgent.id, "UCODINGBOT");
+      const binding = await ChatOpsChannelBindingModel.create({
+        organizationId: marketingAgent.organizationId,
+        provider: "slack",
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        agentId: marketingAgent.id,
+      });
+      await ChatOpsChannelBindingModel.update(binding.id, {
+        answerAllMessages: true,
+      });
+
+      const chatter = makeEventPayload(
         {},
         {
           type: "message",
-          channel,
-          text: "hi",
-          ts: "7777777777.000031",
-          thread_ts: threadTs,
+          channel: CHANNEL,
+          text: "just chatting",
+          ts: "5555555555.000030",
         },
+      );
+      expect(
+        await marketing.parseWebhookNotification(chatter, {}),
+      ).not.toBeNull();
+      expect(await coding.parseWebhookNotification(chatter, {})).toBeNull();
+      for (const control of ["command", "reaction"]) {
+        const mutePayload =
+          control === "command"
+            ? makeEventPayload({}, { ...chatter.event, text: "mute" })
+            : makeEventPayload(
+                {},
+                {
+                  type: "reaction_added",
+                  reaction: "mute",
+                  item: {
+                    type: "message",
+                    channel: CHANNEL,
+                    ts: chatter.event.ts,
+                  },
+                },
+              );
+        expect(
+          await marketing.parseWebhookNotification(mutePayload, {}),
+        ).toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(chatter, {}),
+        ).toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(
+            makeEventPayload(
+              {},
+              {
+                ...chatter.event,
+                text: `<@${MARKETING_BOT}> resume`,
+              },
+            ),
+            {},
+          ),
+        ).not.toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(chatter, {}),
+        ).not.toBeNull();
+      }
+    },
+  );
+});
+
+describe("SlackProvider.parseWebhookNotification — thread mute controls", () => {
+  function createStopProvider(apiCall = vi.fn().mockResolvedValue({})) {
+    const provider = createProvider();
+    const setStatus = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = {
+      apiCall,
+      assistant: { threads: { setStatus } },
+    };
+    return { provider, apiCall, setStatus };
+  }
+
+  test("Stop preserves auto-replies and moves the session out of processing", async () => {
+    const { provider, apiCall } = createStopProvider();
+    const channel = "C_STOP";
+    const threadTs = "6666666666.000001";
+
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          { channel, text: "<@UBOT123> help me", thread_ts: threadTs },
+        ),
+        {},
       ),
+    ).not.toBeNull();
+
+    await provider.parseWebhookNotification(
+      stopPayload({ channel, thread_ts: threadTs }),
       {},
     );
-    expect(first).not.toBeNull();
 
-    // The literal shortcode text — not a reaction — gates the thread the same
-    // as the bare "mute" command, with no confirmation message posted.
-    const mute = await provider.parseWebhookNotification(
+    // Slack leaves the session "processing" after Stop; moving it on is ours.
+    expect(apiCall).toHaveBeenCalledWith("agents.sessions.setStatus", {
+      channel_id: channel,
+      thread_ts: threadTs,
+      status: "active",
+    });
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            channel,
+            text: "are you still there?",
+            ts: "6666666666.000002",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
+  });
+
+  test("Stop aborts the thread's in-flight runs as stopped, not superseded", async () => {
+    const { provider } = createStopProvider();
+    const key = {
+      provider: "slack" as const,
+      channelId: "D_STOP",
+      threadId: "6666666666.000010",
+    };
+    const run = chatOpsRunRegistry.register(key);
+    const otherThread = chatOpsRunRegistry.register({
+      ...key,
+      threadId: "6666666666.000099",
+    });
+    try {
+      await provider.parseWebhookNotification(
+        stopPayload({ channel: key.channelId, thread_ts: key.threadId }),
+        {},
+      );
+      expect(run.signal.aborted).toBe(true);
+      expect(wasRunSuperseded(run.signal)).toBe(false);
+      expect(otherThread.signal.aborted).toBe(false);
+    } finally {
+      run.unregister();
+      otherThread.unregister();
+    }
+  });
+
+  test("an app not yet on agent sessions falls back to assistant.threads.setStatus", async () => {
+    const apiCall = vi.fn().mockRejectedValue(
+      Object.assign(new Error("An API error occurred: not_agent_app"), {
+        code: "slack_webapi_platform_error",
+      }),
+    );
+    const { provider, setStatus } = createStopProvider(apiCall);
+
+    await provider.setTypingStatus("C_LEGACY", "6666666666.000020");
+    await provider.clearTypingStatus("C_LEGACY", "6666666666.000020");
+
+    expect(setStatus).toHaveBeenNthCalledWith(1, {
+      channel_id: "C_LEGACY",
+      thread_ts: "6666666666.000020",
+      status: "is thinking...",
+    });
+    expect(setStatus).toHaveBeenNthCalledWith(2, {
+      channel_id: "C_LEGACY",
+      thread_ts: "6666666666.000020",
+      status: "",
+    });
+    // The rejection is remembered rather than retried on every status change.
+    expect(apiCall).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    "mute",
+    ":mute:",
+    ":shushing_face:",
+    "<@UBOT123> mute",
+  ])("%s mutes an active thread, cancels its run, and stays quiet until re-mentioned", async (text) => {
+    const { provider } = createStopProvider();
+    const channel = "C_MUTE_TEXT";
+    const threadTs = "6666666666.000030";
+    const message = (text: string) =>
       makeEventPayload(
         {},
         {
           type: "message",
           channel,
           text,
-          ts: "7777777777.000032",
           thread_ts: threadTs,
         },
-      ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-
-    // Later un-mentioned messages stay quiet despite answer-all.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "still there?",
-          ts: "7777777777.000033",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterMute).toBeNull();
-  }
-
-  test("a literal ':mute:' message (not a reaction) mutes an answer-all thread", async () => {
-    await expectLiteralMuteTokenMutes(":mute:", "C_ANSWER_ALL_MUTE_TEXT_1");
-  });
-
-  test("a literal ':shushing_face:' message (not a reaction) mutes an answer-all thread", async () => {
-    await expectLiteralMuteTokenMutes(
-      ":shushing_face:",
-      "C_ANSWER_ALL_MUTE_TEXT_2",
-    );
-  });
-});
-
-describe("SlackProvider.parseWebhookNotification — thread mute command", () => {
-  // Wire a real postMessage mock so we can assert the muted-thread notice.
-  function createProviderWithPostMessage(): {
-    provider: SlackProvider;
-    postMessage: ReturnType<typeof vi.fn>;
-  } {
-    const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    return { provider, postMessage };
-  }
-
-  test("'@bot mute' in an active thread mutes it: returns null and gates later replies", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-    const channel = "C_MUTE_MENTION";
-    const threadTs = "6666666666.000001";
-
-    // Activate via a mention.
-    const mention = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> help me", thread_ts: threadTs },
-      ),
-      {},
-    );
-    expect(mention).not.toBeNull();
-
-    // "@bot mute" → muted. Nothing is handed to the agent, and no
-    // confirmation message is posted (the :mute: reaction is the only
-    // acknowledgement).
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> mute", thread_ts: threadTs },
-      ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-
-    // A subsequent un-mentioned reply in the thread is gated again.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "are you still there?",
-          ts: "6666666666.000002",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterMute).toBeNull();
-  });
-
-  test("bare 'mute' (no mention) in an active thread mutes it without a re-mention", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-    const channel = "C_MUTE_BARE";
-    const threadTs = "6666666666.000003";
-
-    await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> kick things off", thread_ts: threadTs },
-      ),
-      {},
-    );
-
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "mute",
-          ts: "6666666666.000004",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("'mute' in an inactive, un-mentioned thread is just a gated message — no mute notice", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-
-    const result = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel: "C_MUTE_INACTIVE",
-          text: "mute",
-          thread_ts: "6666666666.000005",
-        },
-      ),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a normal request mentioning the bot is not swallowed as a mute", async () => {
-    const { provider } = createProviderWithPostMessage();
-
-    const result = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          channel: "C_MUTE_REAL_REQUEST",
-          text: "<@UBOT123> mute the alerts channel for me",
-          thread_ts: "6666666666.000006",
-        },
-      ),
-      {},
-    );
-    expect(result).not.toBeNull();
-    expect(result?.text).toBe("mute the alerts channel for me");
-  });
-});
-
-describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
-  const BOT = "UBOT123";
-  const CHANNEL = "C_REACT";
-  const ROOT = "7777777777.000001";
-  const BOT_REPLY_TS = "7777777777.000002";
-
-  // These tests reuse one channel/thread; the fake cache resets before each
-  // test automatically, so no manual clearing is needed here.
-
-  // Client with a postMessage spy and a conversations.replies that resolves the
-  // thread root (messages[0].ts) for the reacted message.
-  function createReactionProvider(rootTs: string | null = ROOT): {
-    provider: SlackProvider;
-    postMessage: ReturnType<typeof vi.fn>;
-    replies: ReturnType<typeof vi.fn>;
-  } {
-    const provider = createProvider({ botUserId: BOT });
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
-    const replies = vi.fn().mockResolvedValue({
-      messages: rootTs ? [{ ts: rootTs }] : [],
-    });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = {
-      chat: { postMessage },
-      conversations: { replies },
-    };
-    return { provider, postMessage, replies };
-  }
-
-  function reactionPayload(
-    reaction: string,
-    overrides: Record<string, unknown> = {},
-  ) {
-    return makeEventPayload(
-      {},
-      {
-        type: "reaction_added",
-        // reaction events carry channel/ts under `item`, not at the top.
-        channel: undefined,
-        ts: undefined,
-        reaction,
-        item: { type: "message", channel: CHANNEL, ts: BOT_REPLY_TS },
-        ...overrides,
-      },
-    );
-  }
-
-  async function enableAnswerAll(): Promise<void> {
-    const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: `org-${CHANNEL}-${Math.random()}`,
+      );
+    await provider.parseWebhookNotification(message("<@UBOT123> start"), {});
+    const run = chatOpsRunRegistry.register({
       provider: "slack",
-      channelId: CHANNEL,
-      // Must match makeEventPayload's team_id: the setting is stored per
-      // workspace, and a reaction has to look it up under the same key.
-      workspaceId: "T12345",
+      channelId: channel,
+      threadId: threadTs,
     });
-    await ChatOpsChannelBindingModel.update(binding.id, {
-      answerAllMessages: true,
-    });
-  }
-
-  // reactionPayload deliberately carries no `item_user`: the field is optional
-  // on reaction_added and Slack does not populate it for every app-authored
-  // message, so muting must not depend on it.
-  test("🔇 on a bot reply in an active thread mutes it with no confirmation message", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-
-    expect(result).toBeNull();
-    expect(replies).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: CHANNEL, ts: BOT_REPLY_TS }),
-    );
-    expect(postMessage).not.toHaveBeenCalled();
     expect(
-      await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("🤫 (shushing_face) is also a mute reaction", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    await provider.parseWebhookNotification(
-      reactionPayload("shushing_face"),
-      {},
-    );
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 on a teammate's message mutes the thread it belongs to", async () => {
-    // The reaction is about the thread, not about whoever wrote the message
-    // carrying it — reacting on a colleague's reply has to work.
-    const { provider, postMessage } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute", {
-        item: { type: "message", channel: CHANNEL, ts: "7777777777.000042" },
-      }),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
+      await provider.parseWebhookNotification(message(text), {}),
+    ).toBeNull();
+    expect(run.signal.aborted).toBe(true);
     expect(
-      await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
-      ),
-    ).toBeUndefined();
+      await provider.parseWebhookNotification(message("follow up"), {}),
+    ).toBeNull();
+    expect(
+      await provider.parseWebhookNotification(message("<@UBOT123> resume"), {}),
+    ).not.toBeNull();
+    expect(
+      await provider.parseWebhookNotification(message("follow up"), {}),
+    ).not.toBeNull();
+    run.unregister();
   });
 
-  test("the bot's own 🔇 reaction is ignored", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
+  test.each([
+    "mute",
+    "shushing_face",
+  ])("%s reaction on a reply resolves the root and mutes it", async (reaction) => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000040";
+    const getReaction = vi.fn().mockResolvedValue({
+      message: { ts: "6666666666.000041", thread_ts: threadTs },
     });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute", { user: BOT }),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 on the thread root itself needs no API lookup", async () => {
-    // The likeliest target of a mute reaction is the message that started the
-    // thread; resolving it from state also keeps the mute working when
-    // conversations.replies is unavailable.
-    const { provider, postMessage, replies } = createReactionProvider(null);
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject Slack boundary
+    (provider as any).client.reactions = { get: getReaction };
     await provider.parseWebhookNotification(
-      reactionPayload("mute", {
-        item: { type: "message", channel: CHANNEL, ts: ROOT },
-      }),
+      makeEventPayload({}, { thread_ts: threadTs }),
       {},
     );
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a non-mute reaction is ignored", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
     const result = await provider.parseWebhookNotification(
-      reactionPayload("thumbsup"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 in an answer-all channel mutes it with no confirmation message", async () => {
-    // An answer-all thread has no activation to clear, so the mute relies on
-    // the mute marker instead of an activation flag — the 🔇 reaction itself
-    // is the only acknowledgement, same as elsewhere.
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a repeated 🔇 in an answer-all channel still posts no notice", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("mute reaction on an inactive thread posts no notice (transition rule)", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    // Thread was never activated → clearing is a no-op → no confirmation.
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("thread-root resolution failure posts no false 'muted'", async () => {
-    const { provider, postMessage } = createReactionProvider(null);
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 keeps an answer-all thread quiet on the following message", async () => {
-    const { provider } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-
-    // An answer-all channel has no activation for the mute to clear, so the
-    // reaction has to leave a marker behind or the next un-mentioned message
-    // gets answered as if nothing was asked.
-    const next = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
         {
-          type: "message",
-          channel: CHANNEL,
-          text: "still talking after the mute",
-          ts: "7777777777.000099",
-          thread_ts: ROOT,
+          type: "reaction_added",
+          reaction,
+          item: { type: "message", channel: "C12345", ts: "6666666666.000041" },
         },
       ),
       {},
     );
+    expect(result).toBeNull();
+    expect(getReaction).toHaveBeenCalledWith({
+      channel: "C12345",
+      timestamp: "6666666666.000041",
+    });
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).toBeNull();
+  });
 
-    expect(next).toBeNull();
+  test("a reaction on a tracked root mutes without a Slack lookup", async () => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000050";
+    await provider.parseWebhookNotification(
+      makeEventPayload({}, { thread_ts: threadTs }),
+      {},
+    );
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "reaction_added",
+          reaction: "mute",
+          item: { type: "message", channel: "C12345", ts: threadTs },
+        },
+      ),
+      {},
+    );
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test.each([
+    { reaction: "thumbsup", user: "U_SENDER" },
+    { reaction: "mute", user: "UBOT123" },
+  ])("unrelated and self reactions leave activation intact: %j", async (event) => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000060";
+    await provider.parseWebhookNotification(
+      makeEventPayload({}, { thread_ts: threadTs }),
+      {},
+    );
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "reaction_added",
+          ...event,
+          item: { type: "message", channel: "C12345", ts: threadTs },
+        },
+      ),
+      {},
+    );
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
   });
 });
+
+function stopPayload(event: { channel: string; thread_ts: string }) {
+  return {
+    type: "event_callback",
+    team_id: "T12345",
+    event: {
+      type: "agent_session_stopped",
+      user: "U_SENDER",
+      event_ts: "6666666666.999999",
+      streaming_message_ts: [],
+      ...event,
+    },
+  };
+}
 
 // =============================================================================
 // sendReply
@@ -1418,7 +1605,7 @@ describe("SlackProvider.sendReply", () => {
     );
   });
 
-  test("renders the mute hint as its own subtle context block above the footer", async () => {
+  test("renders the conversation link and hint beneath the answer above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
@@ -1439,22 +1626,87 @@ describe("SlackProvider.sendReply", () => {
       },
       text: "hi there",
       footer: "🤖 Agent",
-      hint: 'Reply "mute" to stop',
+      hint: "Started a new conversation",
+      conversationUrl: "https://example.test/chat/runs/session-id",
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
-    // markdown, then the hint context, then the footer as the final block.
     expect(blocks).toEqual([
       { type: "markdown", text: "hi there" },
       {
         type: "context",
         elements: [
-          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+          {
+            type: "mrkdwn",
+            text: "<https://example.test/chat/runs/session-id|Open conversation>",
+          },
+        ],
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "plain_text",
+            text: "Started a new conversation",
+            emoji: true,
+          },
         ],
       },
       {
         type: "context",
         elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+  });
+
+  test("a bot pinned to an agent leaves its name out of the footer", async () => {
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-pinned",
+        signingSecret: SIGNING_SECRET,
+        appId: "A_PINNED",
+      },
+      { pinnedAgentId: "11111111-1111-4111-8111-111111111111" },
+    );
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+    const reply = (footer: string) =>
+      provider.sendReply({
+        originalMessage: {
+          messageId: "1234567890.123456",
+          channelId: "C12345",
+          workspaceId: "T12345",
+          threadId: "1111111111.000000",
+          senderId: "U_SENDER",
+          senderName: "Test User",
+          text: "hello",
+          rawText: "hello",
+          timestamp: new Date(),
+          isThreadReply: false,
+        },
+        text: "Filed it.\n\n🤖 Agent",
+        footer,
+      });
+
+    await reply("🤖 Agent");
+    await reply("🤖 Agent · conversation started by Ann");
+
+    expect(postMessage.mock.calls[0][0].blocks).toEqual([
+      { type: "markdown", text: "Filed it." },
+    ]);
+    expect(postMessage.mock.calls[1][0].blocks).toEqual([
+      { type: "markdown", text: "Filed it." },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "plain_text",
+            text: "conversation started by Ann",
+            emoji: true,
+          },
+        ],
       },
     ]);
   });
@@ -1481,7 +1733,7 @@ describe("SlackProvider.sendReply", () => {
       // The model copied the footer off an earlier bot reply in the thread.
       text: "Here you go.\n\n🤖 Agent",
       footer: "🤖 Agent",
-      hint: 'Reply "mute" to stop',
+      hint: "Started a new conversation",
     });
 
     const { blocks, text } = postMessage.mock.calls[0][0];
@@ -1490,7 +1742,11 @@ describe("SlackProvider.sendReply", () => {
       {
         type: "context",
         elements: [
-          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+          {
+            type: "plain_text",
+            text: "Started a new conversation",
+            emoji: true,
+          },
         ],
       },
       {
@@ -1795,83 +2051,215 @@ describe("SlackProvider.addApprovalRequestForm", () => {
     }
   });
 
-  test("renders the tool's arguments as a code block when provided", async () => {
+  test("asks for approval of the tool, with arguments behind a View arguments button", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
     (provider as any).client = { chat: { postMessage } };
 
     await provider.addApprovalRequestForm({
-      channelId: "C1",
-      threadId: "T1",
-      approvalId: "appr-1",
-      taskId: "task-1",
+      ...approvalFormOptions(),
       toolName: "github__create_issue",
       toolArgs: { repo: "octo/repo", title: "Bug" },
-      originalMessage: {
-        messageId: "1234567890.123456",
-        channelId: "C1",
-        workspaceId: "W1",
-        threadId: "T1",
-        senderId: "U_SENDER",
-        senderEmail: "user@example.com",
-        senderName: "Test User",
-        text: "do it",
-        rawText: "do it",
-        timestamp: new Date(),
-        isThreadReply: false,
-      },
     });
 
-    const callArgs = postMessage.mock.calls[0][0];
-    const sectionTexts = callArgs.blocks
-      .filter((b: { type: string }) => b.type === "section")
-      .map((b: { text: { text: string } }) => b.text.text);
-    // The underlying tool name is shown...
-    expect(sectionTexts).toContain("`github__create_issue`");
-    // ...alongside a fenced code block carrying the arguments.
-    const argsBlock = sectionTexts.find((t: string) => t.startsWith("```"));
-    expect(argsBlock).toBeDefined();
-    expect(argsBlock).toContain('"repo": "octo/repo"');
-    expect(argsBlock).toContain('"title": "Bug"');
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].text.text).toBe(
+      "*Approval required*\n`github__create_issue`\nReview this tool call before it can continue.",
+    );
+    // The arguments are not in the message.
+    expect(JSON.stringify(blocks[0])).not.toContain("octo/repo");
+    const buttons = blocks[1].elements;
+    expect(
+      buttons.map((b: { text: { text: string }; style?: string }) => [
+        b.text.text,
+        b.style,
+      ]),
+    ).toEqual([
+      ["Approve", "primary"],
+      ["Deny", "danger"],
+      ["View arguments", undefined],
+    ]);
+    expect(JSON.parse(buttons[1].value).approved).toBe(false);
   });
 
-  test("omits the arguments code block when there are no arguments", async () => {
+  test("omits View arguments when there are no arguments", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
     (provider as any).client = { chat: { postMessage } };
 
     await provider.addApprovalRequestForm({
-      channelId: "C1",
-      threadId: "T1",
-      approvalId: "appr-1",
-      taskId: "task-1",
-      toolName: "dangerous_tool",
+      ...approvalFormOptions(),
       toolArgs: {},
-      originalMessage: {
-        messageId: "1234567890.123456",
-        channelId: "C1",
-        workspaceId: "W1",
-        threadId: "T1",
-        senderId: "U_SENDER",
-        senderEmail: "user@example.com",
-        senderName: "Test User",
-        text: "do it",
-        rawText: "do it",
-        timestamp: new Date(),
-        isThreadReply: false,
-      },
     });
 
-    const callArgs = postMessage.mock.calls[0][0];
-    const sectionTexts = callArgs.blocks
-      .filter((b: { type: string }) => b.type === "section")
-      .map((b: { text: { text: string } }) => b.text.text);
-    expect(sectionTexts).toContain("`dangerous_tool`");
-    expect(sectionTexts.some((t: string) => t.startsWith("```"))).toBe(false);
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(
+      blocks[1].elements.map((b: { text: { text: string } }) => b.text.text),
+    ).toEqual(["Approve", "Deny"]);
+  });
+
+  test("shows a review without a structured tool as its text, without View arguments", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "execute_remedy_plan",
+      toolArgs: { plan: "narrow" },
+      reviewText: "Allow sending to #general?",
+    });
+
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks[0].text.text).toBe(
+      "*Approval required*\n```\nAllow sending to #general?\n```\nReview this tool call before it can continue.",
+    );
+    expect(
+      blocks[1].elements.map((b: { text: { text: string } }) => b.text.text),
+    ).toEqual(["Approve", "Deny"]);
   });
 });
+
+// =============================================================================
+// View arguments
+// =============================================================================
+
+describe("SlackProvider View arguments", () => {
+  async function postForm(provider: SlackProvider, toolArgs: object) {
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    const open = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage }, views: { open } };
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "context7__query-docs",
+      toolArgs: toolArgs as Record<string, unknown>,
+    });
+    const button = postMessage.mock.calls[0][0].blocks[1].elements[2];
+    return { button, open };
+  }
+
+  function clickPayload(button: { action_id: string; value: string }) {
+    return {
+      type: "block_actions",
+      trigger_id: "trigger-1",
+      actions: [{ action_id: button.action_id, value: button.value }],
+      channel: { id: "C1" },
+      team: { id: "W1" },
+      user: { id: "U2", name: "Approver" },
+      message: { ts: "9.9", thread_ts: "T1" },
+    };
+  }
+
+  test("opens the stored arguments in a modal, not as a decision", async () => {
+    const provider = createProvider();
+    const handleInteractiveApprovalDecision = vi.fn();
+    const handleInteractiveSelection = vi.fn();
+    provider.setEventHandler({
+      handleInteractiveApprovalDecision,
+      handleInteractiveSelection,
+    } as unknown as Parameters<SlackProvider["setEventHandler"]>[0]);
+    // Larger than a button value may hold, so only the cache can carry it.
+    const query = "q".repeat(3000);
+    const { button, open } = await postForm(provider, {
+      libraryId: "/vercel/next.js",
+      query,
+    });
+    expect(button.value.length).toBeLessThan(100);
+
+    await provider.handleInteractivePayload(clickPayload(button));
+
+    expect(handleInteractiveApprovalDecision).not.toHaveBeenCalled();
+    expect(handleInteractiveSelection).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+    const { trigger_id, view } = open.mock.calls[0][0];
+    expect(trigger_id).toBe("trigger-1");
+    expect(view.type).toBe("modal");
+    expect(view.title.text).toBe("Arguments");
+    expect(view.close.text).toBe("Close");
+    expect(view.submit).toBeUndefined();
+    expect(view.blocks[0].text.text).toBe("`context7__query-docs`");
+    const argsText: string = view.blocks[1].text.text;
+    expect(argsText.startsWith("```\n{\n")).toBe(true);
+    expect(argsText).toContain('"libraryId": "/vercel/next.js"');
+    expect(argsText).toContain("… (truncated)");
+    expect(argsText.length).toBeLessThanOrEqual(3000);
+  });
+
+  test("says the arguments are gone once the cache entry expired", async () => {
+    const provider = createProvider();
+    const { button, open } = await postForm(provider, { a: 1 });
+    await cacheManager.delete(
+      `${CacheKey.SlackApprovalArguments}-${button.value}`,
+    );
+
+    await provider.handleInteractivePayload(clickPayload(button));
+
+    expect(open.mock.calls[0][0].view.blocks[0].text.text).toBe(
+      "These arguments are no longer available.",
+    );
+  });
+});
+
+// =============================================================================
+// updateApprovalRequest
+// =============================================================================
+
+describe("SlackProvider.updateApprovalRequest", () => {
+  test.each([
+    [
+      true,
+      "U9",
+      "`context7__query-docs`: :white_check_mark: Approved by <@U9>",
+    ],
+    [false, "U9", "`context7__query-docs`: :x: Denied by <@U9>"],
+    [false, undefined, "`context7__query-docs`: :x: Denied"],
+  ])("approved=%s decidedBy=%s", async (approved, decidedByUserId, text) => {
+    const provider = createProvider();
+    const update = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { update } };
+
+    await provider.updateApprovalRequest({
+      channelId: "C1",
+      messageKey: "9.9",
+      toolName: "context7__query-docs",
+      approved,
+      decidedByUserId,
+    });
+
+    expect(update.mock.calls[0][0].blocks).toEqual([
+      { type: "section", text: { type: "mrkdwn", text } },
+    ]);
+  });
+});
+
+function approvalFormOptions() {
+  return {
+    channelId: "C1",
+    threadId: "T1",
+    approvalId: "appr-1",
+    taskId: "task-1",
+    toolName: "dangerous_tool",
+    originalMessage: {
+      messageId: "1234567890.123456",
+      channelId: "C1",
+      workspaceId: "W1",
+      threadId: "T1",
+      senderId: "U_SENDER",
+      senderEmail: "user@example.com",
+      senderName: "Test User",
+      text: "do it",
+      rawText: "do it",
+      timestamp: new Date(),
+      isThreadReply: false,
+    },
+  };
+}
 
 // =============================================================================
 // parseApprovalPayload
@@ -1988,6 +2376,40 @@ describe("SlackProvider.sendAgentSelectionCard", () => {
     expect(JSON.stringify(callArgs.blocks)).toContain(
       SLACK_SLASH_COMMANDS.HELP,
     );
+  });
+
+  test("keeps the agent picker within Slack's option limits", async () => {
+    const provider = createProvider();
+    const postEphemeral = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postEphemeral } };
+
+    await provider.sendAgentSelectionCard({
+      message: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      agents: Array.from({ length: 150 }, (_, index) => ({
+        id: `agent-${index}`,
+        name: `${"Agent ".repeat(20)}${index}`,
+      })),
+      isWelcome: false,
+    });
+
+    const select = postEphemeral.mock.calls[0][0].blocks
+      .flatMap((block: { elements?: unknown[] }) => block.elements ?? [])
+      .find((element: { type: string }) => element.type === "static_select");
+    expect(select.options).toHaveLength(100);
+    for (const option of select.options) {
+      expect(option.text.text.length).toBeLessThanOrEqual(75);
+    }
   });
 });
 
@@ -3584,10 +4006,9 @@ describe("SlackProvider.notifyMissingScopes", () => {
     expect(callArgs.channel).toBe("C12345");
     expect(callArgs.thread_ts).toBe("1111111111.000000");
     expect(callArgs.text).toContain("`files:read`");
-    expect(callArgs.text).toContain("missing required scopes");
-    expect(callArgs.text).toContain(
-      "https://app.slack.com/app-settings/T12345/A12345/oauth",
-    );
+    expect(callArgs.text).toContain("Reinstall this Slack app");
+    expect(callArgs.text).toContain("https://api.slack.com/apps/A12345/oauth");
+    expect(callArgs.text).toContain("Reinstall to Workspace");
   });
 
   test("does not send notification when already notified (cache hit)", async () => {
@@ -3611,7 +4032,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
     await provider.notifyMissingScopes(fakeMessage);
 
     expect(setSpy).toHaveBeenCalledWith(
-      `${CacheKey.SlackScopeNotification}-T12345`,
+      `${CacheKey.SlackScopeNotification}-T12345-A12345`,
       true,
       30 * 24 * 60 * 60 * 1000, // 30 days in ms
     );
@@ -3659,6 +4080,26 @@ describe("SlackProvider.notifyMissingScopes", () => {
     await provider.notifyMissingScopes(fakeMessage);
   });
 
+  test("a reinstall that granted the scopes clears the warning on the next check", async () => {
+    const provider = createProviderWithMissingScopes(["files:write"]);
+    expect(provider.getReinstallUrl()).toBe(
+      "https://api.slack.com/apps/A12345/oauth",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "x-oauth-scopes": SLACK_REQUIRED_BOT_SCOPES.join(",") },
+        }),
+      ),
+    );
+
+    await provider.refreshGrantedScopes();
+
+    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
+  });
+
   test("uses fallback URL when appId is not set", async () => {
     const provider = new SlackProvider({
       enabled: true,
@@ -3685,7 +4126,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
 
     const callArgs = mockPostMessage.mock.calls[0][0];
     expect(callArgs.text).toContain(
-      "<https://api.slack.com/apps|Slack app settings>",
+      "<https://api.slack.com/apps|OAuth & Permissions page>",
     );
     expect(callArgs.text).not.toContain("A12345");
   });
@@ -3756,6 +4197,40 @@ describe("SlackProvider.handleSlashCommandSocket", () => {
     ).resolves.toBeUndefined();
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("slow command → acked empty before Slack's deadline, reply sent by response_url", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = createProvider();
+      const response = { response_type: "ephemeral", text: "ok" };
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — stub method
+      vi.spyOn(provider as any, "handleSlashCommand").mockImplementation(
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve(response), 5_000)),
+      );
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const ack = vi.fn().mockResolvedValue(undefined);
+
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+      const done = (provider as any).handleSlashCommandSocket(slashBody, ack);
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledWith();
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      await done;
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)).toEqual(
+        response,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("handleSlashCommand throws → error response delivered", async () => {
@@ -3951,5 +4426,122 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(await UserModel.findByEmail(email)).toBeTruthy();
     expect(conversationsOpen).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("SlackProvider bot handle", () => {
+  test("is the display name people @mention, not Slack's shortened username", async () => {
+    const provider = createProvider();
+    Object.assign(provider, {
+      client: {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: {
+              name: "archestrastagingmyass",
+              profile: { display_name: "archestra_staging_my_assistant" },
+            },
+          }),
+        },
+      },
+    });
+
+    const handle = await (
+      provider as unknown as {
+        fetchUserHandle: (userId: string) => Promise<string | null>;
+      }
+    ).fetchUserHandle("U1");
+
+    expect(handle).toBe("archestra_staging_my_assistant");
+  });
+
+  test("falls back to the bot's real name when its display name is empty", async () => {
+    const provider = createProvider();
+    Object.assign(provider, {
+      client: {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: {
+              name: "archestraclaudecode",
+              real_name: "archestra_claude_code",
+              profile: {
+                display_name: "",
+                real_name: "archestra_claude_code",
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    const handle = await (
+      provider as unknown as {
+        fetchUserHandle: (userId: string) => Promise<string | null>;
+      }
+    ).fetchUserHandle("U1");
+
+    expect(handle).toBe("archestra_claude_code");
+  });
+});
+
+describe("plainSlackText", () => {
+  test("drops Slack's link and channel markup and unescapes text", () => {
+    expect(
+      plainSlackText(
+        "Alerts from <https://alerts.example.com/issues?project=4|the tracker>, see <#C123|ops> &amp; <https://example.com>",
+      ),
+    ).toBe("Alerts from the tracker, see #ops & https://example.com");
+    expect(plainSlackText(null)).toBe("");
+  });
+});
+
+describe("SlackProvider.getChannelDescription", () => {
+  test("reads the channel's purpose once, until Slack reports it changed", async () => {
+    const provider = createProvider();
+    const info = vi
+      .fn()
+      .mockResolvedValueOnce({
+        channel: { purpose: { value: " Release coordination " } },
+      })
+      .mockResolvedValueOnce({ channel: { purpose: { value: "Incidents" } } });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { conversations: { info } };
+
+    expect(await provider.getChannelDescription("C1")).toBe(
+      "Release coordination",
+    );
+    expect(await provider.getChannelDescription("C1")).toBe(
+      "Release coordination",
+    );
+    expect(info).toHaveBeenCalledTimes(1);
+
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          subtype: "channel_purpose",
+          channel: "C1",
+          text: "set the channel description: Incidents",
+        },
+      ),
+      {},
+    );
+
+    expect(await provider.getChannelDescription("C1")).toBe("Incidents");
+    expect(info).toHaveBeenCalledTimes(2);
+  });
+
+  test("a channel without a purpose has no description", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        info: vi
+          .fn()
+          .mockResolvedValue({ channel: { purpose: { value: "" } } }),
+      },
+    };
+
+    expect(await provider.getChannelDescription("C2")).toBeNull();
   });
 });

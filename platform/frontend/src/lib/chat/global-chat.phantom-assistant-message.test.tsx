@@ -3,7 +3,11 @@ import { render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ChatProvider, useGlobalChat } from "./global-chat.context";
+import {
+  ChatProvider,
+  useChatSessionSnapshot,
+  useGlobalChat,
+} from "./global-chat.context";
 
 // These exercise the REAL `ai` / `@ai-sdk/react` against a scripted stream: the
 // defect lives in how the SDK turns wire chunks into its message list, which a
@@ -130,8 +134,8 @@ const assistantMessages = (messages: UIMessage[]) =>
   messages.filter((message) => message.role === "assistant");
 
 function RegisterAndSend({ prompt }: { prompt: string }) {
-  const { registerSession, getSession } = useGlobalChat();
-  const session = getSession(CONVERSATION_ID);
+  const { registerSession } = useGlobalChat();
+  const session = useChatSessionSnapshot(CONVERSATION_ID);
 
   useEffect(() => {
     registerSession({ conversationId: CONVERSATION_ID, initialMessages: [] });
@@ -149,16 +153,13 @@ function RegisterAndSend({ prompt }: { prompt: string }) {
 }
 
 describe("phantom assistant messages", () => {
-  let sessions: Array<
-    ReturnType<ReturnType<typeof useGlobalChat>["getSession"]>
-  >;
+  let sessions: Array<NonNullable<ReturnType<typeof useChatSessionSnapshot>>>;
   let chatRequests: Array<{ url: string; body: Record<string, unknown> }>;
 
   const latestMessages = () => sessions.at(-1)?.messages ?? [];
 
   function CaptureSession() {
-    const { getSession } = useGlobalChat();
-    const session = getSession(CONVERSATION_ID);
+    const session = useChatSessionSnapshot(CONVERSATION_ID);
     useEffect(() => {
       if (session) {
         sessions.push(session);

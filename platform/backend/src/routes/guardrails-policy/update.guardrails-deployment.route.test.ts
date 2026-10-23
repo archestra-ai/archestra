@@ -9,9 +9,14 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
@@ -65,6 +70,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect(response.json()).toEqual({
           enabled,
           unsupportedClientAction: "bypass",
+          breakTheGlassEnabled: true,
+          annotatorModelId: null,
+          annotatorLlmApiKeyId: null,
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -105,6 +113,123 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect((await setUnsupportedClientAction("bypass")).json()).toMatchObject({
       enabled: true,
       unsupportedClientAction: "bypass",
+    });
+  });
+
+  test("administrators can turn break the glass off without changing enforcement", async () => {
+    await set(true);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: { breakTheGlassEnabled: false },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      active: true,
+      breakTheGlassEnabled: false,
+    });
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
+    await set(false);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+  });
+
+  test("a write that names the removed setting for new sessions is refused and changes nothing", async () => {
+    await set(true);
+    for (const payload of [
+      { newSessionPolicy: "snapshot" },
+      { enabled: false, newSessionPolicy: "live" },
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    }
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      enabled: true,
+    });
+  });
+
+  test("administrators can pick the annotator model, only as a linked pair of the organization's own, and the change is audited", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const makeKeyWithModel = async (orgId: string, modelId: string) => {
+      const secret = await makeSecret({ secret: { apiKey: "provider-key" } });
+      const key = await makeLlmProviderApiKey(orgId, secret.id, {
+        provider: "openrouter",
+      });
+      const model = await ModelModel.create({
+        externalId: `openrouter/${modelId}`,
+        provider: "openrouter",
+        modelId,
+        contextLength: 128_000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      return { keyId: key.id, modelId: model.id };
+    };
+    const pick = (
+      annotatorModelId: string | null,
+      annotatorLlmApiKeyId: string | null,
+    ) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { annotatorModelId, annotatorLlmApiKeyId },
+      });
+    const own = await makeKeyWithModel(
+      organizationId,
+      "anthropic/claude-sonnet-5",
+    );
+    const other = await makeKeyWithModel(organizationId, "openai/gpt-5");
+    const foreign = await makeKeyWithModel(
+      (await makeOrganization()).id,
+      "openai/gpt-5-mini",
+    );
+
+    expect((await pick(own.modelId, null)).statusCode).toBe(400);
+    expect((await pick(own.modelId, other.keyId)).statusCode).toBe(400);
+    expect((await pick(foreign.modelId, foreign.keyId)).statusCode).toBe(404);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      annotatorModelId: null,
+      annotatorLlmApiKeyId: null,
+    });
+
+    const saved = await pick(own.modelId, own.keyId);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      annotatorModelId: own.modelId,
+      annotatorLlmApiKeyId: own.keyId,
+    });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          action: "organization.updated",
+          before: expect.objectContaining({ annotatorModelId: null }),
+          after: expect.objectContaining({ annotatorModelId: own.modelId }),
+        }),
+      );
+    });
+
+    // Both null goes back to the organization's default model.
+    expect((await pick(null, null)).json()).toMatchObject({
+      annotatorModelId: null,
+      annotatorLlmApiKeyId: null,
     });
   });
 
@@ -161,7 +286,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.message).toContain(
-      'Revision 1: unsupported policy: tool "grain__*" has an invalid qualified identity',
+      'Revision 1: unsupported policy: A full tool name has three parts: where the tool comes from, the server, and the tool, like "mcp/github/list_issues". "grain__*" is not a full name or the exact name of a tool. Use one of them.',
     );
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
     // Turning it off is never refused.
@@ -174,7 +299,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       .where(eq(schema.membersTable.userId, userId));
     expect((await set(true)).statusCode).toBe(403);
     expect((await setUnsupportedClientAction("block")).statusCode).toBe(403);
-    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: "/api/guardrails-deployment",
+          payload: { breakTheGlassEnabled: false },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      enabled: false,
+      breakTheGlassEnabled: true,
+    });
   });
 
   test("members can read the status but not change it", async () => {
@@ -187,7 +324,9 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       url: "/api/guardrails-deployment",
     });
     expect(read.statusCode, read.body).toBe(200);
-    expect(read.json()).toMatchObject({ unsupportedClientAction: "bypass" });
+    expect(read.json()).toMatchObject({
+      unsupportedClientAction: "bypass",
+    });
     expect((await set(true)).statusCode).toBe(403);
   });
 });

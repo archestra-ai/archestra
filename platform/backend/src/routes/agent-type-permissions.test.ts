@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -209,8 +209,9 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);
-      const previousEnabled = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
 
       try {
         const agentRes = await memberApp.inject({
@@ -278,7 +279,7 @@ describe("agent type permission isolation (routes)", () => {
         });
         expect(privilegedAgent.statusCode).toBe(403);
       } finally {
-        config.agentRuntime.enabled = previousEnabled;
+        sandboxInstalled.mockRestore();
         await memberApp.close();
       }
     });
@@ -793,10 +794,9 @@ describe("agent type permission isolation (routes)", () => {
       await makeAgent({
         organizationId,
         agentType: "agent",
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
         authorId: adminUser.id,
       });
@@ -813,13 +813,10 @@ describe("agent type permission isolation (routes)", () => {
       // Admin should see built-in agents
       const adminRes = await app.inject({
         method: "GET",
-        url: "/api/agents/all?agentType=agent",
+        url: "/api/agents?agentType=agent&includeBuiltIn=true",
       });
-      if (adminRes.statusCode !== 200) {
-        console.error("ADMIN ALL ERROR:", adminRes.json());
-      }
-      expect(adminRes.statusCode).toBe(200);
-      const adminAgents = adminRes.json();
+      expect(adminRes.statusCode, adminRes.body).toBe(200);
+      const adminAgents = adminRes.json().data;
       const adminBuiltIn = adminAgents.filter(
         (a: { builtIn: boolean }) => a.builtIn,
       );
@@ -830,10 +827,10 @@ describe("agent type permission isolation (routes)", () => {
       try {
         const memberRes = await memberApp.inject({
           method: "GET",
-          url: "/api/agents/all?agentType=agent",
+          url: "/api/agents?agentType=agent&includeBuiltIn=true",
         });
         expect(memberRes.statusCode).toBe(200);
-        const memberAgents = memberRes.json();
+        const memberAgents = memberRes.json().data;
         const memberBuiltIn = memberAgents.filter(
           (a: { builtIn: boolean }) => a.builtIn,
         );

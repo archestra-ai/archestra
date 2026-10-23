@@ -21,6 +21,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -329,6 +330,7 @@ async function sendMessages(prefix: string, options: { stream: boolean }) {
       method: "POST",
       url: `${prefix}/v1/messages`,
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         "anthropic-version": "2023-06-01",
         "anthropic-beta": FUTURE_BETA,

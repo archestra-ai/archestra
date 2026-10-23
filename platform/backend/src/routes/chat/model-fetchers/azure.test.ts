@@ -36,19 +36,23 @@ const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
 describe("fetchAzureModels", () => {
   test("returns empty array when baseUrl is empty and no override", async () => {
     const result = await fetchAzureModels("test-key", null);
-    expect(result).toEqual([
-      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
-    ]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([{ id: "gpt-4o", displayName: "gpt-4o", provider: "azure" }]);
   });
 
   test("returns empty array when baseUrl override is only whitespace", async () => {
     const result = await fetchAzureModels("test-key", "   ");
-    expect(result).toEqual([]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([]);
   });
 
   test("returns empty array when endpoint regex fails", async () => {
     const result = await fetchAzureModels("test-key", "not-a-valid-url");
-    expect(result).toEqual([]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([]);
   });
 
   test("returns models from successful response", async () => {
@@ -65,7 +69,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
       { id: "gpt-4o-mini", displayName: "gpt-4o-mini", provider: "azure" },
     ]);
@@ -75,6 +81,65 @@ describe("fetchAzureModels", () => {
     );
 
     vi.unstubAllGlobals();
+  });
+
+  test("keeps native media deployments and their modalities when chat completion is unavailable", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "gpt-image-1",
+            model: "gpt-image-1",
+            capabilities: { chat_completion: false },
+          },
+          {
+            id: "gpt-realtime-translate",
+            model: "gpt-realtime-translate",
+            capabilities: { chat_completion: false },
+          },
+          {
+            id: "gpt-audio",
+            model: "gpt-audio",
+            capabilities: { chat_completion: true },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    try {
+      const result = await fetchAzureModels(
+        "test-key",
+        "https://my-resource.openai.azure.com/openai/v1",
+      );
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "gpt-image-1",
+            capabilities: expect.objectContaining({
+              outputModalities: ["image"],
+              supportsToolCalling: false,
+            }),
+          }),
+          expect.objectContaining({
+            id: "gpt-realtime-translate",
+            capabilities: expect.objectContaining({
+              inputModalities: ["audio"],
+              supportsToolCalling: false,
+            }),
+          }),
+          expect.objectContaining({
+            id: "gpt-audio",
+            capabilities: expect.objectContaining({
+              outputModalities: ["text", "audio"],
+              supportsToolCalling: false,
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("captures the backing model name from data-plane deployments for pricing", async () => {
@@ -92,7 +157,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai/deployments/prod-chat",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       {
         id: "prod-chat",
         displayName: "prod-chat",
@@ -120,7 +187,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
       {
         id: "text-embedding-3-large",
@@ -189,7 +258,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-5.2-chat", displayName: "gpt-5.2-chat", provider: "azure" },
       { id: "gpt-5.4-mini", displayName: "gpt-5.4-mini", provider: "azure" },
     ]);
@@ -274,7 +345,9 @@ describe("fetchAzureModels", () => {
       "https://project-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-5.2-chat", displayName: "gpt-5.2-chat", provider: "azure" },
       {
         id: "text-embedding-3-large",
@@ -337,7 +410,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([]);
     expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).not.toHaveBeenCalledWith(
       "https://my-resource.openai.azure.com/openai/models?api-version=2024-02-01",
@@ -435,7 +510,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.services.ai.azure.com/openai/v1",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-4.1", displayName: "gpt-4.1", provider: "azure" },
       { id: "grok-3", displayName: "grok-3", provider: "azure" },
       {
@@ -476,7 +553,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai/v1",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       {
         id: "DeepSeek-V4-Pro",
         displayName: "DeepSeek-V4-Pro",
@@ -538,7 +617,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.services.ai.azure.com/openai/v1",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       { id: "gpt-5-nano", displayName: "gpt-5-nano", provider: "azure" },
       { id: "gpt-4.1", displayName: "gpt-4.1", provider: "azure" },
       {
@@ -568,9 +649,9 @@ describe("fetchAzureModels", () => {
       "bad-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([
-      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
-    ]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([{ id: "gpt-4o", displayName: "gpt-4o", provider: "azure" }]);
 
     vi.unstubAllGlobals();
   });
@@ -583,9 +664,9 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([
-      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
-    ]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([{ id: "gpt-4o", displayName: "gpt-4o", provider: "azure" }]);
 
     vi.unstubAllGlobals();
   });
@@ -601,9 +682,9 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([
-      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
-    ]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([{ id: "gpt-4o", displayName: "gpt-4o", provider: "azure" }]);
 
     vi.unstubAllGlobals();
   });
@@ -619,9 +700,9 @@ describe("fetchAzureModels", () => {
       "test-key",
       "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
     );
-    expect(result).toEqual([
-      { id: "gpt-4o", displayName: "gpt-4o", provider: "azure" },
-    ]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([{ id: "gpt-4o", displayName: "gpt-4o", provider: "azure" }]);
 
     vi.unstubAllGlobals();
   });
@@ -640,7 +721,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai/deployments/gpt-5.2-chat",
     );
 
-    expect(result).toEqual([
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([
       {
         id: "gpt-5.2-chat",
         displayName: "gpt-5.2-chat",
@@ -665,7 +748,9 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai",
     );
 
-    expect(result).toEqual([]);
+    expect(
+      result.map(({ azureCapabilities: _evidence, ...model }) => model),
+    ).toEqual([]);
 
     vi.unstubAllGlobals();
   });

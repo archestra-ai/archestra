@@ -30,6 +30,11 @@
 #                          without both APPA tools, so the default lite suite
 #                          must run with it off. The dedicated `openappa`
 #                          Playwright project is the one that sets it.
+#   ARCHESTRA_AGENT_RUNTIME_ENABLED
+#                          turn Agent Runtime on in the platform container
+#                          (default: false). The beta switch never implies it.
+#                          The docs screenshots set it to show the runtime
+#                          picker and popular agents.
 
 set -euo pipefail
 
@@ -81,22 +86,23 @@ resolve_platform_image() {
     echo "${PLATFORM_IMAGE}"
     return
   fi
-  # Clean checkout: reuse the image CI already built for this exact tree.
-  # Two candidate tags cover both generations of the CI reuse key (full
-  # ./platform tree, and ./platform minus e2e-tests).
-  if [[ -z "$(cd "${REPO_ROOT}" && git status --porcelain -- platform ':(exclude)platform/e2e-tests' ':(exclude)platform/docs-screenshots')" ]]; then
-    local full_tree excl_tree tag
-    full_tree=$(cd "${REPO_ROOT}" && git rev-parse "HEAD:platform")
-    excl_tree=$(cd "${REPO_ROOT}" && git ls-tree "HEAD:platform" | grep -v -e $'\te2e-tests$' -e $'\tdocs-screenshots$' | git hash-object --stdin)
-    for tag in "tree-${excl_tree}" "tree-${full_tree}"; do
-      if pull_public "${REGISTRY}/platform:${tag}" 2> /dev/null; then
-        echo "${REGISTRY}/platform:${tag}"
-        return
-      fi
-    done
-    echo "No prebuilt CI image for this tree; building locally" >&2
+  # Use the same content identity as the image publisher. The old tree-* tags
+  # are no longer published, so screenshot captures always rebuilt locally.
+  # Do not reuse HEAD's image over local platform or build-recipe edits.
+  if [[ -z "$(cd "${REPO_ROOT}" && git status --porcelain -- platform \
+      .github/workflows/platform-e2e-tests.yml \
+      .github/actions/build-docker-image .github/actions/setup-docker-builder \
+      .github/scripts/e2e-image-input-hash.sh)" ]]; then
+    local input_hash image
+    input_hash=$(cd "${REPO_ROOT}" && bash .github/scripts/e2e-image-input-hash.sh platform)
+    image="${REGISTRY}/platform:input-${input_hash}-slim"
+    if pull_public "${image}" 2> /dev/null; then
+      echo "${image}"
+      return
+    fi
+    echo "No prebuilt CI image for these inputs; building locally" >&2
   else
-    echo "platform/ has local changes; building image locally" >&2
+    echo "Platform or image recipe has local changes; building image locally" >&2
   fi
   docker build -t archestra-platform:e2e-lite "${PLATFORM_DIR}" >&2
   echo "archestra-platform:e2e-lite"
@@ -161,6 +167,7 @@ cmd_up() {
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
     -e "ARCHESTRA_BETA=${ARCHESTRA_BETA:-false}" \
+    -e "ARCHESTRA_AGENT_RUNTIME_ENABLED=${ARCHESTRA_AGENT_RUNTIME_ENABLED:-false}" \
     -e "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET=${ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET:-e2e-openappa-offer-signing-secret}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "${PLATFORM_DIR}/e2e-tests/fixtures/a2a-test-agent:/opt/archestra-e2e/a2a-test-agent:ro" \

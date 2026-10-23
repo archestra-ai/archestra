@@ -1,14 +1,24 @@
 "use client";
 
 import {
+  providerSupportsChat,
   type ResourceVisibilityScope,
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  SupportedProviders,
   subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Ref,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
@@ -62,7 +72,10 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] =
     };
   });
 
+const CHAT_PROVIDERS = SupportedProviders.filter(providerSupportsChat);
+
 interface LlmProviderApiKeySelectorProps {
+  ref?: Ref<{ selectKey: (keyId: string) => void }>;
   /** Conversation ID for persisting selection (optional for initial chat) */
   conversationId?: string;
   /** Current Conversation Chat API key ID set on the backend */
@@ -92,6 +105,7 @@ interface LlmProviderApiKeySelectorProps {
  * Shows available keys for the current provider, grouped by scope.
  */
 export function LlmProviderApiKeySelector({
+  ref,
   conversationId,
   currentConversationChatApiKeyId,
   disabled = false,
@@ -111,11 +125,14 @@ export function LlmProviderApiKeySelector({
       includeKeyId: agentLlmApiKeyId ?? undefined,
     });
   const { data: session, isPending: isSessionLoading } = useSession();
+  // Embeddings-only and decisions-only providers (Voyage, Jev) cannot answer a
+  // conversation, so their keys are neither offered nor auto-selected here.
   const availableKeys = useMemo(
     () =>
       fetchedAvailableKeys.filter(
         (key) =>
-          !isPersonalSubscription(key) || key.userId === session?.user.id,
+          providerSupportsChat(key.provider) &&
+          (!isPersonalSubscription(key) || key.userId === session?.user.id),
       ),
     [fetchedAvailableKeys, session?.user.id],
   );
@@ -347,6 +364,7 @@ export function LlmProviderApiKeySelector({
     availableKeys,
     onSelectKey: applyKeyChange,
     onBeforeOpen: () => handleOpenChange(false),
+    allowedProviders: CHAT_PROVIDERS,
   });
 
   useEffect(() => {
@@ -361,6 +379,7 @@ export function LlmProviderApiKeySelector({
   }, [availableKeys, applyKeyChange, connectedKindToSelect]);
 
   const handleSelectKey = (keyId: string) => {
+    if (disabled || isLoading) return;
     cancelPendingCreatedKeySelection();
     const connectOption = subscriptionOptions.find(
       (option) => option.id === keyId,
@@ -371,11 +390,16 @@ export function LlmProviderApiKeySelector({
       handleOpenChange(false);
       return;
     }
-    if (keyId === currentConversationChatApiKeyId) {
-      // Re-clicking the selected credential: for a connected personal
-      // subscription, open the sign-in dialog again so an expired or revoked
-      // session can be re-authenticated (otherwise the click is a dead end).
-      const selectedKey = availableKeys.find((key) => key.id === keyId);
+    const selectedKey = availableKeys.find((key) => key.id === keyId);
+    if (!selectedKey) return;
+    if (
+      keyId === currentConversationChatApiKeyId ||
+      (selectedKey &&
+        isPersonalSubscription(selectedKey) &&
+        selectedKey.requiresReauthentication)
+    ) {
+      // Open the sign-in dialog again for a selected or expired subscription,
+      // so a revoked session can be refreshed before using the credential.
       const reconnectOption =
         selectedKey && isPersonalSubscription(selectedKey)
           ? SUBSCRIPTION_CONNECT_OPTIONS.find((option) =>
@@ -398,6 +422,8 @@ export function LlmProviderApiKeySelector({
     applyKeyChange(keyId);
     handleOpenChange(false);
   };
+
+  useImperativeHandle(ref, () => ({ selectKey: handleSelectKey }));
 
   // Don't render until models are loaded (prevents flashing)
   if (isModelsLoading) {

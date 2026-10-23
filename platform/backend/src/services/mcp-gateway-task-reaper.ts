@@ -1,6 +1,7 @@
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { McpGatewayTaskModel } from "@/models";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 
 /**
@@ -61,8 +62,19 @@ class McpGatewayTaskReaper {
       // can be abandoned without another reader.
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
+      await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
+      await LlmThroughputModel.deleteExpired();
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
+      );
+      // A runtime that never makes another request leaves its pinned files.
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.AgentRuntimePendingExports,
+      );
+      // Download tickets outlive their reads so a resume can follow, and an
+      // upload nobody ran is never read again.
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.AgentWorkspaceTransferTicket,
       );
       if (failed > 0 || purged > 0) {
         logger.info(

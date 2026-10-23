@@ -38,10 +38,15 @@ export function CreatedByCell({
   createdBy,
   className,
   showServiceAccountBadge = true,
+  secondaryText,
+  showTooltip = true,
 }: {
   createdBy: CreatedBy | null | undefined;
   className?: string;
   showServiceAccountBadge?: boolean;
+  /** Optional second line; the avatar stays centered beside both lines. */
+  secondaryText?: string | null;
+  showTooltip?: boolean;
 }) {
   if (!createdBy) {
     return null;
@@ -53,33 +58,34 @@ export function CreatedByCell({
     ? `${label} · Service account`
     : (createdBy.email ?? label);
 
+  const content = (
+    <span
+      className={cn("flex min-w-0 items-center gap-2", className)}
+      title={showTooltip ? detail : undefined}
+    >
+      <CreatorAvatar createdBy={createdBy} />
+      <span className="min-w-0">
+        <span className="block truncate">{label}</span>
+        {secondaryText && secondaryText !== label && (
+          <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            {secondaryText}
+          </span>
+        )}
+      </span>
+      {isServiceAccount && showServiceAccountBadge && (
+        <Badge
+          variant="outline"
+          className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"
+        >
+          Service account
+        </Badge>
+      )}
+    </span>
+  );
+  if (!showTooltip) return content;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn("flex min-w-0 items-center gap-2", className)}
-          title={detail}
-        >
-          <Avatar className="h-5 w-5 shrink-0">
-            <AvatarFallback className="text-[10px]">
-              {isServiceAccount ? (
-                <Bot className="size-3.5" aria-hidden="true" />
-              ) : (
-                getInitials(label)
-              )}
-            </AvatarFallback>
-          </Avatar>
-          <span className="min-w-0 truncate">{label}</span>
-          {isServiceAccount && showServiceAccountBadge && (
-            <Badge
-              variant="outline"
-              className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"
-            >
-              Service account
-            </Badge>
-          )}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent>
         {isServiceAccount || label === detail ? detail : `${label} · ${detail}`}
       </TooltipContent>
@@ -113,7 +119,33 @@ export function createdByFact(
   };
 }
 
-function creatorLabel(createdBy: CreatedBy): string {
+/**
+ * The creator's initials, or a bot glyph for a service account, in a small
+ * avatar, so every surface that names a creator draws them the same way.
+ */
+export function CreatorAvatar({
+  createdBy,
+  className,
+  fallbackClassName,
+}: {
+  createdBy: CreatedBy;
+  className?: string;
+  fallbackClassName?: string;
+}) {
+  return (
+    <Avatar className={cn("h-5 w-5 shrink-0", className)} aria-hidden="true">
+      <AvatarFallback className={cn("text-[10px]", fallbackClassName)}>
+        {createdBy.type === "service_account" ? (
+          <Bot className="size-3.5" aria-hidden="true" />
+        ) : (
+          getInitials(creatorLabel(createdBy))
+        )}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+export function creatorLabel(createdBy: CreatedBy): string {
   return createdBy.name || createdBy.email || "Unknown user";
 }
 

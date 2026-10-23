@@ -1,4 +1,6 @@
 import {
+  DEFAULT_GIT_WEB_URLS,
+  type GitProvider,
   MAX_SKILL_COMPATIBILITY_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
   type ResourcePermissionGrant,
@@ -57,7 +59,9 @@ import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
 import CreatedByModel from "./created-by";
-import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionPolicyModel, {
+  type ObjectPolicy,
+} from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type ResourceAccessFilter,
 } from "./resource-permission-subject";
@@ -264,7 +268,11 @@ class SkillModel {
    */
   static async withGrantedScope<
     T extends { id: string; organizationId: string; scope: string },
-  >(skills: T[]): Promise<(T & { scope: ResourceVisibilityScope })[]> {
+  >(
+    skills: T[],
+    /** These skills' policies, when the caller already loaded them. */
+    policies?: ObjectPolicy[],
+  ): Promise<(T & { scope: ResourceVisibilityScope })[]> {
     const idsByOrganization = new Map<string, string[]>();
     for (const skill of skills) {
       idsByOrganization.set(skill.organizationId, [
@@ -278,6 +286,7 @@ class SkillModel {
         organizationId,
         resource: "skill",
         scopes,
+        policies,
       });
       for (const [id, { audience }] of found) audiences.set(id, audience);
     }
@@ -321,6 +330,8 @@ class SkillModel {
     limit?: number;
     offset?: number;
     search?: string;
+    /** Omit manifest bodies from list-only consumers at the SQL boundary. */
+    includeContent?: boolean;
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
@@ -360,7 +371,13 @@ class SkillModel {
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
-      .select()
+      .select({
+        ...getTableColumns(schema.skillsTable),
+        content:
+          params.includeContent === false
+            ? sql<string>`''`.as("content")
+            : schema.skillsTable.content,
+      })
       .from(schema.skillsTable)
       .where(and(...buildOrgFilters(params)))
       .orderBy(...buildOrderBy(params.sorting))
@@ -374,6 +391,26 @@ class SkillModel {
     }
 
     return await query;
+  }
+
+  /**
+   * Ids and names of the skills the default list shows, in its order: the
+   * same filters as `findByOrganization`, without the row bodies or the
+   * per-row metadata the list attaches. For pickers and setups that need to
+   * name or send every visible skill.
+   */
+  static async findNamesByOrganization(params: {
+    organizationId: string;
+    limit: number;
+    accessibleSkillIds?: string[];
+    status?: SkillRecordStatus;
+  }): Promise<{ id: string; name: string }[]> {
+    return await db
+      .select({ id: schema.skillsTable.id, name: schema.skillsTable.name })
+      .from(schema.skillsTable)
+      .where(and(...buildOrgFilters(params)))
+      .orderBy(...buildOrderBy())
+      .limit(params.limit);
   }
 
   static async countByOrganization(params: {
@@ -432,6 +469,7 @@ class SkillModel {
       .selectDistinct({
         sourceRef: schema.skillsTable.sourceRef,
         sourceOrigin: schema.skillsTable.sourceOrigin,
+        sourceProvider: schema.skillsTable.sourceProvider,
       })
       .from(schema.skillsTable)
       .where(
@@ -442,12 +480,21 @@ class SkillModel {
       );
 
     const repos = new Set<string>();
-    for (const { sourceRef, sourceOrigin } of rows) {
+    for (const { sourceRef, sourceOrigin, sourceProvider } of rows) {
       if (!sourceRef) continue;
       if (isBuiltInSkillSourceRef(sourceRef)) continue;
       const atIdx = sourceRef.indexOf("@");
       const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
-      if (repo) repos.add(sourceOrigin ? `${sourceOrigin}/${repo}` : repo);
+      if (!repo) continue;
+      // `owner/repo` on github.com; the full web URL on every other host,
+      // gitlab.com included, so the same path on two hosts stays distinct.
+      const webOrigin =
+        sourceOrigin ?? DEFAULT_GIT_WEB_URLS[sourceProvider ?? "github"];
+      repos.add(
+        webOrigin === DEFAULT_GIT_WEB_URLS.github
+          ? repo
+          : `${webOrigin}/${repo}`,
+      );
     }
     return [...repos].sort();
   }
@@ -867,8 +914,9 @@ class SkillModel {
      * only by the GitHub import; see `skill_versions.source_commit`.
      */
     versionSourceCommit?: string;
+    tx?: Transaction;
   }): Promise<Skill | null> {
-    return await withDbTransaction(async (tx) => {
+    const run = async (tx: Transaction): Promise<Skill | null> => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(
@@ -941,7 +989,8 @@ class SkillModel {
       });
 
       return skill;
-    });
+    };
+    return params.tx ? run(params.tx) : withDbTransaction(run);
   }
 
   /**
@@ -1254,9 +1303,35 @@ class SkillModel {
               githubSyncRef: null,
               githubAppConfigId: null,
               githubPatId: null,
+              gitlabTokenId: null,
               lastSyncError: null,
             },
       )
+      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
+      .returning();
+    return updated ?? null;
+  }
+
+  /**
+   * Point a synced skill at another repository, branch, folder, or credential.
+   * The caller has already fetched the skill from there, so the pull it stands
+   * for has just succeeded.
+   */
+  static async setGitSource(
+    id: string,
+    source: {
+      sourceOrigin: string | null;
+      sourceProvider: GitProvider;
+      githubSyncRef: string | null;
+      githubSyncInterval: SkillGithubSyncInterval;
+      githubAppConfigId: string | null;
+      githubPatId: string | null;
+      gitlabTokenId: string | null;
+    },
+  ): Promise<Skill | null> {
+    const [updated] = await db
+      .update(schema.skillsTable)
+      .set({ ...source, lastSyncedAt: new Date(), lastSyncError: null })
       .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
       .returning();
     return updated ?? null;
@@ -1867,27 +1942,45 @@ function buildOrgFilters(params: {
           sourceRepo.origin
             ? eq(schema.skillsTable.sourceOrigin, sourceRepo.origin)
             : isNull(schema.skillsTable.sourceOrigin),
+          // Without an origin, the provider tells github.com from gitlab.com.
+          ...(sourceRepo.origin
+            ? []
+            : [
+                sourceRepo.provider === "gitlab"
+                  ? eq(schema.skillsTable.sourceProvider, "gitlab")
+                  : or(
+                      isNull(schema.skillsTable.sourceProvider),
+                      eq(schema.skillsTable.sourceProvider, "github"),
+                    ),
+              ]),
         ]
       : []),
   ];
 }
 
+/**
+ * A repository filter as `findDistinctSourceRepos` lists it. github.com and
+ * gitlab.com are stored without an origin, so the provider tells them apart.
+ */
 function parseSourceRepoFilter(value: string | undefined): {
   repo: string;
   origin: string | null;
+  provider: GitProvider;
 } {
   if (value && /^https?:\/\//i.test(value)) {
     try {
       const url = new URL(value);
-      return {
-        repo: url.pathname.replace(/^\/+|\/+$/g, ""),
-        origin: url.origin === "https://github.com" ? null : url.origin,
-      };
+      const repo = url.pathname.replace(/^\/+|\/+$/g, "");
+      if (url.origin === DEFAULT_GIT_WEB_URLS.github)
+        return { repo, origin: null, provider: "github" };
+      if (url.origin === DEFAULT_GIT_WEB_URLS.gitlab)
+        return { repo, origin: null, provider: "gitlab" };
+      return { repo, origin: url.origin, provider: "github" };
     } catch {
       // An invalid filter simply matches no stored repository.
     }
   }
-  return { repo: value ?? "", origin: null };
+  return { repo: value ?? "", origin: null, provider: "github" };
 }
 
 type SkillRecordStatus = "active" | "deleted";

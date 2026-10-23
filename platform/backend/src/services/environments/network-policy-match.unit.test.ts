@@ -101,6 +101,46 @@ describe("isHostAllowedByNetworkPolicy", () => {
         isHostAllowedByNetworkPolicy({ host: "evil.com", policy: p }),
       ).toBe(false);
     });
+
+    test.each([
+      "common_dependencies",
+      "package_managers",
+    ] as const)("%s allows package registry and mirror subdomains", (domainPreset) => {
+      const preset = policy({ domainPreset });
+      for (const host of [
+        "deb.debian.org",
+        "security.debian.org",
+        "files.pythonhosted.org",
+        "test.pypi.org",
+        "proxy.golang.org",
+        "index.crates.io",
+        "static.rustup.rs",
+        "repo1.maven.org",
+        "api.nuget.org",
+        "repo.packagist.org",
+        "index.rubygems.org",
+        "registry.yarnpkg.com",
+        "cdn01.quay.io",
+      ]) {
+        expect(
+          isHostAllowedByNetworkPolicy({ host, policy: preset }),
+          host,
+        ).toBe(true);
+      }
+    });
+
+    test.each([
+      "common_dependencies",
+      "package_managers",
+    ] as const)("%s does not match lookalike or unrelated hosts", (domainPreset) => {
+      const preset = policy({ domainPreset });
+      for (const host of ["evilpypi.org", "pypi.org.evil.com", "example.com"]) {
+        expect(
+          isHostAllowedByNetworkPolicy({ host, policy: preset }),
+          host,
+        ).toBe(false);
+      }
+    });
   });
 
   describe("restricted: CIDR matching for IP-literal hosts", () => {

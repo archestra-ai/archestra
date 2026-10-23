@@ -1,6 +1,8 @@
 import { providerDisplayNames } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -572,7 +574,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(await LlmProviderApiKeyModel.findById(systemKey.id)).not.toBeNull();
   });
 
-  test("refuses to delete a key backing the organization's OCR configuration", async () => {
+  test("deleting a key backing the organization's OCR configuration clears that setting", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -593,8 +595,10 @@ describe("LLM Provider API Keys CRUD", () => {
       url: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
 
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("OCR");
+    expect(deleteResponse.statusCode, deleteResponse.body).toBe(200);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.ocrChatApiKeyId,
+    ).toBeNull();
   });
 
   test("should return 404 for non-existent LLM provider API key", async () => {
@@ -1655,6 +1659,31 @@ describe("LLM Provider API Keys Scope Update", () => {
     expect(stored?.userId).toBe(user.id);
   });
 
+  test("trims key names and rejects a blank rename", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "  Padded Key  ",
+        provider: "anthropic",
+        apiKey: "sk-ant-padded-name-test",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    expect(createdKey.name).toBe("Padded Key");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: { name: "   " },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    const stored = await LlmProviderApiKeyModel.findById(createdKey.id);
+    expect(stored?.name).toBe("Padded Key");
+  });
+
   test("rejects a ChatGPT-subscription credential pasted into a shared key", async () => {
     const createResponse = await app.inject({
       method: "POST",
@@ -1685,6 +1714,49 @@ describe("LLM Provider API Keys Scope Update", () => {
 
     expect(updateResponse.statusCode).toBe(400);
     expect(updateResponse.json().error.message).toContain("per-user");
+  });
+
+  test("records the credential kind on create and keeps it current when the value is replaced", async () => {
+    const storedKind = async (id: string) =>
+      (
+        await db
+          .select({ kind: schema.llmProviderApiKeysTable.credentialKind })
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, id))
+      )[0]?.kind;
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-openai-personal-key",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const { id } = createResponse.json();
+    expect(await storedKind(id)).toBe("api_key");
+
+    const toSubscription = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${id}`,
+      payload: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+    expect(toSubscription.statusCode).toBe(200);
+    expect(await storedKind(id)).toBe("chatgpt");
+
+    const backToKey = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${id}`,
+      payload: { apiKey: "sk-openai-personal-key-2" },
+    });
+    expect(backToKey.statusCode).toBe(200);
+    expect(await storedKind(id)).toBe("api_key");
   });
 });
 
@@ -2356,3 +2428,71 @@ describe("scoped provider key grants", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("LLM provider key label responses", () => {
+  test("returns persisted labels after create, unrelated update, replacement and clearing", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    vi.clearAllMocks();
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    setupAdminApp();
+    const app = await createApp(organization.id, user);
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: "Label fixture",
+          provider: "ollama",
+          apiKey: "synthetic-label-test-key",
+          labels: [{ key: "stage", value: "initial" }],
+        },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      const id = created.json().id;
+      expect(created.json().labels).toEqual([
+        expect.objectContaining({ key: "stage", value: "initial" }),
+      ]);
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${id}`,
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      expect(read.json().labels).toEqual(created.json().labels);
+      const preserved = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { name: "Renamed fixture" },
+      });
+      expect(preserved.statusCode, preserved.body).toBe(200);
+      expect(preserved.json().labels).toEqual(created.json().labels);
+      const changed = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { labels: [{ key: "stage", value: "changed" }] },
+      });
+      expect(changed.statusCode, changed.body).toBe(200);
+      expect(changed.json().labels).toEqual([
+        expect.objectContaining({ key: "stage", value: "changed" }),
+      ]);
+      const cleared = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { labels: [] },
+      });
+      expect(cleared.statusCode, cleared.body).toBe(200);
+      expect(cleared.json().labels).toEqual([]);
+      const refreshed = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${id}`,
+      });
+      expect(refreshed.json().labels).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+});

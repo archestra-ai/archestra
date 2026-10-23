@@ -24,6 +24,10 @@ on:
         type: string
         default: ""
     secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -31,7 +35,7 @@ on:
   pull_request:
     paths:
       # Dockerfile, native wrappers, in-image tests, and patches. Context is platform/.
-      - "platform/agent_images/**"
+      - "platform/docker_images/agent/**"
       # Shared helper copied into every catalog target.
       - "platform/backend/src/static/workspace-files.py"
       - "platform/.dockerignore"
@@ -62,13 +66,14 @@ jobs:
           - agent-opencode
           - agent-hermes
           - agent-openclaw
+          - agent-grok
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform
-      dockerfile: ./platform/agent_images/Dockerfile
+      dockerfile: ./platform/docker_images/agent/Dockerfile
       target: ${{ matrix.image }}
       image_name: ${{ matrix.image }}
       image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
@@ -77,14 +82,16 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
-      reuse_paths: '["platform/agent_images", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
+      reuse_paths: '["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   # Direct PR builds test both native architectures without publishing images.
   # This job does not request the reusable publish workflow's OIDC permission.
-  # Keep both matrices aligned with the five Dockerfile targets.
+  # Keep both matrices aligned with the six Dockerfile targets.
   validate-agent-catalog-images:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     if: ${{ inputs.version == '' }}
@@ -102,6 +109,7 @@ jobs:
           - agent-opencode
           - agent-hermes
           - agent-openclaw
+          - agent-grok
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,10 +118,10 @@ jobs:
           fetch-depth: 1
 
       - name: Build agent catalog image
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ./platform
-          dockerfile: ./platform/agent_images/Dockerfile
+          dockerfile: ./platform/docker_images/agent/Dockerfile
           target: ${{ matrix.image }}
           platforms: linux/${{ matrix.arch }}
           push: "false"

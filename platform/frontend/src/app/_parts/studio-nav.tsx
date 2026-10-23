@@ -1,7 +1,5 @@
 "use client";
 
-// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { E2eTestId } from "@archestra/shared";
 import {
   AppWindow,
   Bot,
@@ -21,7 +19,6 @@ import {
   Puzzle,
   Route,
   Settings,
-  ShieldCheck,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -29,6 +26,7 @@ import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
+import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 
 /**
  * What the product's navigation is, separately from any one thing that draws
@@ -63,6 +61,8 @@ export interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
+  /** Hover text for the `beta` chip, e.g. what is still unfinished. */
+  badgeTooltip?: string;
   /**
    * Trailing live count, e.g. MCP servers needing attention. Rendered as a
    * sibling of the nav link rather than inside it: the badge is itself a link
@@ -107,7 +107,8 @@ export function isNavItemPermitted(
 ): boolean {
   if (item.permissionUrls) {
     // No `?? true` fallback here: these URLs are asserted to be in
-    // requiredPagePermissionsMap, so a typo should hide the item, not
+    // requiredPagePermissionsMap (or are `/settings`, which
+    // `useNavPermissionMap` adds), so a typo should hide the item, not
     // silently show it to everyone.
     return item.permissionUrls.some((url) => permissionMap[url] === true);
   }
@@ -168,7 +169,9 @@ export const contentNavGroups: NavGroup[] = [
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
-        badgeLabel: "Alpha",
+        badgeLabel: "Beta",
+        badgeTooltip: GUARDRAILS_BETA_TOOLTIP,
+        dotKey: "nav:guardrails",
       },
       {
         title: "Skills",
@@ -177,8 +180,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
-        // Dropped entirely when the deployment has plugins turned off — see
-        // the `pluginsEnabled` filter in `AppSidebar`.
         title: "Plugins",
         url: "/plugins",
         icon: Puzzle,
@@ -289,22 +290,10 @@ export const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    // The rows that span every group above: what tools are allowed to do,
-    // what they did, and how the deployment is configured.
+    // The rows that span every group above: what tools did, and how the
+    // deployment is configured.
     id: "platform",
     items: [
-      {
-        // Not under MCP: the page's own tools come from installed MCP
-        // servers, from agents and apps, and from traffic between agents and
-        // LLMs. The URL stays /mcp/tool-guardrails — docs and deep links
-        // point at it, and the route is not what the reader is being told.
-        title: "Guardrails",
-        url: "/mcp/tool-guardrails",
-        icon: ShieldCheck,
-        testId: E2eTestId.SidebarNavGuardrails,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/tool-guardrails"),
-      },
       {
         title: "Logs",
         url: "/llm/logs",
@@ -322,25 +311,10 @@ export const contentNavGroups: NavGroup[] = [
         icon: Settings,
         customIsActive: (pathname: string) => pathname.startsWith("/settings"),
         // /settings is a landing page that forwards to the first permitted
-        // tab; show the item when the user can see any settings page.
-        permissionUrls: [
-          "/settings/appearance",
-          "/settings/auth",
-          "/settings/service-accounts",
-          "/settings/agents",
-          "/settings/security",
-          "/settings/llm",
-          "/settings/mcp",
-          "/settings/skills",
-          "/settings/knowledge",
-          "/settings/environments",
-          "/settings/users",
-          "/settings/teams",
-          "/settings/roles",
-          "/settings/credentials",
-          "/settings/identity-providers",
-          "/settings/secrets",
-        ],
+        // tab. Whether the reader sees the area at all is its own rule
+        // (`canSeeSettingsArea`), which the navigation permission map carries
+        // under this key.
+        permissionUrls: ["/settings"],
       },
     ],
   },

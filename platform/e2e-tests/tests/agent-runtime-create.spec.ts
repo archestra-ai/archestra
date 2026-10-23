@@ -37,20 +37,19 @@ test("creates Claude Code from the catalog and explains the account connection a
       await nameField.fill(name);
       await expect(nextButton).toBeEnabled({ timeout: 2_000 });
     }).toPass({ timeout: 20_000 });
+    // Picked in the catalog, so the runtime is a summary, not a second picker.
     await expect(
-      page.getByRole("radio", { name: /Claude Code/ }),
-    ).toBeChecked();
+      page.getByText("Claude Code in its own container", { exact: true }),
+    ).toBeVisible();
     await expect(
-      page.getByRole("radio", { name: "Archestra Agent", exact: true }),
+      page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
     const authenticationRow = page.getByRole("button", {
-      name: /^Authentication/,
+      name: /^Whose Claude account runs it/,
     });
     await expect(authenticationRow).toHaveAttribute("aria-expanded", "true");
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
-    await page
-      .getByRole("radio", { name: /API key or cloud provider/ })
-      .click();
+    await page.getByRole("radio", { name: /A company API key/ }).click();
     const attention = authenticationRow.getByRole("img", {
       name: "Select a provider and Claude model",
     });
@@ -85,7 +84,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       }),
     ).toBeVisible();
     await page
-      .getByRole("radio", { name: /Personal Claude subscription/ })
+      .getByRole("radio", { name: /Each person's Claude subscription/ })
       .click();
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
 
@@ -111,14 +110,15 @@ test("creates Claude Code from the catalog and explains the account connection a
       claudeCode: { authentication: "subscription" },
       inferenceProtocol: "anthropic",
     });
-    // Creating opens chat with the agent selected, which asks for the
-    // missing Claude account before the agent can run.
-    await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
+    // Creating opens the agent's own page, which lists the missing Claude
+    // account before the agent can run.
+    await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
+    const setup = page.getByRole("status", { name: "Agent setup" });
     await expect(
-      page.getByText("Sign in to use this agent.", { exact: true }),
+      setup.getByText("Claude subscription", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Sign in", exact: true }),
+      setup.getByRole("button", { name: "Sign in with Claude", exact: true }),
     ).toBeVisible();
   } finally {
     if (agentId) await deleteAgent(request, agentId);
@@ -143,8 +143,18 @@ test("configures popular agent templates and preserves the creation wizard", asy
   expect(organizationResponse.ok()).toBe(true);
   const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
-  const settings = page.locator("#popular-agents");
-  const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
+  const settings = page.getByRole("list", {
+    name: "Agent Runtimes",
+    exact: true,
+  });
+  const names = [
+    "Claude Code",
+    "Codex",
+    "OpenCode",
+    "Hermes",
+    "OpenClaw",
+    "Grok Build",
+  ];
   const save = async () => {
     const response = page.waitForResponse(
       (r) =>
@@ -168,22 +178,21 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toBe(true);
     await goToPage(page, "/settings/agents");
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
-    ).toHaveCount(5);
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+      settings.getByRole("button", { name: /^Remove / }),
+    ).toHaveCount(6);
+    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
       await settings
-        .getByText(name, { exact: true })
-        .getByRole("button", { name: "Remove selected option" })
+        .getByRole("button", { name: `Remove ${name}`, exact: true })
         .click();
     }
     await save();
     await page.reload();
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
+      settings.getByRole("button", { name: /^Remove / }),
     ).toHaveCount(2);
 
     await goToPage(page, "/agents/new");
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toHaveCount(0);
@@ -193,72 +202,61 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toHaveValue(
       "Claude Code",
     );
+    // The catalog is where the runtime is chosen: a custom image is a card
+    // of its own, and the built-in agent's form does not ask again.
+    await goToPage(page, "/agents/new");
     await expect(
-      page.getByRole("radio", { name: /Claude Code/ }),
-    ).toBeChecked();
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /^New .* agent/ }).click();
     const runtimeChoices = page.getByRole("radiogroup", {
       name: "Runtime",
       exact: true,
     });
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(4);
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Codex", exact: true }),
-    ).toBeVisible();
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
-    ).toBeVisible();
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
-      await expect(
-        runtimeChoices.getByRole("radio", { name, exact: true }),
-      ).toHaveCount(0);
-    }
+    await expect(page.getByRole("textbox", { name: /^Name\b/ })).toBeVisible();
+    await expect(runtimeChoices).toHaveCount(0);
 
     await goToPage(page, "/settings/agents");
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
+      settings.getByRole("button", { name: /^Remove / }),
     ).toHaveCount(2);
     await settings
-      .getByRole("button", { name: "Remove selected option" })
+      .getByRole("button", { name: /^Remove / })
       .first()
       .click();
-    await settings
-      .getByRole("button", { name: "Remove selected option" })
-      .click();
+    await settings.getByRole("button", { name: /^Remove / }).click();
     await save();
+    // With every template hidden, a custom image is the Agent Runtime left.
     await goToPage(page, "/agents/new");
+    for (const name of names) {
+      await expect(
+        page.getByRole("button", { name: new RegExp(name) }),
+      ).toHaveCount(0);
+    }
     await expect(
-      page.getByRole("heading", { name: "Popular agents", exact: true }),
-    ).toHaveCount(0);
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Start from scratch/ }),
+      page.getByRole("button", { name: /^New .* agent/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(2);
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
-    ).toBeVisible();
 
     await goToPage(page, "/settings/agents");
-    await settings.getByRole("textbox", { name: "Search options" }).click();
     for (const name of names) {
-      await page.getByRole("option", { name: new RegExp(name) }).click();
+      await settings.getByRole("button", { name: "Add Agent Runtime" }).click();
+      await page.getByRole("button", { name, exact: true }).click();
     }
-    await page.keyboard.press("Escape");
     await save();
     await goToPage(page, "/agents/new");
     for (const name of names)
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toBeVisible();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(7);
-    for (const name of names)
-      await expect(
-        runtimeChoices.getByRole("radio", { name, exact: true }),
-      ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
   } finally {
     expect(
       (

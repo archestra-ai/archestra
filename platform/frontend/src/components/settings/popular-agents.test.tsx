@@ -1,5 +1,10 @@
 import { archestraApiClient, PopularAgentIdSchema } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  dehydrate,
+  hydrate,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -114,10 +119,10 @@ function renderFlow({
         savedMessage="Popular agents updated"
       />
       <AgentCatalog
-        canAddExternalAgent
         canCreateAgent
-        showPopularAgents
+        runtimeAvailable
         onStartFromScratch={vi.fn()}
+        onStartFromImage={vi.fn()}
         onAddExternalAgent={vi.fn()}
         onSelect={vi.fn()}
       />
@@ -158,18 +163,71 @@ function RuntimeFlow({ initialId }: { initialId: AgentRuntimeSelection }) {
 }
 
 async function remove(name: string) {
-  const chip = within(screen.getByRole("combobox")).getByText(name);
-  if (!chip) throw new Error("Missing selected chip");
-  await userEvent.click(
-    within(chip).getByRole("button", { name: "Remove selected option" }),
+  await userEvent.click(screen.getByRole("button", { name: `Remove ${name}` }));
+}
+
+function picker() {
+  return within(screen.getByRole("list", { name: "Agent Runtimes" }));
+}
+
+function savedOverrides(ids: string[]) {
+  return Object.fromEntries(
+    PopularAgentIdSchema.options.map((id) => [
+      id,
+      ids.includes(id) ? { position: ids.indexOf(id) } : { hidden: true },
+    ]),
   );
 }
 
 async function ready() {
-  await screen.findByRole("heading", { name: "Popular agents" });
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("status", { name: "Loading Agent Runtimes" }),
+    ).not.toBeInTheDocument(),
+  );
 }
 
 describe("popular agent configuration", () => {
+  it("revalidates restored settings without relying on a catalog elsewhere on the page", async () => {
+    const previousClient = new QueryClient();
+    previousClient.setQueryData(organizationKeys.details(), organization);
+    const snapshot = dehydrate(previousClient);
+    organization = {
+      ...organization,
+      popularAgentOverrides: savedOverrides(["claude-code", "codex"]),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    hydrate(queryClient, snapshot);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IntegrationAvailabilitySection
+          catalogKey="popularAgentOverrides"
+          catalog={PopularAgentIdSchema.options}
+          title="Agent Runtimes"
+          options={PopularAgentIdSchema.options.map((id) => ({
+            value: id,
+            label: AGENT_CATALOG_TEMPLATE_NAMES[id],
+          }))}
+          placeholder="Select Agent Runtimes…"
+          emptyMessage="No agents found."
+          savedMessage="Agent Runtimes updated"
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        picker().getAllByRole("button", { name: /^Remove / }),
+      ).toHaveLength(2),
+    );
+    expect(picker().queryByText("OpenCode")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(writes).toEqual([]);
+  });
+
   it("withholds cached templates during a fresh read and offers retry after a refresh failure", async () => {
     const responseReady = Promise.withResolvers<void>();
     server.use(
@@ -191,13 +249,13 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: /Codex / }),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /Start from scratch/ }),
+        screen.getByRole("button", { name: /New Test Platform agent/ }),
       ).toBeInTheDocument();
     } finally {
       responseReady.resolve();
     }
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load popular agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load Agent Runtimes")).toHaveLength(
         2,
       ),
     );
@@ -227,7 +285,7 @@ describe("popular agent configuration", () => {
     renderFlow();
     try {
       for (const button of screen.getAllByRole("button", {
-        name: "Remove selected option",
+        name: /^Remove /,
       })) {
         expect(button).toBeDisabled();
       }
@@ -236,7 +294,7 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: "Save" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("heading", { name: "Popular agents" }),
+        screen.queryByRole("button", { name: /Claude Code / }),
       ).not.toBeInTheDocument();
       expect(writes).toEqual([]);
     } finally {
@@ -244,19 +302,19 @@ describe("popular agent configuration", () => {
     }
     await ready();
     await waitFor(() =>
-      expect(
-        within(screen.getByRole("combobox")).queryByText("Codex"),
-      ).not.toBeInTheDocument(),
+      expect(picker().queryByText("Codex")).not.toBeInTheDocument(),
     );
     await remove("Claude Code");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(writes).toEqual([
         {
-          popularAgentOverrides: {
-            "claude-code": { hidden: true },
-            codex: { hidden: true },
-          },
+          popularAgentOverrides: savedOverrides([
+            "opencode",
+            "hermes",
+            "openclaw",
+            "grok",
+          ]),
         },
       ]),
     );
@@ -277,7 +335,7 @@ describe("popular agent configuration", () => {
     );
     renderFlow();
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load popular agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load Agent Runtimes")).toHaveLength(
         2,
       ),
     );
@@ -289,7 +347,7 @@ describe("popular agent configuration", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
     await screen.findByRole("button", { name: /Claude Code / });
-    expect(screen.queryAllByText("Could not load popular agents")).toHaveLength(
+    expect(screen.queryAllByText("Could not load Agent Runtimes")).toHaveLength(
       0,
     );
     expect(
@@ -306,12 +364,16 @@ describe("popular agent configuration", () => {
       ).toBeInTheDocument();
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
+    expect(
+      screen.getByRole("button", { name: "Add Agent Runtime" }),
+    ).toBeDisabled();
     await remove("Codex");
+    expect(
+      screen.getByRole("button", { name: "Add Agent Runtime" }),
+    ).toBeEnabled();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      within(screen.getByRole("combobox")).getByText("Codex"),
-    ).toBeInTheDocument();
+    expect(picker().getByText("Codex")).toBeInTheDocument();
     expect(writes).toEqual([]);
     await remove("Codex");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -321,7 +383,15 @@ describe("popular agent configuration", () => {
       ).not.toBeInTheDocument(),
     );
     expect(writes).toEqual([
-      { popularAgentOverrides: { codex: { hidden: true } } },
+      {
+        popularAgentOverrides: savedOverrides([
+          "claude-code",
+          "opencode",
+          "hermes",
+          "openclaw",
+          "grok",
+        ]),
+      },
     ]);
     expect(
       screen.getByRole("button", { name: /Claude Code / }),
@@ -334,12 +404,14 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
   });
 
-  it("loads saved choices, hides an empty section, and can restore a template", async () => {
+  it("loads saved choices, leaves only Custom image when every template is hidden, and can restore a template", async () => {
     organization.popularAgentOverrides = Object.fromEntries(
       PopularAgentIdSchema.options.map((id) => [id, { hidden: true }]),
     );
     renderFlow();
-    const input = await screen.findByPlaceholderText("Select popular agents…");
+    await screen.findByRole("button", {
+      name: "Add Agent Runtime",
+    });
     await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
     expect(
       screen.getByRole("radio", { name: "Test Platform" }),
@@ -347,24 +419,37 @@ describe("popular agent configuration", () => {
     expect(
       screen.getByRole("radio", { name: "Custom image" }),
     ).toBeInTheDocument();
+    await ready();
+    const codingAgents = screen
+      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .closest("section") as HTMLElement;
     expect(
-      screen.queryByRole("heading", { name: "Popular agents" }),
-    ).not.toBeInTheDocument();
+      within(codingAgents)
+        .getAllByRole("button")
+        .map((button) => button.querySelector(".font-medium")?.textContent),
+    ).toEqual(["Custom image"]);
     expect(
-      screen.getByRole("button", { name: /Start from scratch/ }),
+      screen.getByRole("button", { name: /New Test Platform agent/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeInTheDocument();
-    await userEvent.click(input);
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add Agent Runtime" }),
+      ).toBeEnabled(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add Agent Runtime" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await ready();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Hermes / }),
     ).not.toBeInTheDocument();
-    expect(organization.popularAgentOverrides?.codex).toBeUndefined();
+    expect(organization.popularAgentOverrides?.codex).toEqual({ position: 0 });
     expect(screen.getByRole("radio", { name: "Codex" })).toBeInTheDocument();
   });
 
@@ -402,28 +487,99 @@ describe("popular agent configuration", () => {
         queryKey: organizationKeys.details(),
       });
     });
-    const picker = within(screen.getByRole("combobox"));
-    expect(picker.queryByText("Codex")).not.toBeInTheDocument();
-    expect(picker.getByText("Hermes")).toBeInTheDocument();
+    const selected = picker();
+    expect(selected.queryByText("Codex")).not.toBeInTheDocument();
+    expect(selected.getByText("Hermes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(picker.getByText("Codex")).toBeInTheDocument();
-    expect(picker.queryByText("Hermes")).not.toBeInTheDocument();
+    expect(selected.getByText("Codex")).toBeInTheDocument();
+    expect(selected.queryByText("Hermes")).not.toBeInTheDocument();
     expect(writes).toEqual([]);
   });
 
-  it("restores a removed choice without treating selection order as an unsaved change", async () => {
+  it("appends a restored choice and saves the resulting order", async () => {
     renderFlow();
     await ready();
     await remove("Codex");
     await userEvent.click(
-      screen.getByRole("textbox", { name: "Search options" }),
+      screen.getByRole("button", { name: "Add Agent Runtime" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
-    expect(
-      screen.queryByRole("button", { name: "Save" }),
-    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          popularAgentOverrides: savedOverrides([
+            "claude-code",
+            "opencode",
+            "hermes",
+            "openclaw",
+            "grok",
+            "codex",
+          ]),
+        },
+      ]),
+    );
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("radio")
+          .map((radio) => radio.closest("label")?.textContent),
+      ).toEqual([
+        "Test Platform",
+        "Claude Code",
+        "OpenCode",
+        "Hermes",
+        "OpenClaw",
+        "Grok Build",
+        "Codex",
+        "Custom image",
+      ]),
+    );
+  });
+
+  it("cancels a reorder, then saves and reloads it in the catalog and runtime picker", async () => {
+    const view = renderFlow();
+    await ready();
+    const reorder = async () => {
+      screen.getByRole("button", { name: "Reorder Codex" }).focus();
+      await userEvent.keyboard("{ArrowLeft}");
+    };
+    await reorder();
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent(
+      "Claude Code",
+    );
     expect(writes).toEqual([]);
+    await reorder();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          popularAgentOverrides: savedOverrides([
+            "codex",
+            "claude-code",
+            "opencode",
+            "hermes",
+            "openclaw",
+            "grok",
+          ]),
+        },
+      ]),
+    );
+    view.unmount();
+    renderFlow();
+    await ready();
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
+    const section = screen
+      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .closest("section");
+    if (!section) throw new Error("Missing catalog section");
+    expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
+      "Codex",
+    );
+    expect(screen.getAllByRole("radio")[1]).toHaveAccessibleName("Codex");
   });
 
   it("keeps the saved catalog and draft when a save fails", async () => {
@@ -443,9 +599,7 @@ describe("popular agent configuration", () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
     );
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("combobox")).queryByText("Codex"),
-    ).not.toBeInTheDocument();
+    expect(picker().queryByText("Codex")).not.toBeInTheDocument();
   });
 
   it("prevents users without settings permission from removing chips", async () => {
@@ -456,11 +610,11 @@ describe("popular agent configuration", () => {
     renderFlow();
     await ready();
     for (const button of screen.getAllByRole("button", {
-      name: "Remove selected option",
+      name: /^Remove /,
     }))
       expect(button).toBeDisabled();
     expect(
-      screen.getByRole("textbox", { name: "Search options" }),
+      screen.getByRole("button", { name: "Add Agent Runtime" }),
     ).toBeDisabled();
     expect(writes).toEqual([]);
   });

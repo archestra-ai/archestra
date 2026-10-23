@@ -5,7 +5,8 @@ import {
   getConnectorNamePlaceholder,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { useEffect, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { AutoSyncPermissionsToggle } from "@/app/knowledge/_parts/auto-sync-permissions-toggle";
 import {
@@ -27,8 +28,20 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
@@ -88,6 +101,14 @@ type EditConnectorFormValues = {
 };
 
 function editableConnectorConfig(connector: ConnectorItem) {
+  if (connector.connectorType === "salesforce") {
+    return {
+      ...connector.config,
+      authMethod:
+        (connector.config as Record<string, unknown>).authMethod ??
+        "soap_legacy",
+    };
+  }
   if (
     connector.connectorType === "mfiles" &&
     typeof (connector.config as Record<string, unknown>).authMethod !== "string"
@@ -116,9 +137,19 @@ export function EditConnectorDialog({
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<
-    "general" | "permissions" | "advanced"
-  >("general");
+  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
+    "general",
+  );
+  // The permissions block keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -166,12 +197,18 @@ export function EditConnectorDialog({
     return null;
   }
 
+  const salesforceLegacyAvailable =
+    connectorType === "salesforce" &&
+    (connector.config as Record<string, unknown>).authMethod !==
+      "oauth_client_credentials";
   const typeLabel = getConnectorTypeLabel(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const salesforceMigrationRequired =
+    salesforceLegacyAvailable && authMethod === "oauth_client_credentials";
   const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
@@ -179,7 +216,9 @@ export function EditConnectorDialog({
     connectorType === "github" &&
     authMethod !== "pat" &&
     authMethod !== undefined;
-  const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
+  const urlConfig = usesGithubApp
+    ? null
+    : getConnectorUrlConfig(connectorType, authMethod);
   const emailRequired = needsEmail && isCloud !== false;
   // Only a permission-syncing connector reads the source's access control, so
   // the upstream-permission requirement is noise with the capability off.
@@ -229,15 +268,22 @@ export function EditConnectorDialog({
       : connector.visibility;
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
+    if (salesforceMigrationRequired && !values.apiToken?.trim()) {
+      form.setError("apiToken", {
+        message: "Enter a new OAuth consumer secret to migrate this connector",
+      });
+      return;
+    }
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     // Any single credential field can be updated alone — the backend merges
     // the submitted fields over the stored secret, so pasting only the admin
     // API key (or correcting only the email) must not be dropped just because
     // the token field is left empty to keep the existing token.
     const hasCredentials =
-      values.email.length > 0 ||
-      values.apiToken.length > 0 ||
-      values.adminApiKey.length > 0;
+      Boolean(values.email) ||
+      Boolean(values.apiToken) ||
+      Boolean(values.adminApiKey);
+    await permissionsSave.current?.();
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -286,9 +332,9 @@ export function EditConnectorDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
         { id: "advanced", label: "Advanced" },
       ]}
+      isDirty={permissionsDirty}
       onActiveSectionChange={setActiveSection}
       onSubmit={form.handleSubmit(handleSubmit, () =>
         setActiveSection("general"),
@@ -439,6 +485,79 @@ export function EditConnectorDialog({
 
         <div className="border-t" />
 
+        {salesforceLegacyAvailable && (
+          <>
+            <InlineNotice>
+              <AlertTriangle />
+              <InlineNoticeBody>
+                <span className="font-medium">Migrate before Summer ’27</span>
+                <InlineNoticeText>
+                  Existing username/password connectors can continue while
+                  Salesforce allows SOAP login. Salesforce retires it in Summer
+                  ’27. New connectors require OAuth.
+                </InlineNoticeText>
+              </InlineNoticeBody>
+            </InlineNotice>
+            <FormField
+              control={form.control}
+              name="config.authMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Authentication</FormLabel>
+                  <Select
+                    value={field.value as string}
+                    onValueChange={(value) => {
+                      form.setValue("apiToken", "");
+                      form.setValue("email", "");
+                      form.clearErrors([
+                        "apiToken",
+                        "email",
+                        "config.clientId",
+                      ]);
+                      if (value === "soap_legacy") {
+                        form.setValue("config.clientId", undefined);
+                        if (!form.getValues("config.loginUrl"))
+                          form.setValue(
+                            "config.loginUrl",
+                            (connector.config as Record<string, unknown>)
+                              .loginUrl ?? "https://login.salesforce.com",
+                          );
+                      } else if (
+                        [
+                          "https://login.salesforce.com",
+                          "https://test.salesforce.com",
+                        ].includes(form.getValues("config.loginUrl") as string)
+                      ) {
+                        form.setValue("config.loginUrl", "");
+                      }
+                      field.onChange(value);
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="soap_legacy">
+                        Username/password (legacy)
+                      </SelectItem>
+                      <SelectItem value="oauth_client_credentials">
+                        OAuth client credentials (recommended)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Switch to OAuth when your External Client App is ready.
+                    Saving the migration requires new app credentials and cannot
+                    be reversed.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+          </>
+        )}
+
         {urlConfig && (
           <FormField
             control={form.control}
@@ -473,12 +592,19 @@ export function EditConnectorDialog({
           <FormField
             control={form.control}
             name="apiToken"
+            rules={{
+              required: salesforceMigrationRequired
+                ? "Enter a new OAuth consumer secret to migrate this connector"
+                : false,
+            }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{apiTokenLabel}</FormLabel>
                 <FormDescription>
                   <span>
-                    Leave empty to keep existing credentials unchanged.
+                    {salesforceMigrationRequired
+                      ? "OAuth migration required. Enter the app’s My Domain URL, consumer key, and a new consumer secret. The stored password cannot be reused."
+                      : "Leave empty to keep existing credentials unchanged."}
                   </span>{" "}
                   {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
                   {credentialRequirement}
@@ -491,7 +617,14 @@ export function EditConnectorDialog({
                       {...field}
                     />
                   ) : (
-                    <SecretInput placeholder={apiTokenPlaceholder} {...field} />
+                    <SecretInput
+                      placeholder={
+                        salesforceMigrationRequired
+                          ? "Enter a new Salesforce OAuth consumer secret"
+                          : apiTokenPlaceholder
+                      }
+                      {...field}
+                    />
                   )}
                 </FormControl>
                 <FormMessage />
@@ -499,12 +632,11 @@ export function EditConnectorDialog({
             )}
           />
         )}
-      </div>
-      <div hidden={activeSection !== "permissions"}>
         <ResourceAccessSection
           resource="knowledgeConnector"
           id={connector.id}
-          standalone
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
         />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">

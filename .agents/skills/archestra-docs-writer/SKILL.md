@@ -7,6 +7,14 @@ description: Use when writing, editing, restructuring, or auditing Archestra doc
 
 This skill is the single source of truth for Archestra docs. Read all of it, and read [Site Mechanics](references/site-mechanics.md), before you change a page.
 
+## When to Change the Docs
+
+Change the docs only when a reader would otherwise be stuck or wrong. A code change alone is not a reason.
+
+- **Update** for a new feature, setting, permission, or environment variable, or a changed workflow a reader relies on.
+- **Skip** styling, layout, copy tweaks, a control that moved or changed shape but does the same job, refactors, and fixes that restore documented behavior.
+- When unsure, leave the docs alone.
+
 ## The Bar
 
 A reader opens a docs page to do one thing: understand a feature, finish a task, or look up a value. They skim. Many readers have little patience or attention to spare, and every reader is busy. Write for the reader who reads only the headings and the first line of each section. That reader must still get the answer.
@@ -164,7 +172,7 @@ Every sentence states a fact: what a thing is, or what it does. If it does neith
 8. Do not state what readers assume, that a feature works as named. Document defaults, toggles, and conditions a reader could get wrong.
 9. No emojis. No "Future Considerations" or generic "Best Practices" sections.
 10. Never use real customer names, people, emails, or data. Use fictional, generic examples.
-11. Never say a step needs a role ("you need the Admin role", "only admins can"). Access is RBAC, and custom roles change what each role holds. Name the exact permission instead, linked to its row: [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). For a per-item grant, name the actions and link [Granular Access Control](/docs/admin/access-control#granular-access-control). CI checks the links with `check-docs-permission-links.py`.
+11. Never say a step needs a role ("you need the Admin role", "only admins can"). Access is RBAC, and custom roles change what each role holds. Name the exact permission instead, linked to its row: [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). For a per-item grant, name the actions and link [Granular Access Control](/docs/admin/access-control#granular-access-control). CI checks the links with `check-docs-permission-links.py`.
 
 Keep each prose paragraph on one source line. Do not hard-wrap. Use only the Markdown and the `:::` directives that [Site Mechanics](references/site-mechanics.md) lists. Never invent admonitions such as `> [!NOTE]` or `:::warning`.
 

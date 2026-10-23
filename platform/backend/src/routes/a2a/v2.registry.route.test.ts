@@ -87,7 +87,7 @@ describe("a2a v2 agent registry", () => {
   test("leaves out the platform's own built-in agents", async ({
     makeInternalAgent,
   }) => {
-    // Context compaction, title generation and the dual-LLM pair are how the
+    // Context compaction and title generation are how the
     // platform runs; nobody addresses them as a collaborator.
     const builtIn = await makeInternalAgent({
       name: "Context Compaction Subagent",

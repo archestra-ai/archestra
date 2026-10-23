@@ -9,10 +9,17 @@ import type {
 import { archestraAudience } from "./archestra-audience";
 import { openappaBatteriesService } from "./batteries";
 import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+  shownLine,
+} from "./battery-target";
+import {
   asRecord,
   assignsKey,
   lineInTable,
   parsePolicyToml,
+  type ToolEntry,
   tableHeaderLine,
   toolEntries,
 } from "./policy-text";
@@ -27,34 +34,36 @@ class OpenAppaTrustAudienceService {
     organizationId: string;
     userId: string;
   }): Promise<TrustAudienceView> {
-    const [{ rootContent, resolution }, canSeeAllConsults] = await Promise.all([
-      openappaBatteriesService.coverageSnapshot(params.organizationId),
-      // Consults are recorded per session; an org-wide status needs the
-      // permission that shows every session's consults.
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "openappaDiagnostics",
-        "admin",
-      ),
-    ]);
-    const batteries = resolution.entries.flatMap((included) =>
-      included.battery
-        ? [
-            {
-              name: included.name,
-              entry: included.entry,
-              packageHash: included.packageHash,
-              text: included.battery.policy,
-            },
-          ]
-        : [],
-    );
+    const [{ rootContent, resolution, viewed }, canSeeAllConsults] =
+      await Promise.all([
+        openappaBatteriesService.coverageSnapshot(params.organizationId),
+        // Consults are recorded per session; an org-wide status needs the
+        // permission that shows every session's consults.
+        userHasPermission(params.userId, params.organizationId, "log", "admin"),
+      ]);
+    const batteries = resolution.entries.flatMap((included) => {
+      const deployed = viewed.get(included.entry);
+      return deployed
+        ? deployedFiles(deployed).map((file) => ({
+            name: included.name,
+            entry: included.entry,
+            packageHash: included.packageHash,
+            ...file,
+          }))
+        : [];
+    });
     const policy = asRecord(parsePolicyToml(rootContent)?.policy);
     const declared = declaredSources(batteries);
     const named = audiencesNamedByRules([
-      { entry: null, text: rootContent },
-      ...batteries,
+      ...toolEntries(rootContent),
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? effectiveToolRules(deployedFiles(deployed)).map(
+              ({ entry }) => entry,
+            )
+          : [];
+      }),
     ]);
     const mappings = audienceMappings(rootContent, policy);
     const latest = canSeeAllConsults
@@ -82,7 +91,10 @@ class OpenAppaTrustAudienceService {
         };
       return {
         name,
-        kind: name !== "public" && named.has(name) ? "unmapped" : "builtin",
+        kind:
+          ANSWERED_UNMAPPED.has(name) || !named.has(name)
+            ? "builtin"
+            : "unmapped",
       };
     });
 
@@ -94,6 +106,42 @@ class OpenAppaTrustAudienceService {
 }
 
 export const openappaTrustAudienceService = new OpenAppaTrustAudienceService();
+
+/**
+ * The levels a policy can label data with: trust ranks least trusted first,
+ * and audiences widest first, `public` then `internal`, `self` and each
+ * group. A group is narrower than the level it is declared `within`.
+ */
+export function policyLevels(
+  files: Array<{ entry: string | null; text: string }>,
+): {
+  trust: string[];
+  audiences: Array<{ name: string; width: number }>;
+} {
+  const root = files.find((file) => file.entry === null)?.text ?? "";
+  const policy = asRecord(parsePolicyToml(root)?.policy);
+  const mappings = audienceMappings(root, policy);
+  const width = (name: string): number => {
+    const chain = CHAIN_AUDIENCES.indexOf(name);
+    if (chain >= 0) return chain;
+    const within = mappings.get(name)?.within ?? "internal";
+    return (
+      (CHAIN_AUDIENCES.indexOf(within) >= 0
+        ? CHAIN_AUDIENCES.indexOf(within)
+        : 1) + 0.5
+    );
+  };
+  // Mapped groups only: a rule may also name templated selectors such as
+  // `@archestra:team/$team_ids`, which select readers rather than name a level.
+  const names = [
+    ...CHAIN_AUDIENCES,
+    ...[...mappings.keys()].filter((name) => name.startsWith("@")),
+  ];
+  return {
+    trust: strings(policy?.trust_chain) ?? DEFAULT_TRUST_CHAIN,
+    audiences: names.map((name) => ({ name, width: width(name) })),
+  };
+}
 
 // =============================================================================
 // Internal helpers
@@ -111,12 +159,20 @@ const DEFAULT_TRUST_CHAIN = ["suspicious", "trusted"];
  */
 const CHAIN_AUDIENCES = ["public", "internal", "self"];
 
+/**
+ * Levels the runtime answers without a mapping: `public` is everyone, and
+ * `self` is the session principal, which the platform names for every session
+ * acting for a member (`sessionPrincipal` in `./service`).
+ */
+const ANSWERED_UNMAPPED = new Set(["public", "self"]);
+
 type PolicyFile = { entry: string | null; text: string };
-type IncludedBattery = PolicyFile & {
-  entry: string;
-  name: string;
-  packageHash: string | null;
-};
+type IncludedBattery = PolicyFile &
+  DeployedFile & {
+    entry: string;
+    name: string;
+    packageHash: string | null;
+  };
 type DeclaredSource = {
   name: string;
   battery: string;
@@ -149,7 +205,7 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
         name,
         battery: battery.name,
         entry: battery.entry,
-        line: tableHeaderLine(battery.text, table),
+        line: shownLine(battery, tableHeaderLine(battery.text, table)),
         runBy: archestraAudience.serves({
           batteryName: battery.name,
           packageHash: battery.packageHash,
@@ -159,14 +215,17 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
           : ("helper" as const),
         templates,
         templateLines: templates.map((template) =>
-          lineInTable({
-            text: battery.text,
-            table,
-            matches: (line) =>
-              new RegExp(`template\\s*=\\s*"${escapeRegExp(template)}"`).test(
-                line,
-              ),
-          }),
+          shownLine(
+            battery,
+            lineInTable({
+              text: battery.text,
+              table,
+              matches: (line) =>
+                new RegExp(`template\\s*=\\s*"${escapeRegExp(template)}"`).test(
+                  line,
+                ),
+            }),
+          ),
         ),
       };
     });
@@ -260,27 +319,25 @@ function templateMatches(template: string, selector: string): boolean {
   );
 }
 
-/** Every audience some rule names in its `delta` or `requires`. */
-function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
+/** Every audience some rule names in its `delta`, `forwards` or `requires`. */
+function audiencesNamedByRules(rules: ToolEntry[]): Set<string> {
   const named = new Set<string>();
-  for (const file of files)
-    for (const entry of toolEntries(file.text)) {
-      for (const name of audienceNames(asRecord(entry.delta)?.audience))
-        named.add(name);
-      for (const name of audienceNames(asRecord(entry.requires)?.audience))
-        named.add(name);
-    }
+  for (const entry of rules) {
+    for (const name of audienceNames(asRecord(entry.delta)?.audience))
+      named.add(name);
+    for (const name of audienceNames(asRecord(entry.forwards)?.audience))
+      named.add(name);
+    for (const name of audienceNames(asRecord(entry.requires)?.audience))
+      named.add(name);
+  }
   return named;
 }
 
-/** A `delta` audience list, or a `requires` audience's `contains` and `within`. */
+/** A `delta` audience list, or a `requires` audience's `contains`. */
 function audienceNames(value: unknown): string[] {
   const record = asRecord(value);
   if (!record) return strings(value) ?? [];
-  return [
-    ...(strings(record.contains) ?? []),
-    ...(strings(record.within) ?? []),
-  ];
+  return strings(record.contains) ?? [];
 }
 
 function strings(value: unknown): string[] | null {

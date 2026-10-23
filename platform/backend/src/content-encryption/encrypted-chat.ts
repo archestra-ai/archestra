@@ -129,23 +129,25 @@ export function encryptedChatDekMatches(params: {
 /**
  * Every column that may hold an encrypted-chat envelope, and the AAD context that
  * binds ciphertext to it. A superset of the at-rest layer's contexts: encrypted-chat
- * also covers the chat-side audit surfaces (errors, tool-execution claims,
- * active-run replay payloads), which have no at-rest encryption.
+ * also covers the chat-side audit surfaces (errors, active-run replay
+ * payloads), which have no at-rest encryption.
  *
  * The spellings deliberately match `ContentEncryptionContext` where the two
  * overlap, so a column's AAD context reads the same in both layers.
  */
 export type EncryptedChatContentContext =
+  | "interactions.session_preview"
+  | "openappa_thread_states.calls"
+  | "openappa_thread_states.tools"
+  | "openappa_yells.message"
+  | "openappa_yells.archive"
   | "messages.content"
   | "interactions.request"
   | "interactions.processed_request"
   | "interactions.response"
-  | "interactions.dual_llm_analyses"
-  | "interactions.unsafe_context_boundary"
   | "mcp_tool_calls.tool_call"
   | "mcp_tool_calls.tool_result"
   | "conversation_chat_errors.error"
-  | "chat_tool_execution_claims.result"
   | "chat_active_run_events.payloads"
   | "conversation_attachments.file_data"
   | "conversation_attachments.original_name"

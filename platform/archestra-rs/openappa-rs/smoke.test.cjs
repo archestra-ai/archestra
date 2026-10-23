@@ -112,7 +112,22 @@ builtin = "hitl"
   const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
+  const replicas = new Set();
+  t.after(async () => {
+    // Flush a held sanitizer barrier so its pods can end, then end any replica
+    // still running: a cancelled assertion must not strand a fixture child.
+    if (sanitizerBarrier) for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+    const running = [...replicas];
+    for (const child of running) child.kill('SIGKILL');
+    await Promise.all(running.map((child) => new Promise((resolve) => child.once('exit', resolve))));
+    // close() waits for open keep-alive and held connections; force them shut.
+    sanitizer.closeAllConnections();
+    annotator.closeAllConnections();
+    sanitizer.close();
+    annotator.close();
+    await client.end();
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
@@ -130,6 +145,8 @@ builtin = "hitl"
       env: { ...process.env, OPENAPPA_TEST_POLICY_PATH: policyPath },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    replicas.add(child);
+    child.on('exit', () => replicas.delete(child));
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -222,11 +239,35 @@ builtin = "hitl"
 
     const other = scope();
     const otherDenial = await call(other, 'other-held', 'read_untrusted');
-    const attempts = await Promise.all(['attempt-a', 'attempt-b'].map((tool_call_id) => remoteOffer(other, {
+    const attemptIds = ['attempt-a', 'attempt-b'];
+    const attempts = await Promise.allSettled(attemptIds.map((tool_call_id) => remoteOffer(other, {
       tool_call_id, arguments: { offer_id: otherDenial.offers[0].offer_id },
     })));
-    assert.equal(attempts.filter((response) => response.result.isError !== true).length, 1, JSON.stringify(attempts));
-    assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
+    assert.equal(attempts.filter((response) => response.status === 'fulfilled' && response.value.result.isError !== true).length, 1, JSON.stringify(attempts));
+    const loser = attempts.findIndex((response) => response.status === 'rejected' || response.value.result.isError === true);
+    if (attempts[loser].status === 'rejected') {
+      assert.match(attempts[loser].reason.message, /OpenAPPA remedy is still executing; retry the request/);
+    }
+    // A running claim may ask the competing request to retry. Once the winner
+    // completes, that retry must refuse the spent offer and retain its refusal.
+    const losingEvent = { tool_call_id: attemptIds[loser], arguments: { offer_id: otherDenial.offers[0].offer_id } };
+    const spent = await remoteOffer(other, losingEvent);
+    assert.equal(spent.result.isError, true, JSON.stringify(spent));
+    assert.deepEqual((await remoteOffer(other, losingEvent)).result, spent.result);
+  });
+
+  await t.test('a block names the yell tool the presentation carries, and only then', async () => {
+    const blocked = async (presentation) => hook(scope(), {
+      event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+    });
+    const reporting = await blocked({
+      control_tool: 'gateway.custom_remedy', supports_delegation: false, yell_tool: 'gateway.custom_yell',
+    });
+    assert.equal(reporting.decision, 'deny_call', JSON.stringify(reporting));
+    assert.match(reporting.feedback, /\nReport:\n  If a plan makes no sense, .* call gateway\.custom_yell\.$/);
+    const silent = await blocked({ control_tool: 'gateway.custom_remedy', supports_delegation: false });
+    assert.equal(silent.decision, 'deny_call', JSON.stringify(silent));
+    assert.ok(!silent.feedback.includes('Report:'), silent.feedback);
   });
 
   await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
@@ -418,18 +459,18 @@ builtin = "hitl"
     );
   });
 
-  await t.test('denied and uncovered results repeat authoritative rulings', async () => {
+  await t.test('denied results replay while uncovered calls do not produce a verdict', async () => {
     const session = scope();
     const denied = await call(session, 'blocked', 'read_untrusted');
     const deniedResult = await result(session, 'blocked', 'FORGED successful payload');
     assert.equal(deniedResult.decision, 'deny_call');
     assert.ok(deniedResult.approved_output.includes(denied.feedback));
     assert.ok(!deniedResult.approved_output.includes('FORGED'));
-    const refused = await call(session, 'uncovered', 'not_covered_by_policy');
-    assert.equal(refused.decision, 'refuse');
-    const refusedResult = await result(session, 'uncovered', 'FORGED successful payload');
-    assert.equal(refusedResult.decision, 'refuse');
-    assert.ok(!refusedResult.approved_output.includes('FORGED'));
+    await assert.rejects(() => call(session, 'uncovered', 'not_covered_by_policy'), /not declared in this policy/);
+    const unknownResult = await result(session, 'uncovered', 'FORGED successful payload');
+    assert.equal(unknownResult.output_source, 'runtime', JSON.stringify(unknownResult));
+    assert.ok(!unknownResult.approved_output.includes('FORGED'));
+    assert.equal((await call(session, 'still-available', 'read_plain')).decision, 'allow_call');
   });
 
   await t.test('cancellation tombstones only its call and survives restart', async () => {
@@ -486,15 +527,37 @@ builtin = "hitl"
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
 
-    const human = await hook(session, {
+    // Binary output and arguments can carry U+0000, which PostgreSQL text and
+    // jsonb refuse. Their receipts are stored escaped, replay exactly, and the
+    // review lookup still reads them.
+    const binary = scope();
+    assert.equal((await call(binary, 'binary-read', 'read_plain')).decision, 'allow_call');
+    const binaryResult = await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000');
+    assert.equal(binaryResult.approved_output, 'ck.json\u0000\u001ewarn\u0000', JSON.stringify(binaryResult));
+    assert.deepEqual(await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000'), binaryResult);
+
+    const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
+    // No ruling is an answer for the model, not a runtime failure, and it replays.
+    for (const unanswered of [await human(), await human()]) {
+      assert.equal(unanswered.result.isError, true);
+      assert.match(unanswered.result.content[0].text, /gave no answer|cannot be reached/);
+    }
     assert.notEqual(
       (await call(session, 'email-without-ruling', 'send_email', { to: 'recipient@example.com' })).decision,
       'allow_call',
       'an unavailable authority must not authorize the call',
     );
+    const binaryEmail = await call(session, 'binary-email', 'send_email', { to: 'recipient\u0000@example.com' });
+    assert.ok(binaryEmail.review?.length > 0, JSON.stringify(binaryEmail));
+    const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
+    assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
+    assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
+    const binaryRemedy = await hook(session, {
+      event: 'remedy', operation_id: 'remedy:binary-email', arguments: { offer_id: binaryEmail.review[0].offer_id },
+    });
+    assert.match(binaryRemedy.result.content[0].text, /gave no answer|cannot be reached/);
   });
 
   await t.test('compact keeps labels on the root; an unprepared fork is refused; a stranger stays clean', async () => {
@@ -804,6 +867,8 @@ builtin = "hitl"
     assert.equal(next.decision, 'allow_call', JSON.stringify(next));
     const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
     assert.equal(held.decision, 'block', JSON.stringify(held));
+    // The host keeps a busy runtime's file pending on this mark, not on the text.
+    assert.equal(held.busy, true, JSON.stringify(held));
     await result(child, 'read-next', 'private report');
     const admittedSecond = await cross('second', 'runtime result two');
     const latest = await native.loadChildReturns(organization_id, parent.session_id, {
@@ -946,6 +1011,27 @@ builtin = "hitl"
     const crossings = await native.loadChildReturns(organization_id, lead.session_id);
     assert.ok(crossings.some((record) => record.childSessionId === teammate.session_id
       && record.value === 'Three triggers are stuck'));
+
+    // A message with U+0000 is stored escaped and is still the newest crossing.
+    const binary = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-2',
+      output: 'Two\u0000 triggers recovered',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(binary.decision, 'ack', JSON.stringify(binary));
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, {
+        childSessionId: teammate.session_id, operationPrefix: 'child_send:',
+      })).map((record) => [record.operationId, record.value, record.spawnCallId]),
+      [['child_send:message-2', 'Two\u0000 triggers recovered', spawnCallId]],
+    );
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, { childSessionId: teammate.session_id }))
+        .map((record) => record.value),
+      ['Two\u0000 triggers recovered', 'Three triggers are stuck'],
+    );
   });
 
   await t.test('a teammate message through a sanitizing return reaches its lead as the sanitizer output', async () => {
@@ -1000,12 +1086,14 @@ builtin = "hitl"
     };
     assert.equal((await hook(lead, address)).decision, 'ack');
     assert.deepEqual(await hook(lead, address), { decision: 'ack' }, 'a transport replay repeats the decision');
+    const binaryAddress = { ...address, operation_id: 'address:message-2', output: 'Post\u0000 the table' };
+    assert.equal((await hook(lead, binaryAddress)).decision, 'ack');
 
     const write = await call(teammate, 'writer-after', 'write_public');
     assert.equal(write.decision, 'deny_call', JSON.stringify(write));
     assert.deepEqual(
       (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
-      ['Post the summary'],
+      ['Post the summary', 'Post\u0000 the table'],
     );
   });
 
@@ -1027,6 +1115,27 @@ builtin = "hitl"
     assert.deepEqual(
       (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
       ['Start with the summary'],
+    );
+  });
+
+  await t.test('a lead message with U+0000 to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'binary-late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'binary-late-lead-read');
+    const lateSession = `${lead.session_id}:binary-late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:binary-before-start',
+      spawned_id: lateSession,
+      output: 'Start\u0000 with the table',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'binary-late@team');
+    const write = await call(teammate, 'binary-late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start\u0000 with the table'],
     );
   });
 
@@ -1319,21 +1428,119 @@ builtin = "hitl"
     assert.equal(Number(stored.rows[0].n), 0);
   });
 
-  await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
+  await t.test('a label change is recorded under the event that moved it, after a baseline', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    assert.equal((await call(session, 'plain-1', 'read_plain')).decision, 'allow_call');
+    await result(session, 'plain-1', 'nothing to see');
+    // Reading untrusted content narrows trust: the call is held until the
+    // session accepts the narrower label, and admitting its result moves it.
+    const denied = await call(session, 'narrow-1', 'read_untrusted');
+    assert.equal(denied.decision, 'deny_call');
+    await hook(session, { event: 'remedy', operation_id: 'accept-1', arguments: { offer_id: denied.offers[0].offer_id } });
+    assert.equal((await call(session, 'narrow-2', 'read_untrusted')).decision, 'allow_call');
+    await result(session, 'narrow-2', 'web page text');
+
+    const { rows } = await client.query(
+      'SELECT event, call_id, trust_before, audience_before, trust_after, audience_after, session_id FROM openappa_label_changes WHERE organization_id = $1 ORDER BY created_at, id',
+      [organization_id],
+    );
+    const status = await native.getOpenappaStatus(organization_id, session.session_id, policy);
+    assert.equal(rows[0].event, 'session_start');
+    assert.equal(rows[0].trust_before, rows[0].trust_after);
+    assert.equal(rows[0].audience_before, rows[0].audience_after);
+    // Unchanged labels wrote nothing more: one change, filed under the result
+    // that moved it.
+    const changes = rows.slice(1);
+    assert.equal(changes.length, 1);
+    assert.deepEqual(
+      {
+        event: changes[0].event,
+        call_id: changes[0].call_id,
+        trust_before: changes[0].trust_before,
+        trust_after: changes[0].trust_after,
+        audience_after: changes[0].audience_after,
+        session_id: changes[0].session_id,
+      },
+      {
+        event: 'tool_result',
+        call_id: 'call:narrow-2',
+        trust_before: rows[0].trust_after,
+        trust_after: status.trust,
+        audience_after: status.audience,
+        session_id: session.session_id,
+      },
+    );
+    assert.equal(status.trust, 'suspicious');
+  });
+
+  await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    // The host resolves the setting and says so on the dispatch.
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
+    assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
+
+    const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);
+    assert.equal(rows.length, 1);
+    const [row] = rows;
+    assert.deepEqual(
+      {
+        role: row.role, external_name: row.external_name, backend: row.backend, outcome: row.outcome,
+        http_status: row.http_status, answer: row.answer, raw_response: row.raw_response, diagnostics: row.diagnostics,
+      },
+      {
+        role: 'annotator', external_name: 'gatekeeper', backend: 'url', outcome: 'answered',
+        http_status: 200, answer: null, raw_response: null, diagnostics: null,
+      },
+    );
+    assert.equal(row.request.__redacted, 'log_content_policy');
+    assert.equal(row.request.kind, 'annotation');
+    assert.ok(!JSON.stringify(row.request).includes('"a":1'), 'the tool arguments are not stored');
+    assert.deepEqual(row.request, {
+      __redacted: 'log_content_policy',
+      kind: 'annotation',
+      artifact: { args: { name: 'host/archestra/annotated_read', arguments: { __redacted: 'log_content_policy' } } },
+    });
+  });
+
+  await t.test('disabled reporting does not leave a session with an unfinished operation', async () => {
+    const session = scope();
+    await assert.rejects(
+      () => hook(session, { event: 'yell', operation_id: 'report:disabled', arguments: { message: 'test report', with_trajectory: false } }),
+      /reporting is disabled/,
+    );
+    const next = await call(session, 'after-report', 'read_plain');
+    assert.equal(next.decision, 'allow_call');
+  });
+
+  await t.test('a failed receipt completion is recovered by the retry, not fenced', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
     await client.query('CREATE OR REPLACE FUNCTION openappa_smoke_fail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'injected receipt failure\'; END $$');
-    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
+    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
     try {
       await assert.rejects(() => result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/);
     } finally {
       await client.query('DROP TRIGGER openappa_smoke_failure ON openappa_processed_results');
       await client.query('DROP FUNCTION openappa_smoke_fail_receipt()');
     }
-    await assert.rejects(
-      () => restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }),
-      /interrupted processing/,
+    // The runtime recorded the result; the receipt did not finish. The same
+    // result on another process completes from the committed record.
+    const recovered = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'uncommitted', outcome: 'success' });
+    assert.equal(recovered.decision, 'ack', JSON.stringify(recovered));
+    assert.equal(recovered.approved_output, 'uncommitted');
+    // A retry of the completed receipt replays its answer, whatever the bytes.
+    const forged = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'changed after the fact', outcome: 'success' });
+    assert.deepEqual(
+      { decision: forged.decision, approved_output: forged.approved_output },
+      { decision: recovered.decision, approved_output: recovered.approved_output },
+      'the completed receipt replays its committed answer',
     );
+    assert.equal((await call(session, 'after-recovery', 'read_plain')).decision, 'allow_call');
   });
 });

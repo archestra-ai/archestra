@@ -35,11 +35,13 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -47,6 +49,7 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
+import { withOpenAiChatToolCallIds } from "../utils/tool-call-ids";
 import { createOpenAiCodexClient } from "./openai-codex-client";
 import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
@@ -340,6 +343,7 @@ export class OpenAIRequestAdapter
           name: toolCall?.name ?? "unknown",
           arguments: toolCall?.arguments,
           content,
+          structured: typeof message.content !== "string",
           isError: false,
         });
       }
@@ -587,7 +591,8 @@ export class OpenAIRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      messages,
+      // After the result updates above, which look up the client's call ids.
+      messages: withOpenAiChatToolCallIds(messages),
     };
   }
 
@@ -702,6 +707,16 @@ export class OpenAIRequestAdapter
         message.role === "tool" &&
         Object.hasOwn(updates, message.tool_call_id)
       ) {
+        // Kept as sent: the parts stay, so an image part reaches the provider
+        // (or the image conversion) as an image, not as its JSON text.
+        if (
+          isApprovedAsSent({
+            sent: message.content,
+            approved: updates[message.tool_call_id],
+          })
+        ) {
+          return message;
+        }
         appliedCount++;
         logger.debug(
           { toolCallId: message.tool_call_id },
@@ -1529,9 +1544,16 @@ export const openaiAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): OpenAIProvider {
     // Use observable fetch for request duration metrics if agent is provided
-    const baseFetch = options.agent
-      ? metrics.llm.getObservableFetch("openai", options.agent, options.source)
-      : undefined;
+    const baseFetch = fetchWithAbortSignal(
+      options.agent
+        ? metrics.llm.getObservableFetch(
+            "openai",
+            options.agent,
+            options.source,
+          )
+        : undefined,
+      options.abortSignal,
+    );
 
     // "ChatGPT subscription" (Codex) auth mode: the resolved credential is an
     // encoded ChatGPT OAuth credential, not an `sk-…` key. Route through the

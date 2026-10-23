@@ -8,18 +8,22 @@ import {
   clientFilterToAgentIds,
   DynamicInteraction,
   isClaudeSessionSource,
+  isLogContentNotStored,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
+import { isOpenCodeFamilySessionSource } from "@archestra/shared/opencode-family";
 import {
   and,
   asc,
   count,
   desc,
   eq,
+  getTableColumns,
   gte,
   inArray,
   isNotNull,
+  isNull,
   lte,
   max,
   min,
@@ -28,14 +32,15 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
-import { LRUCacheManager } from "@/cache-manager";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import {
-  decryptInteractionContent,
   encryptInteractionContent,
   readInteractionRow,
+  restoreWrittenInteractionContent,
 } from "@/content-encryption/audit-rows";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   type CursorPaginatedResult,
@@ -44,6 +49,11 @@ import {
   encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
+import {
+  resolveLogContentMode,
+  withholdInteractionContent,
+} from "@/log-content";
 import logger from "@/logging";
 import type {
   InsertInteraction,
@@ -58,17 +68,30 @@ import type {
   UserInfo,
 } from "@/types";
 import {
+  AgentTypeSchema,
   InteractionAuthMethodSchema,
   LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH,
   normalizeInteractionResponse,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
+import {
+  type InteractionSessionPreview,
+  InteractionSessionPreviewSchema,
+} from "@/types/interaction";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
+import { hasUnavailableMediaCost } from "@/utils/media-usage";
+import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import AgentUsageModel from "./agent-usage";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import InteractionBillingModel from "./interaction-billing";
 import InteractionDeltaManager from "./interaction-delta-manager";
+import InteractionSessionHeadModel from "./interaction-session-head";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import { interactionBelongsToOrganization } from "./log-organization";
 import VirtualApiKeyModel from "./virtual-api-key";
@@ -96,6 +119,39 @@ const SESSION_SCAN_BATCH_ROWS = 500;
 const SESSION_SCAN_MAX_ROWS = 20_000;
 
 /**
+ * How many of a session's newest rows a preview lookup reads past guardrail
+ * calls; a longer run keeps the turn the sample found.
+ */
+const GUARDRAIL_SKIP_SCAN_ROWS = 200;
+
+/** Rows per UPDATE when the session-preview backfill stores previews. */
+const SESSION_PREVIEW_UPDATE_ROWS = 50;
+
+/**
+ * A row of a thread's skeleton as fillThreadSessionPreviews lists it (raw
+ * SQL, snake_case): no payload, just what the fold order and the chunks need.
+ */
+type ThreadSkeletonRow = {
+  id: string;
+  parent_id: string | null;
+  bytes: number | null;
+  missing: boolean;
+};
+
+/** A thread's row with its payload, as one chunk of the thread fill loads it. */
+type ThreadChunkRow = {
+  id: string;
+  parentId: string | null;
+  threadId: string | null;
+  requestSharedPrefix: number | null;
+  request: unknown;
+  source: InteractionSource | null;
+  sessionSource: string | null;
+  type: string;
+  encryptedChatConversationId: string | null;
+};
+
+/**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
  * on purpose: the value is cheap to recompute on a miss, so it is not worth a
  * round-trip to the distributed cache to share it between pods. Bounded well
@@ -107,6 +163,15 @@ const SESSION_SCAN_MAX_ROWS = 20_000;
  * means "no predicates" — returning that for a denial would list everything.
  */
 const SESSION_ACCESS_DENIED = Symbol("session-access-denied");
+
+/**
+ * The logs user filter's default list (most active users first) is cached per
+ * organization in the distributed cache. A ready activity summary avoids the
+ * history scan; incomplete summaries use the exact aggregate. Stored at the
+ * endpoint's maximum size so every requested limit is a prefix of the same entry.
+ */
+const USER_FILTER_OPTIONS_CACHE_TTL_MS = 30 * TimeInMs.Second;
+const USER_FILTER_OPTIONS_MAX = 100;
 
 const sessionTotalCache = new LRUCacheManager<number>({
   maxSize: 500,
@@ -135,6 +200,11 @@ function getMessageText(
       .join(" ");
   }
   return "";
+}
+
+/** A guardrail's own model call (e.g. an annotator consult) inside the session it judges. */
+function isGuardrailSource(source: string | null): boolean {
+  return source?.startsWith("guardrail:") ?? false;
 }
 
 /**
@@ -167,14 +237,16 @@ function computeRequestType(
   // the session detail view must badge them as "subagent". A chat session's
   // session_source is not a Claude source, so without this the heuristics below
   // would fall through to "main" and mislabel every auxiliary chat call.
-  if (source?.startsWith("chat:")) {
+  if (source?.startsWith("chat:") || isGuardrailSource(source)) {
     return "subagent";
   }
 
-  if (source === "opencode:main") return "main";
-  if (source?.startsWith("opencode:")) return "subagent";
+  if (source === "opencode:main" || source === "kilo:main") return "main";
+  if (source?.startsWith("opencode:") || source?.startsWith("kilo:")) {
+    return "subagent";
+  }
 
-  if (sessionSource === "opencode_session") {
+  if (isOpenCodeFamilySessionSource(sessionSource)) {
     return computeOpenCodeRequestType(request);
   }
 
@@ -412,25 +484,63 @@ function stripUnstorableChars<T>(value: T): T {
 }
 
 /**
- * Join predicate linking an interaction's `session_id` (VARCHAR) to a
- * conversation's `id` (UUID) — used for Archestra Chat sessions whose
- * session_id IS the conversation id.
- *
- * The only reason a cast is needed at all is type compatibility: Postgres has no
- * `varchar = uuid` operator. We cast the TRUSTED side (`conversations.id::text`,
- * which can never fail) rather than the untrusted `session_id::uuid` — a non-uuid
- * session_id (e.g. some a2a / external-agent ids) would otherwise throw
- * "invalid input syntax for type uuid" and 500 the whole query (see utils/uuid.ts).
- * Comparing as text, a non-conversation session_id simply matches no row, and the
- * equality on the bare `session_id` column can use interactions_session_*_idx.
- * Conversation ids are generated as canonical lowercase uuids, so they match the
- * canonical lowercase form `id::text` produces.
+ * The rows of one session, by the key the session list gives it: a session's
+ * own `session_id`, or, for a request logged without one, that request's id —
+ * such a request is a session of its own, the same `COALESCE(session_id, id)`
+ * key the session list groups by. Only a uuid can be a request id, so any
+ * other key matches by `session_id` alone, and the two branches stay on the
+ * session and primary-key indexes.
  */
-function sessionIdMatchesConversation(): SQL {
-  return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
+function matchesSessionKey(sessionKey: string): SQL {
+  const t = schema.interactionsTable;
+  const sessionRows = eq(t.sessionId, sessionKey);
+  if (!isUuid(sessionKey)) return sessionRows;
+  return or(sessionRows, and(isNull(t.sessionId), eq(t.id, sessionKey))) as SQL;
 }
 
 class InteractionModel {
+  /** Whether the organization has any LLM request logged under a session. */
+  static async existsBySessionId(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, params.sessionId),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .limit(1);
+    return result !== undefined;
+  }
+
+  /** The ones among `sessionIds` that have logged requests in the organization. */
+  static async findLoggedSessionIds(params: {
+    organizationId: string;
+    sessionIds: string[];
+    ownUserId?: string;
+  }): Promise<Set<string>> {
+    if (params.sessionIds.length === 0) return new Set();
+    const rows = await db
+      .selectDistinct({ sessionId: schema.interactionsTable.sessionId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          inArray(schema.interactionsTable.sessionId, params.sessionIds),
+          interactionBelongsToOrganization(params.organizationId),
+          params.ownUserId
+            ? eq(schema.interactionsTable.userId, params.ownUserId)
+            : undefined,
+        ),
+      );
+    return new Set(
+      rows.flatMap((row) => (row.sessionId ? [row.sessionId] : [])),
+    );
+  }
+
   static async existsByRunId(runId: string): Promise<boolean> {
     const [result] = await db
       .select({ id: schema.interactionsTable.id })
@@ -445,28 +555,42 @@ class InteractionModel {
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
+   *
+   * Do not mutate the returned row: for a delta-encoded request its
+   * `request.messages` entries are shared with the reconstruction cache.
    */
   static async create(
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
   ) {
-    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly.
-    const environmentId = data.profileId
-      ? await AgentModel.findEnvironmentId(data.profileId)
-      : (data.environmentId ?? null);
+    const { billingUsage, billingAttribution, ...columns } = data;
+    if (billingUsage && !billingAttribution)
+      throw new Error("Billing attribution is required for settlement");
+    const environmentId = billingAttribution
+      ? billingAttribution.environmentId
+      : data.profileId
+        ? await AgentModel.findEnvironmentId(data.profileId)
+        : (data.environmentId ?? null);
+    // Enforced here, in the single funnel, so no writer can store content
+    // the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
+    const record = withheld ? withholdInteractionContent(columns) : columns;
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...record,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(record.request),
+      processedRequest: stripUnstorableChars(record.processedRequest),
+      response: stripUnstorableChars(record.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
@@ -480,20 +604,131 @@ class InteractionModel {
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
     // so a chain spanning keys could not be reconstructed by any reader.
-    const { values, tip } = audit
-      ? { values: sanitized, tip: null }
-      : await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Withheld rows are excluded too: there is no conversation to share with
+    // a parent, and leaving their hash columns empty keeps a later full-content
+    // row from chaining onto a request that was never stored.
+    const { values, tip } =
+      audit || withheld
+        ? { values: sanitized, tip: null }
+        : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
-    const [interaction] = await db
-      .insert(schema.interactionsTable)
-      // Monotonic v7 id: created_at ties happen under load, and the delta
-      // manager's "most recent interaction" lookup breaks ties with the id.
-      .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
-      .returning();
-    // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for encrypted-chat rows too: this caller
-    // supplied the very key that just encrypted them.
-    decryptInteractionContent(interaction, audit);
+    const interactionId = values.id ?? uuidv7();
+    const plaintext = {
+      ...values,
+      sessionPreview: buildSessionPreview(sanitized, values.request),
+    };
+    const insertValues = {
+      ...encryptInteractionContent({ ...plaintext }, audit),
+      id: interactionId,
+    };
+    const insert = async (tx?: Transaction) => {
+      const writer = tx ?? db;
+      const [created] = await writer
+        .insert(schema.interactionsTable)
+        // Monotonic v7 id: created_at ties happen under load, and the delta
+        // manager's "most recent interaction" lookup breaks ties with the id.
+        .values(insertValues)
+        .onConflictDoNothing({ target: schema.interactionsTable.id })
+        .returning();
+      if (!created) {
+        const [existing] = await writer
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.id, interactionId));
+        if (
+          !existing ||
+          existing.userId !== (data.userId ?? null) ||
+          existing.profileId !== (data.profileId ?? null) ||
+          existing.appId !== (data.appId ?? null) ||
+          existing.connectorId !== (data.connectorId ?? null)
+        )
+          throw new Error(
+            "Interaction id was already used for different attribution",
+          );
+        return existing;
+      }
+      return created;
+    };
+    const write = (tx?: Transaction) =>
+      insertValues.userId == null
+        ? insert(tx)
+        : InteractionUserActivityModel.append(insertValues, tx);
+    const interaction =
+      billingUsage && billingAttribution
+        ? await retainDeletedBillingAttribution({
+            values: insertValues,
+            run: () =>
+              retryOnceOnDeadlock(() =>
+                withDbTransaction(async (tx) => {
+                  const claimed = await InteractionBillingModel.claim({
+                    tx,
+                    interactionId,
+                    usage: billingUsage,
+                    attribution: billingAttribution,
+                    userId: data.userId ?? null,
+                    billingTeamId: data.billingTeamId ?? null,
+                    billingMode: data.billingMode ?? "metered",
+                    attributionLabels: data.attributionLabels,
+                    logIdentity: {
+                      profileId: data.profileId,
+                      appId: data.appId ?? null,
+                      connectorId: data.connectorId ?? null,
+                      serviceAccountId: data.serviceAccountId ?? null,
+                    },
+                  });
+                  if (!claimed) {
+                    const [existing] = await tx
+                      .select()
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (existing) return existing;
+                  }
+                  if (claimed) {
+                    const [legacy] = await tx
+                      .select({ id: schema.interactionsTable.id })
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (legacy)
+                      throw new Error(
+                        "Cannot settle an interaction already written without a billing receipt",
+                      );
+                  }
+                  const created = await write(tx);
+                  if (claimed && data.billingMode !== "subscription") {
+                    if (billingUsage.mode === "enforce") {
+                      await LimitModel.settleBillableUsage({
+                        tx,
+                        usage: billingUsage,
+                        attribution: billingAttribution,
+                      });
+                    } else {
+                      // Shadow records the candidate quote but posts only legacy counts.
+                      await LimitModel.recordInteractionTokenUsage({
+                        agentId: data.profileId ?? "",
+                        teamIds: [],
+                        entities: [],
+                        model: data.model ?? "",
+                        inputTokens: data.inputTokens ?? 0,
+                        outputTokens: data.outputTokens ?? 0,
+                        tx,
+                        attribution: billingAttribution,
+                      });
+                    }
+                  }
+                  return created;
+                }),
+              ),
+          })
+        : await write();
+    // The RETURNING row is this method's public return value, so callers never
+    // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
+    // very key that just encrypted them.
+    restoreWrittenInteractionContent(interaction, {
+      written: insertValues,
+      plaintext,
+      audit,
+    });
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);
@@ -501,16 +736,22 @@ class InteractionModel {
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
-    trackBackgroundWork(
-      InteractionModel.updateUsageAfterInteraction(
-        interaction as InsertInteraction & { id: string },
-      ).catch((error) => {
-        logger.error(
-          { error },
-          `Failed to update usage tracking for interaction ${interaction.id}`,
-        );
-      }),
-    );
+    if (!billingUsage)
+      trackBackgroundWork(
+        InteractionModel.updateUsageAfterInteraction(
+          interaction as InsertInteraction & { id: string },
+        ).catch((error) => {
+          logger.error(
+            { error },
+            `Failed to update usage tracking for interaction ${interaction.id}`,
+          );
+        }),
+      );
+
+    AgentUsageModel.recordUseInBackground({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
 
     return interaction;
   }
@@ -580,9 +821,7 @@ class InteractionModel {
 
     // Session ID filter
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
 
     // Date range filter
@@ -726,9 +965,7 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.userId, filters.userId));
     }
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
     if (filters?.startDate) {
       conditions.push(
@@ -757,22 +994,30 @@ class InteractionModel {
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
+          durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
           source: schema.interactionsTable.source,
+          // The row's small stored preview (not the payload), so the trace can
+          // name a turn by the prompt it served; decrypted below.
+          attributionLabels: schema.interactionsTable.attributionLabels,
+          sessionPreview: schema.interactionsTable.sessionPreview,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
           requestType: sql<"main" | "subagent">`
             CASE
-              WHEN ${schema.interactionsTable.source} = 'opencode:main'
+              WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
               THEN 'main'
-              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction')
+              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction', 'kilo:subagent', 'kilo:title', 'kilo:compaction')
+                OR ${schema.interactionsTable.source} LIKE 'guardrail:%'
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',
                   ${schema.interactionsTable.request}->>'system',
                   ${schema.interactionsTable.request}->>'instructions',
                   ${schema.interactionsTable.request}#>>'{systemInstruction,parts,0,text}'
                 )) LIKE '%title generator%'
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND ${schema.interactionsTable.request} ? 'tools'
                 AND NOT EXISTS (
                   SELECT 1
@@ -813,13 +1058,37 @@ class InteractionModel {
       ),
     );
     return createPaginatedResult(
-      rows.map((row) => ({
-        ...row,
-        externalAgentIdLabel: resolveExternalAgentIdLabel(
-          row.externalAgentId,
-          agentNamesMap,
-        ),
-      })),
+      rows.map(({ sessionPreview, encryptedChatConversationId, ...row }) => {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Locked-safe: a locked chat's preview stays a sentinel, which then
+        // fails the schema check and names nothing.
+        const read = readInteractionRow({
+          sessionPreview,
+          encryptedChatConversationId,
+        });
+        // SPDX-SnippetEnd
+        const preview = InteractionSessionPreviewSchema.safeParse(
+          read.sessionPreview,
+        );
+        return {
+          ...row,
+          externalAgentIdLabel: resolveExternalAgentIdLabel(
+            row.externalAgentId,
+            agentNamesMap,
+          ),
+          userMessagePreview: preview.success
+            ? preview.data.lastUserMessagePreview
+            : null,
+          responseToolNames: preview.success
+            ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseTextPreview: preview.success
+            ? (preview.data.responseTextPreview ?? null)
+            : null,
+        };
+      }),
       Number(total),
       pagination,
     );
@@ -849,6 +1118,42 @@ class InteractionModel {
         // Default: newest first
         return desc(schema.interactionsTable.createdAt);
     }
+  }
+
+  /**
+   * The prompt size of a chat conversation's latest turn, so its context
+   * indicator can show on load instead of waiting for the next reply.
+   * Adapters store uncached input apart from cache reads and writes, so the
+   * three add up to the whole prompt — the same figure the live stream sends.
+   */
+  static async findLatestChatContextUsage(
+    conversationId: string,
+  ): Promise<{ tokens: number; createdAt: Date } | null> {
+    const [row] = await db
+      .select({
+        inputTokens: schema.interactionsTable.inputTokens,
+        cacheReadTokens: schema.interactionsTable.cacheReadTokens,
+        cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
+        createdAt: schema.interactionsTable.createdAt,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, conversationId),
+          eq(schema.interactionsTable.source, "chat"),
+          isNotNull(schema.interactionsTable.inputTokens),
+        ),
+      )
+      .orderBy(desc(schema.interactionsTable.createdAt))
+      .limit(1);
+    if (!row) return null;
+    return {
+      tokens:
+        (row.inputTokens ?? 0) +
+        (row.cacheReadTokens ?? 0) +
+        (row.cacheWriteTokens ?? 0),
+      createdAt: row.createdAt,
+    };
   }
 
   static async findById(
@@ -1030,25 +1335,10 @@ class InteractionModel {
     for (let batch = 0; batch < maxBatches; batch++) {
       let deleted: number;
       try {
-        const result = await db.execute<{ deleted: number }>(sql`
-          WITH fence AS (
-            SELECT i.id
-            FROM ${schema.interactionsTable} AS i
-            WHERE i.created_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-              AND NOT EXISTS (
-                SELECT 1 FROM ${schema.interactionsTable} AS c
-                WHERE c.parent_id = i.id
-              )
-            LIMIT ${batchSize}
-          ),
-          removed AS (
-            DELETE FROM ${schema.interactionsTable}
-            WHERE id IN (SELECT id FROM fence)
-            RETURNING 1
-          )
-          SELECT COUNT(*)::int AS deleted FROM removed
-        `);
-        deleted = Number(result.rows[0]?.deleted ?? 0);
+        deleted = await InteractionUserActivityModel.deleteExpiredBatch({
+          retentionDays: params.retentionDays,
+          batchSize,
+        });
       } catch (error) {
         // Most likely the parent_id RESTRICT FK racing a concurrent insert
         // that chained onto a row selected for deletion. Safe to stop — the
@@ -1146,8 +1436,9 @@ class InteractionModel {
     requestingUserId?: string;
     isAgentAdmin?: boolean;
     organizationId?: string;
+    limit?: number;
   }): Promise<UserInfo[]> {
-    const { requestingUserId, isAgentAdmin, organizationId } = params;
+    const { requestingUserId, isAgentAdmin, organizationId, limit } = params;
     // Build where clause for access control
     const conditions: SQL[] = [isNotNull(schema.interactionsTable.userId)];
     if (organizationId) {
@@ -1172,24 +1463,31 @@ class InteractionModel {
     // Put the most active users first so a large organization's filter surfaces
     // likely choices before its alphabetical tail. Names and ids close ties to
     // keep the order stable between requests.
-    const activityCount = count();
-    const result = await db
+    // Aggregate the log before joining names so user metadata is joined once
+    // per distinct user instead of once per interaction.
+    const activity = db
       .select({
         userId: schema.interactionsTable.userId,
-        userName: schema.usersTable.name,
+        activityCount: count().as("activity_count"),
       })
       .from(schema.interactionsTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.interactionsTable.userId, schema.usersTable.id),
-      )
       .where(and(...conditions))
-      .groupBy(schema.interactionsTable.userId, schema.usersTable.name)
+      .groupBy(schema.interactionsTable.userId)
+      .as("user_activity");
+    const query = db
+      .select({
+        userId: activity.userId,
+        userName: schema.usersTable.name,
+      })
+      .from(activity)
+      .innerJoin(schema.usersTable, eq(activity.userId, schema.usersTable.id))
       .orderBy(
-        desc(activityCount),
+        desc(activity.activityCount),
         asc(schema.usersTable.name),
-        asc(schema.interactionsTable.userId),
-      );
+        asc(activity.userId),
+      )
+      .$dynamic();
+    const result = await (limit === undefined ? query : query.limit(limit));
 
     return result
       .filter(
@@ -1199,6 +1497,39 @@ class InteractionModel {
         id: r.userId,
         name: r.userName,
       }));
+  }
+
+  /**
+   * Users for the logs user filter: at most `limit` users with at least one
+   * interaction in the organization.
+   *
+   * Without `search` or `ids`, returns the most active users first, from a
+   * per-organization cache (see USER_FILTER_OPTIONS_CACHE_TTL_MS). With them,
+   * matches users by name (by id when the name is empty), or by exact id, in
+   * byte order of name like the member picker (not locale order: non-ASCII
+   * names sort by their UTF-8 bytes). That path probes the log per
+   * candidate user through the `user_id` index instead of aggregating the
+   * whole log.
+   */
+  static async getUserFilterOptions(params: {
+    organizationId: string;
+    search?: string;
+    ids?: string[];
+    limit: number;
+  }): Promise<UserInfo[]> {
+    const limit = Math.min(params.limit, USER_FILTER_OPTIONS_MAX);
+    if (params.search?.trim() || params.ids) {
+      return InteractionModel.findUsersWithInteractions({
+        organizationId: params.organizationId,
+        search: params.search,
+        ids: params.ids,
+        limit,
+      });
+    }
+    const mostActive = await InteractionModel.getCachedMostActiveUsers(
+      params.organizationId,
+    );
+    return mostActive.slice(0, limit);
   }
 
   /**
@@ -1216,6 +1547,9 @@ class InteractionModel {
         );
         return;
       }
+
+      // Audio/image counts cannot be repriced using generic text-token tariffs.
+      if (hasUnavailableMediaCost(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
@@ -1241,9 +1575,10 @@ class InteractionModel {
         );
         return;
       }
-      const teamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
+      // A credential's billing team takes the place of the agent's teams.
+      const teamIds = interaction.billingTeamId
+        ? [interaction.billingTeamId]
+        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
@@ -1256,8 +1591,17 @@ class InteractionModel {
         entityType: LimitEntityType;
         entityId: string | null | undefined;
       }> = [
-        { entityType: "user", entityId: interaction.userId },
+        // The billing team pays instead of the caller, so a team-billed
+        // interaction leaves the caller's personal limit untouched.
+        {
+          entityType: "user",
+          entityId: interaction.billingTeamId ? null : interaction.userId,
+        },
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "llm_oauth_client",
+          entityId: interaction.authenticatedAppId,
+        },
         {
           entityType: "virtual_key",
           entityId: interaction.passthroughVirtualKeyId,
@@ -1444,31 +1788,51 @@ class InteractionModel {
     const access = await InteractionModel.buildSessionConditions(
       requestingUserId,
       isAgentAdmin,
-      filters,
+      filters ? { ...filters, organizationId: undefined } : undefined,
     );
     if (access === SESSION_ACCESS_DENIED) {
       return emptyPage();
     }
-    const whereClause = access;
+    const headWhereClause = filters?.organizationId
+      ? and(
+          access,
+          InteractionModel.sessionHeadOrganizationCondition(
+            filters.organizationId,
+          ),
+        )
+      : access;
 
     // One row past the page is fetched so its presence can answer "is there
-    // another page" — the job the total count used to do.
-    const heads = await InteractionModel.findSessionHeadsForCursor(
-      whereClause,
-      cursorQuery,
-    );
+    // another page" — the job the total count used to do. The stored heads
+    // serve the page once they cover all history; until the startup backfill
+    // finishes, the interactions scan gives the same answer more slowly.
+    const heads = (await InteractionSessionHeadModel.isComplete())
+      ? await InteractionModel.findStoredSessionHeadsForCursor(
+          headWhereClause,
+          cursorQuery,
+          filters,
+        )
+      : await InteractionModel.findSessionHeadsForCursor(
+          headWhereClause,
+          cursorQuery,
+        );
     const hasNext = heads.length > cursorQuery.limit;
     const pageRows = hasNext ? heads.slice(0, cursorQuery.limit) : heads;
     if (pageRows.length === 0) {
       return emptyPage();
     }
 
+    // The page's session keys bound phase 2 to a few hundred rows, but a
+    // session can hold rows of another organization, so the organization
+    // check still applies there. It uses the primary-key probes rather than
+    // the shared predicate, whose owner sets read every agent of the
+    // organization on every request.
     const summaries = await InteractionModel.summarizeSessionPage(
       pageRows.map(({ sessionId, interactionId }) => ({
         sessionId,
         interactionId,
       })),
-      whereClause,
+      headWhereClause,
     );
 
     // The summary query groups, so its row order is not the head order. Emit
@@ -1503,6 +1867,414 @@ class InteractionModel {
             : null,
       },
     };
+  }
+
+  /**
+   * Rows with no `session_preview`, newest first, one keyset page at a time.
+   * Rows written before migration 0562 have none, and the session list has to
+   * load, decrypt and often rebuild each one's full request in its place.
+   *
+   * Encrypted-chat rows are left out. Their content is keyed to a browser the
+   * server does not hold, so nothing can be derived from it.
+   *
+   * `requestBytes` is the stored request's size, so the caller can cut the page
+   * to a memory budget before loading anything. `cursor` is the row's
+   * `(created_at, id)` with created_at as text: a JS Date drops microseconds,
+   * and resuming from a truncated time would read the same rows again.
+   */
+  static async findRowsMissingSessionPreview(params: {
+    before: { createdAt: string; id: string } | null;
+    limit: number;
+  }): Promise<
+    Array<{
+      id: string;
+      createdAt: string;
+      requestBytes: number;
+      sessionId: string | null;
+      threadId: string | null;
+    }>
+  > {
+    const before = params.before
+      ? sql`AND (created_at, id) < (${params.before.createdAt}::timestamp, ${params.before.id}::uuid)`
+      : sql``;
+    // Matches the predicate and key order of the partial index built in
+    // database/index-maintenance.ts, so this walks only the rows still to do.
+    // session_id and thread_id tell the caller which rows are delta-encoded
+    // and belong to which thread (see fillThreadSessionPreviews).
+    const { rows } = await db.execute<{
+      id: string;
+      created_at: string;
+      request_bytes: number | null;
+      session_id: string | null;
+      thread_id: string | null;
+    }>(sql`
+      SELECT id, created_at::text AS created_at,
+             pg_column_size(request) AS request_bytes,
+             session_id, thread_id
+      FROM interactions
+      WHERE session_preview IS NULL
+        AND encrypted_chat_conversation_id IS NULL
+        ${before}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${params.limit}
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      requestBytes: Number(row.request_bytes ?? 0),
+      sessionId: row.session_id,
+      threadId: row.thread_id,
+    }));
+  }
+
+  /**
+   * Store the session preview each of these rows would have been written with,
+   * so the session list stops rebuilding it on every read.
+   *
+   * It is derived exactly as {@link create} derives it: flags from the stored
+   * request, the last-user-message text from the full request. That is also
+   * exactly what the list computes for a row without one, so filling it
+   * changes no output, only the cost. A row that already has a preview is
+   * never overwritten, which keeps concurrent runs harmless.
+   *
+   * Meant for rows that store their whole request. A delta-encoded row is
+   * reconstructed here too, but each one loads and folds its entire chain;
+   * the backfill sends those rows through {@link fillThreadSessionPreviews},
+   * which folds a thread once.
+   *
+   * Returns how many rows were filled.
+   */
+  static async fillSessionPreviews(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const t = schema.interactionsTable;
+
+    const rows = await db
+      .select({
+        id: t.id,
+        threadId: t.threadId,
+        request: t.request,
+        source: t.source,
+        sessionSource: t.sessionSource,
+        type: t.type,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(
+        and(
+          inArray(t.id, ids),
+          isNull(t.sessionPreview),
+          isNull(t.encryptedChatConversationId),
+        ),
+      );
+    if (rows.length === 0) return 0;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    for (const row of rows) {
+      readInteractionRow(row);
+    }
+    // SPDX-SnippetEnd
+
+    const reconstructed = await InteractionDeltaManager.reconstructMany(
+      rows.map((row) => ({
+        id: row.id,
+        threadId: row.threadId,
+        request: row.request,
+        processedRequest: null,
+      })),
+    );
+    const responses = await InteractionModel.responsesFor(rows);
+    return InteractionModel.storeSessionPreviews(
+      rows.map((row) =>
+        InteractionModel.sessionPreviewValue(
+          row,
+          reconstructed.get(row.id)?.request ?? row.request,
+          responses.get(row.id) ?? null,
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Fill the previews of every row of one delta-encoded thread that still
+   * lacks one, in a single pass over the thread.
+   *
+   * A delta row stores only the messages new since its parent, so its preview
+   * needs the request folded from its ancestors. Filling such rows a chunk at
+   * a time, as {@link fillSessionPreviews} does, loads the chain of every row
+   * in the chunk and folds one whole conversation per row; on Claude Code
+   * sessions of hundreds of turns that exhausted the worker's heap. Here the
+   * rows still missing a preview and the ancestors their folds need are
+   * listed once without their payloads, then loaded parents first in chunks
+   * bounded by rows and stored bytes and folded one from the previous, so a
+   * thread of any size holds one chunk and one conversation at a time. A
+   * thread can be many times the size of its conversation: it stores the
+   * whole conversation again in a new head row whenever the client's tool
+   * list changes.
+   *
+   * Ancestors are loaded whether or not they have a preview: a row written by
+   * a pod on the previous build during the rollout that introduced previews
+   * can sit between two rows that have one. A row that cannot be read fails
+   * together with its descendants, which cannot be folded without it; the
+   * rest of the thread is filled. Past `deadline` the fill stops between
+   * chunks and reports `complete: false`; a later call resumes with the rows
+   * still missing, their filled ancestors folded again on the way.
+   */
+  static async fillThreadSessionPreviews(params: {
+    sessionId: string;
+    threadId: string;
+    chunkRows: number;
+    chunkBytes: number;
+    deadline?: number;
+  }): Promise<{ filled: number; failed: number; complete: boolean }> {
+    // The rows to fill plus the ancestors their folds need, without
+    // payloads: the skeleton the fold walks and the chunks are cut from.
+    const { rows: skeleton } = await db.execute<ThreadSkeletonRow>(sql`
+      WITH RECURSIVE chain AS (
+        SELECT id, parent_id FROM interactions
+        WHERE session_id = ${params.sessionId}
+          AND thread_id = ${params.threadId}
+          AND session_preview IS NULL
+          AND encrypted_chat_conversation_id IS NULL
+        UNION
+        SELECT i.id, i.parent_id FROM interactions i
+        JOIN chain c ON i.id = c.parent_id
+      )
+      SELECT c.id, c.parent_id, pg_column_size(i.request) AS bytes,
+             (i.session_preview IS NULL) AS missing
+      FROM chain c JOIN interactions i ON i.id = c.id
+      ORDER BY i.created_at, i.id
+    `);
+    if (!skeleton.some((row) => row.missing)) {
+      return { filled: 0, failed: 0, complete: true };
+    }
+    // The listed order only settles siblings; parentsFirst puts every parent
+    // ahead of its children, depth first, so a row's last child in this order
+    // is its last child at all and the folder can drop the fold with it.
+    const order = parentsFirst(skeleton);
+    const folder = InteractionDeltaManager.threadFolder(
+      order.map((row) => ({ id: row.id, parentId: row.parent_id })),
+    );
+    // Rows that could not be read or folded; their descendants cannot be
+    // folded either, and parents come first.
+    const unfoldable = new Set<string>();
+    let filled = 0;
+    let failed = 0;
+    const chunks = [
+      ...sizedChunks(
+        order,
+        { maxRows: params.chunkRows, maxBytes: params.chunkBytes },
+        (row) => Number(row.bytes ?? 0),
+      ),
+    ];
+    for (const [index, chunk] of chunks.entries()) {
+      if (
+        index > 0 &&
+        params.deadline !== undefined &&
+        Date.now() >= params.deadline
+      ) {
+        return { filled, failed, complete: false };
+      }
+      let loaded: ThreadChunkRow[];
+      let responses: Map<string, unknown>;
+      const unreadable = new Set<string>();
+      try {
+        const t = schema.interactionsTable;
+        loaded = await db
+          .select({
+            id: t.id,
+            parentId: t.parentId,
+            threadId: t.threadId,
+            requestSharedPrefix: t.requestSharedPrefix,
+            request: t.request,
+            source: t.source,
+            sessionSource: t.sessionSource,
+            type: t.type,
+            encryptedChatConversationId: t.encryptedChatConversationId,
+          })
+          .from(t)
+          .where(
+            inArray(
+              t.id,
+              chunk.map((row) => row.id),
+            ),
+          );
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        for (const row of loaded) {
+          try {
+            readInteractionRow(row);
+          } catch (error) {
+            unreadable.add(row.id);
+            logger.warn(
+              { err: error, interactionId: row.id },
+              "Could not read an interaction while filling its thread's session previews; it and its descendants keep deriving the preview on read",
+            );
+          }
+        }
+        // SPDX-SnippetEnd
+        // Ancestors are only folded; only the rows being filled read their
+        // response.
+        const filling = new Set(
+          chunk.filter((member) => member.missing).map((member) => member.id),
+        );
+        responses = await InteractionModel.responsesFor(
+          loaded.filter(
+            (row) => filling.has(row.id) && !unreadable.has(row.id),
+          ),
+        );
+      } catch (error) {
+        // Without this chunk nothing below it can be folded: the rest of the
+        // thread waits for the next pass.
+        logger.warn(
+          {
+            err: error,
+            sessionId: params.sessionId,
+            threadId: params.threadId,
+          },
+          "Could not load a chunk of a thread while filling its session previews; the rest of the thread keeps deriving them on read",
+        );
+        for (const rest of chunks.slice(index)) {
+          failed += rest.filter((row) => row.missing).length;
+        }
+        return { filled, failed, complete: true };
+      }
+
+      const byId = new Map(loaded.map((row) => [row.id, row]));
+      const values: Array<{ id: string; sessionPreview: unknown }> = [];
+      for (const member of chunk) {
+        const row = byId.get(member.id);
+        // member.parent_id and row.parentId are the same column, read by the
+        // skeleton query and by the chunk load.
+        const foldable =
+          row !== undefined &&
+          !unreadable.has(member.id) &&
+          (member.parent_id === null || !unfoldable.has(member.parent_id));
+        const full = foldable ? folder.fold(row) : null;
+        if (full === null) {
+          // Removed since the skeleton was read, unreadable, below an
+          // unreadable row, or (which parentsFirst rules out) ahead of its
+          // parent.
+          folder.skip({ id: member.id, parentId: member.parent_id });
+          unfoldable.add(member.id);
+          if (member.missing) failed += 1;
+          continue;
+        }
+        if (member.missing && row) {
+          values.push(
+            InteractionModel.sessionPreviewValue(
+              row,
+              full,
+              responses.get(row.id) ?? null,
+            ),
+          );
+        }
+      }
+      filled += await InteractionModel.storeSessionPreviews(values);
+    }
+    return { filled, failed, complete: true };
+  }
+
+  /**
+   * The responses of `rows`, by id: a preview names a request by what it
+   * produced (its tool calls or reply) and a title turn by its title. Only
+   * rows about to be written are passed, a bounded chunk at a time.
+   */
+  private static async responsesFor(
+    rows: Array<{ id: string }>,
+  ): Promise<Map<string, unknown>> {
+    const t = schema.interactionsTable;
+    const responses = new Map<string, unknown>();
+    if (rows.length === 0) return responses;
+    const loaded = await db
+      .select({
+        id: t.id,
+        response: t.response,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(
+        inArray(
+          t.id,
+          rows.map((row) => row.id),
+        ),
+      );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    for (const row of loaded) {
+      readInteractionRow(row);
+      responses.set(row.id, row.response);
+    }
+    // SPDX-SnippetEnd
+    return responses;
+  }
+
+  /**
+   * The stored form of the preview a row would have been written with: built
+   * as {@link create} builds it, from the full request and the stored
+   * (possibly delta-encoded) one, then encrypted like any content column.
+   */
+  private static sessionPreviewValue(
+    row: {
+      id: string;
+      source: InteractionSource | null;
+      sessionSource: string | null;
+      type: string;
+      request: unknown;
+    },
+    fullRequest: unknown,
+    response: unknown,
+  ): { id: string; sessionPreview: unknown } {
+    const preview = buildSessionPreview(
+      {
+        source: row.source,
+        sessionSource: row.sessionSource,
+        type: row.type,
+        request: fullRequest,
+        response,
+      } as InsertInteraction,
+      row.request,
+    );
+    const { sessionPreview } = encryptInteractionContent(
+      { sessionPreview: preview },
+      null,
+    );
+    return { id: row.id, sessionPreview };
+  }
+
+  /**
+   * Write previews for rows that still have none, a bounded VALUES list at a
+   * time. Returns how many rows were filled; a row filled meanwhile by a
+   * concurrent run is left as it is.
+   */
+  private static async storeSessionPreviews(
+    values: Array<{ id: string; sessionPreview: unknown }>,
+  ): Promise<number> {
+    let filled = 0;
+    for (
+      let offset = 0;
+      offset < values.length;
+      offset += SESSION_PREVIEW_UPDATE_ROWS
+    ) {
+      const chunk = values.slice(offset, offset + SESSION_PREVIEW_UPDATE_ROWS);
+      const { rows } = await db.execute<{ id: string }>(sql`
+        UPDATE interactions AS i
+        SET session_preview = v.preview
+        FROM (VALUES ${sql.join(
+          chunk.map(
+            (value) =>
+              sql`(${value.id}::uuid, ${JSON.stringify(value.sessionPreview)}::jsonb)`,
+          ),
+          sql`, `,
+        )}) AS v(id, preview)
+        WHERE i.id = v.id AND i.session_preview IS NULL
+        RETURNING i.id
+      `);
+      filled += rows.length;
+    }
+    return filled;
   }
 
   /**
@@ -1591,9 +2363,7 @@ class InteractionModel {
 
     // Session ID filter
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
 
     // Date range filter
@@ -1607,6 +2377,69 @@ class InteractionModel {
     }
 
     return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  /**
+   * A bounded head scan should probe owner primary keys, rather than build the
+   * organization's complete owner sets before it can return its first page.
+   * Scalar subqueries prevent PostgreSQL from rewriting EXISTS into hashed
+   * full-roster scans. Missing owners fail closed, as in the shared predicate.
+   */
+  private static sessionHeadOrganizationCondition(organizationId: string): SQL {
+    const t = schema.interactionsTable;
+    const agent = schema.agentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const app = schema.appsTable;
+    const agentBelongs = sql`COALESCE((SELECT ${agent.organizationId} = ${organizationId} FROM ${agent} WHERE ${agent.id} = ${t.profileId}), false)`;
+    const connectorBelongs = sql`COALESCE((SELECT ${connector.organizationId} = ${organizationId} FROM ${connector} WHERE ${connector.id} = ${t.connectorId}), false)`;
+    const appBelongs = sql`COALESCE((SELECT ${app.organizationId} = ${organizationId} FROM ${app} WHERE ${app.id} = ${t.appId}), false)`;
+    return and(
+      or(agentBelongs, connectorBelongs, appBelongs),
+      or(sql`${t.profileId} IS NULL`, agentBelongs),
+      or(sql`${t.connectorId} IS NULL`, connectorBelongs),
+      or(sql`${t.appId} IS NULL`, appBelongs),
+    ) as SQL;
+  }
+
+  /**
+   * {@link findSessionHeadsForCursor}, answered from the stored session heads:
+   * one ordered scan of `interaction_session_heads` with a primary-key join to
+   * each head interaction for the filters, instead of a walk over every
+   * interaction above the cursor with a newer-sibling probe per row.
+   *
+   * Cursors are the same `(created_at, id)` of the head interaction, so a
+   * cursor issued by either reader continues correctly on the other.
+   */
+  private static async findStoredSessionHeadsForCursor(
+    whereClause: SQL | undefined,
+    cursorQuery: CursorQuery,
+    filters: { userId?: string; sessionId?: string } | undefined,
+  ): Promise<
+    Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+      headCreatedAt: Date;
+      headId: string;
+    }>
+  > {
+    const position = decodeCursor(cursorQuery.cursor);
+    const before =
+      position && !Number.isNaN(new Date(position.value).getTime())
+        ? { createdAt: position.value, id: position.id }
+        : null;
+    const rows = await InteractionSessionHeadModel.findPage({
+      interactionFilter: whereClause,
+      userId: filters?.userId,
+      sessionKey: filters?.sessionId,
+      before,
+      limit: cursorQuery.limit,
+    });
+    return rows.map((row) => ({
+      sessionId: row.sessionId,
+      interactionId: row.sessionId ? null : row.headId,
+      headCreatedAt: row.headCreatedAt,
+      headId: row.headId,
+    }));
   }
 
   /**
@@ -1673,7 +2506,10 @@ class InteractionModel {
       })
       .from(t)
       .where(and(...conditions))
-      .orderBy(desc(t.createdAt), desc(t.id))
+      // Drizzle's descending timestamp indexes use NULLS LAST. PostgreSQL
+      // otherwise defaults DESC to NULLS FIRST and sorts the entire history,
+      // even though createdAt is non-nullable.
+      .orderBy(sql`${t.createdAt} DESC NULLS LAST`, desc(t.id))
       .limit(cursorQuery.limit + 1);
 
     return rows.map((row) => ({
@@ -1773,6 +2609,10 @@ class InteractionModel {
         profileName: sql<
           string | null
         >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
+        // Same preference as profileName, so the type names the same agent.
+        profileAgentType: sql<
+          string | null
+        >`COALESCE(MAX(${schema.agentsTable.agentType}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.agentType}::text))`,
         externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
         authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
         authenticatedAppNames: sql<
@@ -1799,8 +2639,21 @@ class InteractionModel {
         passthroughVirtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
-        // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
-        conversationTitle: max(schema.conversationsTable.title),
+        // Title of the Archestra Chat conversation whose id is the session id.
+        // Looked up by primary key once per session: joining on
+        // `conversations.id::text` cannot use that key, so every page read
+        // the whole conversations table. The CASE keeps a non-uuid session id
+        // from reaching the cast (an invalid uuid would fail the query), and
+        // matches only the canonical lowercase form, as the text join did.
+        conversationTitle: sql<
+          string | null
+        >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
+        // The knowledge connector a knowledge:* row ran for, so the list can
+        // tell "Embedding documents" rows apart. Only when one connector owns
+        // every row; looked up by primary key once per session.
+        connectorName: sql<
+          string | null
+        >`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.connectorId}) = 1 THEN (SELECT ${schema.knowledgeBaseConnectorsTable.name} FROM ${schema.knowledgeBaseConnectorsTable} WHERE ${schema.knowledgeBaseConnectorsTable.id} = MAX(${schema.interactionsTable.connectorId}::text)::uuid) END`,
       })
       .from(schema.interactionsTable)
       .leftJoin(
@@ -1814,7 +2667,6 @@ class InteractionModel {
         schema.usersTable,
         eq(schema.interactionsTable.userId, schema.usersTable.id),
       )
-      .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
       .where(pageWhereClause)
       // A session is identified by its session id alone (COALESCE(session_id,
       // id) for sessionless rows). profile_id / agent name must NOT be part of
@@ -1835,6 +2687,7 @@ class InteractionModel {
     const lastInteractionMap =
       await InteractionModel.getLastInteractionsForSessions(
         sessionKeys.filter((k): k is string => k !== null),
+        whereClause,
       );
 
     // Collect all external agent IDs to resolve prompt names
@@ -1888,6 +2741,8 @@ class InteractionModel {
         models: s.models ? s.models.split(",").filter(Boolean) : [],
         profileId: s.profileId,
         profileName: s.profileName,
+        profileAgentType:
+          AgentTypeSchema.safeParse(s.profileAgentType).data ?? null,
         externalAgentIds,
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
@@ -1912,8 +2767,11 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
+        attributionLabels: lastInteraction?.attributionLabels ?? null,
+        contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
+        connectorName: s.connectorName ?? null,
       };
     });
     return sessions;
@@ -1938,7 +2796,13 @@ class InteractionModel {
     const seen = new Set<string>();
     let scanned = 0;
 
-    while (keys.length < needed && scanned < maxScanRows) {
+    // Each scanned interaction can yield at most one session. A page beyond
+    // the scan budget cannot be filled by this walk, so go straight to grouping.
+    while (
+      needed <= maxScanRows &&
+      keys.length < needed &&
+      scanned < maxScanRows
+    ) {
       const batch = await db
         .select({
           id: schema.interactionsTable.id,
@@ -1956,7 +2820,7 @@ class InteractionModel {
         // which works from the oldest end — far below anything this walk
         // reads.
         .orderBy(
-          desc(schema.interactionsTable.createdAt),
+          sql`${schema.interactionsTable.createdAt} DESC NULLS LAST`,
           desc(schema.interactionsTable.id),
         )
         .limit(SESSION_SCAN_BATCH_ROWS)
@@ -2016,6 +2880,7 @@ class InteractionModel {
    */
   private static async getLastInteractionsForSessions(
     sessionKeys: string[],
+    whereClause: SQL | undefined,
   ): Promise<
     Map<
       string,
@@ -2023,6 +2888,8 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        attributionLabels: AttributionLabels | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >
@@ -2057,6 +2924,7 @@ class InteractionModel {
       uuidKeys,
       newest: NEWEST_PER_SESSION,
       oldest: OLDEST_PER_SESSION,
+      whereClause,
     });
 
     // Group by session and find the "last main interaction" and "title interaction"
@@ -2066,6 +2934,8 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        attributionLabels: AttributionLabels | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >();
@@ -2081,6 +2951,7 @@ class InteractionModel {
       string,
       {
         lastMainInteraction: (typeof interactions)[0] | null;
+        guardrailTip: (typeof interactions)[0] | null;
         claudeCodeTitle: string | null | undefined;
       }
     >();
@@ -2090,41 +2961,45 @@ class InteractionModel {
       windowRows: SessionWindowRow[],
     ): {
       lastMainInteraction: SessionWindowRow | null;
+      guardrailTip: SessionWindowRow | null;
       claudeCodeTitle: string | null | undefined;
     } => {
       let lastMainInteraction: SessionWindowRow | null = null;
+      // A guardrail's call previews only a session that has nothing else.
+      let guardrailTip: SessionWindowRow | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
-        const requestStr = JSON.stringify(interaction.request);
+        const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
-          interaction.sessionSource === "opencode_session" &&
-          computeRequestType(
-            interaction.request,
-            interaction.sessionSource,
-            interaction.source,
-          ) === "subagent";
+          interaction.preview?.isOpenCodeSideTurn ??
+          (isOpenCodeFamilySessionSource(interaction.sessionSource) &&
+            computeRequestType(
+              interaction.request,
+              interaction.sessionSource,
+              interaction.source,
+            ) === "subagent");
 
         // Check for title generation request (Claude Code)
-        if (
-          requestStr.includes("Please write a 5-10 word title") &&
-          claudeCodeTitle === undefined
-        ) {
+        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
           // Extract title from response
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
           };
-          claudeCodeTitle = response?.content?.[0]?.text ?? null;
+          claudeCodeTitle = interaction.preview
+            ? interaction.preview.claudeCodeTitle
+            : (response?.content?.[0]?.text ?? null);
           continue;
         }
 
         // Skip if this is not a "main" interaction
         if (
           !lastMainInteraction &&
-          !isOpenCodeSideTurn &&
-          !requestStr.includes("prompt suggestion generator") &&
-          !requestStr.includes("Please write a 5-10 word title")
+          (isGuardrail ||
+            (!isOpenCodeSideTurn &&
+              !interaction.isPromptSuggestion &&
+              !interaction.isTitleGeneration))
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2150,8 +3025,17 @@ class InteractionModel {
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
-            lastMainInteraction = interaction;
+          // A Metadata only turn is a real turn whose content was never
+          // stored: it is the session's tip, with no preview to show.
+          if (
+            interaction.preview?.hasContent ??
+            (hasOpenAiContent ||
+              hasResponsesContent ||
+              hasGeminiContent ||
+              isLogContentNotStored(interaction.request))
+          ) {
+            if (isGuardrail) guardrailTip ??= interaction;
+            else lastMainInteraction = interaction;
           }
         }
 
@@ -2161,12 +3045,16 @@ class InteractionModel {
         }
       }
 
-      return { lastMainInteraction, claudeCodeTitle };
+      return { lastMainInteraction, guardrailTip, claudeCodeTitle };
     };
 
     for (const [sessionKey, windowRows] of groupedBySession) {
       const selection = selectTip(windowRows);
-      if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+      if (
+        selection.lastMainInteraction ||
+        selection.guardrailTip ||
+        selection.claudeCodeTitle
+      ) {
         selectedPerSession.set(sessionKey, selection);
       }
     }
@@ -2175,32 +3063,57 @@ class InteractionModel {
     // prompt suggestions — yields no main interaction, and would lose the
     // preview the old deep window used to find. Re-read just those sessions at
     // the old depth so the preview cannot regress; in the common case the list
-    // is empty and this costs nothing.
-    const unresolvedKeys = [...groupedBySession.keys()].filter(
-      (key) => !selectedPerSession.get(key)?.lastMainInteraction,
-    );
+    // is empty and this costs nothing. A tip found only past the newest rows
+    // may skip newer turns between the two windows (behind a run of guardrail
+    // calls, say), so such a session is re-read too.
+    const unresolvedKeys = [...groupedBySession]
+      .filter(([key, rows]) => {
+        const tip = selectedPerSession.get(key)?.lastMainInteraction;
+        return !tip || rows.indexOf(tip) >= NEWEST_PER_SESSION;
+      })
+      .map(([key]) => key);
     if (unresolvedKeys.length > 0) {
       const deepRows = await InteractionModel.fetchSessionWindowRows({
         sessionKeys: unresolvedKeys,
         uuidKeys: [],
         newest: DEEP_PER_SESSION,
         oldest: 0,
+        // However many guardrail calls follow the last turn; a session of
+        // nothing but them keeps the guardrail tip its sample found.
+        skipGuardrails: true,
+        whereClause,
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
-        const selection = selectTip(windowRows);
-        if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+        const deep = selectTip(windowRows);
+        const sampled = selectedPerSession.get(sessionKey);
+        const selection = {
+          lastMainInteraction:
+            deep.lastMainInteraction ?? sampled?.lastMainInteraction ?? null,
+          guardrailTip: sampled?.guardrailTip ?? null,
+          claudeCodeTitle: deep.claudeCodeTitle ?? sampled?.claudeCodeTitle,
+        };
+        if (
+          selection.lastMainInteraction ||
+          selection.guardrailTip ||
+          selection.claudeCodeTitle
+        ) {
           selectedPerSession.set(sessionKey, selection);
         }
       }
     }
 
-    // Reconstruct every chosen tip's full request from deltas in one pass (a
-    // no-op for legacy/non-delta rows, which reconstructMany returns as-is).
-    // Still at most one tip per session, now in a single ancestor query.
+    // Only old tips without compact metadata need their full delta history.
+    // Batch those legacy reads; modern previews never load an ancestor chain.
     const reconstructed = await InteractionDeltaManager.reconstructMany(
       [...selectedPerSession.values()]
-        .map(({ lastMainInteraction }) => lastMainInteraction)
-        .filter((tip): tip is (typeof interactions)[0] => tip !== null)
+        .map(
+          ({ lastMainInteraction, guardrailTip }) =>
+            lastMainInteraction ?? guardrailTip,
+        )
+        .filter(
+          (tip): tip is (typeof interactions)[0] =>
+            tip !== null && tip.preview === null,
+        )
         .map((tip) => ({
           id: tip.id,
           threadId: tip.threadId,
@@ -2211,8 +3124,9 @@ class InteractionModel {
 
     for (const [
       sessionKey,
-      { lastMainInteraction, claudeCodeTitle },
+      { lastMainInteraction: mainTip, guardrailTip, claudeCodeTitle },
     ] of selectedPerSession) {
+      const lastMainInteraction = mainTip ?? guardrailTip;
       const tipRequest = lastMainInteraction
         ? (reconstructed.get(lastMainInteraction.id)?.request ??
           lastMainInteraction.request)
@@ -2220,10 +3134,17 @@ class InteractionModel {
 
       result.set(sessionKey, {
         lastUserMessagePreview: lastMainInteraction
-          ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+          ? lastMainInteraction.preview
+            ? lastMainInteraction.preview.lastUserMessagePreview
+            : buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
+        attributionLabels: lastMainInteraction?.attributionLabels ?? null,
+        contentNotStored: lastMainInteraction
+          ? (lastMainInteraction.preview?.contentNotStored ??
+            isLogContentNotStored(lastMainInteraction.request))
+          : false,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });
     }
@@ -2245,11 +3166,15 @@ class InteractionModel {
     uuidKeys,
     newest,
     oldest,
+    skipGuardrails = false,
+    whereClause,
   }: {
     sessionKeys: string[];
     uuidKeys: string[];
     newest: number;
     oldest: number;
+    skipGuardrails?: boolean;
+    whereClause: SQL | undefined;
   }): Promise<SessionWindowRow[]> {
     if (sessionKeys.length === 0) {
       return [];
@@ -2270,29 +3195,39 @@ class InteractionModel {
       sessionKeys.map((k) => sql`${k}`),
       sql`, `,
     );
+    // Migration-created indexes use DESC NULLS LAST. PostgreSQL requires the
+    // same ordering to stop at LIMIT, even though created_at is NOT NULL.
+    // The reverse scan therefore needs ASC NULLS FIRST.
     const oldestBranch =
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
-         WHERE session_id = keys.key
-         ORDER BY created_at ASC, id ASC
+         WHERE session_id = keys.key AND ${whereClause ?? sql`true`}
+         ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
+    const newestFrom = skipGuardrails
+      ? sql`(SELECT * FROM interactions
+             WHERE session_id = keys.key AND ${whereClause ?? sql`true`}
+             ORDER BY created_at DESC NULLS LAST, id DESC
+             LIMIT ${GUARDRAIL_SKIP_SCAN_ROWS}) recent
+           WHERE source IS NULL OR source NOT LIKE 'guardrail:%'`
+      : sql`interactions WHERE session_id = keys.key AND ${whereClause ?? sql`true`}`;
     const sessionlessBranch =
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
              encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
         uuidKeys.map((k) => sql`${k}::uuid`),
         sql`, `,
       )})
-        AND session_id IS NULL`
+        AND session_id IS NULL AND ${whereClause ?? sql`true`}`
         : sql``;
 
     // thread_id is selected so the chosen tip can be reconstructed from deltas.
@@ -2303,7 +3238,8 @@ class InteractionModel {
       source: InteractionSource | null;
       thread_id: string | null;
       request: unknown;
-      response: unknown;
+      session_preview: unknown;
+      attribution_labels: AttributionLabels | null;
       type: string;
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
@@ -2320,15 +3256,14 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.session_preview, t.attribution_labels, t.type,
              t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, attribution_labels, type, created_at,
                 encrypted_chat_conversation_id
-         FROM interactions
-         WHERE session_id = keys.key
-         ORDER BY created_at DESC, id DESC
+         FROM ${newestFrom}
+         ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}
       ) t
@@ -2349,6 +3284,16 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
+      const parsedPreview = InteractionSessionPreviewSchema.safeParse(
+        row.session_preview,
+      );
+      const preview = parsedPreview.success ? parsedPreview.data : null;
+      // A guardrail consult quotes the call it judges, so its text marks
+      // nothing about the consult itself.
+      const requestText =
+        preview || isGuardrailSource(row.source)
+          ? ""
+          : JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,
@@ -2356,10 +3301,45 @@ class InteractionModel {
         source: row.source,
         threadId: row.thread_id,
         request: row.request,
-        response: row.response,
+        preview,
+        attributionLabels: row.attribution_labels,
+        response: undefined,
+        isTitleGeneration:
+          preview?.isTitleGeneration ??
+          requestText.includes("Please write a 5-10 word title"),
+        isPromptSuggestion:
+          preview?.isPromptSuggestion ??
+          requestText.includes("prompt suggestion generator"),
         type: row.type,
         createdAt: new Date(row.created_at).getTime(),
       });
+    }
+
+    // Ordinary previews only use the request. Load response bodies in one
+    // batch for the sampled title-generation turns that actually need them;
+    // full assistant responses can otherwise dwarf the session-list reads.
+    const titleIds = [...byId.values()]
+      .filter((row) => row.isTitleGeneration && !row.preview)
+      .map((row) => row.id);
+    if (titleIds.length > 0) {
+      const titles = await db
+        .select({
+          id: schema.interactionsTable.id,
+          response: schema.interactionsTable.response,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
+        })
+        .from(schema.interactionsTable)
+        .where(inArray(schema.interactionsTable.id, titleIds));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      for (const title of titles) {
+        readInteractionRow(title);
+        const row = byId.get(title.id);
+        if (row) row.response = title.response;
+      }
+      // SPDX-SnippetEnd
     }
 
     return [...byId.values()].sort(
@@ -2390,6 +3370,135 @@ class InteractionModel {
       );
 
     return Number(row?.activeUsers) || 0;
+  }
+
+  /**
+   * Concurrent misses for the same organization share one load, so a burst of
+   * page visits after the entry expires runs the loader once per process.
+   */
+  private static mostActiveUsersLoads = new Map<string, Promise<UserInfo[]>>();
+
+  private static async getCachedMostActiveUsers(
+    organizationId: string,
+  ): Promise<UserInfo[]> {
+    const state = await InteractionUserActivityModel.state();
+    const version = `${organizationId}-${state.generation}-${state.revision}-${state.ready}`;
+    const pending = InteractionModel.mostActiveUsersLoads.get(version);
+    if (pending) {
+      return pending;
+    }
+    const load = InteractionModel.loadMostActiveUsers(
+      organizationId,
+      state,
+    ).finally(() => InteractionModel.mostActiveUsersLoads.delete(version));
+    InteractionModel.mostActiveUsersLoads.set(version, load);
+    return load;
+  }
+
+  private static async loadMostActiveUsers(
+    organizationId: string,
+    state: Awaited<ReturnType<typeof InteractionUserActivityModel.state>>,
+  ): Promise<UserInfo[]> {
+    const key =
+      `${CacheKey.InteractionUserOptions}-${organizationId}-${state.generation}-${state.revision}-${state.ready}` as const;
+    const cached = await cacheManager.get<UserInfo[]>(key);
+    if (cached) {
+      return cached;
+    }
+    const startedAt = Date.now();
+    const users = state.ready
+      ? await InteractionUserActivityModel.mostActive({
+          organizationId,
+          limit: USER_FILTER_OPTIONS_MAX,
+          generation: state.generation,
+        })
+      : await InteractionModel.getUniqueUserIds({
+          organizationId,
+          limit: USER_FILTER_OPTIONS_MAX,
+        });
+    const current = await InteractionUserActivityModel.state();
+    if (
+      current.generation !== state.generation ||
+      current.revision !== state.revision ||
+      current.ready !== state.ready
+    ) {
+      return InteractionModel.getUniqueUserIds({
+        organizationId,
+        limit: USER_FILTER_OPTIONS_MAX,
+      });
+    }
+    try {
+      const ttl = USER_FILTER_OPTIONS_CACHE_TTL_MS - (Date.now() - startedAt);
+      if (ttl > 0) await cacheManager.set(key, users, ttl);
+    } catch (error) {
+      // The list is still correct; the next request recomputes it.
+      logger.warn(
+        { error, organizationId },
+        "InteractionModel: could not cache the logs user filter options",
+      );
+    }
+    return users;
+  }
+
+  private static async findUsersWithInteractions(params: {
+    organizationId: string;
+    search?: string;
+    ids?: string[];
+    limit: number;
+  }): Promise<UserInfo[]> {
+    const users = schema.usersTable;
+    const search = params.search?.trim();
+    const candidates = db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(
+        and(
+          params.ids
+            ? sql`${users.id} = ANY(${sql.param(params.ids)}::text[])`
+            : undefined,
+          search
+            ? or(
+                buildTokenizedSearchFilter({
+                  query: search,
+                  columns: [users.name],
+                }),
+                and(
+                  eq(users.name, ""),
+                  buildTokenizedSearchFilter({
+                    query: search,
+                    columns: [users.id],
+                  }),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(sql`${users.name} COLLATE "C"`, sql`${users.id} COLLATE "C"`);
+    // One indexed probe per candidate on `user_id`, stopping at the user's
+    // first interaction in the organization. It refers to the `candidates`
+    // alias of the outer query below, so it is valid only inside that query.
+    const probe = db
+      .select({ found: sql`1` })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          sql`${schema.interactionsTable.userId} = candidates.id`,
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .limit(1);
+    // Sort the matching users by name before probing the log, so the probes
+    // stop once `limit` users with logs are found. `OFFSET 0` keeps PostgreSQL
+    // from flattening the subquery, which would probe every candidate and
+    // sort afterwards. Drizzle omits a zero offset, hence the raw outer query.
+    const result = await db.execute<UserInfo>(sql`
+      SELECT candidates.id, candidates.name
+      FROM (${candidates} OFFSET 0) AS candidates
+      CROSS JOIN LATERAL (${probe}) AS probe
+      ORDER BY candidates.name COLLATE "C", candidates.id COLLATE "C"
+      LIMIT ${params.limit}
+    `);
+    return result.rows;
   }
 
   private static async distinctExternalAgentIds(where: SQL): Promise<string[]> {
@@ -2435,6 +3544,8 @@ export default InteractionModel;
 
 /** One interaction row sampled for a session's list entry. */
 type SessionWindowRow = {
+  preview: InteractionSessionPreview | null;
+  attributionLabels: AttributionLabels | null;
   id: string;
   sessionId: string | null;
   sessionSource: string | null;
@@ -2442,6 +3553,8 @@ type SessionWindowRow = {
   threadId: string | null;
   request: unknown;
   response: unknown;
+  isTitleGeneration: boolean;
+  isPromptSuggestion: boolean;
   type: string;
   /** Epoch milliseconds — see the driver note in fetchSessionWindowRows. */
   createdAt: number;
@@ -2530,16 +3643,22 @@ function buildLastUserMessagePreview(
     if (!message) {
       return null;
     }
-    let preview = message.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
-    // Don't leave half a surrogate pair at the truncation point.
-    const lastCode = preview.charCodeAt(preview.length - 1);
-    if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
-      preview = preview.slice(0, -1);
-    }
-    return preview;
+    return truncatePreview(message);
   } catch {
     return null;
   }
+}
+
+function truncatePreview(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  let preview = trimmed.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
+  // Don't leave half a surrogate pair at the truncation point.
+  const lastCode = preview.charCodeAt(preview.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    preview = preview.slice(0, -1);
+  }
+  return preview;
 }
 
 /**
@@ -2587,4 +3706,164 @@ function parseInteractionAuthMethods(
       const result = InteractionAuthMethodSchema.safeParse(authMethod);
       return result.success ? [result.data] : [];
     });
+}
+
+/**
+ * A thread's skeleton with every parent ahead of its children, keeping the
+ * listed (created_at, id) order otherwise. The fold needs parents first, and
+ * timestamps alone do not promise it: a clock stepping back between two
+ * inserts, or rows restored with their own timestamps, can put a child first.
+ */
+function parentsFirst(rows: ThreadSkeletonRow[]): ThreadSkeletonRow[] {
+  const members = new Map(rows.map((row) => [row.id, row]));
+  const children = new Map<string, ThreadSkeletonRow[]>();
+  const roots: ThreadSkeletonRow[] = [];
+  for (const row of rows) {
+    if (row.parent_id !== null && members.has(row.parent_id)) {
+      const siblings = children.get(row.parent_id) ?? [];
+      siblings.push(row);
+      children.set(row.parent_id, siblings);
+    } else {
+      roots.push(row);
+    }
+  }
+  // Depth first from each root, siblings in listed order. Iterative: a thread
+  // can be thousands of rows deep.
+  const ordered: ThreadSkeletonRow[] = [];
+  const stack = roots.reverse();
+  while (stack.length > 0) {
+    const row = stack.pop() as ThreadSkeletonRow;
+    ordered.push(row);
+    const next = children.get(row.id);
+    if (next) {
+      for (let i = next.length - 1; i >= 0; i--) stack.push(next[i]);
+    }
+  }
+  return ordered;
+}
+
+/** Derive text from the full request and classify the stored delta suffix. */
+function buildSessionPreview(
+  data: InsertInteraction,
+  storedRequest: unknown,
+): InteractionSessionPreview {
+  const request = storedRequest as {
+    messages?: unknown[];
+    input?: unknown[];
+    contents?: unknown[];
+  };
+  const text = isGuardrailSource(data.source ?? null)
+    ? ""
+    : (JSON.stringify(request) ?? "");
+  const isTitleGeneration = text.includes("Please write a 5-10 word title");
+  const response = data.response as { content?: Array<{ text?: string }> };
+  const contentNotStored = isLogContentNotStored(request);
+  return {
+    hasContent:
+      [request?.messages, request?.input, request?.contents].some(
+        (value) => Array.isArray(value) && value.length > 0,
+      ) || contentNotStored,
+    isTitleGeneration,
+    isPromptSuggestion: text.includes("prompt suggestion generator"),
+    isOpenCodeSideTurn:
+      isOpenCodeFamilySessionSource(data.sessionSource ?? null) &&
+      computeRequestType(
+        request,
+        data.sessionSource ?? null,
+        data.source ?? null,
+      ) === "subagent",
+    contentNotStored,
+    lastUserMessagePreview: buildLastUserMessagePreview(
+      data.request,
+      data.type,
+    ),
+    claudeCodeTitle: isTitleGeneration
+      ? (response?.content?.[0]?.text ?? null)
+      : null,
+    ...(contentNotStored
+      ? { responseToolNames: [], responseTextPreview: null }
+      : buildResponsePreview(data)),
+  };
+}
+
+/** The tools a response asked for, else the start of its reply. */
+function buildResponsePreview(
+  data: InsertInteraction,
+): Pick<
+  InteractionSessionPreview,
+  "responseToolNames" | "responseTextPreview"
+> {
+  try {
+    const interaction = new DynamicInteraction({
+      request: data.request,
+      response: data.response,
+      type: data.type,
+    } as never);
+    const responseToolNames = interaction.getToolNamesRequested();
+    return {
+      responseToolNames,
+      responseTextPreview:
+        responseToolNames.length > 0
+          ? null
+          : truncatePreview(interaction.getLastAssistantResponse()),
+    };
+  } catch {
+    return { responseToolNames: [], responseTextPreview: null };
+  }
+}
+
+/** Retry only failed log foreign keys; admission attribution stays in the receipt. */
+async function retainDeletedBillingAttribution<T>(params: {
+  values: typeof schema.interactionsTable.$inferInsert;
+  run: () => Promise<T>;
+}): Promise<T> {
+  const columns = getTableColumns(schema.interactionsTable);
+  const foreignKeys = getTableConfig(schema.interactionsTable).foreignKeys;
+  const clearedConstraints = new Set<string>();
+  // Each retry clears a nullable log reference. Unknown constraints fail
+  // immediately; each constraint can be cleared only once.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await params.run();
+    } catch (error) {
+      let detail: unknown = error;
+      for (
+        let depth = 0;
+        depth < 5 &&
+        detail &&
+        typeof detail === "object" &&
+        !("constraint" in detail);
+        depth++
+      )
+        detail = "cause" in detail ? detail.cause : null;
+      if (
+        !detail ||
+        typeof detail !== "object" ||
+        !("code" in detail) ||
+        detail.code !== "23503" ||
+        !("constraint" in detail) ||
+        typeof detail.constraint !== "string" ||
+        clearedConstraints.has(detail.constraint) ||
+        attempt >= foreignKeys.length
+      )
+        throw error;
+      const missing = foreignKeys
+        .find((key) => key.getName() === detail.constraint)
+        ?.reference().columns;
+      if (!missing?.length || missing.some((column) => column.notNull))
+        throw error;
+      clearedConstraints.add(detail.constraint);
+      for (const column of missing) {
+        const key = Object.entries(columns).find(
+          ([, value]) => value.name === column.name,
+        )?.[0];
+        if (!key) throw error;
+        Reflect.set(params.values, key, null);
+      }
+      logger.info(
+        { constraint: detail.constraint },
+        "Cleared deleted log reference; retained admitted billing attribution",
+      );
+    }
+  }
 }

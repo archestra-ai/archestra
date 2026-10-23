@@ -31,7 +31,8 @@ import virtualApiKeysTable from "./virtual-api-key";
  * in `tokenHash` and the first 22 characters in `tokenStart` for display.
  *
  * The script endpoint consumes a row exactly once (`consumedAt` is an atomic
- * claim); rows also expire via `expiresAt`. Expired/consumed rows are inert.
+ * claim); render tickets expire via `expiresAt`. Consumed rows also anchor
+ * installation-scoped read-only instruction credentials, which recheck live access.
  */
 const connectionSetupsTable = pgTable(
   "connection_setups",
@@ -106,6 +107,8 @@ const connectionSetupsTable = pgTable(
   (table) => [
     uniqueIndex("connection_setups_token_hash_idx").on(table.tokenHash),
     index("connection_setups_org_id_idx").on(table.organizationId),
+    // The Connect page lists one user's setups.
+    index("connection_setups_user_id_idx").on(table.userId),
     index("connection_setups_token_start_idx").on(table.tokenStart),
   ],
 );

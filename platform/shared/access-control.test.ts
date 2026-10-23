@@ -138,14 +138,22 @@ describe("access-control", () => {
 
   describe("outbound A2A administration", () => {
     test("external A2A pages share the Agents read gate", () => {
-      expect(requiredPagePermissionsMap["/agents/a2a"]).toEqual({
-        agent: ["read"],
-      });
+      for (const page of [
+        "/agents/a2a",
+        "/agents/a2a/new",
+        "/agents/a2a/[id]",
+      ]) {
+        expect(requiredPagePermissionsMap[page]).toEqual({
+          agent: ["read"],
+        });
+      }
       expect(requiredPagePermissionsMap["/a2a/agents"]).toBeUndefined();
     });
 
-    test("the shared page gate defers the Agent chooser's OR authorization to its server page", () => {
-      expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
+    test("the Agent chooser takes the permission its create calls need", () => {
+      expect(requiredPagePermissionsMap["/agents/new"]).toEqual({
+        agent: ["create"],
+      });
     });
 
     test("connecting an external agent takes the same permission as creating a local one", () => {
@@ -377,7 +385,7 @@ describe("buildForbiddenErrorMessage", () => {
         missingPermissions: { project: ["read"] },
       }),
     ).toBe(
-      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).",
+      "You don't have permission to upload project files. Missing permission: project:read (View projects, their schedules, and your own sessions inside them).",
     );
   });
 
@@ -396,7 +404,7 @@ describe("buildForbiddenErrorMessage", () => {
       "agent:read (Open Agents, and use the code sandboxes and files of agents you can use)",
     );
     expect(message).toContain(
-      "project:read (View projects and your own sessions inside them)",
+      "project:read (View projects, their schedules, and your own sessions inside them)",
     );
     expect(message.indexOf("agent:read")).toBeLessThan(
       message.indexOf("project:read"),
@@ -433,12 +441,9 @@ describe("platform_admin predefined role", () => {
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    expect(p.openappaDiagnostics).toEqual(["read", "update"]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (
-        ["log", "auditLog", "member", "openappaDiagnostics"].includes(resource)
-      ) {
+      if (["log", "auditLog", "member"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -450,7 +455,6 @@ describe("platform_admin predefined role", () => {
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
       expect.arrayContaining([
         "member:impersonate",
-        "openappaDiagnostics:admin",
         "log:admin",
         "auditLog:admin",
       ]),

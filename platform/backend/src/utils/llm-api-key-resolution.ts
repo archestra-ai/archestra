@@ -16,6 +16,11 @@ import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { LlmProviderApiKey } from "@/types";
+import { ApiError } from "@/types/api";
+import {
+  type ProviderKeySelection,
+  selectMappedProviderKey,
+} from "./provider-key-mappings";
 
 interface ResolvedProviderApiKey {
   apiKey: string | undefined;
@@ -59,6 +64,7 @@ export async function resolveProviderApiKey(params: {
   agentLlmApiKeyId?: string | null;
   /** Model the caller is about to run, when known at resolution time. */
   modelName?: string | null;
+  selection?: ProviderKeySelection;
 }): Promise<ResolvedProviderApiKey> {
   const {
     organizationId,
@@ -79,7 +85,30 @@ export async function resolveProviderApiKey(params: {
   } | null = null;
   let userTeamIds: string[] = [];
 
-  if (userId) {
+  if (params.selection) {
+    if (!userId)
+      throw new ApiError(
+        403,
+        "Resource account selection requires an authenticated user.",
+      );
+    const candidates = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      organizationId,
+      userId,
+      [],
+      provider,
+    );
+    const selected = await selectMappedProviderKey({
+      mappings: candidates.map((key) => ({ ...key, providerApiKeyId: key.id })),
+      provider,
+      selection: params.selection,
+    });
+    if (!selected)
+      throw new ApiError(
+        403,
+        "No permitted configured provider account is available.",
+      );
+    resolvedApiKey = selected;
+  } else if (userId) {
     userTeamIds = await TeamModel.getUserTeamIds(userId);
     resolvedApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
       organizationId,
@@ -99,15 +128,17 @@ export async function resolveProviderApiKey(params: {
     });
   }
 
-  resolvedApiKey = await preferKeyServingModel({
-    organizationId,
-    userId,
-    userTeamIds,
-    provider,
-    modelName,
-    agentLlmApiKeyId,
-    resolved: resolvedApiKey,
-  });
+  resolvedApiKey = params.selection
+    ? resolvedApiKey
+    : await preferKeyServingModel({
+        organizationId,
+        userId,
+        userTeamIds,
+        provider,
+        modelName,
+        agentLlmApiKeyId,
+        resolved: resolvedApiKey,
+      });
 
   if (resolvedApiKey) {
     if (resolvedApiKey.secretId) {
@@ -197,7 +228,7 @@ export async function resolveProviderApiKey(params: {
   // sharing we're preventing. Leave apiKey undefined so the caller prompts the
   // user to link their own account. A subscription credential in the env var is
   // the same per-user token shared deployment-wide, so it is refused too.
-  if (!providerRequiresPerUserCredential(provider)) {
+  if (!params.selection && !providerRequiresPerUserCredential(provider)) {
     const envApiKey = getProviderEnvApiKey(provider);
     if (envApiKey && !isSubscriptionCredential(envApiKey)) {
       return {

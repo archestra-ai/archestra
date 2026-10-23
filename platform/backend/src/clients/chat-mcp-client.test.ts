@@ -4,7 +4,6 @@ import {
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
@@ -15,7 +14,7 @@ import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import { AgentModel, TeamTokenModel } from "@/models";
+import { AgentModel, ServiceAccountModel, TeamTokenModel } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -347,7 +346,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(
         agent.id,
@@ -406,7 +404,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -460,7 +457,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -521,7 +517,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
       chatClient.clearChatMcpClient(agent.id);
@@ -581,7 +576,6 @@ describe("getChatMcpTools failure-vs-empty contract", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -624,7 +618,6 @@ describe("executeMcpTool error handling", () => {
     organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
-    considerContextUntrusted: false,
   };
 
   const mockResult = (overrides: Record<string, unknown>) => ({
@@ -779,47 +772,6 @@ describe("executeMcpTool error handling", () => {
       },
     ]);
   });
-
-  test("attaches unsafe-context boundary metadata when a tool result is marked untrusted", async ({
-    makeAgent,
-    makeTool,
-    makeTrustedDataPolicy,
-  }) => {
-    const agent = await makeAgent();
-    const tool = await makeTool({ name: "test_tool" });
-
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-      id: "call-1",
-      name: "test_tool",
-      content: [{ type: "text", text: "ARCH_TEST = secret-value" }],
-      isError: false,
-    } as never);
-
-    await makeTrustedDataPolicy(tool.id, {
-      conditions: [],
-      action: "mark_as_untrusted",
-    });
-
-    const result = await toolBuilderTest.executeMcpTool({
-      ...baseCtx,
-      agentId: agent.id,
-    });
-
-    expect(result.unsafeContextBoundary).toMatchObject({
-      kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
-      toolCallId: expect.any(String),
-      toolName: "test_tool",
-    });
-    expect(result._meta).toMatchObject({
-      unsafeContextBoundary: {
-        kind: "tool_result",
-        reason: "tool_result_marked_untrusted",
-        toolCallId: expect.any(String),
-        toolName: "test_tool",
-      },
-    });
-  });
 });
 
 describe("chat-mcp-client tool caching", () => {
@@ -840,7 +792,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: "workspace__find_projects",
       catalogId: catalog.id,
@@ -933,140 +885,6 @@ describe("chat-mcp-client tool caching", () => {
     await chatClient.__test.clearToolCache();
   });
 
-  test("requests approval for run_tool when the target tool requires approval", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeUser,
-    makeOrganization,
-    makeMember,
-    makeTool,
-    makeToolPolicy,
-    makeConversation,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Chat Wrapped Approval Agent",
-    });
-    const catalog = await makeInternalMcpCatalog();
-    const targetTool = await makeTool({
-      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, targetTool.id);
-    await makeToolPolicy(targetTool.id, {
-      action: "require_approval",
-      conditions: [
-        { key: "destination", operator: "equal", value: "external" },
-      ],
-    });
-
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    const conversationId = conversation.id;
-    const cacheKey = chatClient.__test.getCacheKey(
-      agent.id,
-      user.id,
-      conversationId,
-    );
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-
-    const mockClient = {
-      ping: vi.fn().mockResolvedValue({}),
-      listTools: vi.fn().mockResolvedValue({
-        tools: [
-          {
-            name: getArchestraToolFullName("run_tool"),
-            description: "Run tool",
-            inputSchema: {
-              type: "object",
-              properties: {
-                tool_name: { type: "string" },
-                tool_args: { type: "object" },
-              },
-              required: ["tool_name"],
-            },
-          },
-        ],
-      }),
-      callTool: vi.fn(),
-      close: vi.fn(),
-    };
-
-    chatClient.__test.setCachedClient(
-      cacheKey,
-      mockClient as unknown as Client,
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId,
-    });
-
-    const runTool = tools[getArchestraToolFullName("run_tool")];
-    expect(typeof runTool.needsApproval).toBe("function");
-    const needsApproval = runTool.needsApproval as NonNullable<
-      Exclude<typeof runTool.needsApproval, boolean>
-    >;
-    await expect(
-      needsApproval(
-        {
-          tool_name: targetTool.name,
-          tool_args: { destination: "external" },
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-        { messages: [] } as any,
-      ),
-    ).resolves.toBe(true);
-
-    await expect(
-      needsApproval(
-        {
-          tool_name: targetTool.name,
-          tool_args: { destination: "internal" },
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-        { messages: [] } as any,
-      ),
-    ).resolves.toBe(false);
-
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-      content: [{ type: "text", text: "Export queued" }],
-      isError: false,
-    } as never);
-    const result = await runTool.execute?.(
-      {
-        tool_name: targetTool.name,
-        tool_args: { destination: "external" },
-      },
-      // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-      { messages: [] } as any,
-    );
-
-    expect(result).toMatchObject({ content: "Export queued" });
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: targetTool.name,
-        arguments: { destination: "external" },
-      }),
-      agentOwner(agent.id),
-      expect.anything(),
-      { conversationId },
-    );
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-  });
-
   test("reuses cached tool definitions for the same agent and user", async ({
     makeAgent,
     makeUser,
@@ -1084,7 +902,6 @@ describe("chat-mcp-client tool caching", () => {
     await makeTeamMember(team.id, user.id);
 
     // Create team token for the team
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
 
@@ -1152,7 +969,6 @@ describe("chat-mcp-client tool caching", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -2689,163 +2505,130 @@ describe("buildArchestraToolOutput", () => {
   });
 });
 
-describe("throwIfApprovalRequired", () => {
-  const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
-    toolBuilderTest;
-
-  test("does not throw when tool has no require_approval policy", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "allowed-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "allow_when_context_is_untrusted",
-      conditions: [],
-    });
-
-    await expect(
-      throwIfApprovalRequired("allowed-tool", {}),
-    ).resolves.toBeUndefined();
-  });
-
-  test("throws when tool has require_approval policy", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "restricted-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-
-    await expect(
-      throwIfApprovalRequired("restricted-tool", {}),
-    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("throws for run_tool when target tool requires approval", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "wrapped-restricted-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [
-        { key: "destination", operator: "equal", value: "external" },
-      ],
-    });
-
-    await expect(
-      throwIfApprovalRequired(getArchestraToolFullName("run_tool"), {
-        tool_name: tool.name,
-        tool_args: { destination: "external" },
-      }),
-    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("does not throw when tool is not found in DB", async () => {
-    await expect(
-      throwIfApprovalRequired("nonexistent-tool", {}),
-    ).resolves.toBeUndefined();
-  });
-
-  test("resolves approval policy target from run_tool arguments", () => {
-    expect(
-      resolveApprovalPolicyTarget(getArchestraToolFullName("run_tool"), {
-        tool_name: "workspace__export",
-        tool_args: { destination: "external" },
-      }),
-    ).toEqual({
-      toolName: "workspace__export",
-      toolInput: { destination: "external" },
-    });
-
-    expect(
-      resolveApprovalPolicyTarget("workspace__export", {
-        destination: "external",
-      }),
-    ).toEqual({
-      toolName: "workspace__export",
-      toolInput: { destination: "external" },
-    });
-  });
-});
-
 describe("selectMCPGatewayToken synthetic principals", () => {
-  test("service-account principal does not mint a personal user token and falls back to the org token", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    await TeamTokenModel.create({
-      organizationId: org.id,
-      isOrganizationToken: true,
-      name: "Org Token",
-    });
-
-    const result = await chatClient.selectMCPGatewayToken(
-      agent.id,
-      `service-account:${crypto.randomUUID()}`,
-      org.id,
-    );
-
-    expect(result).toMatchObject({ isOrganizationToken: true });
-
-    // No personal user token row may be created for the synthetic principal
-    // (previously this path failed on the user_id foreign key).
-    const userTokens = await db.select().from(schema.userTokensTable);
-    expect(userTokens).toHaveLength(0);
-  });
-
-  test("service-account principal without any org token gets null instead of an error", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-
-    const result = await chatClient.selectMCPGatewayToken(
-      agent.id,
-      `service-account:${crypto.randomUUID()}`,
-      org.id,
-    );
-
-    expect(result).toBeNull();
-  });
-
-  test("team actor uses its own team token over the org token", async ({
+  test("a service-account principal runs in-process as itself, never with the org token", async ({
     makeOrganization,
     makeUser,
     makeTeam,
     makeAgent,
+    makeServiceAccount,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ organizationId: org.id });
-
+    const agent = await makeAgent({
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
     await TeamTokenModel.create({
       organizationId: org.id,
       isOrganizationToken: true,
       name: "Org Token",
     });
-    const { token: teamToken } = await TeamTokenModel.createTeamToken(
-      team.id,
-      team.name,
+    const account = await makeServiceAccount(org.id, { teamId: team.id });
+
+    const result = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
     );
+
+    expect(result).toEqual({
+      tokenValue: null,
+      tokenId: `service-account:${account.id}`,
+      teamId: team.id,
+      isOrganizationToken: false,
+      serviceAccountId: account.id,
+    });
+    // Nothing is minted for the run: no personal user token (that path fails
+    // on the user_id foreign key) and no key on the account.
+    expect(await db.select().from(schema.userTokensTable)).toHaveLength(0);
+    expect(
+      (await ServiceAccountModel.findById(account.id, org.id))?.tokens,
+    ).toEqual([]);
+  });
+
+  test("a service-account principal lists its tools without a gateway connection", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
+    const account = await makeServiceAccount(org.id, { teamId: team.id });
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: `service-account:${account.id}`,
+      organizationId: org.id,
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+    expect(Object.keys(tools).length).toBeGreaterThan(0);
+  });
+
+  test("the system principal uses the organization token", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const { token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      isOrganizationToken: true,
+      name: "Org Token",
+    });
 
     const result = await chatClient.selectMCPGatewayToken(
       agent.id,
       "system",
       org.id,
-      team.id,
     );
 
     expect(result).toMatchObject({
-      tokenId: teamToken.id,
-      teamId: team.id,
-      isOrganizationToken: false,
+      tokenId: token.id,
+      isOrganizationToken: true,
     });
+    expect(await ServiceAccountModel.listByOrganizationId(org.id)).toEqual([]);
+  });
+
+  test("a disabled, unknown or unauthorized service account gets no token", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      access: { teams: [team.id] },
+    });
+    const disabled = await makeServiceAccount(org.id, {
+      teamId: team.id,
+      disabled: true,
+    });
+    const outsider = await makeServiceAccount(org.id);
+
+    for (const userId of [
+      `service-account:${disabled.id}`,
+      `service-account:${outsider.id}`,
+      `service-account:${crypto.randomUUID()}`,
+    ]) {
+      expect(
+        await chatClient.selectMCPGatewayToken(agent.id, userId, org.id),
+      ).toBeNull();
+    }
   });
 });

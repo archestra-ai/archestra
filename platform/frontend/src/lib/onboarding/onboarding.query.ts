@@ -9,8 +9,6 @@ export const onboardingKeys = {
   seenNavItems: () => [...onboardingKeys.all, "seen-nav-items"] as const,
   surveyEligibility: () =>
     [...onboardingKeys.all, "survey-eligibility"] as const,
-  feedbackPopupActivation: () =>
-    [...onboardingKeys.all, "feedback-popup-activation"] as const,
 };
 
 /**
@@ -18,11 +16,15 @@ export const onboardingKeys = {
  * Only this client mutates the set, so the cache never goes stale. No error
  * toast: when the query fails the dots simply don't render.
  */
-export function useSeenNavItems() {
+export function useSeenNavItems({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: onboardingKeys.seenNavItems(),
-    enabled: isAuthenticated,
+    enabled: enabled && isAuthenticated,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOnboardingSeenNavItems();
@@ -87,27 +89,6 @@ export function useOnboardingSurveyEligibility({
         await archestraApiSdk.getOnboardingSurveyEligibility();
       throwOnApiError(error, { toastOnError: false });
       return data ?? { eligible: false };
-    },
-  });
-}
-
-/**
- * When the instance got activated (MCP server connected + a successful tool
- * call routed) — the trigger signal for the feedback pop-up. Admin-only
- * endpoint, so the caller gates `enabled`. No error toast: on failure the
- * pop-up simply isn't shown.
- */
-export function useFeedbackPopupActivation({ enabled }: { enabled: boolean }) {
-  return useQuery({
-    queryKey: onboardingKeys.feedbackPopupActivation(),
-    enabled,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getFeedbackPopupActivation();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? { activatedAt: null };
     },
   });
 }

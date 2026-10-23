@@ -1,3 +1,5 @@
+import { SupportedProviders } from "@archestra/shared/model-constants";
+
 /**
  * Route path constants shared across route definitions, auth middleware, sentry config,
  * and request logging filters. Centralizing these prevents drift between components
@@ -10,8 +12,27 @@ export const METRICS_PATH = "/metrics";
 export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 /** Public OAuth redirect target; callback state is the authentication proof. */
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
+/**
+ * Where a Teams user starts and finishes signing in to the bot so it can read
+ * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the proof, and the ChatOps webhook prefix is already allowlisted.
+ */
+export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
+export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback`;
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
+export const PROXY_API_PREFIX = "/v1";
+export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
+
+/** An LLM proxy route: `/v1/<provider>/...` or the model router. */
+export function isLlmProxyPath(url: string): boolean {
+  return (
+    url.startsWith(MODEL_ROUTER_PREFIX) ||
+    SupportedProviders.some((provider) =>
+      url.startsWith(`${PROXY_API_PREFIX}/${provider}`),
+    )
+  );
+}
 /**
  * Public unauthenticated git smart-HTTP endpoint backing the skill marketplace.
  * Routes under this prefix authenticate via the URL token (no session); they
@@ -36,6 +57,11 @@ export const SKILL_MARKETPLACE_STATIC_PATH = "/skills/marketplace.git";
  * logging, in the same shape as SKILL_MARKETPLACE_PREFIX.
  */
 export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
+/** Executable managed artifacts; authenticates a purpose-scoped installation bearer. */
+export const CONNECTION_RUNTIME_PATH = "/api/connection-setups/runtime";
+/** Public, credential-free startup-check renderer; never replays connection setup. */
+export const CONNECTION_STARTUP_GUARD_PATH =
+  "/api/connection-setups/startup-guard";
 
 /**
  * VAF Add On install bootstrap — the parameterless script the connector
@@ -126,3 +152,6 @@ export const OPENAPPA_HELPERS_PREFIX = "/api/openappa/helpers";
  */
 export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
   "/api/openappa/annotators/archestra";
+
+/** Authenticated read-only instruction refresh for installed connection wrappers. */
+export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";

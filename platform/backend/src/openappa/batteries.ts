@@ -5,13 +5,14 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
@@ -20,11 +21,13 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
+import { CredentialAccess } from "@/services/credential-access";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
 } from "@/services/guardrails-policy";
-import { ApiError } from "@/types";
+import { ApiError, GITHUB_COM_API_URL, type GitHubUserId } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
   AttachReadiness,
@@ -37,17 +40,41 @@ import type {
   BatteryPackageFile,
   BatteryScope,
   BatterySummary,
+  CompositionView,
   CreateBatteryInstall,
+  CredentialBinding,
+  CredentialBindingView,
   EffectivePolicy,
+  EffectivePolicyView,
   PolicyBatteryView,
   PolicyDeclarationsView,
+  ServedComposition,
   UpdateBatteryInstall,
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
+  type DeployedFile,
+  declaredAnnotators,
+  declaredCredentials,
+  deployBattery,
+  deployedFiles,
+  deployedSource,
+  prospectiveDeployment,
+  viewedDeployment,
+} from "./battery-target";
+import {
+  carriedServed,
+  composes,
+  compositionView,
+  enforcedBattery,
+  helperOwner,
+  servedRecord,
+} from "./composition-view";
+import {
   addedGrants,
   bundledEntry,
+  type DeployedEntries,
   grantKey,
   helperUrlBase,
   openappaDeclarations,
@@ -55,6 +82,7 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
+import { withReportingTool } from "./reporting-tool";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -70,9 +98,8 @@ type BatteryWriteResult = {
  */
 class OpenAppaBatteriesService {
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
-  /** Concurrent dispatches of one organization share a single policy read. */
+  /** Concurrent reads of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
-
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
     const { installs } = await this.current(organizationId);
@@ -90,14 +117,50 @@ class OpenAppaBatteriesService {
         source,
         contentHash,
         namespaces: battery.namespaces,
-        annotators: battery.annotators,
+        annotators: declaredAnnotators(battery),
         scope: batteryScope(battery),
         helpers: battery.helpers,
-        credentials: battery.credentials,
+        credentials: declaredCredentials(battery),
         setup: battery.setup ?? null,
         installs: installsByBattery.get(battery.name) ?? [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * One stored install row, as the last composition left it. A read never
+   * recomposes, so its status can lag a change the next composition picks up.
+   */
+  async getInstall(params: {
+    organizationId: string;
+    id: string;
+  }): Promise<BatteryInstall> {
+    const install = await OpenAppaBatteryInstallModel.find(params);
+    if (!install) throw new ApiError(404, "Battery install not found");
+    return install;
+  }
+
+  /** The organization's stored credential bindings, without any credential value. */
+  async listCredentialBindings(
+    organizationId: string,
+  ): Promise<CredentialBindingView[]> {
+    const [bindings, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.list(organizationId),
+      this.bindableKeys(organizationId),
+    ]);
+    return bindings.map((binding) => credentialBindingView(binding, bindable));
+  }
+
+  async getCredentialBinding(params: {
+    organizationId: string;
+    variable: string;
+  }): Promise<CredentialBindingView> {
+    const [binding, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.find(params),
+      this.bindableKeys(params.organizationId),
+    ]);
+    if (!binding) throw new ApiError(404, "Credential binding not found");
+    return credentialBindingView(binding, bindable);
   }
 
   /** What each battery this organization can include asks of the person setting it up. */
@@ -106,14 +169,20 @@ class OpenAppaBatteriesService {
   ): Promise<Map<string, BatterySetup>> {
     const available = await this.availableBatteries(organizationId);
     return new Map(
-      [...available].map(([name, { package: battery }]) => [
-        name,
-        {
-          benefit: battery.benefit ?? null,
-          setup: batterySetupSteps(battery),
-          credentials: battery.credentials,
-        },
-      ]),
+      [...available].map(([name, { package: battery }]) => {
+        const deployment = prospectiveDeployment(
+          battery,
+          sandboxRuntimeService.isEnabled,
+        );
+        return [
+          name,
+          {
+            benefit: battery.benefit ?? null,
+            setup: deployment.setup,
+            credentials: deployment.credentials,
+          },
+        ];
+      }),
     );
   }
 
@@ -152,7 +221,10 @@ class OpenAppaBatteriesService {
       const catalog = catalogs.get(catalogId);
       const match = catalog && matchBatteries(catalog, availableNames)[0];
       const found = match && available.get(match.battery);
-      if (match && found)
+      const deployment =
+        found &&
+        prospectiveDeployment(found.package, sandboxRuntimeService.isEnabled);
+      if (match && found && deployment)
         result.set(catalogId, {
           battery: match.battery,
           status: "available",
@@ -166,10 +238,10 @@ class OpenAppaBatteriesService {
                 }),
           description: found.package.description,
           namespaces: found.package.namespaces,
-          credentials: found.package.credentials,
+          credentials: deployment.credentials,
           benefit: found.package.benefit ?? null,
-          setup: batterySetupSteps(found.package),
-          policy: found.package.policy,
+          setup: deployment.setup,
+          files: deployedFiles(deployment),
         });
     }
     return result;
@@ -214,20 +286,17 @@ class OpenAppaBatteriesService {
       OpenAppaGithubSyncModel.find(organizationId),
       OpenAppaCredentialBindingModel.list(organizationId),
     ]);
+    const composition = compositionView(policy);
     return {
-      batteries,
+      batteries: batteries.map((battery) => ({
+        ...battery,
+        served: servedOf(composition, battery),
+      })),
       unusedAliases,
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
+      composition,
       managedInGithub: sync?.interval != null,
-      heldPull:
-        sync?.heldContentHash && sync.heldSourceCommit
-          ? {
-              contentHash: sync.heldContentHash,
-              sourceCommit: sync.heldSourceCommit,
-              reasons: sync.heldReasons,
-            }
-          : null,
       credentialBindings: bindings.map(({ variable, credentialKey }) => ({
         variable,
         key: credentialKey,
@@ -240,8 +309,9 @@ class OpenAppaBatteriesService {
     rootContent: string;
     resolution: PolicyResolution;
     batteries: PolicyBatteryView[];
+    viewed: DeployedEntries;
     rootRevision: number;
-    lastError: string | null;
+    composition: CompositionView;
   }> {
     const { root, resolution, batteries, policy } =
       await this.current(organizationId);
@@ -249,8 +319,13 @@ class OpenAppaBatteriesService {
       rootContent: root.content,
       resolution,
       batteries,
-      rootRevision: policy.rootRevision,
-      lastError: policy.lastError,
+      viewed: await this.deployedBatteries({
+        organizationId,
+        resolution,
+        deploy: viewedDeployment,
+      }),
+      rootRevision: root.revision,
+      composition: compositionView(policy),
     };
   }
 
@@ -262,12 +337,19 @@ class OpenAppaBatteriesService {
       content: root.content,
     });
     const included = resolution.entries.find((item) => item.entry === entry);
-    if (!included?.battery)
+    const deployed = (
+      await this.deployedBatteries({
+        organizationId,
+        resolution,
+        deploy: viewedDeployment,
+      })
+    ).get(entry);
+    if (!included || !deployed)
       throw new ApiError(404, "This battery policy is no longer included");
     return {
       entry: included.entry,
       name: included.name,
-      content: included.battery.policy,
+      content: deployedSource(deployed),
     };
   }
 
@@ -280,6 +362,22 @@ class OpenAppaBatteriesService {
     });
     this.reading.set(organizationId, read);
     return read;
+  }
+
+  /** The effective policy as the API shows it: the row and what it serves. */
+  async effectivePolicyView(
+    organizationId: string,
+  ): Promise<EffectivePolicyView> {
+    const [policy, servedRevision] = await Promise.all([
+      this.getEffectivePolicy(organizationId),
+      OpenAppaDeploymentModel.head(organizationId),
+    ]);
+    const { served: _served, ...row } = policy;
+    return {
+      ...row,
+      composition: compositionView(policy),
+      servedRevision,
+    };
   }
 
   /**
@@ -316,12 +414,41 @@ class OpenAppaBatteriesService {
     const composed = await openappaDeclarations.composeForCheck({
       root: planned.root.content,
       resolution: planned.resolution,
+      deployed: planned.deployed,
       held: new Set(held.map((battery) => battery.name)),
     });
     return {
       refusal: (composed.content ?? null) === null ? composed.errors : [],
       heldBack: held.map(heldBackNote),
     };
+  }
+
+  /**
+   * How each entry of a resolution deploys in this organization now. A
+   * stored binding counts for a variable the resolution's table leaves out, as
+   * a recompose applies it.
+   */
+  async deployedBatteries(params: {
+    organizationId: string;
+    resolution: PolicyResolution;
+    /** How one battery deploys; what it composes as unless a view asks otherwise. */
+    deploy?: typeof deployBattery;
+  }): Promise<DeployedEntries> {
+    const { organizationId, resolution } = params;
+    const [bindable, bindings] = await Promise.all([
+      this.bindableKeys(organizationId),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
+    const stored = new Map(
+      bindings.map((binding) => [binding.variable, binding.credentialKey]),
+    );
+    return deployEntries({
+      resolution,
+      keyOf: (variable) =>
+        resolution.credentials[variable] ?? stored.get(variable) ?? null,
+      bindable,
+      deploy: params.deploy,
+    });
   }
 
   async recompileAll(): Promise<void> {
@@ -334,7 +461,7 @@ class OpenAppaBatteriesService {
    * recomposes. Never throws; a battery problem must not fail an installation.
    */
   async onCatalogToolsChanged(catalogId: string): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     try {
       const catalog = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -356,7 +483,7 @@ class OpenAppaBatteriesService {
    * name its organizations, so they are read from the catalog itself.
    */
   async recompileForCatalog(organizationId: string | null): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     await this.recompileOrganizations(
       organizationId === null
         ? await OrganizationModel.findAllIds()
@@ -365,7 +492,7 @@ class OpenAppaBatteriesService {
   }
 
   async recompileOrganizations(organizationIds: string[]): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     const results = await mapWithConcurrency(
       organizationIds,
       RECOMPILE_CONCURRENCY,
@@ -394,7 +521,7 @@ class OpenAppaBatteriesService {
     userId: string;
     renamedTools: ReadonlyArray<{ oldName: string; newName: string }>;
   }): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     const organizationIds =
       params.organizationId === null
         ? await OrganizationModel.findAllIds()
@@ -577,19 +704,39 @@ class OpenAppaBatteriesService {
         409,
         `${variable} is set by a [credentials] line in the policy text. Remove its line there to manage it here.`,
       );
-    if (key === null)
+    if (key === null) {
+      // Unbinding is a credential change too: it takes use on what is bound.
+      const bound = await OpenAppaCredentialBindingModel.find({
+        organizationId,
+        variable,
+      });
+      if (bound)
+        await CredentialAccess.requireUseOfKey({
+          organizationId,
+          userId,
+          key: bound.credentialKey,
+          message: `Use access to ${bound.credentialKey} is required to unbind it`,
+        });
       await OpenAppaCredentialBindingModel.delete({ organizationId, variable });
-    else {
+    } else {
       if (!(await this.bindableKeys(organizationId)).has(key))
         throw new ApiError(
           400,
           `${key} is not a credential with an organization value`,
         );
+      // Binding hands the credential's value to helper code.
+      await CredentialAccess.requireByKey({
+        organizationId,
+        userId,
+        key,
+        action: "use",
+      });
       await OpenAppaCredentialBindingModel.upsert({
         organizationId,
         variable,
         credentialKey: key,
-        updatedBy: userId,
+        // `updated_by` references users; a service account has no users row.
+        updatedBy: isServiceAccountUserId(userId) ? null : userId,
       });
     }
     await this.recompose(organizationId);
@@ -750,12 +897,16 @@ class OpenAppaBatteriesService {
       );
     // Helper code runs with whatever credentials get bound to it later, so
     // supplying it takes the permission binding a credential takes.
-    if (inspected.credentials.length > 0 || inspected.externals.length > 0)
-      await requireCredentialUpdate({
+    if (
+      declaredCredentials(inspected).length > 0 ||
+      (inspected.multiUser?.externals ?? inspected.externals).length > 0
+    )
+      await CredentialAccess.requireOnEvery({
         userId,
         organizationId,
+        action: "use",
         message:
-          "Credential update permission is required to upload a battery with helper scripts",
+          "Use access to every credential is required to upload a battery with helper scripts",
       });
     await OpenAppaBatteryPackageModel.insert({
       organizationId,
@@ -790,9 +941,9 @@ class OpenAppaBatteriesService {
       contentHash,
       entry,
       namespaces: inspected.namespaces,
-      annotators: inspected.annotators,
+      annotators: declaredAnnotators(inspected),
       helpers: inspected.helpers,
-      credentials: inspected.credentials,
+      credentials: declaredCredentials(inspected),
       setup: inspected.setup ?? null,
     };
   }
@@ -803,11 +954,25 @@ class OpenAppaBatteriesService {
     contentHash: string;
   }): Promise<void> {
     const { organizationId, contentHash } = params;
-    const spelled = await this.spellsHash({ organizationId, contentHash });
-    if (spelled)
+    if (await this.spellsHash({ organizationId, contentHash }))
       throw new ApiError(
         409,
-        `Remove this package from the policy ${spelled} before deleting it`,
+        "Remove this package from the policy before deleting it",
+      );
+    // A refused text keeps an earlier composition enforced, and its helpers
+    // run from the packages that composition used.
+    const stored =
+      await OpenAppaEffectivePolicyModel.findServed(organizationId);
+    const served = stored?.served;
+    if (
+      stored?.lastError != null &&
+      served?.kind === "composition" &&
+      served.contentHash === stored.contentHash &&
+      served.batteries?.some((battery) => battery.packageHash === contentHash)
+    )
+      throw new ApiError(
+        409,
+        "The composition the runtime still enforces uses this package. Delete it once a revision composes without it.",
       );
     if (!(await OpenAppaBatteryPackageModel.delete(params)))
       throw new ApiError(404, "Battery package not found");
@@ -822,35 +987,40 @@ class OpenAppaBatteriesService {
     if (
       effective &&
       effective.rootRevision === root.revision &&
+      effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
       effective.installFingerprint.endsWith(
         root.revision === 0 ? `:${root.contentHash}` : "",
       )
     )
       return effective;
+    logger.info(
+      {
+        organizationId,
+        reason: !effective
+          ? "nothing stored"
+          : effective.rootRevision !== root.revision
+            ? "root revision"
+            : "composition inputs",
+      },
+      "OpenAPPA effective policy recomposes",
+    );
     return this.recompile(organizationId);
   }
 
-  /** Whether the latest revision, or a held pull, spells these bytes. */
+  /** Whether the latest revision spells these bytes. */
   private async spellsHash(params: {
     organizationId: string;
     contentHash: string;
-  }): Promise<string | null> {
+  }): Promise<boolean> {
     const { organizationId, contentHash } = params;
     const latest = await guardrailsPolicyService.get(organizationId);
-    const held = (await OpenAppaGithubSyncModel.find(organizationId))
-      ?.heldContent;
-    for (const [where, content] of [
-      ["policy", latest.content] as const,
-      ...(held ? [["held GitHub pull", held] as const] : []),
-    ]) {
-      const resolution = await openappaDeclarations.resolve({
-        organizationId,
-        content,
-      });
-      if (resolution.entries.some((entry) => entry.packageHash === contentHash))
-        return where;
-    }
-    return null;
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: latest.content,
+    });
+    return resolution.entries.some(
+      (entry) => entry.packageHash === contentHash,
+    );
   }
 
   private async recompose(organizationId: string): Promise<Recomposition> {
@@ -945,34 +1115,47 @@ class OpenAppaBatteriesService {
           installs: await OpenAppaBatteryInstallModel.list(organizationId),
         };
       }
+      const now = new Date();
       const values = await this.compose({
         root: planned.root,
+        roster: planned.roster,
         planned: planned.batteries,
         composed,
         installFingerprint,
-        previousContent: expected?.content ?? null,
+        expected,
+        previousInstalls: previous,
+        installs,
+        now,
       });
-      if (values.error === null) {
-        // The kept rows still carry the refusal this composition lifts.
-        if (settled && held !== null)
-          installs = await OpenAppaBatteryInstallModel.replaceAll({
-            organizationId,
-            rows: planned.rows,
-          });
-        if (expected)
-          this.logGrantGrowth({ organizationId, previous, next: planned.rows });
-      } else if (!settled || held !== values.error) {
-        await OpenAppaBatteryInstallModel.markRefused({
-          organizationId,
-          lastError: values.error,
-        });
-      }
       const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
         values,
         expected,
+        now,
       });
-      if (policy)
+      // Rows are marked only for the composition that was stored: a lost
+      // store says nothing about what the next attempt composes.
+      if (policy) {
+        if (values.error === null) {
+          // The kept rows still carry the refusal this composition lifts.
+          if (settled && held !== null)
+            installs = await OpenAppaBatteryInstallModel.replaceAll({
+              organizationId,
+              rows: planned.rows,
+            });
+          if (expected)
+            this.logGrantGrowth({
+              organizationId,
+              previous,
+              next: planned.rows,
+            });
+        } else if (!settled || held !== values.error) {
+          await OpenAppaBatteryInstallModel.markRefused({
+            organizationId,
+            lastError: values.error,
+          });
+        }
+        logComposition({ organizationId, held, policy });
         return {
           ...planned,
           policy,
@@ -981,6 +1164,7 @@ class OpenAppaBatteriesService {
               ? installs
               : await OpenAppaBatteryInstallModel.list(organizationId),
         };
+      }
       // Another composition stored its result between this attempt's read and
       // its write. Reading again at once tends to lose the same race, so wait
       // first, jittered so simultaneous losers do not line up again. The last
@@ -1018,50 +1202,97 @@ class OpenAppaBatteriesService {
     );
     return openappaDeclarations.composeInputs({
       entries: planned.resolution.entries,
-      helpers: (entry) => {
+      deployed: planned.deployed,
+      helpers: (entry, deployed) => {
         const planned = byName.get(entry.name);
         if (!planned?.composed) return "stub";
-        if (!entry.battery || entry.battery.externals.length === 0) return null;
+        if (deployed.externals.length === 0) return null;
         const owner = helperOwner(installs, entry.name);
         return owner ? { urlBase: helperUrlBase(owner.id), tokenEnv } : "stub";
       },
     });
   }
 
+  /**
+   * Compose the root with its batteries. The resulting host-composed document
+   * is validated by the runtime.
+   */
   private async compose(params: {
     root: GuardrailsPolicy;
+    roster: HostMemberRoster;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
-    previousContent: string | null;
+    /** The stored row this composition replaces, and the install rows it read. */
+    expected: EffectivePolicy | null;
+    previousInstalls: readonly BatteryInstall[];
+    installs: readonly BatteryInstall[];
+    /** When this composition is stored; its record says it was composed then. */
+    now: Date;
   }): Promise<EffectivePolicyValues> {
-    const { root, planned, composed, installFingerprint, previousContent } =
-      params;
+    const { root, planned, composed, installFingerprint, expected } = params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
       batteries: composed,
+      memberRosters: memberRosters(params.roster),
     });
     // A refused composition carries no document. napi renders that absence as
     // `undefined`, not the `null` the generated typing spells, so normalize it
     // before deciding whether the runtime refused: an identity test against
     // `null` alone silently stores a refusal as a clean composition.
-    const accepted = result.content ?? null;
-    // The root alone is no longer enforceable — its include entries are the
-    // host's to answer — so a refusal keeps the last composition that opened.
-    const content = accepted ?? previousContent ?? root.content;
-    return {
-      content,
-      contentHash: hash(content),
-      rootRevision: root.revision,
-      installFingerprint,
-      error:
-        accepted === null
-          ? [...result.errors, ...heldBack(planned).map(heldBackNote)].join(
-              "\n",
-            )
-          : null,
+    const composedContent = result.content ?? null;
+    const accepted =
+      composedContent === null
+        ? null
+        : await withReportingTool({
+            composed: composedContent,
+            validate: (text) => native.validateHostedOpenappaPolicy(text),
+          });
+    const values = (
+      content: string,
+      error: string | null,
+      served: (contentHash: string) => ServedComposition,
+    ) => {
+      const contentHash = hash(content);
+      return {
+        content,
+        contentHash,
+        rootRevision: root.revision,
+        installFingerprint,
+        error,
+        served: served(contentHash),
+      };
     };
+    if (accepted === null) {
+      const error = [
+        ...result.errors,
+        ...heldBack(planned).map(heldBackNote),
+      ].join("\n");
+      // The root alone is no longer enforceable — its include entries are the
+      // host's to answer — so a refusal keeps the last composition that
+      // opened, and says which one that is.
+      const carried = expected
+        ? carriedServed({ expected, installs: params.previousInstalls })
+        : null;
+      return expected && carried
+        ? values(expected.content, error, () => carried)
+        : values(root.content, error, (contentHash) => ({
+            v: 1,
+            kind: "root_only",
+            contentHash,
+            rootRevision: root.revision,
+          }));
+    }
+    return values(accepted, null, (contentHash) =>
+      servedRecord({
+        batteries: planned,
+        installs: params.installs,
+        contentHash,
+        rootRevision: root.revision,
+        composedAt: params.now,
+      }),
+    );
   }
 
   /**
@@ -1089,12 +1320,24 @@ class OpenAppaBatteriesService {
       }),
       this.bindableKeys(organizationId),
     ]);
+    const deployed = deployEntries({
+      resolution,
+      keyOf: (variable) => resolution.credentials[variable] ?? null,
+      bindable,
+    });
+    const roster = await this.hostMemberRoster({
+      organizationId,
+      resolution,
+      deployed,
+    });
     const aliases = new Map(
       resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
     );
+    const reads = (entry: (typeof resolution.entries)[number]) =>
+      entry.battery ? declaredCredentials(entry.battery) : [];
     const readers = new Map<string, string[]>();
     for (const entry of resolution.entries)
-      for (const variable of entry.battery?.credentials ?? [])
+      for (const variable of reads(entry))
         readers.set(variable, [...(readers.get(variable) ?? []), entry.name]);
     // Two entries answering one name compose to nothing the runtime accepts and
     // derive one row apiece for the same battery. `validate` refuses such a
@@ -1120,40 +1363,63 @@ class OpenAppaBatteriesService {
           target,
           catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
         }));
-      const credentials = (entry.battery?.credentials ?? []).map(
-        (variable) => ({
-          variable,
-          key: resolution.credentials[variable] ?? null,
-          source: credentialSource[variable] ?? null,
-          readers: readers.get(variable) ?? [],
-        }),
-      );
+      // A battery with targets is missing its credentials until every variable
+      // its multi-user target reads is bound, though its base alone composes.
+      const credentials = reads(entry).map((variable) => ({
+        variable,
+        key: resolution.credentials[variable] ?? null,
+        source: credentialSource[variable] ?? null,
+        readers: readers.get(variable) ?? [],
+      }));
       const catalogIds = [
         ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
       ];
-      const status = batteryStatus({
-        resolved: entry.battery !== null && !duplicated.has(entry.name),
-        credentials,
-        bindable,
-        governs: organizationWide
-          ? { kind: "organization" }
-          : {
-              kind: "catalogs",
-              servers,
-              conflicting: catalogIds.some((catalogId) =>
-                prefixes.conflicting.has(catalogId),
-              ),
-            },
+      const statusOf = (
+        read: ReadonlyArray<{ variable: string; key: string | null }>,
+      ) =>
+        batteryStatus({
+          resolved: entry.battery !== null && !duplicated.has(entry.name),
+          credentials: read,
+          bindable,
+          governs: organizationWide
+            ? { kind: "organization" }
+            : {
+                kind: "catalogs",
+                servers,
+                conflicting: catalogIds.some((catalogId) =>
+                  prefixes.conflicting.has(catalogId),
+                ),
+              },
+        });
+      // Whether it composes depends only on what the chosen deployment reads:
+      // a base waiting on its target's credentials still composes.
+      const deploysWith = new Set(deployed.get(entry.entry)?.credentials);
+      const composed = composes({
+        status: statusOf(
+          credentials.filter(({ variable }) => deploysWith.has(variable)),
+        ),
+        scope,
       });
-      return { entry, scope, servers, credentials, catalogIds, status };
+      const status = statusOf(credentials);
+      return {
+        entry,
+        scope,
+        servers,
+        credentials,
+        catalogIds,
+        status,
+        composed,
+      };
     });
     // A tool rule routes to an annotator from the root or from a battery that
     // composes its own rules; a stubbed battery's rules route nothing.
     const routed = new Set([
       ...resolution.routedAnnotators,
       ...drafts
-        .filter(composes)
-        .flatMap(({ entry }) => entry.battery?.routedAnnotators ?? []),
+        .filter(({ composed }) => composed)
+        .flatMap(
+          ({ entry }) => deployed.get(entry.entry)?.routedAnnotators ?? [],
+        ),
     ]);
     const batteries: PlannedBattery[] = [];
     const rows = new Map<string, BatteryInstallRow>();
@@ -1164,7 +1430,7 @@ class OpenAppaBatteriesService {
       const status =
         organizationWide &&
         draft.status === "active" &&
-        !(entry.battery?.annotators ?? []).some((annotator) =>
+        !(deployed.get(entry.entry)?.annotators ?? []).some((annotator) =>
           routed.has(annotator),
         )
           ? "unrouted"
@@ -1182,7 +1448,7 @@ class OpenAppaBatteriesService {
         line: entry.line,
         status,
         scope,
-        composed: composes({ status, scope }),
+        composed: draft.composed,
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
@@ -1197,6 +1463,7 @@ class OpenAppaBatteriesService {
           batteryName: entry.name,
           catalogId,
           status,
+          target: deployed.get(entry.entry)?.target?.name ?? null,
           packageHash: entry.packageHash,
           lastError: null,
           credentialBindings: bindings,
@@ -1209,6 +1476,8 @@ class OpenAppaBatteriesService {
     return {
       root,
       resolution,
+      deployed,
+      roster,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -1218,6 +1487,42 @@ class OpenAppaBatteriesService {
   }
 
   /** Keys of the organization's credential definitions holding an organization value. */
+  /**
+   * The organization's members by the GitHub account they connected, for the
+   * member roster deployed targets look people up in. A GitHub App bound to
+   * one of their audience helpers that is not GitHub.com's answers for other
+   * accounts, so then nobody is known.
+   */
+  async hostMemberRoster(params: {
+    organizationId: string;
+    resolution: PolicyResolution;
+    deployed: DeployedEntries;
+  }): Promise<HostMemberRoster> {
+    const { organizationId, resolution } = params;
+    const targets = [...params.deployed.values()].filter(
+      (deployed) => deployed.target !== null,
+    );
+    if (targets.length === 0) return new Map();
+    const keys = targets.flatMap(({ externals }) =>
+      externals.flatMap(({ kind, tokenEnv }) => {
+        const key = tokenEnv && resolution.credentials[tokenEnv];
+        return kind === "audience" && key ? [key] : [];
+      }),
+    );
+    const definitions = await RuntimeCredentialDefinitionModel.findByKeys({
+      organizationId,
+      keys,
+    });
+    const foreign = [...definitions.values()].some(
+      ({ kind, githubUrl }) =>
+        kind === "github_app" &&
+        (githubUrl ?? GITHUB_COM_API_URL) !== GITHUB_COM_API_URL,
+    );
+    return foreign
+      ? new Map()
+      : RuntimeCredentialConnectionModel.listGitHubRoster(organizationId);
+  }
+
   private async bindableKeys(
     organizationId: string,
   ): Promise<ReadonlySet<string>> {
@@ -1610,7 +1915,8 @@ function rowsSettled(params: {
   return rows.every((row) => {
     const seen = stored.get(rowKey(row));
     if (!seen || !seen.enabled) return false;
-    if (seen.packageHash !== row.packageHash) return false;
+    if (seen.packageHash !== row.packageHash || seen.target !== row.target)
+      return false;
     if (
       JSON.stringify(sortedBindings(seen.credentialBindings)) !==
       JSON.stringify(sortedBindings(row.credentialBindings))
@@ -1693,7 +1999,8 @@ type CatalogBattery =
       credentials: string[];
       benefit: string | null;
       setup: string[];
-      policy: string;
+      /** Its policy files in compose order, the target before its base. */
+      files: DeployedFile[];
     };
 
 type CatalogPrefixes = {
@@ -1705,9 +2012,25 @@ type CatalogPrefixes = {
 
 type PlannedBattery = PolicyBatteryView;
 
+/** Members by the GitHub account they connected: the host's member roster. */
+type HostMemberRoster = ReadonlyMap<GitHubUserId, string>;
+
+/** The rosters composition fills, by the lookup name the battery targets use. */
+export function memberRosters(
+  roster: HostMemberRoster,
+): Record<string, Record<string, string>> {
+  return {
+    "host-members": Object.fromEntries(
+      [...roster].map(([id, email]) => [`github:${id}`, email]),
+    ),
+  };
+}
+
 type PlannedComposition = {
   root: GuardrailsPolicy;
   resolution: PolicyResolution;
+  deployed: DeployedEntries;
+  roster: HostMemberRoster;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -1770,29 +2093,6 @@ type BatteryGovernance =
       conflicting: boolean;
     };
 
-/**
- * Whether a battery composes its own policy rather than the empty stub: an
- * active one, and an organization-wide one whose package resolves, since its
- * annotator must stay declared for the rules that route to it.
- */
-function composes(battery: {
-  status: BatteryInstallStatus;
-  scope: BatteryScope;
-}): boolean {
-  switch (battery.status) {
-    case "active":
-    case "unrouted":
-      return true;
-    case "missing_credentials":
-      return battery.scope === "organization";
-    case "unavailable":
-    case "naming_conflict":
-    case "server_missing":
-    case "refused":
-      return false;
-  }
-}
-
 type HeldBackStatus = Exclude<
   BatteryInstallStatus,
   "active" | "unrouted" | "refused"
@@ -1822,17 +2122,28 @@ function heldBackRemedy(battery: HeldBackBattery): string {
     case "missing_credentials":
       return "bind each credential it reads to a runtime credential key with an organization value";
     case "naming_conflict":
-      return "point its [server_aliases] targets at tool prefixes exactly one MCP server carries";
+      return "point its aliases.mcp targets at tool prefixes exactly one MCP server carries";
     case "server_missing": {
       const unserved = battery.servers
         .filter((server) => server.catalogId === null)
         .map((server) => JSON.stringify(server.target));
       return unserved.length === 0
-        ? "point a [server_aliases] target at its namespaces"
+        ? "point a aliases.mcp target at its namespaces"
         : `no MCP server in this deployment carries the tool prefix ${unserved.join(", ")}; install or restore that server, or point the alias at one that exists`;
     }
   }
 }
+
+// Recompose legacy rows with implicit 64 KiB limits (v2), rows that do not
+// record their deployed battery target (v3), rows before host member rosters
+// (v4), rows without retained original annotator bindings (v5), rows a
+// same-name rebinding refused and pinned to an earlier composition (v6), and
+// rows whose retirement suffix covers credential keys but not the stored
+// opening policies (v7), rows that do not record what they serve (v8),
+// rows that leave `yell` to the catch-all (v9), rows that dropped a retired
+// name live opening policies bound differently (v10), and rows that keep
+// retired annotators for conversations opened under earlier policies (v11).
+const COMPOSITION_VERSION = "v11:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -1846,44 +2157,65 @@ function compositionFingerprint(params: {
   const { planned, batteries, root } = params;
   const held = heldBack(planned.batteries).map(heldBackNote);
   return (
+    COMPOSITION_VERSION +
     hash(
       JSON.stringify({
         batteries,
         credentials: planned.resolution.credentials,
+        roster: [...planned.roster].sort(([a], [b]) => a - b),
+        // A base composes while its target waits on a credential; the rows still move.
+        statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),
       }),
-    ) + (root.revision === 0 ? `:${root.contentHash}` : "")
+    ) +
+    (root.revision === 0 ? `:${root.contentHash}` : "")
   );
 }
 
-/** The native package joins its one-line setup steps with newlines. */
-function batterySetupSteps(battery: NativeBatteryPackage): string[] {
-  return battery.setup?.split("\n") ?? [];
+/**
+ * How each resolved entry deploys, given the key each variable is bound to
+ * and the keys that hold an organization value. Helpers run in the sandbox, so
+ * without it no battery deploys a target.
+ */
+function deployEntries(params: {
+  resolution: PolicyResolution;
+  keyOf: (variable: string) => string | null;
+  bindable: ReadonlySet<string>;
+  deploy?: typeof deployBattery;
+}): DeployedEntries {
+  const { resolution, keyOf, bindable, deploy = deployBattery } = params;
+  const isBound = (variable: string) => {
+    const key = keyOf(variable);
+    return key !== null && bindable.has(key);
+  };
+  return new Map(
+    resolution.entries.flatMap((entry) =>
+      entry.battery
+        ? [
+            [
+              entry.entry,
+              deploy({
+                battery: entry.battery,
+                isBound,
+                sandboxEnabled: sandboxRuntimeService.isEnabled,
+              }),
+            ] as const,
+          ]
+        : [],
+    ),
+  );
 }
 
-/** A battery with no tool namespace and at least one annotator governs the organization. */
+/**
+ * A battery with no tool namespace and at least one annotator, in its base or
+ * its target, governs the organization.
+ */
 function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {
   return battery !== null &&
     battery.namespaces.length === 0 &&
-    battery.annotators.length > 0
+    declaredAnnotators(battery).length > 0
     ? "organization"
     : "catalogs";
-}
-
-/** The row whose helpers a battery's composed externals consult: its earliest one. */
-function helperOwner(
-  installs: BatteryInstall[],
-  name: string,
-): BatteryInstall | null {
-  return (
-    installs
-      .filter((install) => install.batteryName === name)
-      .sort(
-        (a, b) =>
-          a.createdAt.getTime() - b.createdAt.getTime() ||
-          a.id.localeCompare(b.id),
-      )[0] ?? null
-  );
 }
 
 /**
@@ -2020,22 +2352,6 @@ function prefixRenames(
   return renames;
 }
 
-async function requireCredentialUpdate(params: {
-  userId: string;
-  organizationId: string;
-  message: string;
-}): Promise<void> {
-  if (
-    !(await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "credential",
-      "update",
-    ))
-  )
-    throw new ApiError(403, params.message);
-}
-
 /**
  * Runs `work` for `key` unless a run is in flight. A call during a run queues
  * exactly one follow-up, which starts after the run ends and so sees every
@@ -2070,6 +2386,20 @@ const EDIT_ATTEMPTS = 3;
 /** Base wait after a lost store, doubled per attempt and jittered on top. */
 const RECOMPILE_BACKOFF_MS = 25;
 
+function credentialBindingView(
+  binding: CredentialBinding,
+  bindable: ReadonlySet<string>,
+): CredentialBindingView {
+  return {
+    variable: binding.variable,
+    credentialKey: binding.credentialKey,
+    hasValue: bindable.has(binding.credentialKey),
+    updatedBy: binding.updatedBy,
+    createdAt: binding.createdAt,
+    updatedAt: binding.updatedAt,
+  };
+}
+
 function recomposeBackoffMs(attempt: number): number {
   const delay = RECOMPILE_BACKOFF_MS * 2 ** attempt;
   return delay + Math.random() * delay;
@@ -2081,4 +2411,54 @@ function sleep(ms: number): Promise<void> {
 
 function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * How the enforced composition holds a battery the current text declares;
+ * null when it does not hold it, or when nothing is enforced.
+ */
+function servedOf(
+  composition: CompositionView,
+  battery: PolicyBatteryView,
+): { status: BatteryInstallStatus; composed: boolean } | null {
+  if (composition.served.kind === "root_only") return null;
+  const enforced = enforcedBattery(composition, battery);
+  return enforced.status === "pending"
+    ? null
+    : { status: enforced.status, composed: enforced.composed };
+}
+
+/**
+ * One line when a stored composition is refused or opens again: a refusal
+ * keeps serving an earlier composition, or, with none, refuses every governed
+ * call. Repeating the same refusal logs nothing.
+ */
+function logComposition(params: {
+  organizationId: string;
+  held: string | null;
+  policy: EffectivePolicy;
+}): void {
+  const { organizationId, held, policy } = params;
+  if (policy.lastError === null) {
+    if (held !== null)
+      logger.info(
+        { organizationId, rootRevision: policy.rootRevision },
+        "OpenAPPA composition opened again",
+      );
+    return;
+  }
+  if (held === policy.lastError) return;
+  const { served } = compositionView(policy);
+  logger.warn(
+    {
+      organizationId,
+      refusedRootRevision: policy.rootRevision,
+      servedRootRevision:
+        served.kind === "previous" ? served.rootRevision : null,
+      error: policy.lastError,
+    },
+    served.kind === "root_only"
+      ? "OpenAPPA composition refused; no earlier composition exists, so governed calls are refused"
+      : "OpenAPPA composition refused; the runtime keeps enforcing an earlier composition",
+  );
 }

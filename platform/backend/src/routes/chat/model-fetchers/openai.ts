@@ -6,6 +6,7 @@ import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import { ApiError, type OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
+import { fetchLiteLlmPricing } from "./litellm";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import {
   type ModelFetchOptions,
@@ -15,7 +16,7 @@ import {
 
 // Codex uses client_version to gate models that require a newer client.
 // An hourly workflow proposes updates from stable Codex CLI releases.
-const CODEX_MODELS_CLIENT_VERSION = "0.161.0";
+const CODEX_MODELS_CLIENT_VERSION = "0.164.0";
 
 const CodexModelsResponseSchema = z.object({
   models: z.array(
@@ -126,7 +127,13 @@ export async function fetchOpenAiModels(
     extraHeaders,
   });
 
+  const pricing = await fetchLiteLlmPricing({ baseUrl, apiKey, extraHeaders });
   return data.data
     .filter((model) => isChatModelId(model.id))
-    .map(mapOpenAiModelToModelInfo);
+    .map((model) => ({
+      ...mapOpenAiModelToModelInfo(model),
+      ...(pricing.has(model.id)
+        ? { providerPricing: pricing.get(model.id) }
+        : {}),
+    }));
 }

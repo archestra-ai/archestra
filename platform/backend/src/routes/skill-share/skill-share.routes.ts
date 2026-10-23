@@ -2,7 +2,6 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
@@ -18,6 +17,7 @@ import {
 import {
   ApiError,
   type ClientType,
+  CONNECTION_SETUP_MAX_SKILLS,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   deriveSkillShareLinkStatus,
@@ -63,7 +63,10 @@ const SkillShareLinkResponseSchema = SelectSkillShareLinkSchema.omit({
 const SkillShareLinkBodySchema = z.object({
   // upper bound sized for the "share all org skills" UX at /connection,
   // which snapshots the full org skill set in one POST.
-  skillIds: z.array(z.string().uuid()).max(500).optional(),
+  skillIds: z
+    .array(z.string().uuid())
+    .max(CONNECTION_SETUP_MAX_SKILLS)
+    .optional(),
   pluginIds: z
     .array(z.string().uuid())
     .max(PLUGIN_DELIVERY_MAX_COUNT)
@@ -446,9 +449,6 @@ async function validatePluginsForLink(params: {
   pluginPlatform: PluginPlatform | null;
 }): Promise<ClientType | null> {
   if (params.pluginIds.length === 0) return null;
-  if (!config.plugins.enabled) {
-    throw new ApiError(404, "Plugins are not enabled");
-  }
   if (!params.pluginPlatform) {
     throw new ApiError(
       400,

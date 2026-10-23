@@ -1,4 +1,7 @@
+import { KubeConfig } from "@kubernetes/client-node";
+import { HttpResponse, http } from "msw";
 import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   A2ATaskModel,
   AgentRunModel,
@@ -11,10 +14,18 @@ import {
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import type { AgentRunCompletion } from "@/services/agent-runtime/backends/types";
 import { afterEach, expect, test, vi } from "@/test";
+import { useMswServer } from "@/test/msw";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 
-afterEach(() => vi.restoreAllMocks());
+// biome-ignore lint/correctness/useHookAtTopLevel: MSW test lifecycle helper, not a React hook.
+const server = useMswServer();
+const clusterOrigin = "https://kubernetes.example.test";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  agentSandboxApi.reset();
+});
 
 // Exercise the scheduler, task lifecycle, launch-spec construction and real DB.
 // Only the external container driver and model-provider network are replaced.
@@ -31,10 +42,22 @@ test.for([
   makeScheduleTrigger,
   makeScheduleTriggerRun,
 }) => {
-  config.agentRuntime.enabled = true;
+  // A dedicated worker has not warmed the web process's capability cache.
+  // Exercise real discovery/admission; only the external cluster is replaced.
+  vi.restoreAllMocks();
+  agentSandboxApi.reset();
+  vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
+    function (this: KubeConfig) {
+      this.loadFromOptions({
+        clusters: [{ name: "test", server: clusterOrigin }],
+        users: [{ name: "test" }],
+        contexts: [{ name: "test", cluster: "test", user: "test" }],
+        currentContext: "test",
+      });
+    },
+  );
+  serveController(true);
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
-  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
-  vi.spyOn(backend, "assertReady").mockResolvedValue();
   vi.spyOn(backend, "resolveRuntimeScope").mockReturnValue("test-runtime");
   const launch = vi.spyOn(backend, "launch").mockResolvedValue();
   vi.spyOn(backend, "stageInputs").mockResolvedValue();
@@ -118,6 +141,7 @@ test.for([
   const launched = await ScheduleTriggerRunModel.findById(run.id);
   expect(launched).toMatchObject({
     status: "running",
+    error: null,
     completedAt: null,
     chatConversationId: null,
   });
@@ -156,7 +180,16 @@ test.for([
     overlapping.find((candidate) => candidate.id !== run.id),
   ).toMatchObject({
     status: "failed",
-    error: "Skipped: previous run was still in progress",
+    error: expect.stringContaining(
+      `Skipped: run ${run.id} was still in progress`,
+    ),
+    blockedBy: {
+      runId: run.id,
+      runtimeTaskId: taskId,
+      phase: "running",
+      maximumDurationSeconds: 72 * 3600,
+      deadline: expect.any(String),
+    },
   });
   await ScheduleTriggerModel.update(trigger.id, { enabled: false });
 
@@ -181,12 +214,37 @@ test.for([
     settled?.completedAt,
   );
 
-  // Runtime configuration must never silently fall back to foreground execution.
-  config.agentRuntime.enabled = false;
+  // Runtime configuration must never silently fall back to foreground
+  // execution when the cluster loses the Agent Sandbox controller.
+  agentSandboxApi.reset();
+  serveController(false);
   const disabled = await makeScheduleTriggerRun(trigger.id);
   await handleScheduleTriggerRunExecution({ runId: disabled.id });
   expect(await ScheduleTriggerRunModel.findById(disabled.id)).toMatchObject({
     status: "failed",
-    error: expect.stringContaining("Agent Runtime is disabled"),
+    error: expect.stringContaining("Agent Sandbox controller"),
+    runtimeTaskId: null,
   });
 });
+
+function serveController(installed: boolean) {
+  for (const [group, resources] of [
+    ["agents.x-k8s.io", ["sandboxes"]],
+    [
+      "extensions.agents.x-k8s.io",
+      ["sandboxclaims", "sandboxtemplates", "sandboxwarmpools"],
+    ],
+  ] as const) {
+    server.use(
+      http.get(`${clusterOrigin}/apis/${group}/v1beta1`, () =>
+        installed
+          ? HttpResponse.json({
+              kind: "APIResourceList",
+              groupVersion: `${group}/v1beta1`,
+              resources: resources.map((name) => ({ name })),
+            })
+          : new HttpResponse("404 page not found\n", { status: 404 }),
+      ),
+    );
+  }
+}

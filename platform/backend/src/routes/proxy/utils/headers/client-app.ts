@@ -6,7 +6,9 @@ import {
   isCodexOriginator,
   isCodexUserAgent,
   isCursorUserAgent,
+  isKiloUserAgent,
   isOpenCodeUserAgent,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
@@ -110,6 +112,19 @@ export function detectOpenCodeClientId(
     getHeaderValue(headers, "originator")?.trim().toLowerCase() === "opencode"
   ) {
     return OPENCODE_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Auto-detects Kilo Code's CLI from its `kilo/…` User-Agent. Returns
+ * {@link KILO_CLIENT_ID}.
+ */
+export function detectKiloClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof KILO_CLIENT_ID | undefined {
+  if (isKiloUserAgent(getHeaderValue(headers, "user-agent"))) {
+    return KILO_CLIENT_ID;
   }
   return undefined;
 }

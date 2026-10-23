@@ -15,6 +15,7 @@ import type {
   BatteryCredentialBindings,
   BatteryInstallStatus,
   BatteryPackageFile,
+  BatteryTargetName,
 } from "@/types/openappa-batteries";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import organizationsTable from "./organization";
@@ -71,6 +72,8 @@ export const openappaBatteryInstallsTable = pgTable(
       .$type<BatteryInstallStatus>()
       .notNull()
       .default("active" satisfies BatteryInstallStatus),
+    // The target the battery deploys as; null for its base alone.
+    target: text().$type<BatteryTargetName>(),
     // The package version the declaration spells; null for a bundled battery.
     packageHash: text("package_hash"),
     lastError: text("last_error"),
@@ -108,6 +111,11 @@ export const openappaEffectivePoliciesTable = pgTable(
     compiledAt: timestamp("compiled_at", { withTimezone: true }).notNull(),
     lastError: text("last_error"),
     lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    // What `content` was composed from: its revision, time and battery
+    // statuses, or that it is the root text alone. Trusted only while its
+    // `contentHash` equals `content_hash`, so a build that does not write it
+    // leaves a value nobody reads. See src/openappa/composition-view.ts.
+    served: jsonb("served").$type<unknown>(),
   },
 );
 

@@ -29,21 +29,40 @@ export const REDACTED_LOG_PATHS = [
 ]
   .flatMap((key) => [key, `*.${key}`, `*.headers.${key}`])
   .concat([
+    ...[
+      "api-key",
+      "Api-Key",
+      "API-Key",
+      "x-api-key",
+      "x-archestra-virtual-key",
+    ].flatMap((key) => [`["${key}"]`, `*["${key}"]`, `*.headers["${key}"]`]),
     // The browser-held encrypted chat key rides this request header;
     // the server must never persist it, logs included. Hyphenated keys need
     // fast-redact's bracket syntax (same three shapes as above).
+    '["x-archestra-openappa-context"]',
+    '*["x-archestra-openappa-context"]',
+    '*.headers["x-archestra-openappa-context"]',
     '["x-archestra-encrypted-chat-key"]',
     '*["x-archestra-encrypted-chat-key"]',
     '*.headers["x-archestra-encrypted-chat-key"]',
     '["x-archestra-internal-call"]',
     '*["x-archestra-internal-call"]',
     '*.headers["x-archestra-internal-call"]',
+    '["x-archestra-guardrail-call"]',
+    '*["x-archestra-guardrail-call"]',
+    '*.headers["x-archestra-guardrail-call"]',
     '["x-archestra-runtime-binding"]',
     '*["x-archestra-runtime-binding"]',
     '*.headers["x-archestra-runtime-binding"]',
     '["X-Archestra-Runtime-Binding"]',
     '*["X-Archestra-Runtime-Binding"]',
     '*.headers["X-Archestra-Runtime-Binding"]',
+    '["x-archestra-client-runtime-token"]',
+    '*["x-archestra-client-runtime-token"]',
+    '*.headers["x-archestra-client-runtime-token"]',
+    '["X-Archestra-Client-Runtime-Token"]',
+    '*["X-Archestra-Client-Runtime-Token"]',
+    '*.headers["X-Archestra-Client-Runtime-Token"]',
   ]);
 
 /**

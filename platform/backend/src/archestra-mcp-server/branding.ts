@@ -11,7 +11,6 @@ import {
   getArchestraToolPrefix,
   getArchestraToolShortName,
   isLikelyArchestraToolName,
-  POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import config from "@/config";
 import type { Organization } from "@/types";
@@ -141,21 +140,6 @@ class ArchestraMcpBranding {
       ...this.identity,
       includeDefaultPrefix: true,
     });
-  }
-
-  /**
-   * True when the tool is a built-in that bypasses tool invocation and
-   * trusted data policies. Most built-ins do; the ones in
-   * {@link POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES} (e.g.
-   * `query_knowledge_sources`, whose results can carry prompt injection from
-   * knowledge-base content) are evaluated like external tools instead.
-   */
-  isPolicyBypassedToolName(toolName: string): boolean {
-    const shortName = this.getToolShortName(toolName);
-    return (
-      shortName !== null &&
-      !POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
-    );
   }
 
   private state: ArchestraBrandingState = {

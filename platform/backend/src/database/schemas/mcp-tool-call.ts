@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -49,6 +52,16 @@ const mcpToolCallsTable = pgTable(
     // - initialize: { capabilities, serverInfo }
     toolResult: jsonb("tool_result").$type<unknown>(),
     /**
+     * Plaintext copies of the call's tool name and outcome, so usage statistics
+     * can group on them in SQL: `tool_call`/`tool_result` may be encrypted, and
+     * name plus status is exactly what the `mcp_tool_calls_total` metric already
+     * exposes. Set only for `tools/call` rows. `tool_name` stays null on
+     * encrypted-chat rows, whose content the server must not read. Null on rows
+     * written before these columns existed; readers fall back to the JSON.
+     */
+    toolName: varchar("tool_name", { length: 255 }),
+    isError: boolean("is_error"),
+    /**
      * Non-null marks `toolCall`/`toolResult` as encrypted under an encrypted-chat
      * conversation's browser-held key rather than the server key, and names the
      * conversation whose escrow record recovers it. Readers MUST consult this
@@ -64,6 +77,20 @@ const mcpToolCallsTable = pgTable(
     }),
     /** Agent run or external run that issued this gateway call. */
     runId: varchar("run_id"),
+    /**
+     * The LLM proxy session (`interactions.session_id`) whose model turn
+     * issued this call. Written only from an exact signal: the chat engine's
+     * own session id, or the session headers a gateway client sends, read the
+     * same way the LLM proxy reads them. Null when there is none; readers may
+     * still resolve it through `run_id` (see McpToolCallModel).
+     */
+    sessionId: varchar("session_id"),
+    /**
+     * The model's own id for the tool call this row executed (the provider's
+     * `tool_use` / `tool_calls[].id`), when the caller passed it. Distinct from
+     * `tool_call.id`, which is minted by the platform.
+     */
+    llmToolCallId: varchar("llm_tool_call_id"),
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
@@ -79,6 +106,8 @@ const mcpToolCallsTable = pgTable(
      * platform made in-process, and for rows from before this was recorded.
      */
     source: varchar("source", { length: 20 }).$type<McpGatewayCallSource>(),
+    /** Elapsed request-processing time, excluding audit persistence. */
+    durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
@@ -88,6 +117,16 @@ const mcpToolCallsTable = pgTable(
     userIdIdx: index("mcp_tool_calls_user_id_idx").on(table.userId),
     appIdIdx: index("mcp_tool_calls_app_id_idx").on(table.appId),
     createdAtIdx: index("mcp_tool_calls_created_at_idx").on(table.createdAt),
+    // A session's calls in time order (the session view's keyset walk).
+    // Partial: most rows carry no session, so the index stays small.
+    sessionCreatedAtIdx: index("mcp_tool_calls_session_created_at_idx")
+      .on(table.sessionId, table.createdAt, table.id)
+      .where(sql`${table.sessionId} IS NOT NULL`),
+    // Resolving a session for rows linked only by run id, and the session
+    // filter's run branch.
+    runIdIdx: index("mcp_tool_calls_run_id_idx")
+      .on(table.runId)
+      .where(sql`${table.runId} IS NOT NULL`),
   }),
 );
 

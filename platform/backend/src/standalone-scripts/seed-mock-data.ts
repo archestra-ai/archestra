@@ -7,7 +7,11 @@ import {
 import { getTableName, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
-import { seedDefaultUserAndOrg, syncBuiltInAgents } from "@/database/seed";
+import {
+  seedArchestraCatalogAndTools,
+  seedDefaultUserAndOrg,
+  syncBuiltInAgents,
+} from "@/database/seed";
 import logger from "@/logging";
 import {
   AgentLabelModel,
@@ -16,6 +20,7 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import AgentUsageModel from "@/models/agent-usage";
 import type { TeamMemberRole } from "@/types/team-role";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
@@ -152,6 +157,9 @@ async function seedMockData() {
   // Always ensure the LLM Proxy exists
   await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
+  // The TRUNCATE above dropped the built-in catalog; without it every
+  // starter policy is refused until the backend restarts.
+  await seedArchestraCatalogAndTools();
 
   const sharedUsers = [
     { id: editorUser.id, name: "editor" },
@@ -321,11 +329,6 @@ async function seedMockData() {
   const agentToolData = toolData.map((tool) => ({
     agentId: tool.agentId,
     toolId: tool.id,
-    allowUsageWhenUntrustedDataIsPresent:
-      tool.allowUsageWhenUntrustedDataIsPresent || false,
-    toolResultTreatment: (tool.dataIsTrustedByDefault
-      ? "trusted"
-      : "untrusted") as "trusted" | "untrusted" | "sanitize_with_dual_llm",
   }));
 
   await db.insert(schema.agentToolsTable).values(agentToolData);
@@ -345,29 +348,28 @@ async function seedMockData() {
     agentIds,
     toolsByAgent,
     200, // number of interactions
-    0.3, // 30% block probability
   );
 
-  // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
-  await db.insert(schema.interactionsTable).values(interactionData as any);
+  const insertedInteractions = await db
+    .insert(schema.interactionsTable)
+    // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
+    .values(interactionData as any)
+    .returning({
+      profileId: schema.interactionsTable.profileId,
+      createdAt: schema.interactionsTable.createdAt,
+    });
   logger.info(`✅ Created ${interactionData.length} interactions`);
 
-  // Show statistics
-  const blockedCount = interactionData.filter((i) => {
-    const response = i.response as { choices?: Array<{ message?: unknown }> };
-    if (Array.isArray(response.choices)) {
-      const message = response.choices[0]?.message;
-      return (
-        !!message &&
-        typeof message === "object" &&
-        "refusal" in message &&
-        Boolean(message.refusal)
-      );
-    }
-    return false;
-  }).length;
-  logger.info(`   - ${blockedCount} blocked by policy`);
-  logger.info(`   - ${interactionData.length - blockedCount} allowed`);
+  // Inserted directly, so stamp each agent as InteractionModel.create would.
+  const newestByAgent = new Map<string, Date>();
+  for (const { profileId, createdAt } of insertedInteractions) {
+    if (!profileId) continue;
+    const newest = newestByAgent.get(profileId);
+    if (!newest || createdAt > newest) newestByAgent.set(profileId, createdAt);
+  }
+  for (const [agentId, usedAt] of newestByAgent) {
+    await AgentUsageModel.recordUse({ agentId, usedAt });
+  }
 }
 
 /**

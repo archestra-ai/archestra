@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type InternalAgent =
+  archestraApiTypes.GetChatAgentRosterResponses["200"][number];
 
 type InitialAgentListItem = Pick<
   InternalAgent,
@@ -10,19 +11,22 @@ type InitialAgentListItem = Pick<
   | "authorId"
   | "description"
   | "icon"
-  | "systemPrompt"
   | "runtime"
+  | "builtIn"
 >;
 
-export function filterAndSortInitialAgents(params: {
-  allAgents: InitialAgentListItem[];
+export function filterAndSortInitialAgents<
+  T extends InitialAgentListItem,
+>(params: {
+  allAgents: T[];
   currentAgentId: string | null;
   search: string;
   userId?: string;
-}) {
+}): T[] {
   const { allAgents, currentAgentId, search, userId } = params;
 
   let result = allAgents.filter((agent) => {
+    if (agent.builtIn) return false;
     if (agent.scope === "personal") {
       return agent.authorId === userId;
     }
@@ -58,24 +62,32 @@ export function filterAndSortInitialAgents(params: {
   });
 }
 
-export function truncateAgentDescription(description?: string | null) {
-  if (!description) {
-    return null;
-  }
-
-  const maxLength = 80;
-  if (description.length <= maxLength) {
-    return description;
-  }
-
-  const truncated = description.slice(0, maxLength).trimEnd();
-  const lastSpaceIndex = truncated.lastIndexOf(" ");
-  const safeTruncation =
-    lastSpaceIndex >= maxLength - 15
-      ? truncated.slice(0, lastSpaceIndex)
-      : truncated;
-
-  return `${safeTruncation.trimEnd()}...`;
+/**
+ * Splits the picker's sorted list into the user's own agents and the ones
+ * shared with them, keeping each group in the sorted order. Empty groups are
+ * dropped so the picker never shows a heading with nothing under it.
+ */
+export function groupInitialAgents<T extends InitialAgentListItem>(params: {
+  agents: T[];
+  userId?: string;
+  /** The user's pins, newest first; pinned agents lead in that order. */
+  pinnedIds?: readonly string[];
+}): { label: string; agents: T[] }[] {
+  const { agents, userId, pinnedIds = [] } = params;
+  const pinOrder = new Map(pinnedIds.map((id, index) => [id, index]));
+  const pinned = agents
+    .filter((agent) => pinOrder.has(agent.id))
+    .sort((a, b) => (pinOrder.get(a.id) ?? 0) - (pinOrder.get(b.id) ?? 0));
+  const unpinned = agents.filter((agent) => !pinOrder.has(agent.id));
+  const yours = unpinned.filter(
+    (agent) => agent.scope === "personal" && agent.authorId === userId,
+  );
+  const shared = unpinned.filter((agent) => !yours.includes(agent));
+  return [
+    { label: "Pinned", agents: pinned },
+    { label: "Yours", agents: yours },
+    { label: "Shared with you", agents: shared },
+  ].filter((group) => group.agents.length > 0);
 }
 
 function getScopeOrder(scope: InitialAgentListItem["scope"]) {

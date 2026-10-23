@@ -5,7 +5,11 @@ import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
@@ -15,6 +19,7 @@ import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
+import { ProviderChannels } from "../_components/provider-channels";
 import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
@@ -50,6 +55,7 @@ export default function MsTeamsPage() {
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
         docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/ms-teams")}
+        collapseWhenDone
       >
         <LlmKeySetupStep />
         {isLocalDev ? (
@@ -93,17 +99,20 @@ export default function MsTeamsPage() {
         ) : (
           <InlineNotice variant="info">
             <Info />
-            <span className="font-medium">
-              {configuredAppName}'s webhook must be reachable from the Internet
-            </span>
-            <InlineNoticeText>
-              The webhook endpoint{" "}
-              <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
-              </code>{" "}
-              must be publicly accessible so {channelLabel} can deliver messages
-              to {configuredAppName}
-            </InlineNoticeText>
+            <InlineNoticeBody>
+              <span className="font-medium">
+                {configuredAppName}'s webhook must be reachable from the
+                Internet
+              </span>
+              <InlineNoticeText>
+                The webhook endpoint{" "}
+                <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                  POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
+                </code>{" "}
+                must be publicly accessible so {channelLabel} can deliver
+                messages to {configuredAppName}
+              </InlineNoticeText>
+            </InlineNoticeBody>
           </InlineNotice>
         )}
         <SetupStep
@@ -132,6 +141,8 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
       </SetupSection>
+
+      {msTeams?.configured && <ProviderChannels provider="ms-teams" />}
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

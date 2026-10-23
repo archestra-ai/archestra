@@ -2,6 +2,7 @@ import type { Permissions } from "@archestra/shared";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useId } from "react";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -39,6 +40,8 @@ type TableRowAction = {
   /** The href leaves the app: open it in a new tab, as a link out should. */
   external?: boolean;
   testId?: string;
+  /** Structured form of `disabledTooltip`, shown in its place on hover. */
+  disabledTooltipContent?: React.ReactNode;
 };
 
 type TableRowActionsProps = {
@@ -175,9 +178,9 @@ function ActionButton({
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           data-testid={action.testId}
         >
-          <Link href={action.href} {...externalLinkProps(action)}>
+          <IntentPrefetchLink href={action.href} {...externalLinkProps(action)}>
             {icon}
-          </Link>
+          </IntentPrefetchLink>
         </PermissionButton>
       );
     }
@@ -187,6 +190,9 @@ function ActionButton({
         permissions={action.permissions as Permissions}
         permissionScope={action.permissionScope}
         tooltip={tooltipText}
+        reasonContent={
+          action.disabled ? action.disabledTooltipContent : undefined
+        }
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
@@ -215,9 +221,9 @@ function ActionButton({
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         data-testid={action.testId}
       >
-        <Link href={action.href} {...externalLinkProps(action)}>
+        <IntentPrefetchLink href={action.href} {...externalLinkProps(action)}>
           {icon}
-        </Link>
+        </IntentPrefetchLink>
       </Button>
     ) : (
       <Button
@@ -249,7 +255,9 @@ function ActionButton({
           button
         )}
       </TooltipTrigger>
-      <TooltipContent>{tooltipText}</TooltipContent>
+      <TooltipContent>
+        {(action.disabled && action.disabledTooltipContent) || tooltipText}
+      </TooltipContent>
     </Tooltip>
   );
 }

@@ -31,8 +31,8 @@ export function DefaultCredentialsWarning({
   // link used to carry the verb ("Set ENV"), so hiding it left the warning
   // trailing off into "to change" and "or Change".
   const deploymentDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformDeployment,
-    "authentication--security",
+    DocsPage.PlatformDeploymentConfiguration,
+    "authentication",
   );
 
   // Loading state - don't show anything yet
@@ -52,8 +52,8 @@ export function DefaultCredentialsWarning({
 
   if (slim) {
     const fixUrl = getFrontendDocsUrl(
-      DocsPage.PlatformDeployment,
-      "authentication--security:~:text=ARCHESTRA_AUTH_ADMIN_EMAIL",
+      DocsPage.PlatformDeploymentConfiguration,
+      "ARCHESTRA_AUTH_ADMIN_EMAIL",
     );
 
     return (

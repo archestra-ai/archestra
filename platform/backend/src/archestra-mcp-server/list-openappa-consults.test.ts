@@ -58,7 +58,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("returns the helper's own error for the caller's session, without the request or answer", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const callerId = `user:${context.userId}`;
     await seedConsult({
       organizationId,
@@ -94,7 +94,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("narrows by outcome", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const callerId = `user:${context.userId}`;
     await seedConsult({ organizationId, callerId, externalName: "worked" });
     await seedConsult({
@@ -111,16 +111,16 @@ describe("list_openappa_consults", () => {
     ]);
   });
 
-  test("another caller's session is readable only with openappaDiagnostics:admin", async () => {
+  test("another caller's session is readable only with log:admin", async () => {
     await seedConsult({
       organizationId,
       callerId: "user:someone-else",
       sessionId: "their-chat",
       diagnostics: HELPER_ERROR,
     });
-    const reader = await callerWith({ openappaDiagnostics: ["read"] });
+    const reader = await callerWith({ log: ["read"] });
     const admin = await callerWith({
-      openappaDiagnostics: ["read", "admin"],
+      log: ["read", "admin"],
     });
 
     const refused = await list(reader, { sessionId: "their-chat" });
@@ -134,9 +134,9 @@ describe("list_openappa_consults", () => {
   });
 
   test("an audience source's diagnostics are withheld from a caller who cannot read members", async () => {
-    const withheld = await callerWith({ openappaDiagnostics: ["read"] });
+    const withheld = await callerWith({ log: ["read"] });
     const allowed = await callerWith({
-      openappaDiagnostics: ["read"],
+      log: ["read"],
       member: ["read"],
     });
     for (const context of [withheld, allowed])
@@ -164,7 +164,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("long diagnostics and raw responses are cut and marked", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,
@@ -180,8 +180,56 @@ describe("list_openappa_consults", () => {
     expect(consult.rawResponseTruncated).toBe(true);
   });
 
+  test("nextCursor reads the older consults past the first page", async () => {
+    const context = await callerWith({ log: ["read"] });
+    const names = await seedNewestFirst(
+      { organizationId, callerId: `user:${context.userId}` },
+      55,
+    );
+
+    const first = await list(context);
+    const second = await list(context, { cursor: first.nextCursor });
+
+    expect(first.hasMore).toBe(true);
+    expect(second.hasMore).toBe(false);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      [...first.consults, ...second.consults].map(
+        (consult) => consult.externalName,
+      ),
+    ).toEqual(names);
+  });
+
+  test("large consults are paged under the result budget without a gap or repeat", async () => {
+    const context = await callerWith({ log: ["read"] });
+    const names = await seedNewestFirst(
+      { organizationId, callerId: `user:${context.userId}` },
+      30,
+      {
+        diagnostics: `"ж"\n`.repeat(1000),
+        rawResponse: `"ж"\n`.repeat(1000),
+      },
+    );
+
+    const seen: string[] = [];
+    let cursor: string | null | undefined;
+    let pages = 0;
+    do {
+      const page = await list(context, cursor ? { cursor } : {});
+      expect(
+        Buffer.byteLength(JSON.stringify(JSON.stringify(page)), "utf8"),
+      ).toBeLessThan(64 * 1024);
+      seen.push(...page.consults.map((consult) => consult.externalName));
+      cursor = page.nextCursor;
+      pages++;
+    } while (cursor);
+
+    expect(pages).toBeGreaterThan(1);
+    expect(seen).toEqual(names);
+  });
+
   test("does not fall back to the session the call runs in", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,
@@ -199,14 +247,14 @@ describe("list_openappa_consults", () => {
   });
 
   test("does not exist while OpenAPPA is disabled", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     config.openappa.enabled = false;
 
     expect(await failure(context)).toMatch(/No tool named/);
   });
 
-  test("refuses a caller without openappaDiagnostics:read", async () => {
-    const context = await callerWith({ openappaPolicy: ["read"] });
+  test("refuses a caller without log:read", async () => {
+    const context = await callerWith({ guardrailsPolicy: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,
@@ -238,6 +286,7 @@ async function list(
   sessionId: string;
   ownSessionsOnly: boolean;
   hasMore: boolean;
+  nextCursor: string | null;
   consults: ConsultSummary[];
 }> {
   const outcome = await executeArchestraTool(
@@ -266,8 +315,27 @@ async function failure(
   return JSON.stringify(outcome);
 }
 
+/** `count` consults a second apart, returning their names newest first. */
+async function seedNewestFirst(
+  owner: { organizationId: string; callerId: string },
+  count: number,
+  texts: { diagnostics?: string; rawResponse?: string } = {},
+): Promise<string[]> {
+  const newest = Date.now();
+  const names = Array.from({ length: count }, (_, index) => `consult-${index}`);
+  for (const [index, externalName] of names.entries())
+    await seedConsult({
+      ...owner,
+      externalName,
+      createdAt: new Date(newest - index * 1000),
+      ...texts,
+    });
+  return names;
+}
+
 async function seedConsult(params: {
   organizationId: string;
+  createdAt?: Date;
   callerId: string;
   sessionId?: string;
   externalName?: string;
@@ -277,7 +345,7 @@ async function seedConsult(params: {
   diagnostics?: string;
   rawResponse?: string;
 }): Promise<void> {
-  const now = new Date();
+  const now = params.createdAt ?? new Date();
   await db.insert(schema.openappaExternalConsultsTable).values({
     id: randomUUID(),
     organizationId: params.organizationId,

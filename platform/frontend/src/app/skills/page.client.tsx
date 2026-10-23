@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  GIT_PROVIDER_LABELS,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
@@ -41,14 +45,16 @@ import {
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -62,6 +68,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -95,7 +103,6 @@ import {
 } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
-  countSkills,
   type SkillUsageReference,
   useAllMatchingSkills,
   useBulkDeleteSkills,
@@ -107,7 +114,10 @@ import {
   useSkillsList,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
-import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
+import {
+  parseRepoFromSourceRef,
+  repositoryLabel,
+} from "@/lib/skills/skill-source";
 import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -186,6 +196,8 @@ function SkillsList() {
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
+  const importedIds = searchParams.get("imported")?.split(",").filter(Boolean);
+  const hasImportFilter = Boolean(importedIds?.length);
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
   const scopeFilter = useScopeFilterParams();
@@ -201,17 +213,19 @@ function SkillsList() {
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
-  const pluginsEnabled = useFeature("plugins") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
   const { data: canOpenPluginDetails } = useHasPermissions(
     { plugin: ["read", "update"] },
     "*",
   );
-  const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
+  const pluginSkillsEnabled = canReadPlugins === true;
   const kindParam = searchParams.get("kind");
-  const requestedKind: SkillKind =
-    kindParam === "standalone" || kindParam === "mcp" || kindParam === "plugin"
+  const requestedKind: SkillKind = hasImportFilter
+    ? "standalone"
+    : kindParam === "standalone" ||
+        kindParam === "mcp" ||
+        kindParam === "plugin"
       ? kindParam
       : "all";
   const kind: SkillKind =
@@ -241,8 +255,11 @@ function SkillsList() {
    * visible page and "every matching skill" differ only by limit/offset.
    */
   const listFilters = {
+    // The table shows names and descriptions, never the SKILL.md body.
+    includeContent: false,
     search: search || undefined,
     sourceRepo: sourceRepo || undefined,
+    skillIds: hasImportFilter ? importedIds : undefined,
     labels: labelsFilter,
     scope: scopeFilter.scope,
     teamIds: scopeFilter.teamIds,
@@ -250,6 +267,8 @@ function SkillsList() {
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
     access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
     status: isDeletedView ? ("deleted" as const) : undefined,
     sortBy,
     sortDirection,
@@ -334,6 +353,7 @@ function SkillsList() {
   const setKindFilter = useCallback(
     (value: string) => {
       const params = new URLSearchParams(searchParams.toString());
+      params.delete("imported");
       if (value === "all") {
         params.delete("kind");
       } else {
@@ -509,6 +529,7 @@ function SkillsList() {
     ? totalStandaloneSkills
     : items.length;
   const hasActiveFilters =
+    hasImportFilter ||
     !!search ||
     !!sourceRepo ||
     Boolean(labelsFilter) ||
@@ -550,12 +571,13 @@ function SkillsList() {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of [
       "search",
+      "imported",
       "sourceRepo",
       "scope",
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
       "status",
       "kind",
       "labels",
@@ -657,9 +679,7 @@ function SkillsList() {
           },
         ];
     return (
-      <ResourceTableRowActions
-        kind="skill"
-        resource={isDeletedView ? null : skill}
+      <TableRowActions
         permissionScope={"id" in skill ? skill.id : undefined}
         actions={actions}
         dropdownActions={dropdownActions}
@@ -909,8 +929,34 @@ function SkillsList() {
           ) : (
             <>
               <CollectionFilters>
+                {hasImportFilter && (
+                  <InlineNotice variant="info" className="-mt-2">
+                    <Info />
+                    <span className="font-medium">Just imported</span>
+                    <InlineNoticeText>
+                      Showing only the skills created by this import.
+                    </InlineNoticeText>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => {
+                        const params = new URLSearchParams(
+                          searchParams.toString(),
+                        );
+                        params.delete("imported");
+                        params.delete("page");
+                        router.push(`${pathname}?${params.toString()}`, {
+                          scroll: false,
+                        });
+                      }}
+                    >
+                      <span>Show all skills</span>
+                    </Button>
+                  </InlineNotice>
+                )}
                 <FilterBar
-                  leading
+                  leading={!hasImportFilter}
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                   search={
@@ -922,11 +968,7 @@ function SkillsList() {
                   }
                 >
                   {!isDeletedView && (
-                    <ResourceAccessFilter
-                      resource="skill"
-                      noun="skills"
-                      countItems={countSkills}
-                    />
+                    <ResourceAccessFilter resource="skill" noun="skills" />
                   )}
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (
@@ -990,7 +1032,9 @@ function SkillsList() {
                               <span aria-hidden>
                                 <RepositoryOwnerIcon repo={sourceRepo} />
                               </span>
-                              <span className="truncate">{sourceRepo}</span>
+                              <span className="truncate">
+                                {repositoryLabel(sourceRepo)}
+                              </span>
                             </span>
                           ) : (
                             <span>All repositories</span>
@@ -1009,7 +1053,7 @@ function SkillsList() {
                               </span>
                             }
                           >
-                            {repo}
+                            {repositoryLabel(repo)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1355,20 +1399,23 @@ function ListedSkillName({
           {standalone?.githubSyncInterval && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge
-                  variant="outline"
+                <span
+                  role="img"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the sync details without implying a click action
+                  tabIndex={0}
+                  aria-label={
+                    standalone.lastSyncError ? "Sync failed" : "Kept in sync"
+                  }
                   className={cn(
-                    "shrink-0 gap-1",
+                    "inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     standalone.lastSyncError && "text-destructive",
                   )}
                 >
-                  <RefreshCw className="h-3 w-3" />
-                  synced
-                </Badge>
+                  <RefreshCw className="size-3.5" />
+                </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
-                {SYNC_INTERVAL_LABELS[standalone.githubSyncInterval]} from
-                GitHub; read-only until disconnected.
+                {`${SYNC_INTERVAL_LABELS[standalone.githubSyncInterval]} from ${GIT_PROVIDER_LABELS[standalone.sourceProvider ?? "github"]}; read-only until disconnected.`}
                 {standalone.lastSyncError
                   ? ` Last sync failed: ${standalone.lastSyncError}`
                   : ` Last synced: ${formatRelativeTimeFromNow(
@@ -1463,11 +1510,12 @@ function listedSkillSource(item: ListedSkill): {
   const repo = parseRepoFromSourceRef(
     item.skill.sourceRef,
     item.skill.sourceOrigin,
+    item.skill.sourceProvider,
   );
   return repo
-    ? { label: repo, isRepo: true }
+    ? { label: repositoryLabel(repo), isRepo: true }
     : {
-        label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
+        label: item.skill.sourceType === "github" ? "Git" : "Manual",
         isRepo: false,
       };
 }

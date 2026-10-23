@@ -47,15 +47,9 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
-// Native/OpenAPPA tests opt in explicitly; local policy settings must not
-// switch unrelated PGlite suites away from the existing guardrails.
-//
-// The beta master switch is pinned for the same reason as Vertex AI above: a
-// developer's .env reaches these tests through dotenv, and OpenAPPA now rides
-// this switch. Left to the .env it would turn the legacy trusted-data
-// guardrail off on a beta machine and leave it on in CI, so the same suite
-// would assert different behavior in the two places. A test that wants a beta
-// feature stubs its own gate.
+// Keep unrelated beta features off even when a developer's .env enables them.
+// OpenAPPA is always available; enforcement tests opt in through the deployment
+// Guardrails setting. A test of another beta feature stubs its own gate.
 process.env.ARCHESTRA_BETA = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 
@@ -92,6 +86,14 @@ let pristineConfig: Record<string, unknown> | null = null;
 // would pull config.ts before the env above is set.
 type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
 let enterpriseTier: EnterpriseTierRef | null = null;
+// archestraMcpBranding is the same kind of singleton: a test that syncs the
+// built-in catalog for a white-labeled organization leaves the tool prefix
+// branded (`acme_copilot__` instead of `archestra__`) for every later test in
+// the worker, and the next file in the worker then names its OpenAPPA tools
+// after that organization. Reset it with config, on the way in and out.
+type ArchestraMcpBrandingRef =
+  typeof import("../archestra-mcp-server/branding.js").archestraMcpBranding;
+let archestraMcpBranding: ArchestraMcpBrandingRef | null = null;
 if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
@@ -99,6 +101,8 @@ if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   >;
   pristineConfig = structuredClone(liveConfig);
   enterpriseTier = (await import("../enterprise-tier.js")).enterpriseTier;
+  archestraMcpBranding = (await import("../archestra-mcp-server/branding.js"))
+    .archestraMcpBranding;
 }
 type TestDatabase = ReturnType<typeof drizzle>;
 let testDb: TestDatabase | null = null;
@@ -210,6 +214,21 @@ beforeEach(async ({ task }) => {
   if (enterpriseTier) {
     enterpriseTier.setUserCountForTesting(0);
   }
+
+  // Same for the MCP branding singleton: back to the unbranded default, so a
+  // white-label test earlier in the worker cannot rename this test's tools.
+  archestraMcpBranding?.syncFromOrganization(null);
+
+  // Agent Runtime availability is detected from whatever cluster the default
+  // kubeconfig points at, so a developer machine with the Agent Sandbox
+  // controller would answer differently from CI. Default to "not installed";
+  // a test that needs it either overrides this spy or restores it to exercise
+  // real detection. Imported here, after the test file's mocks are applied.
+  const { agentSandboxApi } = await import(
+    "../k8s/agent-runtime/sandbox-api.js"
+  );
+  agentSandboxApi.reset();
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
 
   if (
     pgliteClient &&
@@ -354,6 +373,7 @@ function restoreTestGlobals(): void {
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
+  archestraMcpBranding?.syncFromOrganization(null);
 }
 
 /**

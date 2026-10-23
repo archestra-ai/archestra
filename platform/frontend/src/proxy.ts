@@ -1,6 +1,11 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import {
+  isShellSeedRoute,
+  SHELL_SEED_HEADER,
+  SHELL_SEED_SEARCH_HEADER,
+} from "@/lib/auth/shell-seed";
 
 export function proxy(req: NextRequest) {
   // Redirect root to /chat before any client components render
@@ -58,7 +63,35 @@ export function proxy(req: NextRequest) {
     });
   }
 
-  return NextResponse.next();
+  // Tell the root layout which documents render their first page on the
+  // server, so it resolves the signed-in shell there too. Never trusted from
+  // the client: the header is always set or removed here.
+  const headers = new Headers(req.headers);
+  if (rendersFirstPageOnServer(req)) {
+    headers.set(SHELL_SEED_HEADER, req.nextUrl.pathname);
+    headers.set(SHELL_SEED_SEARCH_HEADER, req.nextUrl.search);
+  } else {
+    headers.delete(SHELL_SEED_HEADER);
+    headers.delete(SHELL_SEED_SEARCH_HEADER);
+  }
+  return NextResponse.next({ request: { headers } });
+}
+
+/**
+ * A full document load (or refresh) of a page whose rows are server-rendered.
+ * Next removes the router's flight headers (`rsc` and the like) before the
+ * proxy runs, so a client navigation or route prefetch looks like any other
+ * GET here. Fetch Metadata tells them apart: the browser sends
+ * `Sec-Fetch-Dest: document` only for top-level document loads (router
+ * fetches carry `empty`), and page scripts cannot set it. A browser without
+ * Fetch Metadata gets no seed and loads its first page itself.
+ */
+function rendersFirstPageOnServer(req: NextRequest) {
+  return (
+    req.method === "GET" &&
+    isShellSeedRoute(req.nextUrl.pathname, req.nextUrl.search) &&
+    req.headers.get("sec-fetch-dest") === "document"
+  );
 }
 
 /**

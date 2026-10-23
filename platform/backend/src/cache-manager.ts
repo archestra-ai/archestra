@@ -1,6 +1,6 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
@@ -16,24 +16,35 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
+  OpenAppaHitlSummary: "openappa-hitl-summary",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
+  /** Recent scheduled model sync attempt for an LLM provider API key */
+  LlmModelSyncAttempt: "llm-model-sync-attempt",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
+  /** Last verified provider tool-token count, bounded to one slot per gateway. */
+  McpToolTokenCount: "mcp-tool-token-count",
   /** Deduplication for processed emails */
   ProcessedEmail: "processed-email",
   /** Rate limiting for webhooks */
   WebhookRateLimit: "webhook-rate-limit",
   /** OAuth flow state during authentication */
   OAuthState: "oauth-state",
+  /** Token endpoint requests, before verifying client credentials. */
+  OAuthTokenRateLimit: "oauth-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -48,16 +59,28 @@ export const CacheKey = {
   OpenAppaNativeQuestion: "openappa-native-question",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
-  /** Pending OpenAPPA review indexed by a verified runtime workspace */
-  OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
+  /** Canonical result text replayed on later requests. Keep the deployed preview's
+   * namespace so upgrading a live conversation does not rewrite its earlier results. */
+  OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
+  /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
+  OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Notice for a call whose annotator gave no answer, answered on that call's result */
+  OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
+  /** Host clarification appended to a runtime-confirmed denied call's result. */
+  OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** Sessions whose client already waited once for the gateway remedy tools to load */
+  OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -68,8 +91,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
-  /** Short-lived browser intent and bound native session for /connection. */
-  ConnectionPromptSession: "connection-prompt-session",
+  /** First native conversation to present a verified setup reference */
+  ConnectionSetupConversation: "connection-setup-conversation",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
@@ -79,8 +102,6 @@ export const CacheKey = {
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
-  /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */
-  AppGalleryDeviceAuthRateLimit: "app-gallery-device-auth-rate-limit",
   /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
   Microsoft365CopilotDeviceAuthRateLimit:
     "microsoft-365-copilot-device-auth-rate-limit",
@@ -92,12 +113,21 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Most active users in an organization's LLM logs, for the logs user filter */
+  InteractionUserOptions: "interaction-user-options-v2",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
   KbConnectorIdentity: "kb-connector-identity",
+  /** Files of the MS Teams message that triggered an agent-selection card, replayed once the agent is picked */
+  TeamsAgentSelectionAttachments: "teams-agent-selection-attachments",
+  /** An MS Teams group-chat message held until its sender signs in so the bot can read its files */
+  TeamsFileSignIn: "teams-file-sign-in",
+  /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
+  TeamsFileSignInState: "teams-file-sign-in-state",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
@@ -116,14 +146,12 @@ export const CacheKey = {
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  ChatOpsReplyAnchor: "chatops-reply-anchor",
+  ChatOpsRuntimeAcknowledgement: "chatops-runtime-acknowledgement",
   /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
-  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
-  DualLlmSanitizedResult: "dual-llm-sanitized-result",
-  /** Completed Q&A rounds of a dual LLM analysis that failed mid-flight, keyed by content hash so a retry resumes instead of re-interrogating */
-  DualLlmPartialTranscript: "dual-llm-partial-transcript",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
@@ -136,6 +164,20 @@ export const CacheKey = {
    * read an old boolean and mistake it for "not an encrypted chat".
    */
   EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
+  /**
+   * Protected runtime files pinned for a parent session while their runtime
+   * was mid-call, one entry per runtime session. Any replica serving the
+   * runtime's next request releases them; any replica serving the parent's
+   * next call reads them.
+   */
+  AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /**
+   * Workspace transfer tickets: minted by whichever replica serves the tool
+   * or API call, redeemed by whichever one the public content URL reaches.
+   */
+  AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -200,6 +242,27 @@ class CacheManager {
     });
 
     logger.debug("CacheManager: Started with Keyv PostgreSQL storage");
+  }
+
+  /**
+   * SQL that is true while a live entry is stored under `${prefix}-${id}`,
+   * for queries that must skip rows whose entry has not expired. `id` is a
+   * text SQL expression, usually a column. Entries are JSON text with an
+   * epoch-millisecond `expires`; one without it never expires.
+   *
+   * This reads Keyv's stored envelope (`{"value": ..., "expires": <ms>}`),
+   * the format incrementFixedWindows also writes. If a Keyv upgrade renamed
+   * `expires`, every entry would look live forever. The model sync schedule
+   * tests write their markers through `set` and expect a retry once the TTL
+   * passes, so they fail on such a change.
+   */
+  liveEntryExists(params: { prefix: CacheKeyPrefix; id: SQL; now: Date }): SQL {
+    const { prefix, id, now } = params;
+    return sql`EXISTS (
+      SELECT 1 FROM keyv_cache
+      WHERE keyv_cache.key = ${`keyv:${prefix}-`} || ${id}
+        AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
+    )`;
   }
 
   /**
@@ -457,6 +520,27 @@ class CacheManager {
         getAndDeleteMany: take,
       });
     });
+  }
+
+  /**
+   * Read several keys in one statement. Unlike {@link getMany}, a storage
+   * failure throws so a caller cannot treat an outage as an empty poll.
+   */
+  async readMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return entries;
+    const rows = await CacheEntryModel.getMany(
+      keys.map((key) => `keyv:${key}`),
+    );
+    const now = Date.now();
+    for (const row of rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (data?.value === undefined) continue;
+      if (typeof data.expires === "number" && now > data.expires) continue;
+      entries.set(row.key.slice("keyv:".length) as AllowedCacheKey, data.value);
+    }
+    return entries;
   }
 
   /**

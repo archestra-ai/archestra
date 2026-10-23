@@ -1,11 +1,17 @@
 import {
   archestraApiSdk,
+  type archestraApiTypes,
   ManagedResourceSchema,
   type Permissions,
   ResourcePermissionActionSchema,
 } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
-import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
+import {
+  hasPagePermissions,
+  hasPermissions,
+  pageUsesCapabilities,
+} from "@/lib/auth/auth.utils";
+import { sessionConfirmation } from "@/lib/auth/session-confirmation";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
@@ -13,9 +19,12 @@ import { throwOnApiError } from "@/lib/utils/api";
 export const authQueryKeys = {
   all: ["auth"] as const,
   session: () => [...authQueryKeys.all, "session"] as const,
-  orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
   sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
+  // Under `all` so role, member and team changes, which invalidate it,
+  // refresh object grants along with the permission map.
+  scopedCapabilities: () =>
+    [...authQueryKeys.all, "scopedCapabilities"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,
 };
@@ -31,8 +40,23 @@ export const authQueryKeys = {
 export function useSession() {
   return useQuery({
     queryKey: authQueryKeys.session(),
-    queryFn: async () => {
-      const { data } = await authClient.getSession();
+    queryFn: async ({ client: queryClient }) => {
+      // Cold load only: a refresh restores the session from the persisted
+      // snapshot, and the shell's queries are already running by then. The
+      // seed runs alongside the session check but nothing waits on it here:
+      // the queries it fills await it themselves (awaitBootstrapSeed).
+      const isColdLoad =
+        queryClient.getQueryData(authQueryKeys.session()) === undefined;
+      if (isColdLoad) startBootstrapSeed(queryClient);
+      const { data, error } = await authClient.getSession();
+      // An explicit authentication refusal clears the shell. An unavailable
+      // server must enter the query's error state and retain the last session.
+      if (error?.status === 401 || error?.status === 403) {
+        sessionConfirmation.set(false);
+        return null;
+      }
+      throwOnApiError(error, { toastOnError: false });
+      sessionConfirmation.set(!!data?.user);
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -43,20 +67,6 @@ export function useSession() {
     // sitting behind a session check. The persisted copy is stripped of the
     // session token, and the request below still runs and replaces it.
     meta: PERSISTED_QUERY_META,
-  });
-}
-
-export function useCurrentOrgMembers() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
-
-  return useQuery({
-    queryKey: authQueryKeys.orgMembers(),
-    queryFn: async () => {
-      const { data } = await authClient.organization.listMembers();
-      return data?.members ?? [];
-    },
-    enabled: isAuthenticated,
   });
 }
 
@@ -112,30 +122,42 @@ export function useHasPermissions(
   };
 }
 
-/** Page discovery accepts an object read grant; it does not imply global read. */
+/**
+ * Page discovery accepts an object read grant; it does not imply global read.
+ * A page that no grant can open does not wait for the scoped capabilities.
+ */
 export function useHasPagePermissions(required: Permissions) {
+  const needsCapabilities = pageUsesCapabilities(required);
   const permissions = useAllPermissions();
-  const capabilities = useScopedCapabilities();
+  const capabilities = useScopedCapabilities(needsCapabilities);
   return {
     data: hasPagePermissions({
       userPermissions: permissions.data,
       required,
       capabilities: capabilities.data ?? [],
     }),
-    isPending: permissions.isPending || capabilities.isPending,
+    isPending:
+      permissions.isPending || (needsCapabilities && capabilities.isPending),
   };
 }
 
 export function useScopedCapabilities(enabled = true) {
   const { data: session } = useSession();
   return useQuery({
-    queryKey: ["scoped-capabilities"],
+    queryKey: authQueryKeys.scopedCapabilities(),
     enabled: enabled && !!session?.user,
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.scopedCapabilities;
       const { data, error } = await archestraApiSdk.getScopedCapabilities();
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
+    // Same lifetime as the permission map it completes: page guards wait on
+    // both, so restoring only one would leave a guarded page empty on refresh.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -181,7 +203,9 @@ export function useAllPermissions() {
 
   return useQuery({
     queryKey: authQueryKeys.userPermissions(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.permissions;
       const { data, error } = await archestraApiSdk.getUserPermissions();
       throwOnApiError(error, { toastOnError: false });
       return data;
@@ -205,10 +229,18 @@ export function useAllPermissions() {
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
 ): Record<Key, boolean> | null {
+  const { isPending: isSessionPending } = useSession();
   const { data: userPermissions, isLoading } = useAllPermissions();
   const capabilities = useScopedCapabilities();
 
-  if (isLoading || capabilities.isLoading) {
+  // Both queries sit disabled — not loading — until the session resolves, so
+  // without the session check a fresh page load briefly reads as "no
+  // permissions" and guards acting on that answer redirect a reader who has them.
+  if (
+    isSessionPending ||
+    isLoading ||
+    (userPermissions === undefined && capabilities.isLoading)
+  ) {
     return null;
   }
 
@@ -228,9 +260,19 @@ export function usePermissionMap<Key extends string>(
   return result;
 }
 
-export function useDefaultCredentialsEnabled() {
+/**
+ * Whether the default admin credentials are still active. `enabled: false`
+ * skips the request. The sidebar warnings pass it for viewers who never see
+ * the default-credentials warning.
+ */
+export function useDefaultCredentialsEnabled({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   return useQuery({
     queryKey: authQueryKeys.defaultCredentialsEnabled(),
+    enabled,
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getDefaultCredentialsStatus();
@@ -242,4 +284,105 @@ export function useDefaultCredentialsEnabled() {
     // Keep data fresh with shorter stale time
     staleTime: 10000, // 10 seconds
   });
+}
+
+/**
+ * Put a server-resolved session and bootstrap into a fresh query cache, under
+ * the keys the shell's gates and the session check read, so a server-rendered
+ * page renders signed in on the server and on the first browser render alike
+ * — and neither asks for them again while they are fresh.
+ */
+export function seedShellQueries(
+  queryClient: QueryClient,
+  seed: {
+    session: unknown;
+    bootstrap: archestraApiTypes.GetBootstrapResponses["200"];
+  },
+) {
+  queryClient.setQueryData(authQueryKeys.session(), seed.session);
+  applyBootstrap(queryClient, seed.bootstrap);
+}
+
+// ===
+
+type BootstrapData = NonNullable<
+  Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>["data"]
+>;
+
+/**
+ * The cold load's `/api/bootstrap` answer while it is in flight, so a query it
+ * seeds that becomes enabled first (the session usually answers sooner) waits
+ * for it instead of starting a second request. Cleared once settled: later
+ * fetches of those queries are refreshes and go to their own endpoints.
+ */
+const bootstrapSeeds = new WeakMap<
+  QueryClient,
+  Promise<BootstrapData | null>
+>();
+
+/**
+ * Await the in-flight bootstrap seed, if any. Resolves to null when there is
+ * none or it failed, and the caller fetches its own endpoint.
+ *
+ * @public — also awaited by the config, organization, appearance and member
+ * default queries
+ */
+export async function awaitBootstrapSeed(
+  queryClient: QueryClient,
+): Promise<BootstrapData | null> {
+  return (await bootstrapSeeds.get(queryClient)) ?? null;
+}
+
+/**
+ * Seeds the queries the app shell reads (permissions, scoped capabilities,
+ * organization, config, public config, appearance, and the member's default
+ * agent and model) from one `/api/bootstrap` request, fired alongside the
+ * session check on a cold load, so those queries are already fresh when the
+ * session resolves and enables them, instead of starting a second wave.
+ *
+ * Best-effort: when signed out or on any failure nothing is seeded and each
+ * query fetches its own endpoint as before. The keys are spelled out rather
+ * than imported because the modules owning them import this one.
+ */
+function startBootstrapSeed(queryClient: QueryClient) {
+  if (bootstrapSeeds.has(queryClient)) return;
+  const seed = (async () => {
+    try {
+      const { data } = await archestraApiSdk.getBootstrap();
+      if (!data) return null;
+      applyBootstrap(queryClient, data);
+      return data;
+    } catch {
+      // Fall back to the individual requests.
+      return null;
+    } finally {
+      bootstrapSeeds.delete(queryClient);
+    }
+  })();
+  bootstrapSeeds.set(queryClient, seed);
+}
+
+function applyBootstrap(
+  queryClient: QueryClient,
+  data: archestraApiTypes.GetBootstrapResponses["200"],
+) {
+  queryClient.setQueryData(authQueryKeys.userPermissions(), data.permissions);
+  queryClient.setQueryData(
+    authQueryKeys.scopedCapabilities(),
+    data.scopedCapabilities,
+  );
+  queryClient.setQueryData(["config"], data.config);
+  if (data.organization) {
+    queryClient.setQueryData(["organization", "details"], data.organization);
+  }
+  // Checked one by one: a backend from before these parts answers without them.
+  if (data.publicConfig) {
+    queryClient.setQueryData(["public-config"], data.publicConfig);
+  }
+  if (data.appearance) {
+    queryClient.setQueryData(["appearance", "public"], data.appearance);
+  }
+  if (data.memberDefaultAgent) {
+    queryClient.setQueryData(["member-default-agent"], data.memberDefaultAgent);
+  }
 }

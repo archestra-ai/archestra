@@ -10,7 +10,10 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, LimitModel } from "@/models";
+import LlmThroughputModel from "@/models/llm-throughput";
+import { createLimit } from "@/services/limit";
 import {
+  ApiError,
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
@@ -29,6 +32,9 @@ import type { ArchestraContext } from "./types";
 // === Constants ===
 
 const LimitOutputItemSchema = z.object({
+  throughputUsage: z
+    .object({ currentUsage: z.number(), resetsAt: z.string() })
+    .optional(),
   id: z.string().describe("The limit ID."),
   entityType: LimitEntityTypeSchema.describe("The limited entity type."),
   entityId: z.string().describe("The limited entity ID."),
@@ -42,7 +48,7 @@ const LimitOutputItemSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "Models targeted by a token_cost limit. Null or empty array means all models.",
+      "Models targeted by a cost or throughput limit. Null or empty array means all models.",
     ),
   mcpServerName: z
     .string()
@@ -62,7 +68,7 @@ const CreateLimitToolArgsSchema = z
       "The type of entity to apply the limit to.",
     ),
     entity_id: UuidIdSchema.describe(
-      "The ID of the entity (organization, team, agent, user, virtual_key, or environment).",
+      "The ID of the entity (organization, team, agent, user, virtual_key, environment, or llm_oauth_client).",
     ),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
     limit_value: z
@@ -74,7 +80,7 @@ const CreateLimitToolArgsSchema = z
       .optional()
       .describe("Array of model names. Omit for all models."),
     cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
-      "Optional cleanup interval for this limit. Omit to use the calendar-month default.",
+      "Minute recovers continuously. Other intervals reset on their rolling or calendar schedule. Omit for calendar month; legacy per-minute types imply minute.",
     ),
     mcp_server_name: z
       .string()
@@ -115,7 +121,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
-      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+      "Create a spend (token_cost), requests, or tokens limit for any supported interval. Minute recovers continuously; other intervals reset on their schedule. Requests and tokens, and minute spend, support organization, team, and virtual_key scopes with cumulative caps. Tokens count only usage reported by the provider, without forecasts. Missing usage is not charged. Spend checks actual billed usage. Token and spend limits can be exceeded by requests already in flight. Legacy requests_per_minute and tokens_per_minute remain minute-only.",
     schema: CreateLimitToolArgsSchema,
     outputSchema: z.object({
       limit: LimitOutputItemSchema,
@@ -129,7 +135,17 @@ const registry = defineArchestraTools([
       );
 
       try {
-        const limit = await LimitModel.create({
+        if (
+          !context.organizationId ||
+          !(await LimitModel.isEntityInOrganization(
+            args.entity_type,
+            args.entity_id,
+            context.organizationId,
+          ))
+        ) {
+          return errorResult("Limit entity not found.");
+        }
+        const limit = await createLimit({
           entityType: args.entity_type,
           entityId: args.entity_id,
           limitType: args.limit_type,
@@ -158,6 +174,7 @@ const registry = defineArchestraTools([
           }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
         );
       } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
         return catchError(error, "creating limit");
       }
     },
@@ -175,6 +192,9 @@ const registry = defineArchestraTools([
         entity_id: UuidIdSchema.optional().describe(
           "Optional filter by entity ID.",
         ),
+        limit_type: LimitTypeSchema.optional().describe(
+          "Optional filter by limit type.",
+        ),
       })
       .strict(),
     outputSchema: z.object({
@@ -189,9 +209,14 @@ const registry = defineArchestraTools([
       );
 
       try {
+        if (!context.organizationId) {
+          return errorResult("Organization context is required.");
+        }
         const limits = await LimitModel.findAll(
           args.entity_type,
           args.entity_id,
+          args.limit_type,
+          context.organizationId,
         );
 
         if (limits.length === 0) {
@@ -228,8 +253,14 @@ const registry = defineArchestraTools([
           })
           .join("\n\n");
 
+        const throughput = await LlmThroughputModel.usage(limits);
         return structuredSuccessResult(
-          { limits },
+          {
+            limits: limits.map((limit) => ({
+              ...limit,
+              throughputUsage: throughput.get(limit.id),
+            })),
+          },
           `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
         );
       } catch (error) {
@@ -249,6 +280,14 @@ const registry = defineArchestraTools([
           .number()
           .optional()
           .describe("Optional new limit value."),
+        limit_type: LimitTypeSchema.optional().describe(
+          "Same-unit legacy conversion only: requests_per_minute to requests, or tokens_per_minute to tokens.",
+        ),
+        model: z
+          .array(z.string())
+          .nullable()
+          .optional()
+          .describe("Canonical model names; null applies to all models."),
         cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
           "Optional new cleanup interval for this limit.",
         ),
@@ -267,6 +306,9 @@ const registry = defineArchestraTools([
 
       try {
         const updateData: Record<string, unknown> = {};
+        if (args.limit_type !== undefined)
+          updateData.limitType = args.limit_type;
+        if (args.model !== undefined) updateData.model = args.model;
         if (args.limit_value !== undefined) {
           updateData.limitValue = args.limit_value;
         }
@@ -277,6 +319,14 @@ const registry = defineArchestraTools([
         if (Object.keys(updateData).length === 0) {
           return errorResult("No fields provided to update.");
         }
+        if (
+          !context.organizationId ||
+          !(await LimitModel.findByIdInOrganization(
+            args.id,
+            context.organizationId,
+          ))
+        )
+          return errorResult("Limit not found.");
 
         const limit = await LimitModel.patch(args.id, updateData);
 
@@ -319,6 +369,14 @@ const registry = defineArchestraTools([
       );
 
       try {
+        if (
+          !context.organizationId ||
+          !(await LimitModel.findByIdInOrganization(
+            args.id,
+            context.organizationId,
+          ))
+        )
+          return errorResult("Limit not found.");
         const deleted = await LimitModel.delete(args.id);
 
         if (!deleted) {

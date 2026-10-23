@@ -83,9 +83,6 @@ describe("runtime workspace child anchor", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const ended = vi.spyOn(appaService, "endChild").mockResolvedValue({
       decision: "release",
@@ -196,9 +193,6 @@ describe("runtime workspace child anchor", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     try {
       const codex = childRequest({

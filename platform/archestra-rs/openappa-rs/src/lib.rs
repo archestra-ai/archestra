@@ -1,33 +1,41 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
+// Clippy's deeper trait analysis overflows the default solver recursion on the
+// napi-bound dispatch futures; plain rustc stays within it.
+#![recursion_limit = "256"]
 
 mod adapter;
 mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+mod labels;
+mod lease;
 #[allow(dead_code)]
 mod peer;
 mod policy;
 mod replay;
+mod sealed;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
-    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
-    postgres::{LeasedPostgres, PostgresError},
+    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
+    encryption::{StorageCipher, field_context},
+    postgres::{LeaseError, PostgresError},
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PreparedDeployment, RemedyOutcome,
-        RemedyPresentation, RemedyRefusal, Runtime,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PublishedDeployment, RemedyOutcome,
+        RemedyPresentation, RemedyRefusal, RootForkRefusal, Runtime,
     },
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnBinding,
-    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, RefusalClass, Ruling,
+    SpawnBinding, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::RawValue};
@@ -39,7 +47,7 @@ use std::{
     sync::{Arc, OnceLock},
     time::{Duration, SystemTime},
 };
-use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{Mutex, Semaphore};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -48,44 +56,114 @@ pub struct ReportingOptions {
     pub hostname: Option<String>,
 }
 
+/// Transient key material supplied separately from the serializable hook input.
+/// The host validates conversation ownership, escrow and fingerprint first.
+#[napi(object)]
+pub struct ContentEncryption {
+    pub key: napi::bindgen_prelude::Buffer,
+    pub scope: String,
+    /// Opaque capability for this dispatch's authenticated loopback annotator.
+    pub annotator_context: Option<String>,
+}
+
 /// Process-wide runtime slot. The mutex covers initialize only. Every dispatch
-/// runs through a view pinned to its organization's deployment (see
-/// [`deployments`]), so dispatches run concurrently and none changes what another
-/// serves. A root keeps its opening policy revision, and a fork its parent's.
-/// Same-trajectory exclusion uses an in-process root lock and an advisory session
-/// lock. Ledger writes use short self-committing transactions.
+/// runs through a view pinned to the head of its organization's deployment line
+/// (see [`deployments`]), so dispatches run concurrently and none changes what
+/// another serves. Every family decides its next event under its line's head,
+/// whichever revision opened it; the runtime refuses a family pinned to the
+/// policy it opened under as `RefusalClass::LegacyFamily`, which is not retryable.
+/// No dispatch holds a database connection or a lock while it works: the event
+/// log serializes each read-decide-append step of a family on the family's row,
+/// receipts carry a lease per operation (see [`lease`]), and every write is one
+/// short transaction.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 #[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
     store: Arc<LogStore>,
-    /// One permit per pooled connection, so a dispatch waits for a connection
-    /// here, asynchronously, and never inside the store.
-    connections: Arc<Semaphore>,
     deployments: Arc<deployments::Deployments>,
     reporting: Option<ReportingOptions>,
+    /// The policy revision this state's runtime is pinned to; `None` before a pin.
+    served: Option<u64>,
 }
 
-/// Field order is drop order: the connection goes back before its permit does.
+/// A state whose store is one pooled connection of its own, for a short read.
 struct Leased {
     state: State,
-    _permit: OwnedSemaphorePermit,
 }
 
-/// A dispatch holds its connection across its consults, so slow authorities
-/// can keep every connection busy. Waiting dispatches then fail closed rather
-/// than hang; the bound matches the ledger's own `lock_timeout`.
-const CONNECTION_WAIT: Duration = Duration::from_secs(30);
+/// Host SQL beside the ledger. A store that is not leased checks a pooled
+/// connection out for each query alone, so a dispatch holds no connection while
+/// it waits on a consult.
+pub(crate) struct Sql<'a>(&'a LogStore);
 
-async fn connection_permit(
-    connections: &Arc<Semaphore>,
-    wait: Duration,
-) -> napi::Result<OwnedSemaphorePermit> {
-    tokio::time::timeout(wait, connections.clone().acquire_owned())
-        .await
-        .map_err(|_| error("OpenAPPA had no free PostgreSQL connection in time; retry later"))?
-        .map_err(error)
+impl Sql<'_> {
+    pub(crate) fn with_client<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut postgres::Client) -> Result<T, PostgresError> + Send + 'static,
+    ) -> Result<T, SqlError> {
+        if let Some(pg) = self.0.postgres() {
+            return Ok(pg.with_client(operation)?);
+        }
+        let leased = self.0.lease()?;
+        let pg = leased
+            .postgres()
+            .ok_or_else(|| PostgresError("OpenAPPA requires PostgreSQL storage".into()))?;
+        Ok(pg.with_client(operation)?)
+    }
+}
+
+/// Why host SQL beside the ledger did not run.
+#[derive(Debug)]
+pub(crate) enum SqlError {
+    /// Every pooled connection stayed busy for the whole checkout wait.
+    Exhausted(Duration),
+    Postgres(PostgresError),
+}
+
+impl std::fmt::Display for SqlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SqlError::Exhausted(wait) => {
+                write!(f, "no PostgreSQL connection became free within {wait:?}")
+            }
+            SqlError::Postgres(error) => error.fmt(f),
+        }
+    }
+}
+
+impl From<PostgresError> for SqlError {
+    fn from(error: PostgresError) -> Self {
+        SqlError::Postgres(error)
+    }
+}
+
+impl From<LeaseError> for SqlError {
+    fn from(error: LeaseError) -> Self {
+        match error {
+            LeaseError::Exhausted(wait) => SqlError::Exhausted(wait),
+            other => SqlError::Postgres(PostgresError::from(other)),
+        }
+    }
+}
+
+impl From<SqlError> for Fault {
+    fn from(error: SqlError) -> Self {
+        match error {
+            SqlError::Exhausted(_) => Fault::binding(
+                BindingFailure::PoolExhausted,
+                "OpenAPPA had no free PostgreSQL connection in time; retry later",
+            ),
+            SqlError::Postgres(error) => Fault::binding(BindingFailure::Storage, error),
+        }
+    }
+}
+
+impl From<SqlError> for napi::Error {
+    fn from(error: SqlError) -> Self {
+        Fault::from(error).into()
+    }
 }
 
 fn state_mutex() -> &'static Mutex<Option<State>> {
@@ -153,6 +231,9 @@ struct OfferInput {
     /// Recorded as the remedy result.
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// As on [`Input`]: a remedy's consults are recorded like any dispatch's.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -175,7 +256,7 @@ impl YellReceiver {
             || self.token.len() != 64
             || !self.token.bytes().all(|b| b.is_ascii_hexdigit())
         {
-            return Err(error("invalid host yell receiver"));
+            return Err(invalid_input("invalid host yell receiver"));
         }
         Ok(format!("http://127.0.0.1:{}/{}", self.port, self.token))
     }
@@ -245,6 +326,10 @@ struct Input {
     ruling: Option<RulingInput>,
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// The host's Log Content mode is Metadata only: this dispatch's consult
+    /// rows keep no content.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 /// Maximum byte length for precheck refusal text.
@@ -287,6 +372,10 @@ enum ExecutionOutcome {
 struct PresentationInput {
     control_tool: String,
     supports_delegation: bool,
+    /// The reporting tool a block names, spelled the way the model calls it. Absent when
+    /// reporting is off, and then a block does not mention it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    yell_tool: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -309,8 +398,261 @@ struct RecordedCall {
     dispatch: Option<String>,
 }
 
-fn error(message: impl ToString) -> napi::Error {
-    napi::Error::from_reason(message.to_string())
+/// A failure the host classifies by kind. The loader recovers the JSON body into
+/// a JS `Error` whose `code` is the kind's snake_case name; a refusal carries the
+/// runtime's own class name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub(crate) enum Failure {
+    Refused(RefusalClass),
+    Binding(BindingFailure),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BindingFailure {
+    LeaseLost,
+    HeldElsewhere,
+    UnstartedParent,
+    /// Spelled as the runtime's `RefusalClass::PolicyMoved`, so the host reads one
+    /// code whichever side reported it.
+    PolicyMoved,
+    /// The runtime refuses the organization's policy document; an administrator
+    /// fixes the document.
+    PolicyRefused,
+    /// The policy needs a deployment setting this process lacks: an unset
+    /// variable or an unconfigured builtin. The operator fixes the deployment.
+    RuntimeMisconfigured,
+    /// Spelled as the runtime's `RefusalClass::Storage`.
+    Storage,
+    /// Every pooled PostgreSQL connection stayed busy for the whole checkout wait.
+    PoolExhausted,
+    /// As many replays as the process admits are running.
+    ReplayBusy,
+    ReplayTimedOut,
+    /// The host sent what the binding cannot read: a host defect, refused the
+    /// same way on every retry.
+    InvalidInput,
+    /// The binding or the runtime panicked; nothing was released.
+    Panicked,
+    /// Spelled as the runtime's `RefusalClass::EngineInvariant`: the runtime
+    /// answered in a shape the binding does not expect.
+    EngineInvariant,
+}
+
+/// A failure with the text the host logs beside its code.
+#[derive(Debug)]
+pub(crate) struct Fault {
+    pub kind: Failure,
+    pub message: String,
+}
+
+impl Fault {
+    pub(crate) fn new(kind: Failure, message: impl ToString) -> Self {
+        Fault {
+            kind,
+            message: message.to_string(),
+        }
+    }
+
+    pub(crate) fn binding(kind: BindingFailure, message: impl ToString) -> Self {
+        Fault::new(Failure::Binding(kind), message)
+    }
+}
+
+impl From<Fault> for napi::Error {
+    fn from(fault: Fault) -> Self {
+        failure(fault.kind, fault.message)
+    }
+}
+
+fn failure(kind: Failure, message: impl ToString) -> napi::Error {
+    napi::Error::from_reason(json!({ "code": kind, "message": message.to_string() }).to_string())
+}
+
+fn invalid_input(message: impl ToString) -> napi::Error {
+    failure(Failure::Binding(BindingFailure::InvalidInput), message)
+}
+
+fn storage(message: impl ToString) -> napi::Error {
+    failure(Failure::Binding(BindingFailure::Storage), message)
+}
+
+/// A stored log the binding read directly could not be read, under the class a
+/// dispatch that read it would be refused with, so the host classifies the cause
+/// rather than reporting every read as storage.
+fn read_failure(read: appa_eventlog::ReadError) -> napi::Error {
+    use appa_eventlog::ReadError;
+    let class = match &read {
+        ReadError::Undecodable { .. } | ReadError::UndecodableKey { .. } => {
+            RefusalClass::UntrustedLog
+        }
+        ReadError::PolicyFileMissing { .. }
+        | ReadError::PolicyFileMismatch { .. }
+        | ReadError::UnknownRevision { .. } => RefusalClass::PolicyUnavailable,
+        ReadError::LegacyFamily { .. } => RefusalClass::LegacyFamily,
+        // The session names a root whose log is gone: as `read_refused`
+        // classes it, a trajectory that cannot continue.
+        ReadError::UnknownRoot { .. } => RefusalClass::Trajectory,
+        _ => return storage(read),
+    };
+    failure(Failure::Refused(class), read)
+}
+
+/// A session's label could not be read, under the class of its cause: the log's
+/// own read failure, an opening policy that no longer resolves, or a log that no
+/// longer replays.
+fn status_read_failure(read: appa_runtime::api::StatusReadError) -> napi::Error {
+    use appa_runtime::api::StatusReadError;
+    match read {
+        StatusReadError::Read(read) => read_failure(read),
+        StatusReadError::Policy(_) => {
+            failure(Failure::Refused(RefusalClass::PolicyUnavailable), read)
+        }
+        StatusReadError::Replay(_) => failure(Failure::Refused(RefusalClass::UntrustedLog), read),
+        StatusReadError::UnknownRoot { .. } => {
+            failure(Failure::Refused(RefusalClass::Trajectory), read)
+        }
+    }
+}
+
+fn panicked(message: impl ToString) -> napi::Error {
+    failure(Failure::Binding(BindingFailure::Panicked), message)
+}
+
+fn invariant(message: impl ToString) -> napi::Error {
+    failure(Failure::Binding(BindingFailure::EngineInvariant), message)
+}
+
+/// The message of a request the binding refused as malformed.
+#[cfg(test)]
+fn rejected_input(error: napi::Error) -> String {
+    let body: Value = serde_json::from_str(&error.reason).unwrap();
+    assert_eq!(body["code"], json!("invalid_input"), "{body}");
+    body["message"].as_str().unwrap().to_owned()
+}
+
+fn sql_failure(error: SqlError) -> napi::Error {
+    error.into()
+}
+
+/// The runtime would not answer a remedy now; nothing was released.
+fn remedy_refused(message: impl ToString) -> napi::Error {
+    failure(Failure::Refused(RefusalClass::Remedy), message)
+}
+
+fn fork_refused(refusal: RootForkRefusal) -> napi::Error {
+    failure(Failure::Refused(RefusalClass::Trajectory), refusal)
+}
+
+/// The host retries: the dispatch that took the operation over answers it.
+fn lease_lost() -> napi::Error {
+    failure(
+        Failure::Binding(BindingFailure::LeaseLost),
+        "OpenAPPA lost its lease on this operation; retry the request",
+    )
+}
+
+/// Another dispatch holds a live lease on this operation. The host retries: that
+/// dispatch answers it, or its lease expires and the retry takes the work over.
+fn held_elsewhere() -> napi::Error {
+    failure(
+        Failure::Binding(BindingFailure::HeldElsewhere),
+        "OpenAPPA is processing this operation in another request; retry the request",
+    )
+}
+
+/// The organization's policy moved past the one this dispatch carries: another
+/// process published a newer revision while it was decided, or the policy it read
+/// was recomposed before it was published. Nothing was appended; the host's retry
+/// reads the policy again and decides at the new head.
+fn policy_moved() -> napi::Error {
+    failure(
+        Failure::Binding(BindingFailure::PolicyMoved),
+        "OpenAPPA published a newer policy revision for this organization; retry the request",
+    )
+}
+
+/// Whether a dispatch failed because its deployment line moved past the revision
+/// its view was pinned to: the runtime refuses it as `RefusalClass::PolicyMoved`,
+/// which [`failure`] stamps as the code `policy_moved`. A failure without that
+/// code is matched on OpenAPPA's `EventError::PolicyMoved` display text, as an
+/// unclassed refusal carries it.
+fn is_policy_moved(error: &napi::Error) -> bool {
+    let envelope = serde_json::from_str::<Value>(&error.reason).ok();
+    let field = |name: &str| {
+        envelope
+            .as_ref()
+            .and_then(|envelope| envelope.get(name))
+            .and_then(Value::as_str)
+    };
+    if field("code") == Some("policy_moved") {
+        return true;
+    }
+    let text = field("message").unwrap_or(&error.reason);
+    text.contains(" moved to policy revision ")
+        && text.contains("while this event was decided; retry it")
+}
+
+/// Runs `work` through a view pinned to the head of the organization's deployment
+/// line. When the line moved past that head while `work` was decided, which only
+/// happens when another process published, nothing was appended: the
+/// organization's deployment is pinned at the new head when it names the same
+/// policy, and `work` runs once more. When the head names another policy, or moves
+/// again, the dispatch fails as retryable and the host's retry reads the policy
+/// again.
+async fn on_deployment<T, Work>(
+    state: &State,
+    organization_id: &str,
+    policy: &deployments::HostedPolicy,
+    work: impl Fn(State) -> Work,
+) -> napi::Result<T>
+where
+    Work: std::future::Future<Output = napi::Result<T>>,
+{
+    let deployment = state
+        .deployments
+        .deployment(
+            &state.runtime,
+            &state.store,
+            organization_id,
+            policy,
+            state.reporting.is_some(),
+        )
+        .await
+        .map_err(|refusal| match refusal {
+            deployments::DeploymentError::Superseded => policy_moved(),
+            deployments::DeploymentError::Failed(fault) => fault.into(),
+        })?;
+    match work(state.pinned(&deployment)).await {
+        Err(moved) if is_policy_moved(&moved) => {
+            let Some(head) = state
+                .deployments
+                .repin(&state.runtime, &state.store, organization_id, &deployment)
+                .await?
+            else {
+                return Err(policy_moved());
+            };
+            match work(state.pinned(&head)).await {
+                Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
+                result => result,
+            }
+        }
+        result => result,
+    }
+}
+
+/// A receipt this dispatch could not claim or complete, as the host sees it. A
+/// receipt reused for other input or another caller is the host's defect; one
+/// another dispatch settled first is answered by the retry.
+fn receipt_failure(reason: ReceiptError) -> napi::Error {
+    match reason {
+        ReceiptError::LeaseLost => lease_lost(),
+        ReceiptError::InputMismatch | ReceiptError::ScopeMismatch => invalid_input(reason),
+        ReceiptError::Storage(_) | ReceiptError::NotPending | ReceiptError::CompletionMismatch => {
+            storage(reason)
+        }
+    }
 }
 
 /// The upstream pin and host replay boundary version stored with each run.
@@ -324,42 +666,99 @@ pub fn get_openappa_replay_engine_version() -> String {
 #[napi(js_name = "inspectOpenappaPolicyTests")]
 pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String> {
     AssertUnwindSafe(async move {
-        let response = replay::inspect(&input).map_err(error)?;
-        serde_json::to_string(&response).map_err(error)
+        let response = replay::inspect(&input).map_err(invalid_input)?;
+        serde_json::to_string(&response).map_err(invariant)
     })
     .catch_unwind()
     .await
-    .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
+    .map_err(|_| panicked("OpenAPPA scenario inspection failed unexpectedly"))?
 }
 
-/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
-/// replay core answers consults through an in-process stand-in, never a live party,
-/// and keeps every trajectory in memory.
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy with the
+/// credential values the host resolved for it. Every consult the policy declares is
+/// made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+///
+/// `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+/// `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+/// file's result, before the next file starts. It only observes: calls are queued without
+/// waiting, and the listener must not throw. Events still queued when the replay settles
+/// may arrive after its promise resolves.
 #[napi(js_name = "replayOpenappaPolicy")]
-pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
-    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+pub async fn replay_openappa_policy(
+    input: String,
+    on_progress: Option<ThreadsafeFunction<String, (), String, napi::Status, false>>,
+) -> napi::Result<String> {
+    // Live consults wait on remote parties, so a few replays may run at once.
+    static REPLAY_SLOTS: Semaphore = Semaphore::const_new(4);
     AssertUnwindSafe(async move {
-        let _permit = REPLAY_SLOT
-            .try_acquire()
-            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
-        let request = replay::Request::parse(&input).map_err(error)?;
-        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+        let _permit = REPLAY_SLOTS.try_acquire().map_err(|_| {
+            failure(
+                Failure::Binding(BindingFailure::ReplayBusy),
+                "Too many OpenAPPA replays are running; retry later",
+            )
+        })?;
+        let request = replay::Request::parse(&input).map_err(invalid_input)?;
+        let report = |event: replay::Progress<'_>| {
+            let Some(listener) = &on_progress else {
+                return;
+            };
+            // An event that cannot be encoded or queued is dropped; the run goes on.
+            if let Ok(event) = serde_json::to_string(&event) {
+                listener.call(event, ThreadsafeFunctionCallMode::NonBlocking);
+            }
+        };
+        let response = tokio::time::timeout(Duration::from_secs(120), replay::run(request, report))
             .await
-            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
-        serde_json::to_string(&response).map_err(error)
+            .map_err(|_| {
+                failure(
+                    Failure::Binding(BindingFailure::ReplayTimedOut),
+                    "OpenAPPA replay exceeded its 120 second limit",
+                )
+            })?;
+        serde_json::to_string(&response).map_err(invariant)
     })
     .catch_unwind()
     .await
-    .map_err(|_| error("OpenAPPA replay failed unexpectedly"))?
+    .map_err(|_| panicked("OpenAPPA replay failed unexpectedly"))?
 }
 fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> {
     value
         .as_deref()
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| error(format!("missing {name}")))
+        .ok_or_else(|| invalid_input(format!("missing {name}")))
 }
+/// The engine's reason for holding a child return while one of the child's
+/// calls is open (`EventError::ChildDispatchOpen`). The engine reports that
+/// hold only as text, so the binding names it here, next to the test that pins
+/// the text to the engine's output.
+const CHILD_CALL_OPEN_REASON: &str =
+    "the child has a call still open; report its outcome before the child ends";
+
+/// Marks a child return held only because the child has a call open, so the
+/// host keeps a busy runtime's file as pending instead of refusing it. Only
+/// the exact reason marks it; a ruling that quotes it stays a ruling.
+fn mark_busy_hold(mut decision: Value) -> Value {
+    let busy = decision.get("decision").and_then(Value::as_str) == Some("block")
+        && decision.get("reason").and_then(Value::as_str) == Some(CHILD_CALL_OPEN_REASON);
+    if busy && let Some(fields) = decision.as_object_mut() {
+        fields.insert("busy".into(), Value::Bool(true));
+    }
+    decision
+}
+
 fn wire(decision: &HookDecision) -> napi::Result<Value> {
-    serde_json::to_value(WireDecision::of(decision)).map_err(error)
+    require_decision(decision)?;
+    serde_json::to_value(WireDecision::of(decision)).map_err(invariant)
+}
+
+fn require_decision(decision: &HookDecision) -> napi::Result<()> {
+    if let HookDecision::Refuse { class, detail } = decision {
+        return Err(failure(
+            Failure::Refused(*class),
+            format!("OpenAPPA processing interrupted: {detail}"),
+        ));
+    }
+    Ok(())
 }
 
 fn session_scope(input: &Input) -> SessionScope {
@@ -400,6 +799,7 @@ fn presentation_options(input: &Input) -> EmbeddedPresentationOptions {
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -414,6 +814,7 @@ fn result_presentation_options(input: &Input, call: &RecordedCall) -> EmbeddedPr
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -427,10 +828,25 @@ fn native_presentation_options() -> EmbeddedPresentationOptions {
     }
 }
 
-fn postgres_store(store: &LogStore) -> napi::Result<&LeasedPostgres> {
-    store
-        .postgres()
-        .ok_or_else(|| error("OpenAPPA requires PostgreSQL storage"))
+/// A session's stored identity — root, parent and forked-from session — must be the
+/// one this event names.
+fn check_session_identity(
+    saved: &(String, Option<String>, Option<String>),
+    root: &str,
+    input: &Input,
+) -> napi::Result<()> {
+    let (saved_root, saved_parent, saved_fork) = saved;
+    if saved_root != root || *saved_parent != input.parent_id {
+        return Err(invalid_input("session identity changed"));
+    }
+    // A fork retains its parent session. A session with its own root cannot move
+    // to a different history.
+    if input.fork_of.is_some() && *saved_fork != input.fork_of {
+        return Err(invalid_input(
+            "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
+        ));
+    }
+    Ok(())
 }
 
 /// The key of a session's `openappa_sessions` row. Session ids come from clients, so
@@ -478,12 +894,18 @@ pub struct DispatchPolicy {
     pub content: String,
     /// Variable → value, for the document's `runtimeCredentials`. Secrets.
     pub credentials: HashMap<String, String>,
+    /// The content hash of the stored composition `content` was read from. A
+    /// dispatch whose composition is no longer the stored one publishes nothing
+    /// and is refused as retryable; absent, nothing is checked.
+    pub composition_hash: Option<String>,
 }
 
 #[napi(object)]
 pub struct OpenappaStatus {
     pub trust: String,
     pub audience: String,
+    /// The organization's policy revision the session's next event is decided under.
+    pub policy_revision: i64,
 }
 
 impl From<DispatchPolicy> for deployments::HostedPolicy {
@@ -491,6 +913,7 @@ impl From<DispatchPolicy> for deployments::HostedPolicy {
         deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
+            composition: policy.composition_hash,
         }
     }
 }
@@ -508,33 +931,38 @@ pub async fn initialize_openappa(
     let max_connections = usize::try_from(postgres_max_connections)
         .ok()
         .and_then(NonZeroUsize::new)
-        .ok_or_else(|| error("OpenAPPA needs at least one PostgreSQL connection"))?;
+        .ok_or_else(|| {
+            failure(
+                Failure::Binding(BindingFailure::RuntimeMisconfigured),
+                "OpenAPPA needs at least one PostgreSQL connection",
+            )
+        })?;
     let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
     }
     let state = tokio::task::spawn_blocking(move || -> napi::Result<State> {
         appa_runtime::tls::install_crypto_provider();
-        let mut config = policy::compile(INITIAL_POLICY, |_| None).map_err(error)?;
+        let mut config = policy::compile(INITIAL_POLICY, |_| None)?;
         config.reporting.agent_yell = reporting.is_some();
         let store = Arc::new(
             LogStore::open(Backend::Postgres {
                 url: database_url,
                 max_connections,
             })
-            .map_err(error)?,
+            .map_err(storage)?,
         );
-        let runtime = policy::open(config, store.clone()).map_err(error)?;
+        let runtime = policy::open(config, store.clone())?;
         Ok(State {
             runtime: Arc::new(runtime),
             store,
-            connections: Arc::new(Semaphore::new(max_connections.get())),
             deployments: Arc::default(),
             reporting,
+            served: None,
         })
     })
     .await
-    .map_err(error)??;
+    .map_err(panicked)??;
     *slot = Some(state);
     Ok(())
 }
@@ -548,10 +976,25 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
     tokio::task::spawn_blocking(move || {
         std::panic::catch_unwind(|| policy::validate(&content))
             .map(|result| result.err().into_iter().collect())
-            .map_err(|_| error("OpenAPPA policy validation failed"))
+            .map_err(|_| panicked("OpenAPPA policy validation failed"))
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
+}
+
+/// Validates a document already composed by the host, including host-owned helper
+/// token bindings. Never use this for authored root or battery text: those must
+/// pass their existing input checks before the host adds its bindings.
+/// Validation defers secret lookup and opens no store or network connection.
+#[napi(js_name = "validateHostedOpenappaPolicy")]
+pub async fn validate_hosted_openappa_policy(content: String) -> napi::Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| policy::validate_hosted(&content))
+            .map(|result| result.err().into_iter().collect())
+            .map_err(|_| panicked("OpenAPPA hosted policy validation failed"))
+    })
+    .await
+    .map_err(panicked)?
 }
 
 #[napi(object)]
@@ -568,7 +1011,10 @@ pub struct ComposeBatteryInput {
     /// The include entry this battery answers, as the root document spells it.
     pub entry: String,
     pub name: String,
+    /// The base policy text.
     pub policy: String,
+    /// The target policy text deployed before the base; absent deploys the base alone.
+    pub target_policy: Option<String>,
     pub helpers: Option<HelperBindingInput>,
 }
 
@@ -576,6 +1022,9 @@ pub struct ComposeBatteryInput {
 pub struct ComposePolicyInput {
     pub root: String,
     pub batteries: Vec<ComposeBatteryInput>,
+    /// The readers of each member roster the host keeps, by roster name:
+    /// principal → email. A roster absent here is declared empty.
+    pub member_rosters: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 #[napi(object)]
@@ -603,13 +1052,20 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 entry: battery.entry,
                 name: battery.name,
                 policy: battery.policy,
+                target: battery.target_policy,
                 helpers: battery.helpers.map(|helpers| policy::HelperBinding {
                     url_base: helpers.url_base,
                     token_env: helpers.token_env,
                 }),
             })
             .collect();
-        std::panic::catch_unwind(|| policy::compose(&input.root, &batteries))
+        let rosters: policy::MemberRosters = input
+            .member_rosters
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, readers)| (name, readers.into_iter().collect()))
+            .collect();
+        std::panic::catch_unwind(|| policy::compose_with_rosters(&input.root, &batteries, &rosters))
             .map(|result| match result {
                 Ok(composed) => ComposedPolicy {
                     content: Some(composed.content),
@@ -622,10 +1078,10 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                     errors: vec![message],
                 },
             })
-            .map_err(|_| error("OpenAPPA policy composition failed"))
+            .map_err(|_| panicked("OpenAPPA policy composition failed"))
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
 }
 
 #[napi(object)]
@@ -649,6 +1105,14 @@ pub struct CredentialDeclaration {
     pub line: u32,
 }
 
+/// A root external or profile naming a `token_env`; `reader` is its `externals`
+/// path.
+#[napi(object)]
+pub struct TokenEnvReader {
+    pub variable: String,
+    pub reader: String,
+}
+
 #[napi(object)]
 pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
@@ -660,6 +1124,8 @@ pub struct PolicyDeclarations {
     /// or profile of the document names them as its `token_env`. A dispatch carries
     /// their values in `DispatchPolicy.credentials`.
     pub runtime_credentials: Vec<String>,
+    /// Every root external or profile naming a `token_env`, bound or not.
+    pub token_env_readers: Vec<TokenEnvReader>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -682,7 +1148,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     })
                     .collect(),
                 server_aliases: parsed
-                    .server_aliases
+                    .mcp_aliases
                     .into_iter()
                     .map(|alias| ServerAliasDeclaration {
                         namespace: alias.namespace,
@@ -701,12 +1167,20 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     .collect(),
                 routed_annotators: parsed.routed_annotators,
                 runtime_credentials: parsed.runtime_credentials,
+                token_env_readers: parsed
+                    .token_env_readers
+                    .into_iter()
+                    .map(|reader| TokenEnvReader {
+                        variable: reader.variable,
+                        reader: reader.reader,
+                    })
+                    .collect(),
                 errors: parsed.errors,
             })
-            .map_err(|_| error("OpenAPPA declaration parsing failed"))
+            .map_err(|_| panicked("OpenAPPA declaration parsing failed"))
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
 }
 
 #[napi(object)]
@@ -764,10 +1238,10 @@ pub async fn edit_openappa_policy(
                     errors: vec![message],
                 },
             })
-            .map_err(|_| error("OpenAPPA policy editing failed"))
+            .map_err(|_| panicked("OpenAPPA policy editing failed"))
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
 }
 
 #[napi(object)]
@@ -793,13 +1267,43 @@ pub struct BatteryPackage {
     pub annotators: Vec<String>,
     /// The annotators the battery's own `[[policy.tool]]` rules route calls to.
     pub routed_annotators: Vec<String>,
-    pub policy: String,
+    /// The base policy text: all a deployment without a target composes.
+    pub base: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
     pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
+    /// What a multi-user deployment composes, when the battery declares targets.
+    pub multi_user: Option<BatteryTargetView>,
+}
+
+/// A battery deployed for one target: the target policy, composed before the base,
+/// and what the two declare and read together.
+#[napi(object)]
+pub struct BatteryTargetView {
+    pub policy: String,
+    /// Every variable the target and its base read.
+    pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
+    pub externals: Vec<BatteryExternal>,
+    pub annotators: Vec<String>,
+    pub routed_annotators: Vec<String>,
+    pub setup: Option<String>,
+}
+
+fn battery_externals(externals: &[batteries::HelperExternal]) -> Vec<BatteryExternal> {
+    externals
+        .iter()
+        .map(|external| BatteryExternal {
+            kind: external.kind.clone(),
+            name: external.name.clone(),
+            command: external.command.clone(),
+            token_env: external.token_env.clone(),
+        })
+        .collect()
 }
 
 impl From<&batteries::BatteryInfo> for BatteryPackage {
@@ -810,19 +1314,10 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             namespaces: info.namespaces.clone(),
             annotators: info.annotators.clone(),
             routed_annotators: info.routed_annotators.clone(),
-            policy: info.policy.clone(),
+            base: info.base.clone(),
             helpers: info.helpers.clone(),
             credentials: info.credentials.clone(),
-            externals: info
-                .externals
-                .iter()
-                .map(|external| BatteryExternal {
-                    kind: external.kind.clone(),
-                    name: external.name.clone(),
-                    command: external.command.clone(),
-                    token_env: external.token_env.clone(),
-                })
-                .collect(),
+            externals: battery_externals(&info.externals),
             benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
@@ -833,6 +1328,15 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     text: file.text.clone(),
                 })
                 .collect(),
+            multi_user: info.multi_user.as_ref().map(|target| BatteryTargetView {
+                policy: target.policy.clone(),
+                credentials: target.credentials.clone(),
+                target_credentials: target.target_credentials.clone(),
+                externals: battery_externals(&target.externals),
+                annotators: target.annotators.clone(),
+                routed_annotators: target.routed_annotators.clone(),
+                setup: target.setup.clone(),
+            }),
         }
     }
 }
@@ -843,13 +1347,13 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
         let loaded = std::panic::catch_unwind(batteries::bundled)
-            .map_err(|_| error("bundled OpenAPPA batteries failed to load"))?;
+            .map_err(|_| panicked("bundled OpenAPPA batteries failed to load"))?;
         loaded
-            .map_err(error)
+            .map_err(invariant)
             .map(|batteries| batteries.iter().map(BatteryPackage::from).collect())
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
 }
 
 /// Validates an uploaded battery package with the marketplace's own checks and reads
@@ -866,73 +1370,155 @@ pub async fn inspect_openappa_battery(
                 text: file.text,
             })
             .collect();
-        std::panic::catch_unwind(|| batteries::inspect(&files))
-            .map_err(|_| error("OpenAPPA battery inspection failed"))?
+        std::panic::catch_unwind(|| batteries::inspect(&files, batteries::PackageOrigin::Uploaded))
+            .map_err(|_| panicked("OpenAPPA battery inspection failed"))?
             .map(|info| BatteryPackage::from(&info))
-            .map_err(error)
+            .map_err(invalid_input)
     })
     .await
-    .map_err(error)?
+    .map_err(panicked)?
 }
 
 #[napi(js_name = "dispatchHook")]
-pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Result<String> {
-    let input: Input = serde_json::from_str(&input).map_err(error)?;
+pub async fn dispatch_hook(
+    input: String,
+    policy: DispatchPolicy,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<String> {
+    let input: Input = serde_json::from_str(&input).map_err(invalid_input)?;
     validate(&input)?;
-    run(input, policy.into()).await
+    run(input, policy.into(), encryption).await
+}
+
+/// The kind of family each root opened as, in the order given, for the operator's
+/// preflight count: `following` for one that follows a deployment line, `legacy`
+/// for one pinned to a policy snapshot, `encrypted` for an opening sealed with a
+/// conversation key this read does not hold, and none for a root with no log.
+#[napi(js_name = "openappaRootKinds")]
+pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<String>>> {
+    if roots
+        .iter()
+        .any(|root| root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control))
+    {
+        return Err(invalid_input("invalid root identity"));
+    }
+    let leased = initialized().await?.lease().await?;
+    tokio::task::spawn_blocking(move || {
+        roots
+            .into_iter()
+            .map(|root| match leased.state.store.log(&TrajectoryId(root)) {
+                Ok(_) => Ok(Some("following".to_owned())),
+                Err(appa_eventlog::ReadError::LegacyFamily { .. }) => Ok(Some("legacy".to_owned())),
+                Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
+                Err(read) if read.to_string().contains("requires its conversation key") => {
+                    Ok(Some("encrypted".to_owned()))
+                }
+                Err(read) => Err(read_failure(read)),
+            })
+            .collect()
+    })
+    .await
+    .map_err(panicked)?
 }
 
 /// Read the current label of a started session without mutating its trajectory.
+/// The read runs through a view pinned to the organization's deployment line, as
+/// a dispatch does: a family is read on the line it follows.
+/// None before the session started, and for a family opened under the earlier
+/// policy model, whose next event is refused instead.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
     organization_id: String,
     session_id: String,
+    policy: DispatchPolicy,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
     if organization_id.is_empty()
         || organization_id.len() > 512
         || organization_id.chars().any(char::is_control)
     {
-        return Err(error("invalid organization identity"));
+        return Err(invalid_input("invalid organization identity"));
     }
     if session_id.is_empty() || session_id.len() > 1024 || session_id.chars().any(char::is_control)
     {
-        return Err(error("invalid session identity"));
+        return Err(invalid_input("invalid session identity"));
     }
+    let policy: deployments::HostedPolicy = policy.into();
     let result = AssertUnwindSafe(async move {
-        let state = initialized().await?;
-        let leased = state.lease().await?;
-        tokio::task::spawn_blocking(move || {
+        let state = initialized().await?.encrypted(encryption)?;
+        let session = SessionKey::new(&organization_id, &session_id);
+        let lookup = state.clone();
+        let root = tokio::task::spawn_blocking(move || recorded_root(&lookup, &session))
+            .await
+            .map_err(panicked)??;
+        // An unstarted session has no status, and is no reason to publish.
+        if root.is_none() {
+            return Ok(None);
+        }
+        on_deployment(&state, &organization_id, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);
-            let root = postgres_store(&leased.state.store)?
-                .with_client(move |client| {
-                    Ok(client
-                        .query_opt(
-                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                            &[&key.organization_id, &key.actor],
-                        )?
-                        .map(|row| row.get::<_, String>(0)))
-                })
-                .map_err(error)?;
-            let Some(root) = root else { return Ok(None) };
-            let status = leased
-                .state
-                .runtime
-                .try_status(&TrajectoryId(root))
-                .map_err(error)?;
-            Ok(Some(OpenappaStatus {
-                trust: status.trust,
-                audience: status.audience,
-            }))
+            async move { session_status(pinned, key).await }
         })
         .await
-        .map_err(error)?
     })
     .catch_unwind()
     .await;
     match result {
         Ok(result) => result,
-        Err(_) => Err(error("OpenAPPA panicked while reading status")),
+        Err(_) => Err(panicked("OpenAPPA panicked while reading status")),
     }
+}
+
+/// The root the session `key` names has recorded, or `None` before it started.
+fn recorded_root(state: &State, key: &SessionKey) -> napi::Result<Option<String>> {
+    let key = key.clone();
+    Sql(&state.store)
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| row.get::<_, String>(0)))
+        })
+        .map_err(sql_failure)
+}
+
+/// The label of the session `key` names, read through `state`'s pinned view.
+async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<OpenappaStatus>> {
+    let policy_revision = state
+        .served
+        .and_then(|revision| i64::try_from(revision).ok())
+        .ok_or_else(|| invariant("OpenAPPA status was read outside a pinned deployment"))?;
+    let leased = state.lease().await?;
+    tokio::task::spawn_blocking(move || {
+        let root = Sql(&leased.state.store).with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| row.get::<_, String>(0)))
+        })?;
+        let Some(root) = root else { return Ok(None) };
+        let root = TrajectoryId(root);
+        let status = match leased.state.runtime.try_status(&root) {
+            Ok(status) => status,
+            // A family opened under the earlier policy model has no label to
+            // report: its next event is refused with `legacy_family`.
+            Err(appa_runtime::api::StatusReadError::Read(
+                appa_eventlog::ReadError::LegacyFamily { .. },
+            )) => return Ok(None),
+            Err(read) => return Err(status_read_failure(read)),
+        };
+        Ok(Some(OpenappaStatus {
+            trust: status.trust,
+            audience: status.audience,
+            policy_revision,
+        }))
+    })
+    .await
+    .map_err(panicked)?
 }
 
 /// Validates input fields and event requirements before processing.
@@ -944,7 +1530,7 @@ fn validate(input: &Input) -> napi::Result<()> {
         ("session", &input.session_id, 1024),
     ] {
         if value.is_empty() || value.len() > limit || value.chars().any(char::is_control) {
-            return Err(error(format!("invalid {name} identity")));
+            return Err(invalid_input(format!("invalid {name} identity")));
         }
     }
     for (name, value) in [
@@ -958,7 +1544,7 @@ fn validate(input: &Input) -> napi::Result<()> {
         if let Some(value) = value
             && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
         {
-            return Err(error(format!("invalid {name} identity")));
+            return Err(invalid_input(format!("invalid {name} identity")));
         }
     }
     if let Some(presentation) = &input.presentation
@@ -966,7 +1552,15 @@ fn validate(input: &Input) -> napi::Result<()> {
             || presentation.control_tool.len() > 1024
             || presentation.control_tool.chars().any(char::is_control))
     {
-        return Err(error("invalid control tool presentation"));
+        return Err(invalid_input("invalid control tool presentation"));
+    }
+    if let Some(yell) = input
+        .presentation
+        .as_ref()
+        .and_then(|presentation| presentation.yell_tool.as_ref())
+        && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
+    {
+        return Err(invalid_input("invalid yell tool presentation"));
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),
@@ -975,17 +1569,19 @@ fn validate(input: &Input) -> napi::Result<()> {
         if let Some(value) = value
             && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
         {
-            return Err(error(format!("invalid {name}")));
+            return Err(invalid_input(format!("invalid {name}")));
         }
     }
     if let Some(refusal) = &input.precheck_refusal {
         // A refusal answers a remedy no human ruled on, so a ruling beside
         // it would be silently dropped.
         if input.event != HookEventKind::Remedy || input.ruling.is_some() {
-            return Err(error("a precheck refusal only answers an unruled remedy"));
+            return Err(invalid_input(
+                "a precheck refusal only answers an unruled remedy",
+            ));
         }
         if refusal.trim().is_empty() || refusal.len() > MAX_PRECHECK_REFUSAL_BYTES {
-            return Err(error("invalid precheck refusal"));
+            return Err(invalid_input("invalid precheck refusal"));
         }
     }
     // Reject malformed host requests before writing an interrupted-operation
@@ -995,7 +1591,7 @@ fn validate(input: &Input) -> napi::Result<()> {
         HookEventKind::ToolResult => {
             required(&input.tool_call_id, "tool_call_id")?;
             if input.output.is_none() {
-                return Err(error("missing output"));
+                return Err(invalid_input("missing output"));
             }
         }
         HookEventKind::CancelCall => {
@@ -1004,18 +1600,20 @@ fn validate(input: &Input) -> napi::Result<()> {
         HookEventKind::ToolCall => {
             let operation = required(&input.operation_id, "operation_id")?;
             if !operation.starts_with("call:") || operation == "call:" {
-                return Err(error("tool call operation_id must be call:<tool-call-id>"));
+                return Err(invalid_input(
+                    "tool call operation_id must be call:<tool-call-id>",
+                ));
             }
             proposed(input)?;
         }
         HookEventKind::Yell => {
             required(&input.operation_id, "operation_id")?;
             let _: YellArguments =
-                serde_json::from_str(required_arguments(input)?).map_err(error)?;
+                serde_json::from_str(required_arguments(input)?).map_err(invalid_input)?;
         }
         HookEventKind::Remedy => {
             let _: ExecuteRemedyPlanArgs =
-                serde_json::from_str(required_arguments(input)?).map_err(error)?;
+                serde_json::from_str(required_arguments(input)?).map_err(invalid_input)?;
         }
         HookEventKind::Prompt | HookEventKind::TurnEnd | HookEventKind::ChildEnd => {
             required(&input.operation_id, "operation_id")?;
@@ -1024,17 +1622,17 @@ fn validate(input: &Input) -> napi::Result<()> {
             required(&input.operation_id, "operation_id")?;
             required(&input.parent_id, "parent_id")?;
             if input.output.is_none() {
-                return Err(error("missing output"));
+                return Err(invalid_input("missing output"));
             }
         }
         HookEventKind::ChildAddress => {
             required(&input.operation_id, "operation_id")?;
             let child = required(&input.spawned_id, "spawned_id")?;
             if child.len() > 1024 || child.chars().any(char::is_control) {
-                return Err(error("invalid child identity"));
+                return Err(invalid_input("invalid child identity"));
             }
             if input.output.is_none() {
-                return Err(error("missing output"));
+                return Err(invalid_input("missing output"));
             }
         }
     }
@@ -1042,27 +1640,25 @@ fn validate(input: &Input) -> napi::Result<()> {
 }
 
 /// Runs one validated event through a view pinned to its organization's deployment.
-async fn run(input: Input, policy: deployments::HostedPolicy) -> napi::Result<String> {
+async fn run(
+    input: Input,
+    policy: deployments::HostedPolicy,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
-        let state = initialized().await?;
-        let deployment = state
-            .deployments
-            .deployment(
-                &state.runtime,
-                &input.organization_id,
-                &policy,
-                state.reporting.is_some(),
-            )
-            .await
-            .map_err(error)?;
-        state.pinned(&deployment).dispatch(input).await
+        let state = initialized().await?.encrypted(encryption)?;
+        on_deployment(&state, &input.organization_id, &policy, |pinned| {
+            let input = input.clone();
+            async move { pinned.dispatch(input).await }
+        })
+        .await
     })
     .catch_unwind()
     .await;
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
         Ok(Err(error)) => Err(error),
-        Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
+        Err(_) => Err(panicked("OpenAPPA panicked; operation was not released")),
     }
 }
 
@@ -1072,7 +1668,7 @@ async fn initialized() -> napi::Result<State> {
         .await
         .as_ref()
         .cloned()
-        .ok_or_else(|| error("OpenAPPA is not initialized"))
+        .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))
 }
 
 /// Executes a remedy for the proxy-stamped trajectory, resolving that session
@@ -1081,13 +1677,14 @@ async fn initialized() -> napi::Result<State> {
 pub async fn execute_remedy_by_offer(
     input: String,
     policy: DispatchPolicy,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<String> {
-    let input: OfferInput = serde_json::from_str(&input).map_err(error)?;
+    let input: OfferInput = serde_json::from_str(&input).map_err(invalid_input)?;
     if input.organization_id.is_empty()
         || input.organization_id.len() > 512
         || input.organization_id.chars().any(char::is_control)
     {
-        return Err(error("invalid organization identity"));
+        return Err(invalid_input("invalid organization identity"));
     }
     validate_trajectory(&input.trajectory)?;
     match (input.execution_mode, &input.tool_call_id) {
@@ -1095,19 +1692,24 @@ pub async fn execute_remedy_by_offer(
             if !tool_call_id.is_empty()
                 && tool_call_id.len() <= 1024
                 && !tool_call_id.chars().any(char::is_control) => {}
-        (ExecutionMode::Tracked, _) => return Err(error("tracked remedy requires tool_call_id")),
+        (ExecutionMode::Tracked, _) => {
+            return Err(invalid_input("tracked remedy requires tool_call_id"));
+        }
         (ExecutionMode::Untracked, None) => {}
         (ExecutionMode::Untracked, Some(_)) => {
-            return Err(error("untracked remedy must not include tool_call_id"));
+            return Err(invalid_input(
+                "untracked remedy must not include tool_call_id",
+            ));
         }
     }
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
-    let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
+    let _: ExecuteRemedyPlanArgs =
+        serde_json::from_str(visible_arguments.get()).map_err(invalid_input)?;
     let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
-        routing_owner(postgres_store(&leased.state.store)?, &input)?
+        routing_owner(&Sql(&leased.state.store), &input)?
     };
     let Some(owner) = owner else {
         return Ok(
@@ -1142,9 +1744,11 @@ pub async fn execute_remedy_by_offer(
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
+        withhold_consult_content: input.withhold_consult_content,
     };
     validate(&input)?;
-    let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
+    let response: Value =
+        serde_json::from_str(&run(input, policy.into(), encryption).await?).map_err(invariant)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
 }
 
@@ -1169,14 +1773,18 @@ pub async fn load_offer_review(
     organization_id: String,
     session_id: String,
     offer_id: String,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OfferReviewOutput>> {
-    let session_id_for_output = session_id.clone();
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
-    let state = initialized().await?;
+    let state = initialized().await?.encrypted(encryption)?;
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
+    if pg.0.cipher().is_encrypted() {
+        let receipts = encrypted_receipts(pg, &organization_id, &session_id)?;
+        return Ok(review_in(receipts, &offer_id, &session_id));
+    }
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
     let review = pg
@@ -1192,35 +1800,72 @@ pub async fn load_offer_review(
             // its host context, or the semantic input of a receipt that
             // predates context.
             let row = client.query_opt(
-                "SELECT entry->>'text' AS text, \
-                 COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
-                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
-                 FROM openappa_operations o \
-                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
-                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
-                 AND o.decision->'review' IS NOT NULL \
-                 AND entry->>'offer_id' = $3 \
-                 ORDER BY o.created_at DESC \
-                 LIMIT 1",
+                &format!(
+                    "SELECT entry->>'text' AS text, \
+                     COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
+                     COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
+                     FROM openappa_operations o \
+                     CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                     WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND NOT {} \
+                     AND o.decision->'review' IS NOT NULL \
+                     AND entry->>'offer_id' = $3 \
+                     ORDER BY o.created_at DESC \
+                     LIMIT 1",
+                    sealed::ESCAPED
+                ),
                 &[&organization_id, &session_id, &target_offer_id],
             )?;
-            Ok(row.map(|row| {
-                (
-                    row.get::<_, String>("text"),
-                    row.get::<_, Option<String>>("tool"),
-                    row.get::<_, Option<String>>("arguments"),
-                )
-            }))
+            if let Some(row) = row {
+                return Ok(Some(OfferReviewOutput {
+                    offer_id: target_offer_id,
+                    text: row.get("text"),
+                    session_id,
+                    tool: row.get("tool"),
+                    arguments: row.get("arguments"),
+                }));
+            }
+            let opened = sealed::read(
+                client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
+                "o.organization_id=$1 AND o.session_id=$2",
+                &[&organization_id, &session_id],
+            )?;
+            Ok(review_in(
+                opened.into_iter().map(|receipt| (receipt.input, receipt.decision)),
+                &target_offer_id,
+                &session_id,
+            ))
         })
-        .map_err(error)?;
+        ?;
+    Ok(review)
+}
 
-    Ok(review.map(|(text, tool, arguments)| OfferReviewOutput {
-        offer_id,
-        text,
-        session_id: session_id_for_output,
-        tool,
-        arguments,
-    }))
+/// The review entry for `offer_id` among a session's receipts, newest first,
+/// with the reviewed call's tool and arguments.
+fn review_in(
+    receipts: impl IntoIterator<Item = (Value, Value)>,
+    offer_id: &str,
+    session_id: &str,
+) -> Option<OfferReviewOutput> {
+    receipts.into_iter().find_map(|(input, decision)| {
+        let review = decision["review"]
+            .as_array()?
+            .iter()
+            .find(|entry| entry["offer_id"].as_str() == Some(offer_id))?;
+        let source = input
+            .get("context")
+            .or_else(|| input.get("semantic"))
+            .unwrap_or(&input);
+        Some(OfferReviewOutput {
+            offer_id: offer_id.to_owned(),
+            session_id: session_id.to_owned(),
+            text: review["text"].as_str().unwrap_or_default().to_owned(),
+            tool: source["tool"].as_str().map(str::to_owned),
+            arguments: source.get("arguments").map(Value::to_string),
+        })
+    })
 }
 
 #[napi(object)]
@@ -1263,11 +1908,11 @@ pub async fn load_child_returns(
     let state = {
         let slot = state_mutex().lock().await;
         slot.as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
             .clone()
     };
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // session_id is the leading PK column of openappa_operations, and
         // organization_id is an additional tenancy guard. ChildEnd keeps its
@@ -1287,8 +1932,8 @@ pub async fn load_child_returns(
             &lookup.operation_prefix, &limit,
         ];
         let mut rows = client.query_raw(
-            "SELECT o.session_id AS child_session_id, \
-              o.operation_id, \
+            &format!("SELECT o.session_id AS child_session_id, \
+              o.operation_id, o.created_at, \
               COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event, \
               o.decision->>'decision' AS decision, \
               o.decision->>'value' AS decision_value, \
@@ -1296,7 +1941,7 @@ pub async fn load_child_returns(
               COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS output \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') IN ('child_end', 'child_return') \
@@ -1313,9 +1958,10 @@ pub async fn load_child_returns(
               AND ($3::text IS NULL OR o.session_id=$3) \
               AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
               ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
+                ESCAPED = sealed::ESCAPED),
             params.iter().copied(),
         )?;
-        let mut records = Vec::new();
+        let mut records: Vec<(SystemTime, ChildReturnRecord)> = Vec::new();
         let mut budget = ReceiptLookupBudget::default();
         while let Some(row) = rows.next()? {
             let event: Option<String> = row.get("event");
@@ -1334,17 +1980,63 @@ pub async fn load_child_returns(
             }) else {
                 continue;
             };
-            records.push(ChildReturnRecord {
+            records.push((row.get("created_at"), ChildReturnRecord {
                 child_session_id: row.get("child_session_id"),
                 spawn_call_id: row.get("spawn_call_id"),
                 child_native_id: row.get("child_native_id"),
                 operation_id: Some(crossed.operation_id),
                 value: crossed.value,
-            });
+            }));
         }
-        Ok(records)
+        drop(rows);
+        // The same lookup over the receipts SQL cannot read inside; crossed_return
+        // decides for them as for the rows above.
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 \
+             AND EXISTS (SELECT 1 FROM openappa_sessions s \
+               WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
+             AND ($3::text IS NULL OR o.session_id=$3) \
+             AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4)",
+            &params[..4],
+        )?;
+        let unsealed = records.len();
+        for receipt in opened {
+            let event = receipt.input_text("event");
+            let decision = receipt.decision_text("decision");
+            let decision_value = receipt.decision_text("value");
+            let output = receipt.input_text("output");
+            let Some(crossed) = crossed_return(ReturnReceipt {
+                event: event.as_deref().unwrap_or(""),
+                operation_id: &receipt.operation_id,
+                decision: decision.as_deref().unwrap_or(""),
+                decision_value: decision_value.as_deref(),
+                output: output.as_deref(),
+            }) else {
+                continue;
+            };
+            budget.take(crossed.value.len())?;
+            records.push((receipt.created_at, ChildReturnRecord {
+                spawn_call_id: receipt.input_text("spawn_call_id"),
+                child_native_id: receipt.input_text("child_native_id"),
+                child_session_id: receipt.session_id,
+                operation_id: Some(crossed.operation_id),
+                value: crossed.value,
+            }));
+        }
+        if records.len() > unsealed {
+            records.sort_by(|(a_at, a), (b_at, b)| {
+                b_at.cmp(a_at)
+                    .then_with(|| a.child_session_id.cmp(&b.child_session_id))
+                    .then_with(|| b.operation_id.cmp(&a.operation_id))
+            });
+            records.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 #[napi(object)]
@@ -1369,21 +2061,22 @@ pub async fn load_child_addresses(
     let state = {
         let slot = state_mutex().lock().await;
         slot.as_ref()
-            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
             .clone()
     };
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // Only the child's own parent addresses it, and only an address the
         // runtime acknowledged carried the parent's label into the child.
         use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
         let params: &[&(dyn ToSql + Sync)] = &[&organization_id, &child_session_id];
         let mut rows = client.query_raw(
-            "SELECT o.session_id AS parent_session_id, \
+            &format!(
+                "SELECT o.session_id AS parent_session_id, o.created_at, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
@@ -1391,33 +2084,77 @@ pub async fn load_child_addresses(
               AND o.decision->>'decision' = 'ack' \
               AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
               ORDER BY o.created_at LIMIT 10001",
+                ESCAPED = sealed::ESCAPED
+            ),
             params.iter().copied(),
         )?;
-        let mut records = Vec::new();
+        let mut records: Vec<(SystemTime, ChildAddressRecord)> = Vec::new();
         let mut budget = ReceiptLookupBudget::default();
         while let Some(row) = rows.next()? {
             let value: Option<String> = row.get("value");
             budget.take(value.as_deref().unwrap_or("").len())?;
-            records.push(ChildAddressRecord {
-                parent_session_id: row.get("parent_session_id"),
-                value: value.ok_or_else(|| {
-                    PostgresError("OpenAPPA retained a child address without a value".into())
-                })?,
-            });
+            records.push((
+                row.get("created_at"),
+                ChildAddressRecord {
+                    parent_session_id: row.get("parent_session_id"),
+                    value: value.ok_or_else(|| {
+                        PostgresError("OpenAPPA retained a child address without a value".into())
+                    })?,
+                },
+            ));
         }
-        Ok(records)
+        drop(rows);
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 AND EXISTS (SELECT 1 FROM openappa_sessions s \
+               WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id)",
+            params,
+        )?;
+        let unsealed = records.len();
+        for receipt in opened {
+            if !addresses(&receipt, &child_session_id)
+                || receipt.decision_text("decision").as_deref() != Some("ack")
+            {
+                continue;
+            }
+            let Some(value) = receipt.input_text("output") else {
+                continue;
+            };
+            budget.take(value.len())?;
+            records.push((
+                receipt.created_at,
+                ChildAddressRecord {
+                    parent_session_id: receipt.session_id,
+                    value,
+                },
+            ));
+        }
+        if records.len() > unsealed {
+            records.sort_by_key(|(created_at, _)| *created_at);
+            // The same bound the SQL applies, over the merged list.
+            records.truncate(10_001);
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
     })
-    .map_err(error)
+    .map_err(sql_failure)
+}
+
+/// Whether `receipt` is a ChildAddress to `child_session_id`.
+fn addresses(receipt: &sealed::OpenedReceipt, child_session_id: &str) -> bool {
+    receipt.input_text("event").as_deref() == Some("child_address")
+        && receipt.input_text("spawned_id").as_deref() == Some(child_session_id)
 }
 
 /// Whether this child's parent addressed it before the child's first event.
-fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bool> {
+fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Result<bool> {
     let Some(parent) = input.parent_id.clone() else {
         return Ok(false);
     };
     let (organization_id, child) = (input.organization_id.clone(), input.session_id.clone());
     pg.with_client(move |client| {
-        Ok(client
+        let addressed = client
             .query_one(
                 "SELECT EXISTS (SELECT 1 FROM openappa_operations o \
                   WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
@@ -1425,9 +2162,20 @@ fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bo
                   AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $3)",
                 &[&organization_id, &parent, &child],
             )?
-            .get::<_, bool>(0))
+            .get::<_, bool>(0);
+        if addressed {
+            return Ok(true);
+        }
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 AND o.session_id=$2",
+            &[&organization_id, &parent],
+        )?;
+        Ok(opened.iter().any(|receipt| addresses(receipt, &child)))
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 /// Receipt key for a spawn call. The host's id is raw; the operation the tool-call
@@ -1518,7 +2266,7 @@ fn spawn_ref_from_receipt(
 /// allow-call receipt. `None` when that receipt is absent, incomplete, or not a
 /// spawn release.
 fn released_spawn_binding(
-    pg: &LeasedPostgres,
+    pg: &Sql<'_>,
     organization_id: &str,
     parent_session_id: &str,
     spawn_call_id: &str,
@@ -1539,9 +2287,9 @@ fn released_spawn_binding(
         if status != "complete" {
             return Ok(None);
         }
-        let input: Value = row.get("input");
+        let input = sealed::unescape(row.get("input"))?;
         let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
+        let Some(decision) = decision.map(sealed::unescape).transpose()? else {
             return Ok(None);
         };
         let semantic = input.get("semantic").unwrap_or(&input);
@@ -1557,7 +2305,7 @@ fn released_spawn_binding(
             .filter(|binding| !binding.is_empty())
             .map(str::to_owned))
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 enum AddressedChild {
@@ -1593,77 +2341,19 @@ fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
     }
 }
 
-struct SessionLock<'a> {
-    pg: &'a LeasedPostgres,
-    root: String,
-}
-impl<'a> SessionLock<'a> {
-    fn acquire(pg: &'a LeasedPostgres, root: String) -> napi::Result<Self> {
-        let key = root.clone();
-        pg.with_client(move |client| {
-            client.query_one("SELECT pg_advisory_lock(hashtextextended($1, 0))", &[&key])?;
-            Ok(())
-        })
-        .map_err(error)?;
-        Ok(Self { pg, root })
-    }
-}
-impl Drop for SessionLock<'_> {
-    fn drop(&mut self) {
-        let key = self.root.clone();
-        let _ = self.pg.with_client(move |client| {
-            client.query_one(
-                "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
-                &[&key],
-            )?;
-            Ok(())
-        });
-    }
-}
-
-/// In-process per-trajectory exclusion. The advisory session lock only
-/// excludes other connections: on this process's one ledger connection it is
-/// reentrant, so it cannot order this process's own dispatches. Unrelated
-/// roots overlap freely; dispatches for one root queue here. One root is one
-/// chat session, so the registry grows with the distinct sessions this
-/// process has served, a few hundred bytes each — the same lifetime the
-/// sandbox handle slots keep. Removing an entry is not safe while a later
-/// dispatch could already be queued on it, so entries stay for the process's
-/// life; revisit only if distinct-root counts grow unbounded in production.
-static ROOT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
-
-struct RootLock {
-    _guard: OwnedMutexGuard<()>,
-}
-
-impl RootLock {
-    async fn acquire(root: String) -> Self {
-        let lock = {
-            let mut registry = root_locks().lock().await;
-            registry.entry(root).or_default().clone()
-        };
-        let _guard = lock.lock_owned().await;
-        Self { _guard }
-    }
-}
-
-fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
-    ROOT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
 impl State {
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
     fn open_fork(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
         input: &Input,
         fork_of: &str,
         root: &str,
     ) -> napi::Result<Option<SystemTime>> {
         if input.parent_id.is_some() {
-            return Err(error(
+            return Err(invalid_input(
                 "an OpenAPPA session cannot both fork a session and be its child",
             ));
         }
@@ -1678,8 +2368,8 @@ impl State {
                     )?
                     .map(|row| (row.get::<_, String>(0), row.get::<_, bool>(1))))
             })
-            .map_err(error)?
-            .ok_or_else(|| error("the session this one forks has not started"))?;
+            ?
+            .ok_or_else(|| invalid_input("the session this one forks has not started"))?;
         // A top-level session's trajectory is its root, a child's is its actor.
         let parent_trajectory = if parent_is_child {
             parent.actor
@@ -1688,16 +2378,14 @@ impl State {
         };
 
         let fork_root = root.to_owned();
-        let already_opened = pg
-            .with_client(move |client| {
-                Ok(client
-                    .query_one(
-                        "SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1)",
-                        &[&fork_root],
-                    )?
-                    .get::<_, bool>(0))
-            })
-            .map_err(error)?;
+        let already_opened = pg.with_client(move |client| {
+            Ok(client
+                .query_one(
+                    "SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1)",
+                    &[&fork_root],
+                )?
+                .get::<_, bool>(0))
+        })?;
         if already_opened {
             // A crash after `Runtime::open_root_fork` but before our session row left a
             // durable opening without a reliable boundary. Re-open it to verify
@@ -1708,134 +2396,212 @@ impl State {
                     &TrajectoryId(parent_trajectory),
                     &TrajectoryId(root.to_owned()),
                 )
-                .map_err(error)?;
+                .map_err(fork_refused)?;
             return Ok(None);
         }
 
-        // This dispatch already holds the child lock. It then takes the parent
-        // lock, while a parent never takes a child lock, so this order has no cycle.
-        let _parent_lock = SessionLock::acquire(pg, parent_root.clone())?;
+        // Taken before the fork reads the parent's log. A parent result completes
+        // only after its admission is in that log, so every result completed
+        // before this moment is part of the history the fork copies. A result
+        // still being processed while the fork opens is not inherited: the fork
+        // answers it as unknown, which withholds it.
+        let forked_at = pg.with_client(|client| {
+            Ok(client
+                .query_one("SELECT clock_timestamp()", &[])?
+                .get::<_, SystemTime>(0))
+        })?;
         self.runtime
             .open_root_fork(
                 &TrajectoryId(parent_root),
                 &TrajectoryId(parent_trajectory),
                 &TrajectoryId(root.to_owned()),
             )
-            .map_err(error)?;
-        // A parent result claims `created_at` under this same parent lock. The
-        // database clock taken before releasing it is therefore an exact cutoff.
-        pg.with_client(|client| {
-            Ok(client
-                .query_one("SELECT clock_timestamp()", &[])?
-                .get::<_, SystemTime>(0))
+            .map_err(fork_refused)?;
+        Ok(Some(forked_at))
+    }
+
+    fn encrypted(&self, encryption: Option<ContentEncryption>) -> napi::Result<State> {
+        let Some(encryption) = encryption else {
+            return Ok(self.clone());
+        };
+        let cipher = StorageCipher::encrypted(encryption.key.as_ref(), encryption.scope)
+            .map_err(invalid_input)?;
+        let store = Arc::new(self.store.encrypted_view(cipher).map_err(SqlError::from)?);
+        let runtime = self.runtime.on(store.clone());
+        let runtime = match encryption.annotator_context {
+            Some(context) => runtime.with_archestra_context(context),
+            None => runtime,
+        };
+        Ok(State {
+            runtime: Arc::new(runtime),
+            store,
+            ..self.clone()
         })
-        .map(Some)
-        .map_err(error)
     }
 
     /// This state with its runtime pinned to `deployment`: every lease of it, and
     /// every view made of such a lease, serves that deployment.
-    fn pinned(&self, deployment: &PreparedDeployment) -> State {
+    fn pinned(&self, deployment: &PublishedDeployment) -> State {
         State {
             runtime: Arc::new(self.runtime.pinned(deployment)),
+            served: Some(deployment.revision()),
             ..self.clone()
         }
     }
 
-    /// This state over one pooled connection: the store is a lease of it and
-    /// the runtime records through that lease.
+    /// This state over one pooled connection, for a short read: the store is a
+    /// lease of it and the runtime reads through that lease.
     async fn lease(&self) -> napi::Result<Leased> {
-        let permit = connection_permit(&self.connections, CONNECTION_WAIT).await?;
-        let store = Arc::new(self.store.lease().map_err(error)?);
+        let store = Arc::new(self.store.lease().map_err(SqlError::from)?);
         Ok(Leased {
             state: State {
                 runtime: Arc::new(self.runtime.on(store.clone())),
                 store,
                 ..self.clone()
             },
-            _permit: permit,
         })
     }
 
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
         let key = SessionKey::of(&input);
-        let root = if let Some(root) = input.owner_root.clone() {
-            root
-        } else if let Some(parent_id) = &input.parent_id {
-            // A parent is only ever looked up in the child's own organization.
-            let parent = SessionKey::new(&input.organization_id, parent_id);
-            let leased = self.lease().await?;
-            postgres_store(&leased.state.store)?
-                .with_client(move |client| {
-                    client
-                        .query_opt(
-                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                            &[&parent.organization_id, &parent.actor],
-                        )?
-                        .map(|row| row.get::<_, String>(0))
-                        .ok_or_else(|| PostgresError("parent session has not started".into()))
-                })
-                .map_err(error)?
-        } else {
-            self.session_root(&input, &key).await?
-        };
-        let _root = RootLock::acquire(root.clone()).await;
-        let mut leased = self.lease().await?;
+        let sql = Sql(&self.store);
+        let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
-        leased.state.runtime = Arc::new(leased.state.runtime.recording(consults.clone()));
+        let recording = State {
+            runtime: Arc::new(self.runtime.recording(consults.clone())),
+            ..self.clone()
+        };
         let attribution = consults::Attribution {
             organization_id: input.organization_id.clone(),
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
+            withhold_content: input.withhold_consult_content,
         };
-        let result = leased.state.dispatch_on_lease(input, root, key).await;
-        // On the dispatch's own connection, after its session lock is released.
-        if let Ok(pg) = postgres_store(&leased.state.store) {
-            consults::store(pg, attribution, &consults);
+        let child_return = input.event == HookEventKind::ChildReturn;
+        let observation = self.label_observation(&input, &root);
+        let result = recording.dispatch_in_family(input, root, key).await;
+        consults::store(&sql, attribution, &consults);
+        if result.is_ok() {
+            self.record_label(&sql, observation);
         }
-        result
+        if child_return {
+            result.map(mark_busy_hold)
+        } else {
+            result
+        }
+    }
+
+    /// Who and what a label change after dispatching `input` is filed under.
+    fn label_observation(&self, input: &Input, root: &str) -> labels::Observation {
+        let event = match input.event {
+            HookEventKind::SessionStart => labels::ChangeEvent::SessionStart,
+            HookEventKind::ToolCall => labels::ChangeEvent::ToolCall,
+            HookEventKind::ToolResult | HookEventKind::CancelCall => {
+                labels::ChangeEvent::ToolResult
+            }
+            HookEventKind::Remedy => labels::ChangeEvent::Remedy,
+            HookEventKind::ChildReturn | HookEventKind::ChildEnd => {
+                labels::ChangeEvent::ChildReturn
+            }
+            HookEventKind::Yell
+            | HookEventKind::Prompt
+            | HookEventKind::TurnEnd
+            | HookEventKind::ChildAddress => labels::ChangeEvent::Other,
+        };
+        let call_id = match (&input.operation_id, &input.tool_call_id) {
+            (Some(operation), _) if operation.starts_with("call:") => Some(operation.clone()),
+            (_, Some(tool_call_id)) => Some(format!("call:{tool_call_id}")),
+            _ => None,
+        };
+        labels::Observation {
+            organization_id: input.organization_id.clone(),
+            root: root.to_owned(),
+            session_id: input.session_id.clone(),
+            caller_id: input.caller_id.clone(),
+            event,
+            call_id,
+            tool: input.tool.clone(),
+            policy_revision: self
+                .served
+                .and_then(|revision| i64::try_from(revision).ok()),
+        }
+    }
+
+    /// Reads the root's label after a dispatch and records it if it moved. A
+    /// root the runtime cannot read is skipped: the dataset never fails a dispatch.
+    fn record_label(&self, sql: &Sql<'_>, observation: labels::Observation) {
+        let Ok(status) = self
+            .runtime
+            .try_status(&TrajectoryId(observation.root.clone()))
+        else {
+            return;
+        };
+        labels::record(
+            sql,
+            observation,
+            labels::Label {
+                trust: status.trust,
+                audience: status.audience,
+            },
+        );
+    }
+
+    /// The root of the family `input` belongs to: the owner's for a proxy-stamped
+    /// trajectory, the parent's for a child, else the session's own.
+    fn dispatch_root(&self, input: &Input) -> napi::Result<String> {
+        if let Some(root) = input.owner_root.clone() {
+            return Ok(root);
+        }
+        let Some(parent_id) = &input.parent_id else {
+            return self.session_root(input, &SessionKey::of(input));
+        };
+        // A parent is only ever looked up in the child's own organization.
+        let parent = SessionKey::new(&input.organization_id, parent_id);
+        Sql(&self.store)
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&parent.organization_id, &parent.actor],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            ?
+            .ok_or_else(|| {
+                failure(
+                    Failure::Binding(BindingFailure::UnstartedParent),
+                    "parent session has not started",
+                )
+            })
     }
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
     /// the session id alone keeps that root, so its history carries on.
-    async fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
+    fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
         let lookup = key.clone();
-        let leased = self.lease().await?;
-        let recorded = postgres_store(&leased.state.store)?
-            .with_client(move |client| {
-                Ok(client
-                    .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                        &[&lookup.organization_id, &lookup.actor],
-                    )?
-                    .map(|row| row.get::<_, String>(0)))
-            })
-            .map_err(error)?;
+        let recorded = Sql(&self.store).with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&lookup.organization_id, &lookup.actor],
+                )?
+                .map(|row| row.get::<_, String>(0)))
+        })?;
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
-    /// The session lock and the runtime's appends lock the same key, which
-    /// only one connection can hold twice, so both run on this state's lease.
-    async fn dispatch_on_lease(
+    /// One event of a session family. Dispatches of one family run side by side:
+    /// the event log takes their steps in turn, and each operation's receipt
+    /// lets one of them work on it at a time.
+    async fn dispatch_in_family(
         &self,
         input: Input,
         root: String,
         key: SessionKey,
     ) -> napi::Result<Value> {
-        let pg = postgres_store(&self.store)?;
-        let _lock = SessionLock::acquire(pg, root.clone())?;
-        // Check every member of the family: continuing a parent while a child's
-        // result is interrupted could otherwise bypass inherited restrictions.
-        let interrupted = self
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?;
-        if interrupted {
-            return Err(error(
-                "OpenAPPA session has interrupted processing; operator recovery is required",
-            ));
-        }
+        let sql = Sql(&self.store);
+        let pg = &sql;
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -1854,18 +2620,9 @@ impl State {
                         )
                     }))
             })
-            .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_fork)) = &existing {
-            if *saved_root != root || *saved_parent != input.parent_id {
-                return Err(error("session identity changed"));
-            }
-            // A fork retains its parent session. A session with its own root cannot move
-            // to a different history.
-            if input.fork_of.is_some() && *saved_fork != input.fork_of {
-                return Err(error(
-                    "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
-                ));
-            }
+            ?;
+        if let Some(saved) = &existing {
+            check_session_identity(saved, &root, &input)?;
         } else {
             let forked_at = input
                 .fork_of
@@ -1891,7 +2648,7 @@ impl State {
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
-                return Err(error(wire(&decision)?));
+                return Err(invariant(wire(&decision)?));
             }
             // A child opens under its fork's seed: the parent's label when it spawned
             // the child. A parent that addressed the child before this first event may
@@ -1910,68 +2667,135 @@ impl State {
                 )
                 .await;
                 if !matches!(readdress, HookDecision::Ack | HookDecision::Context { .. }) {
-                    return Err(error(wire(&readdress)?));
+                    return Err(invariant(wire(&readdress)?));
                 }
             }
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
-            let start_decision = wire(&decision)?;
-            let (id, root, input) = (key.actor.clone(), root.clone(), input.clone());
-            pg.with_client(move |client| {
-                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
-                Ok(())
-            }).map_err(error)?;
+            let start_decision = self
+                .store
+                .cipher()
+                .seal_json(
+                    &field_context(&[
+                        "openappa_sessions",
+                        &key.organization_id,
+                        &key.actor,
+                        "start_decision",
+                    ]),
+                    &wire(&decision)?,
+                )
+                .map_err(storage)?;
+            let (id, saved_root, row) = (key.actor.clone(), root.clone(), input.clone());
+            // Two first events of one session can both get here; the runtime opened the
+            // session once, and the first row stands. The other must describe the same
+            // session.
+            let stored = pg
+                .with_client(move |client| {
+                    client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (organization_id, actor) DO NOTHING",
+                        &[&id, &saved_root, &row.organization_id, &row.caller_id, &row.session_id, &row.parent_id, &row.fork_of, &forked_at, &start_decision])?;
+                    Ok(client
+                        .query_one(
+                            "SELECT root, parent_id, forked_from FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                            &[&row.organization_id, &id],
+                        )
+                        .map(|row| (row.get(0), row.get(1), row.get(2)))?)
+                })
+                ?;
+            check_session_identity(&stored, &root, &input)?;
         }
 
+        let receipts = lease::Receipts::new(self.store.clone());
+        let began = lease::log_end(pg, &root)?;
+        let work = self.handle_event(pg, &receipts, input, root.clone(), key, actor);
+        let failure = match receipts.hold(work).await {
+            lease::Guarded::Finished(Ok(value)) => return Ok(value),
+            lease::Guarded::Finished(Err(failure)) => failure,
+            lease::Guarded::Lost => lease_lost(),
+        };
+        // The host's retry takes these receipts over at once.
+        receipts.release(lease::log_end(pg, &root).ok() == Some(began));
+        Err(failure)
+    }
+
+    /// The part of a dispatch that claims and completes receipts. It runs under
+    /// the family's lock and lease.
+    async fn handle_event(
+        &self,
+        pg: &Sql<'_>,
+        receipts: &lease::Receipts,
+        input: Input,
+        root: String,
+        key: SessionKey,
+        actor: Actor,
+    ) -> napi::Result<Value> {
         if input.event == HookEventKind::SessionStart {
+            let cipher = self.store.cipher().clone();
             return pg
                 .with_client(move |client| {
-                    Ok(client
+                    let stored: Value = client
                         .query_one(
                             "SELECT start_decision FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
                             &[&key.organization_id, &key.actor],
                         )?
-                        .get(0))
+                        .get(0);
+                    cipher.open_json(&field_context(&["openappa_sessions", &key.organization_id, &key.actor, "start_decision"]), stored).map_err(Into::into)
                 })
-                .map_err(error);
+                .map_err(sql_failure);
         }
         if matches!(
             input.event,
             HookEventKind::ToolResult | HookEventKind::CancelCall
         ) {
-            return self.result(pg, &input, &actor).await;
+            return self.result(pg, receipts, &input, &actor).await;
         }
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
             let binding = remedy_binding(&input.caller_id);
+            let result_key = input
+                .tool_call_id
+                .clone()
+                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(decision) = claim_operation(
                 &self.store,
+                receipts,
                 &input,
                 &root,
                 &operation,
                 &request,
                 binding.clone(),
                 None,
-            )? {
+            )
+            .await?
+            {
+                // The remedy's answer is saved. A dispatch stopped between its
+                // two completions leaves the tracked result pending; it takes
+                // exactly this answer, so finish that receipt from it now. A
+                // result another live request is finishing is left to it.
+                if let Some(result_key) = result_key {
+                    let root = TrajectoryId::new(root.as_str());
+                    if let ResultClaim::Work =
+                        claim_result(&self.store, receipts, &result_key, &root).await?
+                    {
+                        let approved = decision_text(&decision)?;
+                        self.store
+                            .complete_processed_result(
+                                result_key,
+                                approved,
+                                decision.clone(),
+                                receipts.owner(),
+                            )
+                            .map_err(receipt_failure)?;
+                    }
+                }
                 return Ok(decision);
             }
-            let result_key = input
-                .tool_call_id
-                .clone()
-                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(result_key) = &result_key {
-                match self
-                    .store
-                    .claim_processed_result(ProcessedResultRequest {
-                        key: result_key.clone(),
-                        root: TrajectoryId::new(root.as_str()),
-                    })
-                    .map_err(error)?
+                let root = TrajectoryId::new(root.as_str());
+                if let ResultClaim::Complete(decision) =
+                    claim_result(&self.store, receipts, result_key, &root).await?
                 {
-                    ProcessedResultClaim::Claimed => {}
-                    ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+                    return Ok(decision);
                 }
             }
             if let Some(refusal) = &input.precheck_refusal {
@@ -1982,6 +2806,7 @@ impl State {
                 let response = runtime_refusal(refusal.clone())?;
                 return finish_remedy(
                     &self.store,
+                    receipts,
                     &input,
                     &operation,
                     binding,
@@ -1990,14 +2815,14 @@ impl State {
                 );
             }
             let args: ExecuteRemedyPlanArgs =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+                serde_json::from_str(required_arguments(&input)?).map_err(invalid_input)?;
             let offer_id = args.offer_id.clone();
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
                     .arguments
                     .clone()
-                    .ok_or_else(|| error("missing remedy arguments"))?,
+                    .ok_or_else(|| invalid_input("missing remedy arguments"))?,
                 cwd: None,
             };
             let ruling = input.ruling.as_ref().map(|r| match r {
@@ -2016,16 +2841,18 @@ impl State {
                 },
             )
             .await;
+            require_decision(&gate)?;
             if !matches!(gate, HookDecision::PassControl) {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
                     HookDecision::Block { reason } => reason,
-                    HookDecision::Refuse { detail } => detail,
-                    _ => return Err(error("unexpected remedy control decision")),
+                    HookDecision::Refuse { detail, .. } => detail,
+                    _ => return Err(invariant("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
                 return finish_remedy(
                     &self.store,
+                    receipts,
                     &input,
                     &operation,
                     binding,
@@ -2064,6 +2891,7 @@ impl State {
             )?;
             return finish_remedy(
                 &self.store,
+                receipts,
                 &input,
                 &operation,
                 binding,
@@ -2075,11 +2903,11 @@ impl State {
         let operation = input
             .operation_id
             .clone()
-            .ok_or_else(|| error("an operation id is required"))?;
+            .ok_or_else(|| invalid_input("an operation id is required"))?;
         if input.event == HookEventKind::ToolCall {
-            let call_id = operation
-                .strip_prefix("call:")
-                .ok_or_else(|| error("tool call operation_id must be call:<tool-call-id>"))?;
+            let call_id = operation.strip_prefix("call:").ok_or_else(|| {
+                invalid_input("tool call operation_id must be call:<tool-call-id>")
+            })?;
             if let Some(decision) = cancelled_call(pg, &input, call_id)? {
                 return Ok(decision);
             }
@@ -2095,33 +2923,45 @@ impl State {
             // Retained so the child's side can find what its parent addressed to it.
             request["spawned_id"] = json!(input.spawned_id);
         }
+        // Reject host configuration and malformed reporting input before
+        // claiming a durable operation. No effect has started yet, so these
+        // refusals must not leave a pending receipt fencing the whole family.
+        let report = if input.event == HookEventKind::Yell {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| invalid_input("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(invalid_input)?;
+            let endpoint = match &input.yell_receiver {
+                Some(receiver) => receiver.endpoint()?,
+                None => reporting.endpoint.clone(),
+            };
+            Some((reporting, args, endpoint))
+        } else {
+            None
+        };
         if let Some(decision) = claim_operation(
             &self.store,
+            receipts,
             &input,
             &root,
             &operation,
             &request,
             session_binding(&input),
             context,
-        )? {
+        )
+        .await?
+        {
             return Ok(decision);
         }
-        let decision = if input.event == HookEventKind::Yell {
-            let reporting = self
-                .reporting
-                .as_ref()
-                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
-            let args: YellArguments =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        let decision = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: match &input.yell_receiver {
-                        Some(receiver) => receiver.endpoint()?,
-                        None => reporting.endpoint.clone(),
-                    },
+                    endpoint,
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,
@@ -2160,7 +3000,7 @@ impl State {
                     child: actor
                         .child
                         .clone()
-                        .ok_or_else(|| error("not a child session"))?,
+                        .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input.output.clone(),
                 },
                 HookEventKind::ChildReturn => HookEvent::ChildReturn {
@@ -2168,18 +3008,20 @@ impl State {
                     child: actor
                         .child
                         .clone()
-                        .ok_or_else(|| error("not a child session"))?,
+                        .ok_or_else(|| invalid_input("not a child session"))?,
                     value: input
                         .output
                         .clone()
-                        .ok_or_else(|| error("missing output"))?,
+                        .ok_or_else(|| invalid_input("missing output"))?,
                 },
                 HookEventKind::SessionStart
                 | HookEventKind::ToolResult
                 | HookEventKind::CancelCall
                 | HookEventKind::Remedy
                 | HookEventKind::Yell
-                | HookEventKind::ChildAddress => return Err(error("unsupported OpenAPPA event")),
+                | HookEventKind::ChildAddress => {
+                    return Err(invalid_input("unsupported OpenAPPA event"));
+                }
             };
             let outcome = hooks::handle_embedded_with_options(
                 &self.runtime,
@@ -2191,6 +3033,7 @@ impl State {
         };
         finish_operation(
             &self.store,
+            receipts,
             &input,
             &operation,
             &decision,
@@ -2203,7 +3046,7 @@ impl State {
     /// family's in-flight fork when the host named no spawn call. A supplied call id
     /// never falls back to in-flight: the engine has no call-id spawn reference, and
     /// the receipt's `spawn_binding` is the reference it minted.
-    fn child_spawn_ref(&self, pg: &LeasedPostgres, input: &Input) -> napi::Result<SpawnRef> {
+    fn child_spawn_ref(&self, pg: &Sql<'_>, input: &Input) -> napi::Result<SpawnRef> {
         let binding = match input.spawn_call_id.as_deref() {
             Some(spawn_call_id) => {
                 let parent = required(&input.parent_id, "parent_id")?;
@@ -2211,7 +3054,7 @@ impl State {
             }
             None => None,
         };
-        spawn_ref_from_receipt(input.spawn_call_id.as_deref(), binding).map_err(error)
+        spawn_ref_from_receipt(input.spawn_call_id.as_deref(), binding).map_err(invariant)
     }
 
     /// The parent addresses a child it started, so the parent's current label flows into
@@ -2230,7 +3073,7 @@ impl State {
     /// dispatcher's own child trajectory. The dispatch already holds the family lock.
     async fn address_child(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
         input: &Input,
         actor: &Actor,
     ) -> napi::Result<Value> {
@@ -2252,7 +3095,7 @@ impl State {
                     )?
                     .map(|row| row.get::<_, String>(0)))
             })
-            .map_err(error)?;
+            ?;
         let stored_actor = match classify_addressed_child(&parent, &child_session, started) {
             AddressedChild::Rebind(stored_actor) => stored_actor,
             AddressedChild::UnstartedNative => return Ok(json!({ "decision": "ack" })),
@@ -2273,7 +3116,8 @@ impl State {
 
     async fn result(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
+        receipts: &lease::Receipts,
         input: &Input,
         actor: &Actor,
     ) -> napi::Result<Value> {
@@ -2282,28 +3126,59 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
-        match self
-            .store
-            .claim_processed_result(ProcessedResultRequest {
-                key: key.clone(),
-                root: actor.root.clone(),
-            })
-            .map_err(error)?
+        // A recovered receipt is this same result, claimed by a dispatch that
+        // stopped mid-processing. It is driven again and completed.
+        if let ResultClaim::Complete(decision) =
+            claim_result(&self.store, receipts, &key, &actor.root).await?
         {
-            ProcessedResultClaim::Claimed => {}
-            ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+            return Ok(decision);
         }
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
-        let Some(released) = read_completed_operation(pg, &operation)? else {
-            // A fork replays the history of the session it forks: a result from before the
-            // fork comes back as that session processed it, never as an unknown call.
-            let response =
-                inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
-            let approved = decision_text(&response)?;
-            self.store
-                .complete_processed_result(key, approved, response.clone())
-                .map_err(error)?;
-            return Ok(response);
+        let released = match read_operation_state(pg, &operation)? {
+            OperationState::Complete(completed) => completed,
+            OperationState::Pending {
+                input: recorded,
+                context,
+            } => {
+                // The call's own dispatch stopped after its claim: take its
+                // receipt over once that dispatch's lease has expired. Re-drive
+                // the recorded call — the runtime replays a committed decision
+                // and decides one it never recorded — and complete its receipt,
+                // so this result is processed against exactly the answer the
+                // host was owed.
+                if let Some(completed) = claim_operation(
+                    &self.store,
+                    receipts,
+                    input,
+                    &actor.root.0,
+                    &operation.operation_id,
+                    &recorded,
+                    session_binding(input),
+                    context.clone(),
+                )
+                .await?
+                {
+                    CompletedOperation {
+                        input: recorded,
+                        context,
+                        decision: completed,
+                    }
+                } else {
+                    self.recover_call(input, actor, receipts, &operation, recorded, context)
+                        .await?
+                }
+            }
+            OperationState::Absent => {
+                // A fork replays the history of the session it forks: a result from before the
+                // fork comes back as that session processed it, never as an unknown call.
+                let response =
+                    inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
+                let approved = decision_text(&response)?;
+                self.store
+                    .complete_processed_result(key, approved, response.clone(), receipts.owner())
+                    .map_err(receipt_failure)?;
+                return Ok(response);
+            }
         };
         let allowed = matches!(
             released.decision.get("decision").and_then(Value::as_str),
@@ -2313,8 +3188,8 @@ impl State {
             let response = authoritative_unexecuted_response(released.decision)?;
             let approved = decision_text(&response)?;
             self.store
-                .complete_processed_result(key, approved, response.clone())
-                .map_err(error)?;
+                .complete_processed_result(key, approved, response.clone(), receipts.owner())
+                .map_err(receipt_failure)?;
             return Ok(response);
         }
         let call = recorded_call(released.context, released.input)?;
@@ -2325,7 +3200,7 @@ impl State {
             input
                 .output
                 .clone()
-                .ok_or_else(|| error("missing tool output"))?
+                .ok_or_else(|| invalid_input("missing tool output"))?
         };
         let outcome = match (cancelled, input.outcome) {
             (true, _) => ToolOutcome::Failure {
@@ -2370,7 +3245,7 @@ impl State {
         .await;
         let decision = outcome.decision;
         if cancelled && !matches!(decision, HookDecision::Ack) {
-            return Err(error("OpenAPPA could not settle a withheld tool call"));
+            return Err(invariant("OpenAPPA could not settle a withheld tool call"));
         }
         let approved = match &decision {
             HookDecision::Ack
@@ -2387,10 +3262,13 @@ impl State {
             HookDecision::Block { reason } => {
                 format!("[appa] Tool output withheld: {reason}")
             }
-            HookDecision::Refuse { detail } => {
-                return Err(error(format!("OpenAPPA result refused: {detail}")));
+            HookDecision::Refuse { class, detail } => {
+                return Err(failure(
+                    Failure::Refused(*class),
+                    format!("OpenAPPA result refused: {detail}"),
+                ));
             }
-            _ => return Err(error("unexpected tool result decision")),
+            _ => return Err(invariant("unexpected tool result decision")),
         };
         let mut response = if cancelled {
             // Never replay an admission for a dispatch we have closed without
@@ -2410,7 +3288,7 @@ impl State {
                 HookDecision::ReplaceOutput { .. }
                 | HookDecision::Block { .. }
                 | HookDecision::Refuse { .. } => OutputSource::Runtime,
-                _ => return Err(error("unexpected tool result decision")),
+                _ => return Err(invariant("unexpected tool result decision")),
             }
         };
         response = with_approved_output(&response, approved.clone(), output_source)?;
@@ -2419,17 +3297,21 @@ impl State {
             let request = json!({ "event": "cancel_call", "tool_call_id": call_id });
             if let Some(saved) = claim_operation(
                 &self.store,
+                receipts,
                 input,
                 &actor.root.0,
                 &operation,
                 &request,
                 session_binding(input),
                 None,
-            )? {
+            )
+            .await?
+            {
                 response = saved;
             } else {
                 finish_operation(
                     &self.store,
+                    receipts,
                     input,
                     &operation,
                     &response,
@@ -2437,13 +3319,77 @@ impl State {
                 )?;
             }
         }
-        let approved = decision_text(&response)?;
+        let approved = stored_approved_output(&decision_text(&response)?, &response);
         self.store
-            .complete_processed_result(key, approved, response.clone())
-            .map_err(error)?;
+            .complete_processed_result(key, approved, response.clone(), receipts.owner())
+            .map_err(receipt_failure)?;
         Ok(response)
     }
+
+    /// Re-drives a call whose receipt an interrupted dispatch left pending,
+    /// then completes that receipt with the answer. The runtime replays a
+    /// decision it committed and decides afresh one it never recorded, so the
+    /// completed receipt holds exactly the answer the first dispatch owed.
+    async fn recover_call(
+        &self,
+        input: &Input,
+        actor: &Actor,
+        receipts: &lease::Receipts,
+        operation: &OperationKey,
+        recorded: Value,
+        context: Option<Value>,
+    ) -> napi::Result<CompletedOperation> {
+        let call = recorded_call(context.clone(), recorded.clone())?;
+        let event = HookEvent::ToolCall {
+            actor: actor.clone(),
+            call: proposed_recorded_call(&call)?,
+            call_id: Some(operation.operation_id.clone()),
+            spawn: call.spawn.then_some(SpawnKind::Single),
+            prompt: None,
+            ruling: None,
+        };
+        let outcome = hooks::handle_embedded_with_options(
+            &self.runtime,
+            event,
+            result_presentation_options(input, &call),
+        )
+        .await;
+        let decision = wire(&outcome.decision)?;
+        self.store
+            .complete_operation(operation.clone(), decision.clone(), receipts.owner())
+            .map_err(receipt_failure)?;
+        Ok(CompletedOperation {
+            input: recorded,
+            context,
+            decision,
+        })
+    }
 }
+
+/// The `approved_output` column of a completed tool result, which holds the text a second
+/// time when the stored decision already carries it (`approved_output`, set by
+/// [`with_approved_output`]). A long text is stored in the decision alone, and the column
+/// holds `sha256:<hex>` of it.
+///
+/// Contract, checked at the pinned OpenAPPA revision and by the base commit's own code:
+/// nothing reads the column as content. A replay answers from the decision
+/// (`ProcessedResultClaim::Complete { decision, .. }` here and in `peer.rs`,
+/// `inherited_result` selects `decision`), `resolve_result_claim` only requires the column
+/// non-null, and `resolve_result_completion` compares it with the value a second completion
+/// of a complete row passes, which no path in this crate or the base commit makes after a
+/// claim answered `Complete`. Re-check all three when the OpenAPPA pin moves, and before
+/// anything reads the column. No schema changes: the column stays non-null text.
+fn stored_approved_output(approved: &str, decision: &Value) -> String {
+    let carried = decision.get("approved_output").and_then(Value::as_str) == Some(approved);
+    if carried && approved.len() > REFERENCE_FROM_BYTES {
+        format!("sha256:{}", sha256_hex(approved.as_bytes()))
+    } else {
+        approved.to_owned()
+    }
+}
+
+/// Texts up to this size stay readable in the column.
+const REFERENCE_FROM_BYTES: usize = 1024;
 
 #[derive(Serialize)]
 struct ApprovedOutput<'a, T> {
@@ -2490,16 +3436,6 @@ enum OutputSource {
 }
 
 #[derive(Serialize)]
-struct RenderedRemedy {
-    decision: &'static str,
-    approved_output: String,
-    output_source: OutputSource,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'static str>,
-    result: HostToolResult,
-}
-
-#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HostToolResult {
     is_error: bool,
@@ -2523,7 +3459,7 @@ fn with_approved_output<T: Serialize>(
         approved_output,
         output_source,
     })
-    .map_err(error)
+    .map_err(invariant)
 }
 
 fn render_unknown_offer() -> napi::Result<Value> {
@@ -2541,7 +3477,7 @@ fn render_unknown_offer() -> napi::Result<Value> {
             }],
         },
     })
-    .map_err(error)
+    .map_err(invariant)
 }
 
 /// Constructs a refusal response not generated by the runtime engine.
@@ -2557,7 +3493,7 @@ fn runtime_refusal(text: String) -> napi::Result<Value> {
             content: vec![HostText { kind: "text", text }],
         },
     })
-    .map_err(error)
+    .map_err(invariant)
 }
 
 fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<Value> {
@@ -2565,7 +3501,7 @@ fn with_offer_status(response: Value, status: OfferStatusKind) -> napi::Result<V
         response: &response,
         offer: OfferStatus { status },
     })
-    .map_err(error)
+    .map_err(invariant)
 }
 
 fn with_presentation_offers(
@@ -2578,7 +3514,7 @@ fn with_presentation_offers(
     }
     let object = response
         .as_object_mut()
-        .ok_or_else(|| error("decision is not an object"))?;
+        .ok_or_else(|| invariant("decision is not an object"))?;
     object.insert(
         "offers".to_owned(),
         json!(
@@ -2627,7 +3563,25 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             false,
             render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
         ),
-        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, false, feedback),
+        // The offer stands and the feedback tells the model what to do next:
+        // an answer for it, not a runtime failure that ends the turn. It is an
+        // error result because nothing was released.
+        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, true, feedback),
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
+        } => {
+            return Err(remedy_refused(format!(
+                "OpenAPPA remedy interrupted: {detail}"
+            )));
+        }
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
+        } => {
+            return Err(failure(
+                Failure::Binding(BindingFailure::HeldElsewhere),
+                "OpenAPPA remedy is still executing; retry the request",
+            ));
+        }
         RemedyOutcome::Refused { reason } => (
             OutputSource::Runtime,
             unknown_control_reason(&reason),
@@ -2635,7 +3589,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             reason.detail().to_owned(),
         ),
     };
-    serde_json::to_value(RenderedRemedy {
+    serde_json::to_value(HostMcpResult {
         decision: "mcp_result",
         approved_output: text.clone(),
         output_source,
@@ -2645,7 +3599,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             content: vec![HostText { kind: "text", text }],
         },
     })
-    .map_err(error)
+    .map_err(invariant)
 }
 
 /// Formats a human reviewer denial message.
@@ -2724,7 +3678,7 @@ fn remedy_operation(input: &Input) -> napi::Result<String> {
         // but no later result is inferred from a fabricated transport id.
         None => Ok(format!(
             "remedy:untracked:{}",
-            sha256_hex(serde_json::to_vec(&remedy_fingerprint(input)?).map_err(error)?)
+            sha256_hex(serde_json::to_vec(&remedy_fingerprint(input)?).map_err(invariant)?)
         )),
     }
 }
@@ -2764,28 +3718,30 @@ fn remedy_request(input: &Input) -> napi::Result<Value> {
 }
 
 fn original_arguments_raw(arguments: &str) -> napi::Result<Box<RawValue>> {
-    let value: Value = serde_json::from_str(arguments).map_err(error)?;
+    let value: Value = serde_json::from_str(arguments).map_err(invalid_input)?;
     if !value.is_object() {
-        return Err(error("original remedy arguments must be a JSON object"));
+        return Err(invalid_input(
+            "original remedy arguments must be a JSON object",
+        ));
     }
-    serde_json::value::to_raw_value(&value).map_err(error)
+    serde_json::value::to_raw_value(&value).map_err(invariant)
 }
 
 fn object_raw(arguments: &RawValue, name: &str) -> napi::Result<Box<RawValue>> {
-    let value: Value = serde_json::from_str(arguments.get()).map_err(error)?;
+    let value: Value = serde_json::from_str(arguments.get()).map_err(invalid_input)?;
     if !value.is_object() {
-        return Err(error(format!("{name} must be a JSON object")));
+        return Err(invalid_input(format!("{name} must be a JSON object")));
     }
-    serde_json::value::to_raw_value(&value).map_err(error)
+    serde_json::value::to_raw_value(&value).map_err(invariant)
 }
 
 fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Value> {
-    let arguments = arguments.ok_or_else(|| error(format!("missing {name}")))?;
-    let value: Value = serde_json::from_str(arguments.get()).map_err(error)?;
+    let arguments = arguments.ok_or_else(|| invalid_input(format!("missing {name}")))?;
+    let value: Value = serde_json::from_str(arguments.get()).map_err(invalid_input)?;
     if value.is_object() {
         Ok(value)
     } else {
-        Err(error(format!("{name} must be a JSON object")))
+        Err(invalid_input(format!("{name} must be a JSON object")))
     }
 }
 
@@ -2794,13 +3750,10 @@ fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Va
 const MAX_FORK_DEPTH: usize = 32;
 
 /// The decision the session this one forks from processed for `call_id`, looked up the fork
-/// line. A child accepts only results claimed before its parent-lock-protected watermark, so it
-/// replays the history it started with rather than later parent activity.
-fn inherited_result(
-    pg: &LeasedPostgres,
-    input: &Input,
-    call_id: &str,
-) -> napi::Result<Option<Value>> {
+/// line. A fork accepts only results completed before it opened (see `open_fork`), so it
+/// replays the history it started with rather than later parent activity. A result completed
+/// before completion times were recorded falls back to its claim time.
+fn inherited_result(pg: &Sql<'_>, input: &Input, call_id: &str) -> napi::Result<Option<Value>> {
     let (organization_id, mut session, call_id) = (
         input.organization_id.clone(),
         input.session_id.clone(),
@@ -2821,7 +3774,7 @@ fn inherited_result(
                 return Ok(None);
             };
             if let Some(row) = client.query_opt(
-                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND created_at < $4",
+                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND COALESCE(completed_at, created_at) < $4",
                 &[&parent, &call_id, &organization_id, &forked_at],
             )? {
                 return Ok(row.get::<_, Option<Value>>(0));
@@ -2830,7 +3783,7 @@ fn inherited_result(
         }
         Ok(None)
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 fn decision_text(response: &Value) -> napi::Result<String> {
@@ -2841,12 +3794,12 @@ fn decision_text(response: &Value) -> napi::Result<String> {
         .or_else(|| response.get("reason"))
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| error("control response lacks model-visible text"))
+        .ok_or_else(|| invariant("control response lacks model-visible text"))
 }
 
 fn recorded_call(context: Option<Value>, legacy_input: Value) -> napi::Result<RecordedCall> {
     let value = context.unwrap_or(legacy_input);
-    serde_json::from_value(value).map_err(|_| error("released call receipt lacks call context"))
+    serde_json::from_value(value).map_err(|_| storage("released call receipt lacks call context"))
 }
 
 fn proposed_recorded_call(call: &RecordedCall) -> napi::Result<ProposedCall> {
@@ -2882,7 +3835,7 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// redispatch plan names another tool to run first). The hint says what to do
 /// and who decides; provider safety classifiers refused requests that told the
 /// model to skip the user.
-const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. When the policy requires approval, that call asks the user itself, so do not ask first. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
 
 /// A result for a call this session never released. The code tells the proxy
 /// that nothing ran on the runtime's side: a remedy the gateway never ran
@@ -2908,38 +3861,36 @@ fn cancellation_operation(call_id: &str) -> String {
 }
 
 struct CompletedOperation {
-    #[allow(dead_code)]
-    root: String,
     input: Value,
     context: Option<Value>,
     decision: Value,
 }
 
-fn read_completed_operation(
-    pg: &LeasedPostgres,
-    key: &OperationKey,
-) -> napi::Result<Option<CompletedOperation>> {
+/// The operation receipt's state: absent, claimed but never completed (its
+/// dispatch was interrupted mid-operation), or completed with its decision.
+enum OperationState {
+    Absent,
+    Pending {
+        input: Value,
+        context: Option<Value>,
+    },
+    Complete(CompletedOperation),
+}
+
+fn read_operation_state(pg: &Sql<'_>, key: &OperationKey) -> napi::Result<OperationState> {
     let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
     let organization_id = key.session.organization_id.clone();
+    let cipher = pg.0.cipher().clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
-            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
+            "SELECT input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
             &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
-            return Ok(None);
+            return Ok(OperationState::Absent);
         };
-        let status: String = row.get("status");
-        if status != "complete" {
-            return Ok(None);
-        }
-        let root: String = row.get("root");
-        let input: Value = row.get("input");
-        let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
-            return Ok(None);
-        };
+        let input = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &operation_id, "input"]), row.get("input"))?;
         let (actual_input, context) = if let Some(obj) = input.as_object() {
             if let Some(semantic) = obj.get("semantic") {
                 (semantic.clone(), obj.get("context").cloned())
@@ -2951,21 +3902,37 @@ fn read_completed_operation(
         } else {
             (input, None)
         };
-        Ok(Some(CompletedOperation {
-            root,
+        let status: String = row.get("status");
+        if status != "complete" {
+            return Ok(OperationState::Pending {
+                input: actual_input,
+                context,
+            });
+        }
+        let decision = row.get::<_, Option<Value>>("decision").map(|value| cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &operation_id, "decision"]), value)).transpose()?;
+        let Some(decision) = decision else {
+            return Ok(OperationState::Absent);
+        };
+        Ok(OperationState::Complete(CompletedOperation {
             input: actual_input,
             context,
             decision,
         }))
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
-fn cancelled_call(
-    pg: &LeasedPostgres,
-    input: &Input,
-    call_id: &str,
-) -> napi::Result<Option<Value>> {
+fn read_completed_operation(
+    pg: &Sql<'_>,
+    key: &OperationKey,
+) -> napi::Result<Option<CompletedOperation>> {
+    Ok(match read_operation_state(pg, key)? {
+        OperationState::Complete(completed) => Some(completed),
+        OperationState::Absent | OperationState::Pending { .. } => None,
+    })
+}
+
+fn cancelled_call(pg: &Sql<'_>, input: &Input, call_id: &str) -> napi::Result<Option<Value>> {
     let key = operation_key(
         input,
         session_binding(input),
@@ -2979,7 +3946,7 @@ fn required_arguments(input: &Input) -> napi::Result<&str> {
         .arguments
         .as_ref()
         .map(|args| args.get())
-        .ok_or_else(|| error("missing arguments"))
+        .ok_or_else(|| invalid_input("missing arguments"))
 }
 fn proposed(input: &Input) -> napi::Result<ProposedCall> {
     Ok(ProposedCall {
@@ -2987,7 +3954,7 @@ fn proposed(input: &Input) -> napi::Result<ProposedCall> {
         arguments: input
             .arguments
             .clone()
-            .ok_or_else(|| error("missing arguments"))?,
+            .ok_or_else(|| invalid_input("missing arguments"))?,
         cwd: None,
     })
 }
@@ -2998,7 +3965,7 @@ fn canonical_tool(raw: &str) -> napi::Result<String> {
     (adapter::adapter().identify_tool)(raw)
         .map(|derived| derived.canonical.as_str().to_owned())
         .map_err(|refusal| {
-            error(match refusal {
+            invalid_input(match refusal {
                 appa_runtime_api::ParseRefusal::Unreadable { detail }
                 | appa_runtime_api::ParseRefusal::Malformed { detail } => detail,
             })
@@ -3016,18 +3983,18 @@ fn spelled_tool(canonical: &str) -> String {
 
 fn validate_trajectory(trajectory: &TrajectoryStamp) -> napi::Result<()> {
     if trajectory.v != 1 {
-        return Err(error("invalid trajectory"));
+        return Err(invalid_input("invalid trajectory"));
     }
     if trajectory.session_id.is_empty()
         || trajectory.session_id.len() > 1024
         || trajectory.session_id.chars().any(char::is_control)
     {
-        return Err(error("invalid session identity"));
+        return Err(invalid_input("invalid session identity"));
     }
     if let Some(parent) = &trajectory.parent_id
         && (parent.is_empty() || parent.len() > 1024 || parent.chars().any(char::is_control))
     {
-        return Err(error("invalid parent identity"));
+        return Err(invalid_input("invalid parent identity"));
     }
     Ok(())
 }
@@ -3133,26 +4100,54 @@ fn present(value: Option<String>) -> Option<String> {
 /// The original call's retry text. A missing row or missing fields is an empty
 /// presentation, not a refusal: the runtime still decides whether the offer is
 /// live, and old rows fall back to the canonical tool spelling.
+fn encrypted_receipts(
+    pg: &Sql<'_>,
+    organization_id: &str,
+    session_id: &str,
+) -> napi::Result<Vec<(Value, Value)>> {
+    let (organization_id, session_id) = (organization_id.to_owned(), session_id.to_owned());
+    let cipher = pg.0.cipher().clone();
+    pg.with_client(move |client| {
+        let receipts = sealed::read(
+            client,
+            &cipher,
+            sealed::Receipts::All,
+            "o.organization_id=$1 AND o.session_id=$2",
+            &[&organization_id, &session_id],
+        )?;
+        Ok(receipts
+            .into_iter()
+            .map(|receipt| (receipt.input, receipt.decision))
+            .collect())
+    })
+    .map_err(sql_failure)
+}
+
 fn recorded_call_presentation(
-    pg: &LeasedPostgres,
+    pg: &Sql<'_>,
     organization_id: &str,
     session_id: &str,
     offer_id: &str,
 ) -> napi::Result<CallPresentation> {
+    if pg.0.cipher().is_encrypted() {
+        let receipts = encrypted_receipts(pg, organization_id, session_id)?;
+        return Ok(presentation_in(receipts, offer_id).unwrap_or_default());
+    }
     let (organization_id, session_id, offer_id) = (
         organization_id.to_owned(),
         session_id.to_owned(),
         offer_id.to_owned(),
     );
-    let row = pg
+    let presentation = pg
         .with_client(move |client| {
-            Ok(client
-                .query_opt(
+            let row = client.query_opt(
+                &format!(
                     "SELECT o.input->'context' AS context, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool', o.input->>'tool') AS tool, \
                      COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event \
                      FROM openappa_operations o \
                      WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND NOT {} \
                      AND ( \
                        EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'offers', '[]'::jsonb)) AS offer \
                          WHERE offer->>'offer_id' = $3) \
@@ -3161,26 +4156,65 @@ fn recorded_call_presentation(
                      ) \
                      ORDER BY o.created_at DESC \
                      LIMIT 1",
-                    &[&organization_id, &session_id, &offer_id],
-                )?
-                .map(|row| {
-                    (
-                        row.get::<_, Option<Value>>("context"),
-                        row.get::<_, Option<String>>("tool"),
-                        row.get::<_, Option<String>>("event"),
-                    )
-                }))
+                    sealed::ESCAPED
+                ),
+                &[&organization_id, &session_id, &offer_id],
+            )?;
+            if let Some(row) = row {
+                let context: Option<Value> = row.get("context");
+                return Ok(Some(presentation_from_receipt(
+                    context.as_ref(),
+                    row.get("tool"),
+                    row.get::<_, Option<String>>("event").as_deref(),
+                )));
+            }
+            let opened = sealed::read(
+                client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
+                "o.organization_id=$1 AND o.session_id=$2",
+                &[&organization_id, &session_id],
+            )?;
+            Ok(presentation_in(
+                opened.into_iter().map(|receipt| (receipt.input, receipt.decision)),
+                &offer_id,
+            ))
         })
-        .map_err(error)?;
-    Ok(match row {
-        Some((context, tool, event)) => {
-            presentation_from_receipt(context.as_ref(), tool, event.as_deref())
+        ?;
+    Ok(presentation.unwrap_or_default())
+}
+
+/// The presentation of the call whose receipt offered or reviewed `offer_id`,
+/// among a session's receipts, newest first.
+fn presentation_in(
+    receipts: impl IntoIterator<Item = (Value, Value)>,
+    offer_id: &str,
+) -> Option<CallPresentation> {
+    receipts.into_iter().find_map(|(input, decision)| {
+        let matches = ["offers", "review"].iter().any(|field| {
+            decision[*field].as_array().is_some_and(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| entry["offer_id"].as_str() == Some(offer_id))
+            })
+        });
+        if !matches {
+            return None;
         }
-        None => CallPresentation::default(),
+        let semantic = input.get("semantic").unwrap_or(&input);
+        Some(presentation_from_receipt(
+            input.get("context"),
+            input
+                .get("context")
+                .and_then(|v| v["tool"].as_str())
+                .or_else(|| semantic["tool"].as_str())
+                .map(str::to_owned),
+            semantic["event"].as_str(),
+        ))
     })
 }
 
-fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
+fn routing_owner(pg: &Sql<'_>, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
     let key = SessionKey::new(&input.organization_id, &input.trajectory.session_id);
     let stamped_parent = input.trajectory.parent_id.clone();
     let row = pg
@@ -3192,7 +4226,7 @@ fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option
                 )?
                 .map(|row| (row.get::<_, String>(0), row.get::<_, Option<String>>(1))))
         })
-        .map_err(error)?;
+        ?;
     let Some((root, recorded_parent)) = row else {
         return Ok(None);
     };
@@ -3210,8 +4244,19 @@ fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option
     }))
 }
 
-fn claim_operation(
+/// Claims the operation's receipt under this dispatch's lease. `None` means the
+/// dispatch does the work: the receipt was just claimed, or it was left pending
+/// by a dispatch that stopped and whose lease expired. The store recovers a
+/// receipt only for the identical input of the same scope, so proceeding
+/// re-drives exactly this operation: the runtime answers from its committed
+/// facts where it kept them and runs the operation afresh where it kept
+/// nothing, and the finish completes the receipt with that answer. A receipt
+/// another live request is working on refuses as retryable; a mismatched retry
+/// fails closed.
+#[allow(clippy::too_many_arguments)]
+async fn claim_operation(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     root: &str,
     operation: &str,
@@ -3219,17 +4264,72 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match store
-        .claim_operation(OperationRequest {
-            key: operation_key(input, binding, operation.to_owned()),
-            root: TrajectoryId::new(root),
-            input: request.clone(),
-            context,
-        })
-        .map_err(error)?
-    {
-        OperationClaim::Claimed => Ok(None),
-        OperationClaim::Complete { decision } => Ok(Some(decision)),
+    let key = operation_key(input, binding, operation.to_owned());
+    let request = OperationRequest {
+        key: key.clone(),
+        root: TrajectoryId::new(root),
+        input: request.clone(),
+        context,
+    };
+    let mut held = lease::HeldWait::new();
+    loop {
+        match store.claim_operation(request.clone(), receipts.lease()) {
+            Ok(OperationClaim::Claimed) => {
+                receipts.hold_operation(key, lease::Holding::Created);
+                return Ok(None);
+            }
+            Ok(OperationClaim::Recovered) => {
+                receipts.hold_operation(key, lease::Holding::Recovered);
+                return Ok(None);
+            }
+            Ok(OperationClaim::Complete { decision }) => return Ok(Some(decision)),
+            // Another request works on this operation: its answer is this one's.
+            Ok(OperationClaim::Held) if held.again().await => {}
+            Ok(OperationClaim::Held) => return Err(held_elsewhere()),
+            Err(reason) => return Err(receipt_failure(reason)),
+        }
+    }
+}
+
+/// What claiming a processed result's receipt left this dispatch to do.
+enum ResultClaim {
+    /// This dispatch holds the receipt and processes the result.
+    Work,
+    /// The result was processed before; this is its saved decision.
+    Complete(Value),
+}
+
+/// Claims a processed result's receipt under this dispatch's lease, as
+/// [`claim_operation`] claims an operation's.
+async fn claim_result(
+    store: &LogStore,
+    receipts: &lease::Receipts,
+    key: &ProcessedResultKey,
+    root: &TrajectoryId,
+) -> napi::Result<ResultClaim> {
+    let request = ProcessedResultRequest {
+        key: key.clone(),
+        root: root.clone(),
+    };
+    let mut held = lease::HeldWait::new();
+    loop {
+        match store.claim_processed_result(request.clone(), receipts.lease()) {
+            Ok(ProcessedResultClaim::Claimed) => {
+                receipts.hold_result(key.clone(), lease::Holding::Created);
+                return Ok(ResultClaim::Work);
+            }
+            Ok(ProcessedResultClaim::Recovered) => {
+                receipts.hold_result(key.clone(), lease::Holding::Recovered);
+                return Ok(ResultClaim::Work);
+            }
+            Ok(ProcessedResultClaim::Complete { decision, .. }) => {
+                return Ok(ResultClaim::Complete(decision));
+            }
+            // Another request processes this result: its answer is this one's.
+            Ok(ProcessedResultClaim::Held) if held.again().await => {}
+            Ok(ProcessedResultClaim::Held) => return Err(held_elsewhere()),
+            Err(reason) => return Err(receipt_failure(reason)),
+        }
     }
 }
 
@@ -3237,24 +4337,26 @@ fn claim_operation(
 /// processed result, so a retry of either replays this response.
 fn finish_remedy(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     operation: &str,
     binding: ReceiptBinding,
     result_key: Option<ProcessedResultKey>,
     response: Value,
 ) -> napi::Result<Value> {
-    finish_operation(store, input, operation, &response, binding)?;
+    finish_operation(store, receipts, input, operation, &response, binding)?;
     if let Some(result_key) = result_key {
         let approved = decision_text(&response)?;
         store
-            .complete_processed_result(result_key, approved, response.clone())
-            .map_err(error)?;
+            .complete_processed_result(result_key, approved, response.clone(), receipts.owner())
+            .map_err(receipt_failure)?;
     }
     Ok(response)
 }
 
 fn finish_operation(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     operation: &str,
     decision: &Value,
@@ -3264,8 +4366,9 @@ fn finish_operation(
         .complete_operation(
             operation_key(input, binding, operation.to_owned()),
             decision.clone(),
+            receipts.owner(),
         )
-        .map_err(error)
+        .map_err(receipt_failure)
 }
 
 #[derive(Deserialize)]
@@ -3273,67 +4376,6 @@ fn finish_operation(
 struct YellArguments {
     message: String,
     with_trajectory: bool,
-}
-
-#[cfg(test)]
-mod connection_permit_tests {
-    use super::connection_permit;
-    use std::{sync::Arc, time::Duration};
-    use tokio::sync::Semaphore;
-
-    #[test]
-    fn a_busy_pool_refuses_within_its_wait_and_serves_once_freed() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .start_paused(true)
-            .build()
-            .expect("a test runtime builds");
-        runtime.block_on(async {
-            let connections = Arc::new(Semaphore::new(1));
-            let wait = Duration::from_secs(30);
-            let held = connection_permit(&connections, wait)
-                .await
-                .expect("a free connection is granted");
-            assert!(connection_permit(&connections, wait).await.is_err());
-            drop(held);
-            assert!(connection_permit(&connections, wait).await.is_ok());
-        });
-    }
-}
-
-#[cfg(test)]
-mod root_lock_tests {
-    use super::RootLock;
-    use futures_util::FutureExt;
-
-    // One test function: the registry is process-global, so parallel test
-    // bodies would contend for it and a single `now_or_never` poll could
-    // observe a momentarily held registry instead of the root under test.
-    #[test]
-    fn same_roots_serialize_while_other_roots_overlap() {
-        // An uncontended acquire settles without an executor; a contended one
-        // stays pending, so `now_or_never` observes exclusion directly.
-        let held = RootLock::acquire("held-root".to_owned())
-            .now_or_never()
-            .expect("an uncontended root acquires immediately");
-        assert!(
-            RootLock::acquire("held-root".to_owned())
-                .now_or_never()
-                .is_none(),
-            "a second dispatch for the same root must wait"
-        );
-        let other = RootLock::acquire("other-root".to_owned())
-            .now_or_never()
-            .expect("a different root acquires while another is held");
-        drop(other);
-        drop(held);
-        assert!(
-            RootLock::acquire("held-root".to_owned())
-                .now_or_never()
-                .is_some(),
-            "a released root can be acquired again"
-        );
-    }
 }
 
 #[cfg(test)]
@@ -3493,7 +4535,7 @@ mod typed_tests {
             parent_id: None,
         };
         assert_eq!(
-            super::validate_trajectory(&foreign).unwrap_err().reason,
+            super::rejected_input(super::validate_trajectory(&foreign).unwrap_err()),
             "invalid trajectory"
         );
     }
@@ -3654,7 +4696,7 @@ mod typed_tests {
 
     #[test]
     fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
-        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let ruling = "[appa] Blocked: read_secret cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
         let response = authoritative_unexecuted_response(serde_json::json!({
             "decision": "deny_call",
             "feedback": ruling,
@@ -3754,7 +4796,10 @@ mod typed_tests {
                 });
                 json[field] = Value::String(value);
                 let input = serde_json::from_value(json).unwrap();
-                assert_eq!(super::validate(&input).unwrap_err().reason, reason);
+                assert_eq!(
+                    super::rejected_input(super::validate(&input).unwrap_err()),
+                    reason
+                );
             }
         }
     }
@@ -3828,7 +4873,7 @@ mod remedy_tests {
     // The runtime's re-rendered block after a denial: the operator plan is
     // filtered out, so no Continue section remains.
     const DENIED_BLOCK: &str =
-        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+        "[appa] Blocked: send_mail cannot run yet.\n\nWhy:\n  - requires attention: signoff";
 
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {
@@ -3874,6 +4919,25 @@ mod remedy_tests {
 
     fn text(response: &Value) -> &str {
         response["approved_output"].as_str().unwrap()
+    }
+
+    #[test]
+    fn a_remedy_with_no_answer_reaches_the_model_as_an_error_result() {
+        let feedback = "[appa] the return declaration is refused: the reserved attest-schema \
+                        sanitizer is not registered, or its rank is above this trajectory's; \
+                        the offer stands and may be executed again";
+        let response = render(
+            RemedyOutcome::NoAnswer {
+                feedback: feedback.to_owned(),
+            },
+            &owner(None),
+            None,
+        );
+
+        assert_eq!(text(&response), feedback);
+        assert_eq!(response["result"]["content"][0]["text"], feedback);
+        assert_eq!(response["result"]["isError"], true);
+        assert_eq!(response["output_source"], "runtime");
     }
 
     #[test]
@@ -4044,19 +5108,19 @@ mod runtime_child_tests {
         let mut missing_output = event_input("child_return", json!({}));
         missing_output.output = None;
         assert_eq!(
-            validate(&missing_output).unwrap_err().reason,
+            super::rejected_input(validate(&missing_output).unwrap_err()),
             "missing output"
         );
         let mut missing_parent = event_input("child_return", json!({}));
         missing_parent.parent_id = None;
         assert_eq!(
-            validate(&missing_parent).unwrap_err().reason,
+            super::rejected_input(validate(&missing_parent).unwrap_err()),
             "missing parent_id"
         );
         let mut missing_operation = event_input("child_return", json!({}));
         missing_operation.operation_id = None;
         assert_eq!(
-            validate(&missing_operation).unwrap_err().reason,
+            super::rejected_input(validate(&missing_operation).unwrap_err()),
             "missing operation_id"
         );
         assert!(matches!(
@@ -4403,6 +5467,19 @@ mod runtime_child_tests {
         );
     }
 
+    #[test]
+    fn only_the_exact_open_call_hold_is_marked_busy() {
+        let hold = |reason: &str| json!({ "decision": "block", "reason": reason });
+        assert_eq!(
+            super::mark_busy_hold(hold(super::CHILD_CALL_OPEN_REASON))["busy"],
+            json!(true)
+        );
+        let quoted = format!("denied: {}", super::CHILD_CALL_OPEN_REASON);
+        assert!(super::mark_busy_hold(hold(&quoted)).get("busy").is_none());
+        let ack = json!({ "decision": "ack", "reason": super::CHILD_CALL_OPEN_REASON });
+        assert!(super::mark_busy_hold(ack).get("busy").is_none());
+    }
+
     #[tokio::test]
     async fn a_child_return_does_not_settle_an_open_call() {
         let delegate = super::canonical_tool("delegate").unwrap();
@@ -4433,10 +5510,9 @@ mod runtime_child_tests {
         let HookDecision::Block { reason } = blocked else {
             panic!("an open call must hold the return, got {blocked:?}");
         };
-        assert!(
-            reason.contains("call still open"),
-            "held reason was {reason}"
-        );
+        // The binding marks exactly this hold as busy (`mark_busy_hold`), so
+        // the host keeps a busy runtime's file pending instead of refusing it.
+        assert_eq!(reason, super::CHILD_CALL_OPEN_REASON);
         assert!(runtime.audit(&root).unwrap().iter().all(|entry| {
             entry.trajectory != child.0 || !matches!(entry.event, AuditEvent::ChildReturn { .. })
         }));
@@ -4490,5 +5566,183 @@ mod runtime_child_tests {
             matches!(later, HookDecision::AllowCall { .. }),
             "a later call still runs after the crossing, got {later:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod stored_approved_output_tests {
+    use super::{OutputSource, stored_approved_output, with_approved_output};
+    use serde_json::json;
+
+    fn decision(text: &str) -> serde_json::Value {
+        with_approved_output(
+            &json!({"decision": "ack"}),
+            text.to_owned(),
+            OutputSource::Tool,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_long_text_the_decision_carries_is_stored_once_as_a_reference() {
+        let text = "x".repeat(5000);
+        let stored = stored_approved_output(&text, &decision(&text));
+        assert_eq!(
+            stored,
+            format!("sha256:{}", super::sha256_hex(text.as_bytes()))
+        );
+        assert_eq!(stored, stored_approved_output(&text, &decision(&text)));
+    }
+
+    #[test]
+    fn a_short_text_or_one_the_decision_lacks_stays_in_the_column() {
+        let short = "ok".repeat(100);
+        assert_eq!(stored_approved_output(&short, &decision(&short)), short);
+        let long = "y".repeat(5000);
+        assert_eq!(
+            stored_approved_output(&long, &json!({"decision": "ack"})),
+            long
+        );
+        assert_eq!(
+            stored_approved_output(&long, &decision("another text")),
+            long
+        );
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::{
+        BindingFailure, Failure, RefusalClass, SqlError, failure, is_policy_moved, lease_lost,
+        policy_moved, read_failure, status_read_failure,
+    };
+    use appa_eventlog::postgres::PostgresError;
+    use serde_json::{Value, json};
+    use std::time::Duration;
+
+    fn code(error: &napi::Error) -> Value {
+        serde_json::from_str::<Value>(&error.reason).unwrap()["code"].clone()
+    }
+
+    /// The runtime's class and the binding's own failure share one code, and an
+    /// unclassed refusal is still recognized by its text.
+    #[test]
+    fn a_moved_policy_is_recognized_by_its_code_or_its_text() {
+        for kind in [
+            Failure::Refused(RefusalClass::PolicyMoved),
+            Failure::Binding(BindingFailure::PolicyMoved),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), json!("policy_moved"));
+        }
+        assert!(is_policy_moved(&policy_moved()));
+        assert!(is_policy_moved(&failure(
+            Failure::Refused(RefusalClass::PolicyMoved),
+            "OpenAPPA processing interrupted: any wording"
+        )));
+        assert!(is_policy_moved(&napi::Error::from_reason(
+            "OpenAPPA processing interrupted: deployment org-a moved to policy revision 3 while this event was decided; retry it"
+        )));
+        assert!(!is_policy_moved(&lease_lost()));
+        assert!(!is_policy_moved(&failure(
+            Failure::Refused(RefusalClass::PolicyUnavailable),
+            "OpenAPPA processing interrupted: the policy is unavailable"
+        )));
+    }
+
+    /// A family opened under the earlier policy model reaches the host under its
+    /// own code, and no retry loop mistakes it for a moved policy.
+    #[test]
+    fn a_legacy_family_is_its_own_code_and_never_a_moved_policy() {
+        let kind = Failure::Refused(RefusalClass::LegacyFamily);
+        assert_eq!(serde_json::to_value(kind).unwrap(), json!("legacy_family"));
+        assert!(!is_policy_moved(&failure(
+            kind,
+            "this trajectory family was opened before live policy revisions; open a new one"
+        )));
+    }
+
+    /// A binding failure that names a runtime fault is spelled as the runtime's class.
+    #[test]
+    fn a_shared_fault_has_one_spelling() {
+        for (binding, runtime) in [
+            (BindingFailure::Storage, RefusalClass::Storage),
+            (
+                BindingFailure::EngineInvariant,
+                RefusalClass::EngineInvariant,
+            ),
+        ] {
+            assert_eq!(
+                serde_json::to_value(Failure::Binding(binding)).unwrap(),
+                serde_json::to_value(Failure::Refused(runtime)).unwrap(),
+            );
+        }
+    }
+
+    /// A log the binding reads directly reports the class a dispatch reading it
+    /// would be refused with; only a failed read is storage.
+    #[test]
+    fn a_direct_log_read_reports_its_class() {
+        use appa_eventlog::ReadError;
+        for (read, expected) in [
+            (
+                ReadError::Undecodable {
+                    seq: 7,
+                    detail: "expected value".into(),
+                },
+                "untrusted_log",
+            ),
+            (
+                ReadError::PolicyFileMissing { key: "0a1b".into() },
+                "policy_unavailable",
+            ),
+            (
+                ReadError::LegacyFamily {
+                    root: "root".into(),
+                },
+                "legacy_family",
+            ),
+            (
+                ReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                ReadError::Postgres(PostgresError("PostgreSQL ERROR (SQLSTATE 08006)".into())),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&read_failure(read)), json!(expected));
+        }
+        use appa_runtime::api::StatusReadError;
+        for (read, expected) in [
+            (
+                StatusReadError::Policy("missing".into()),
+                "policy_unavailable",
+            ),
+            (StatusReadError::Replay("diverged".into()), "untrusted_log"),
+            (
+                StatusReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                StatusReadError::Read(ReadError::Postgres(PostgresError(
+                    "PostgreSQL ERROR (SQLSTATE 57P01)".into(),
+                ))),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&status_read_failure(read)), json!(expected));
+        }
+    }
+
+    #[test]
+    fn an_exhausted_pool_is_told_apart_from_a_failed_query() {
+        let exhausted = napi::Error::from(SqlError::Exhausted(Duration::from_secs(30)));
+        assert_eq!(code(&exhausted), json!("pool_exhausted"));
+        let failed = napi::Error::from(SqlError::Postgres(PostgresError("db error".into())));
+        assert_eq!(code(&failed), json!("storage"));
     }
 }

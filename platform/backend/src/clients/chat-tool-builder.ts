@@ -1,23 +1,22 @@
 // Builds the AI SDK Tool wrappers the chat path exposes to the model: MCP
-// gateway tools (with approval gating, lifecycle hooks, browser sync, and MCP
+// gateway tools (with lifecycle hooks, browser sync, and MCP
 // App output enrichment) and agent delegation tools (plain child-agent
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
-  ENCRYPTED_CHAT_REDACTED_MARKER,
   extractMcpExecutedAs,
   extractMcpHumanRuling,
-  extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
+  type ModelSelection,
   OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
   TOOL_ASK_USER_SHORT_NAME,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -33,17 +32,13 @@ import type {
   Tool as McpToolDefinition,
 } from "@modelcontextprotocol/sdk/types.js";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
-import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
   type ArchestraContext,
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
-import {
-  resolveRunToolDispatch,
-  resolveRunToolTarget,
-} from "@/archestra-mcp-server/run-tool-target";
+import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -54,10 +49,6 @@ import type {
 } from "@/clients/tool-call-repeat-tracker";
 import { capChatToolResult } from "@/clients/tool-result-spill";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
-import {
-  legacyTrustedDataActive,
-  sensitiveContextOriginFromBoundary,
-} from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import {
@@ -65,32 +56,30 @@ import {
   readKbChunksFromToolResult,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
-import { AgentTeamModel, ToolModel, TrustedDataPolicyModel } from "@/models";
-import ChatToolExecutionClaimModel from "@/models/chat-tool-execution-claim";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
+import { ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
-import type {
-  Tool as CatalogTool,
-  ChatToolExecutionClaim,
-  UnsafeContextBoundary,
-} from "@/types";
-import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import type { Tool as CatalogTool } from "@/types";
+import { agentOwner } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
-  tokenValue: string;
+  /** Bearer value for the loopback gateway; null when tools are listed in-process */
+  tokenValue: string | null;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
   isUserToken?: boolean;
+  /** Set when the caller acts as a service account */
+  serviceAccountId?: string;
 }
 
 /**
@@ -115,6 +104,7 @@ export interface ChatToolContext {
   openedAppId?: string;
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
+  chatOpsPinnedAgentId?: string;
   sessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
@@ -126,8 +116,6 @@ export interface ChatToolContext {
   teams?: SpanTeamInfo[];
   /** The requesting user's teams (with labels) for OTEL span attributes */
   userTeams?: SpanTeamInfo[];
-  /** Block tool execution when policy is require_approval (A2A/autonomous contexts) */
-  blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
   /**
@@ -154,7 +142,6 @@ export interface ChatToolContext {
    */
   taskBridge?: ChatTaskBridge;
   mcpGwToken: McpGatewayToken;
-  considerContextUntrusted: boolean;
   /**
    * Encrypted chat: span content capture is suppressed and long calls
    * are forced inline (never detached into durable MCP task rows).
@@ -162,7 +149,7 @@ export interface ChatToolContext {
   suppressContentLogging?: boolean;
   /**
    * Present only when the encrypted chat has an escrow record: the
-   * MCP tool-call rows and execution-claim results it produces are encrypted
+   * MCP tool-call rows it produces are encrypted
    * under the conversation key instead of redacted, so break-glass recovery
    * can still read them.
    */
@@ -175,11 +162,14 @@ export interface ChatToolContext {
   repeatTracker: ToolCallRepeatTracker;
   /** Keep rich UI media, but send it to the model only when its row allows it. */
   modelAcceptsImageToolResults: boolean;
+  /** The model and key this run is on, which a fork starts from. Rebound per run. */
+  parentLlm?: ModelSelection;
+  /** A reviewed remedy call pauses the run until someone answers. */
+  openappaReviewPause?: boolean;
 }
 
 /**
- * Wraps an MCP gateway tool as an AI SDK Tool: approval gating (including the
- * run_tool grant-approval proposal), PreToolUse/PostToolUse hooks, the
+ * Wraps an MCP gateway tool as an AI SDK Tool: PreToolUse/PostToolUse hooks, the
  * archestra-vs-external execution branch, and MCP App output enrichment.
  */
 export function buildMcpGatewayTool(params: {
@@ -202,10 +192,19 @@ export function buildMcpGatewayTool(params: {
   return {
     description: mcpTool.description || `Tool: ${mcpTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
-    ...needsApprovalProps({
-      toolName: mcpTool.name,
-      ctx,
-    }),
+    // Pausing for approval moves the A2A task to input-required; the
+    // answerer's ruling then reaches the tool when the run resumes.
+    ...(ctx.openappaReviewPause &&
+    archestraMcpBranding.getToolShortName(mcpTool.name) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+      ? {
+          needsApproval: (input: unknown) =>
+            remedyCallNeedsHumanReview({
+              organizationId: ctx.organizationId,
+              input,
+            }),
+        }
+      : {}),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
       return executeWithToolSpan({
@@ -213,7 +212,6 @@ export function buildMcpGatewayTool(params: {
         args,
         spanToolArgs: toolArguments,
         ctx,
-        toolCallId: options.toolCallId,
         entryLogMessage: "Executing MCP tool from chat (direct)",
         abortLogMessage: "MCP tool execution aborted",
         failureLogMessage: "MCP tool execution failed",
@@ -259,17 +257,6 @@ export function buildMcpGatewayTool(params: {
               },
               "Executing archestra tool with context",
             );
-            const toolExecutionContext =
-              await evaluateToolExecutionContextTrust({
-                messages: options.messages,
-                agentId: ctx.agentId,
-                organizationId: ctx.organizationId,
-                userId: ctx.userId,
-                considerContextUntrusted: ctx.considerContextUntrusted,
-                policyContext: {
-                  externalAgentId: getChatExternalAgentId(),
-                },
-              });
             const archestraResponse = await executeArchestraTool(
               mcpTool.name,
               toolArguments,
@@ -280,6 +267,7 @@ export function buildMcpGatewayTool(params: {
                 openedAppId: ctx.openedAppId,
                 chatOpsBindingId: ctx.chatOpsBindingId,
                 chatOpsThreadId: ctx.chatOpsThreadId,
+                chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
                 userId: ctx.userId,
                 agentId: ctx.agentId,
                 organizationId: ctx.organizationId,
@@ -297,15 +285,11 @@ export function buildMcpGatewayTool(params: {
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
-                contextIsTrusted: toolExecutionContext.contextIsTrusted,
-                sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
-                  toolExecutionContext.unsafeContextBoundary,
-                ),
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
+                parentLlm: ctx.parentLlm,
                 openappaSubagent: ctx.appaSubagent,
-                approvalRequiredPoliciesHandled: true,
                 // Every runner that drives an agent lands here — web
                 // chat, A2A, ChatOps, schedule triggers, incoming email
                 // — and all of them put the result through this file's
@@ -316,10 +300,14 @@ export function buildMcpGatewayTool(params: {
                 // encrypted under the conversation key, not redacted.
                 suppressContentLogging: ctx.suppressContentLogging,
                 encryptedChatAudit: ctx.encryptedChatAudit,
+                // A run_tool dispatch persists its call through mcpClient,
+                // which links the row to this turn's session and call.
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
                   userId: ctx.userId,
+                  llmSessionId: ctx.sessionId,
+                  llmToolCallId: options.toolCallId,
                 }),
               },
             );
@@ -378,26 +366,6 @@ export function buildMcpGatewayTool(params: {
                 userId: ctx.userId,
               }),
             });
-
-            // A run_tool dispatch result is the target tool's output, so its
-            // trusted-data boundary must be evaluated exactly like the direct
-            // path (executeMcpTool) does — otherwise a "sensitive" result
-            // policy never flips the session (and the divider never shows)
-            // under progressive tool loading. Built-in targets auto-trust
-            // inside the evaluation, so only real external data attaches one.
-            const dispatch = resolveRunToolDispatch({
-              toolName: mcpTool.name,
-              args: toolArguments,
-            });
-            if (dispatch.kind === "target") {
-              toolResult = await attachDispatchUnsafeContextBoundary({
-                toolResult,
-                toolCallId: options.toolCallId,
-                targetToolName: dispatch.toolName,
-                agentId: ctx.agentId,
-                considerContextUntrusted: ctx.considerContextUntrusted,
-              });
-            }
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
             toolResult = await executeMcpTool({
@@ -409,13 +377,13 @@ export function buildMcpGatewayTool(params: {
               organizationId: ctx.organizationId,
               isolationKey: ctx.scopeKey,
               mcpGwToken: ctx.mcpGwToken,
-              considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
               taskBridge: (await isGuardrailsV2Active())
                 ? undefined
                 : ctx.taskBridge,
               toolCallId: options.toolCallId,
+              llmSessionId: ctx.sessionId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,
               encryptedChatAudit: ctx.encryptedChatAudit,
@@ -451,8 +419,7 @@ export function buildMcpGatewayTool(params: {
 }
 
 /**
- * Wraps an agent delegation tool as an AI SDK Tool: approval gating and direct
- * child-agent run returning plain text. No lifecycle hooks, browser
+ * Wraps an agent delegation tool as an AI SDK Tool: a direct child-agent run returning plain text. No lifecycle hooks, browser
  * sync, or output enrichment — those are chat/MCP-tool concerns.
  */
 export function buildAgentDelegationTool(params: {
@@ -461,11 +428,6 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
-  const resolvedToolId =
-    typeof agentTool._meta?.toolId === "string"
-      ? agentTool._meta.toolId
-      : undefined;
-
   const archestraContext: ArchestraContext = {
     agent: { id: ctx.agentId, name: ctx.agentName },
     agentId: ctx.agentId,
@@ -475,6 +437,7 @@ export function buildAgentDelegationTool(params: {
     isolationKey: ctx.scopeKey,
     chatOpsBindingId: ctx.chatOpsBindingId,
     chatOpsThreadId: ctx.chatOpsThreadId,
+    chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,
@@ -485,27 +448,17 @@ export function buildAgentDelegationTool(params: {
       organizationId: ctx.organizationId,
       userId: ctx.userId,
     }),
-    // In interactive chat, the AI SDK has already evaluated and presented the
-    // approval gate. Autonomous/headless contexts omit that gate and must let
-    // the execution path fail closed on require_approval policies.
-    approvalRequiredPoliciesHandled: !ctx.blockOnApprovalRequired,
   };
 
   return {
     description: agentTool.description || `Agent tool: ${agentTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
-    ...needsApprovalProps({
-      toolName: agentTool.name,
-      ctx,
-      resolvedToolId,
-    }),
     execute: async (args: Record<string, unknown>, options) =>
       executeWithToolSpan({
         toolName: agentTool.name,
         args,
         spanToolArgs: args,
         ctx,
-        toolCallId: options.toolCallId,
         entryLogMessage: "Executing agent tool from chat",
         abortLogMessage: "Agent tool execution aborted",
         failureLogMessage: "Agent tool execution failed",
@@ -523,26 +476,13 @@ export function buildAgentDelegationTool(params: {
             return repeatNudge;
           }
 
-          const toolExecutionContext = await evaluateToolExecutionContextTrust({
-            messages: options.messages,
-            agentId: ctx.agentId,
-            organizationId: ctx.organizationId,
-            userId: ctx.userId,
-            considerContextUntrusted: ctx.considerContextUntrusted,
-            policyContext: {
-              externalAgentId: getChatExternalAgentId(),
-            },
-          });
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
-            contextIsTrusted: toolExecutionContext.contextIsTrusted,
-            sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
-              toolExecutionContext.unsafeContextBoundary,
-            ),
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
+            parentLlm: ctx.parentLlm,
           });
 
           span.setAttribute(
@@ -562,26 +502,8 @@ export function buildAgentDelegationTool(params: {
               item.type === "text" ? item.text : JSON.stringify(item),
             )
             .join("\n");
-          // Internal subagents retain their established trust behavior. Only
-          // an external A2A descriptor carries an exact policy-bearing tool ID
-          // and therefore introduces this explicit opaque-data boundary.
-          const boundaryResult = resolvedToolId
-            ? await buildUnsafeContextBoundaryResult({
-                resultMeta: response._meta as
-                  | Record<string, unknown>
-                  | undefined,
-                toolCallId: options.toolCallId,
-                toolName: agentTool.name,
-                toolOutput: content,
-                agentId: ctx.agentId,
-                considerContextUntrusted: ctx.considerContextUntrusted,
-                resolvedToolId,
-              })
-            : null;
           return capChatToolResult({
-            result: boundaryResult?.unsafeContextBoundary
-              ? { content, ...boundaryResult }
-              : content,
+            result: content,
             hookFeedback: null,
             context: ctx,
             toolCallId: options.toolCallId,
@@ -886,8 +808,6 @@ export async function buildArchestraToolOutput(params: {
 export const __test = {
   normalizeJsonSchema,
   executeMcpTool,
-  resolveApprovalPolicyTarget,
-  throwIfApprovalRequired,
   // Hook helpers — exposed for focused unit tests
   firePreToolUseHook,
   firePostToolUseHook,
@@ -945,154 +865,17 @@ const STRUCTURED_RESULT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
 ]);
 
-function getChatExternalAgentId(): string {
-  return `${archestraMcpBranding.catalogName} Chat`;
-}
-
 /**
- * The `needsApproval` property for a tool wrapper, or nothing when the caller
- * blocks approval-required execution outright (A2A/autonomous contexts).
- */
-function needsApprovalProps(params: {
-  toolName: string;
-  ctx: ChatToolContext;
-  resolvedToolId?: string;
-}): Pick<Tool, "needsApproval"> | Record<string, never> {
-  const { toolName, ctx, resolvedToolId } = params;
-  if (ctx.blockOnApprovalRequired) {
-    return {};
-  }
-  return {
-    needsApproval: async (args: unknown) => {
-      const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-      return ToolInvocationPolicyModel.checkApprovalRequired(
-        approvalTarget.toolName,
-        approvalTarget.toolInput,
-        {
-          teamIds: [],
-          externalAgentId: getChatExternalAgentId(),
-        },
-        resolvedToolId,
-      );
-    },
-  };
-}
-
-type ClaimGateOutcome =
-  | { kind: "proceed" }
-  | {
-      kind: "claimed";
-      claimKey: { conversationId: string; toolCallId: string };
-    }
-  | { kind: "dedup"; result: string | { content: string } };
-
-/**
- * The atomic at-most-once claim for an approval-gated dispatch (#5132). Only
- * approval-gated calls inside a conversation are claimed; everything else
- * proceeds unclaimed. On a lost claim, builds the loser's replay result from
- * the recorded outcome — fail closed (an "already executing/executed" text)
- * whenever the recorded result cannot be reproduced.
- *
- * A winner short-circuited before dispatch (PreToolUse block, repeat-breaker
- * nudge) still records its text as the completed outcome: replays get the
- * same content success-shaped rather than re-entering the block path. That
- * asymmetry is accepted — replays must stay deterministic, and a fresh retry
- * always arrives under a new toolCallId.
- */
-async function claimApprovalGatedDispatch(params: {
-  toolName: string;
-  args: unknown;
-  ctx: ChatToolContext;
-  toolCallId: string | undefined;
-}): Promise<ClaimGateOutcome> {
-  const { toolName, args, ctx, toolCallId } = params;
-  // blockOnApprovalRequired contexts never execute approval-gated calls at
-  // all (throwIfApprovalRequired above), so there is nothing to claim.
-  if (ctx.blockOnApprovalRequired || !ctx.conversationId || !toolCallId) {
-    return { kind: "proceed" };
-  }
-
-  // An existing claim is honored before any policy check: the call was
-  // approval-gated when it first dispatched, and relaxing or deleting the
-  // policy afterwards must not reopen duplicate dispatch for its replays.
-  const claimKey = { conversationId: ctx.conversationId, toolCallId };
-  const priorClaim = await ChatToolExecutionClaimModel.findByKey(
-    claimKey,
-    ctx.encryptedChatAudit,
-  );
-  if (priorClaim) {
-    return { kind: "dedup", result: buildReplayResult(priorClaim) };
-  }
-
-  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-  const approvalRequired =
-    await ToolInvocationPolicyModel.checkApprovalRequired(
-      approvalTarget.toolName,
-      approvalTarget.toolInput,
-      { teamIds: [], externalAgentId: getChatExternalAgentId() },
-    );
-  if (!approvalRequired) {
-    return { kind: "proceed" };
-  }
-
-  const outcome = await ChatToolExecutionClaimModel.claim(
-    { ...claimKey, toolName },
-    ctx.encryptedChatAudit,
-  );
-  if (outcome.claimed) {
-    return { kind: "claimed", claimKey };
-  }
-  return { kind: "dedup", result: buildReplayResult(outcome.existing) };
-}
-
-/** The loser's replay result for a lost claim — fail closed when the recorded
- * result cannot be reproduced. */
-function buildReplayResult(
-  existing: ChatToolExecutionClaim.Select | null,
-): string | { content: string } {
-  if (existing?.state === "completed" && existing.result) {
-    const content = existing.result.truncated
-      ? `${existing.result.content}\n[Result truncated for replay.]`
-      : existing.result.content;
-    return existing.result.resultKind === "text" ? content : { content };
-  }
-  if (existing?.state === "failed") {
-    const failure = existing.result?.content ?? "unknown error";
-    return `This tool call was already dispatched earlier and failed (${failure}). It was NOT re-executed; retry with a new tool call if appropriate.`;
-  }
-  // Still `executing` (or the claim row vanished): the external write may be
-  // in flight or already committed — never dispatch again.
-  return "This tool call was already dispatched (it may still be executing or have completed). It was NOT re-executed to avoid a duplicate external write. Do not retry this exact call.";
-}
-
-/** Best-effort outcome write: a failure here must never fail the tool call. */
-async function recordClaimOutcome(
-  params: Parameters<typeof ChatToolExecutionClaimModel.recordOutcome>[0],
-  encryptedChatAudit: EncryptedChatAuditContext | null | undefined,
-): Promise<void> {
-  try {
-    await ChatToolExecutionClaimModel.recordOutcome(params, encryptedChatAudit);
-  } catch (error) {
-    logger.warn(
-      { error, toolCallId: params.toolCallId },
-      "Failed to record tool execution claim outcome; replays of this call will fail closed",
-    );
-  }
-}
-
-/**
- * The execute skeleton shared by both tool kinds: the autonomous approval
- * block, the entry log, the MCP span, the abort check, and the catch that
- * reports an error metric and logs abort-vs-failure before rethrowing. The
- * kind-specific body (including its own success metrics and span attributes)
- * runs as `run`.
+ * The execute skeleton shared by both tool kinds: the entry log, the MCP span,
+ * the abort check, and the catch that reports an error metric and logs
+ * abort-vs-failure before rethrowing. The kind-specific body (including its
+ * own success metrics and span attributes) runs as `run`.
  */
 async function executeWithToolSpan<R>(params: {
   toolName: string;
   args: unknown;
   spanToolArgs: Record<string, unknown> | undefined;
   ctx: ChatToolContext;
-  toolCallId: string | undefined;
   entryLogMessage: string;
   abortLogMessage: string;
   failureLogMessage: string;
@@ -1106,35 +889,11 @@ async function executeWithToolSpan<R>(params: {
     args,
     spanToolArgs,
     ctx,
-    toolCallId,
     entryLogMessage,
     abortLogMessage,
     failureLogMessage,
     run,
   } = params;
-
-  if (ctx.blockOnApprovalRequired) {
-    await throwIfApprovalRequired(toolName, args);
-  }
-
-  // At-most-once dispatch for approval-gated calls (#5132): the client-driven
-  // approval flow can replay an approved call (stale tab, re-approve of a
-  // resolved turn) with the same toolCallId, so dispatch is gated on an atomic
-  // per-(conversation, toolCallId) claim. Losers answer from the claim and
-  // never reach `run`.
-  const claimGate = await claimApprovalGatedDispatch({
-    toolName,
-    args,
-    ctx,
-    toolCallId,
-  });
-  if (claimGate.kind === "dedup") {
-    logger.info(
-      { agentId: ctx.agentId, userId: ctx.userId, toolName, toolCallId },
-      "Duplicate approval-gated tool call deduplicated, not re-dispatching",
-    );
-    return claimGate.result as R;
-  }
 
   logger.info(
     {
@@ -1151,18 +910,6 @@ async function executeWithToolSpan<R>(params: {
   const { serverName } = parseFullToolName(toolName);
   const startTime = Date.now();
 
-  // EncryptedChat: the recorded outcome (used to answer replays) goes in encrypted
-  // under the conversation key, so a replay still reproduces the real result.
-  // Without an escrow record there is no key that could ever open it, so the
-  // marker is stored instead and replays answer with it — the accepted cost of
-  // never persisting unrecoverable content.
-  const claimResultForStorage = (result: string | { content: string }) =>
-    ctx.suppressContentLogging && !ctx.encryptedChatAudit
-      ? ChatToolExecutionClaimModel.toStoredResult(
-          JSON.stringify(ENCRYPTED_CHAT_REDACTED_MARKER),
-        )
-      : ChatToolExecutionClaimModel.toStoredResult(result);
-
   return startActiveMcpSpan({
     toolName,
     mcpServerName: serverName ?? "unknown",
@@ -1176,37 +923,9 @@ async function executeWithToolSpan<R>(params: {
     callback: async (span) => {
       try {
         throwIfAborted(ctx.abortSignal);
-        const result = await run({ span, startTime });
-        if (claimGate.kind === "claimed") {
-          await recordClaimOutcome(
-            {
-              ...claimGate.claimKey,
-              state: "completed",
-              result: claimResultForStorage(
-                result as string | { content: string },
-              ),
-            },
-            ctx.encryptedChatAudit,
-          );
-        }
-        return result;
+        return await run({ span, startTime });
       } catch (error) {
         const aborted = ctx.abortSignal?.aborted || isAbortLikeError(error);
-        // An abort after dispatch is an ambiguous external write — the claim
-        // stays `executing` so replays keep failing closed. Only a definite
-        // failure is recorded (replays then report it without re-running).
-        if (claimGate.kind === "claimed" && !aborted) {
-          await recordClaimOutcome(
-            {
-              ...claimGate.claimKey,
-              state: "failed",
-              result: claimResultForStorage(
-                error instanceof Error ? error.message : String(error),
-              ),
-            },
-            ctx.encryptedChatAudit,
-          );
-        }
         // A stopped run is a cancellation, not a tool failure — don't count it.
         if (!aborted) {
           reportToolMetrics({
@@ -1262,15 +981,22 @@ interface ToolExecutionContext {
   isolationKey?: string;
   mcpGwToken: Pick<
     McpGatewayToken,
-    "tokenId" | "teamId" | "isOrganizationToken"
+    "tokenId" | "teamId" | "isOrganizationToken" | "serviceAccountId"
   > | null;
-  considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
   /** Detaches this call into a cancellable task if it runs long (chat only). */
   taskBridge?: ChatTaskBridge;
-  /** The model's id for this call, linking a task card to the call it backs. */
+  /**
+   * The model's id for this call, linking a task card to the call it backs
+   * and the persisted tool-call row to the model's call.
+   */
   toolCallId?: string;
+  /**
+   * The LLM session this run's model calls are filed under (the session id
+   * the run hands the LLM proxy), recorded on the persisted tool-call row.
+   */
+  llmSessionId?: string;
   /**
    * Set when the tool's gateway-listed definition carries a `ui://` resource,
    * i.e. it may be advertised top-level while unassigned. Gates the dynamic
@@ -1303,7 +1029,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   _meta?: Record<string, unknown>;
   structuredContent?: Record<string, unknown>;
   rawContent?: ContentBlock[];
-  unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
   const {
     toolName,
@@ -1318,6 +1043,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     elicitation,
     taskBridge,
     toolCallId,
+    llmSessionId,
     isUiProvidingTool,
     suppressContentLogging,
     encryptedChatAudit,
@@ -1392,8 +1118,13 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         tokenId: mcpGwToken.tokenId,
         teamId: mcpGwToken.teamId,
         isOrganizationToken: mcpGwToken.isOrganizationToken,
+        serviceAccountId: mcpGwToken.serviceAccountId,
         organizationId,
         userId,
+        // Exact links to the LLM turn: the run's own session id and the
+        // model's id for this call (the row's tool_call.id stays our own).
+        ...(llmSessionId && { llmSessionId }),
+        ...(toolCallId && { llmToolCallId: toolCallId }),
       }
     : undefined;
 
@@ -1486,14 +1217,9 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       .join("\n");
     return {
       content: extractedError || result.error || "Tool execution failed",
-      ...(await buildUnsafeContextBoundaryResult({
-        resultMeta: result._meta,
-        toolCallId: toolCall.id,
-        toolName,
-        toolOutput: extractedError || result.error || "Tool execution failed",
-        agentId,
-        considerContextUntrusted: ctx.considerContextUntrusted,
-      })),
+      ...(result._meta && Object.keys(result._meta).length > 0
+        ? { _meta: result._meta }
+        : {}),
       structuredContent: result.structuredContent,
       rawContent: Array.isArray(result.content)
         ? (result.content as ContentBlock[])
@@ -1653,14 +1379,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
 
   return {
     content: textContent,
-    ...(await buildUnsafeContextBoundaryResult({
-      resultMeta: Object.keys(mergedMeta).length > 0 ? mergedMeta : undefined,
-      toolCallId: toolCall.id,
-      toolName,
-      toolOutput: result.structuredContent ?? textContent,
-      agentId,
-      considerContextUntrusted: ctx.considerContextUntrusted,
-    })),
+    ...(Object.keys(mergedMeta).length > 0 ? { _meta: mergedMeta } : {}),
     structuredContent: result.structuredContent,
     rawContent: mcpContent,
   };
@@ -1742,163 +1461,20 @@ function toolProvidesUiResource(tool: CatalogTool): boolean {
   return metaProvidesUiResource(meta);
 }
 
-/**
- * Evaluate and attach the unsafe-context boundary for a `run_tool` dispatch
- * result, against the dispatched *target* tool. Mirrors what the direct path
- * (executeMcpTool) does for ordinary tool calls: the boundary lands both
- * top-level on the result (the chat stream/persisted part the divider reads)
- * and inside `_meta`. A result that stays trusted is returned unchanged.
- */
-async function attachDispatchUnsafeContextBoundary(params: {
-  toolResult: string | { content: string; [key: string]: unknown };
-  toolCallId: string;
-  targetToolName: string;
-  agentId: string;
-  considerContextUntrusted: boolean;
-}): Promise<string | { content: string; [key: string]: unknown }> {
-  const result =
-    typeof params.toolResult === "string"
-      ? { content: params.toolResult }
-      : params.toolResult;
-
-  const boundaryResult = await buildUnsafeContextBoundaryResult({
-    resultMeta: result._meta as Record<string, unknown> | undefined,
-    toolCallId: params.toolCallId,
-    toolName: params.targetToolName,
-    isRunToolDispatchTarget: true,
-    toolOutput:
-      (result.structuredContent as Record<string, unknown> | undefined) ??
-      result.content,
-    agentId: params.agentId,
-    considerContextUntrusted: params.considerContextUntrusted,
-  });
-
-  if (!boundaryResult.unsafeContextBoundary) {
-    return params.toolResult;
-  }
-  return { ...result, ...boundaryResult };
-}
-
-/**
- * Attaches the boundary a chat tool result carries into the transcript, which
- * is what draws the sensitive-context divider.
- *
- * @public — exported for testability
- */
-export async function buildUnsafeContextBoundaryResult(params: {
-  resultMeta?: Record<string, unknown>;
-  toolCallId: string;
-  toolName: string;
-  /** True when toolName is a run_tool dispatch target (see evaluateBulk). */
-  isRunToolDispatchTarget?: boolean;
-  toolOutput: unknown;
-  agentId: string;
-  considerContextUntrusted: boolean;
-  resolvedToolId?: string;
-}): Promise<{
-  _meta?: Record<string, unknown>;
-  unsafeContextBoundary?: UnsafeContextBoundary;
-}> {
-  // A platform dispatch error (tool_state, e.g. unknown_tool) never reached an
-  // upstream tool, so its result is platform-authored text with no external
-  // data — never mark the context unsafe for it. Mirrors the trusted-data bulk
-  // re-evaluation, which exempts the same envelopes; without both, a benign
-  // unresolved-tool error poisons the session and blocks the next legit call.
-  if (
-    extractMcpToolError({
-      _meta: params.resultMeta,
-      content: params.toolOutput,
-    })?.type === "tool_state"
-  ) {
-    return params.resultMeta && Object.keys(params.resultMeta).length > 0
-      ? { _meta: params.resultMeta }
-      : {};
-  }
-
-  const unsafeContextBoundary =
-    await evaluateUnsafeContextBoundaryForToolResult(params);
-  const mergedMeta = unsafeContextBoundary
-    ? {
-        ...params.resultMeta,
-        unsafeContextBoundary,
-      }
-    : params.resultMeta;
-
-  return {
-    ...(mergedMeta && Object.keys(mergedMeta).length > 0
-      ? { _meta: mergedMeta }
-      : {}),
-    ...(unsafeContextBoundary ? { unsafeContextBoundary } : {}),
-  };
-}
-
-/**
- * Chat evaluates the pre-OpenAPPA result policies here rather than through
- * `evaluateIfContextIsTrusted`, so it needs the same stand-down check: without
- * it this path keeps marking chat tool results untrusted, and the chat keeps
- * drawing a sensitive-context divider, after the guardrail is supposed to be
- * off. See `legacyTrustedDataActive`.
- */
-async function evaluateUnsafeContextBoundaryForToolResult(params: {
-  toolCallId: string;
-  toolName: string;
-  isRunToolDispatchTarget?: boolean;
-  toolOutput: unknown;
-  agentId: string;
-  considerContextUntrusted: boolean;
-  resolvedToolId?: string;
-}): Promise<UnsafeContextBoundary | undefined> {
-  if (!legacyTrustedDataActive() || params.considerContextUntrusted) {
-    return undefined;
-  }
-
-  const teamIds = await AgentTeamModel.getTeamsForAgent(params.agentId);
-  const evaluation = await TrustedDataPolicyModel.evaluateBulk(
-    params.agentId,
-    [
-      {
-        toolName: params.toolName,
-        toolOutput: params.toolOutput,
-        isRunToolDispatchTarget: params.isRunToolDispatchTarget,
-      },
-    ],
-    {
-      teamIds,
-      externalAgentId: getChatExternalAgentId(),
-    },
-    params.resolvedToolId
-      ? new Map([[params.toolName, params.resolvedToolId]])
-      : undefined,
-  );
-
-  const toolResultEvaluation = evaluation.get("0");
-  const reason = !toolResultEvaluation
-    ? UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted
-    : toolResultEvaluation.isBlocked
-      ? UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultBlocked
-      : toolResultEvaluation.isTrusted
-        ? undefined
-        : UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted;
-  if (!reason) {
-    return undefined;
-  }
-
-  return {
-    kind: "tool_result",
-    reason,
-    toolCallId: params.toolCallId,
-    toolName: params.toolName,
-  };
-}
-
 function buildTokenAuthContext({
   mcpGwToken,
   organizationId,
   userId,
+  llmSessionId,
+  llmToolCallId,
 }: {
   mcpGwToken: McpGatewayToken | null;
   organizationId: string;
   userId: string;
+  /** Links the tool calls this context executes to the run's LLM session. */
+  llmSessionId?: string;
+  /** The model's id for the tool call this context executes. */
+  llmToolCallId?: string;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1911,6 +1487,9 @@ function buildTokenAuthContext({
     organizationId,
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
+    serviceAccountId: mcpGwToken.serviceAccountId,
+    ...(llmSessionId && { llmSessionId }),
+    ...(llmToolCallId && { llmToolCallId }),
   };
 }
 
@@ -1934,32 +1513,6 @@ function isAbortLikeError(error: unknown): boolean {
   }
 
   return error.message.toLowerCase().includes("abort");
-}
-
-async function throwIfApprovalRequired(
-  toolName: string,
-  args: unknown,
-): Promise<void> {
-  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-  const requiresApproval =
-    await ToolInvocationPolicyModel.checkApprovalRequired(
-      approvalTarget.toolName,
-      approvalTarget.toolInput,
-      {
-        teamIds: [],
-        externalAgentId: getChatExternalAgentId(),
-      },
-    );
-  if (requiresApproval) {
-    throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  }
-}
-
-function resolveApprovalPolicyTarget(
-  toolName: string,
-  args: unknown,
-): { toolName: string; toolInput: Record<string, unknown> } {
-  return resolveRunToolTarget({ toolName, args });
 }
 
 function reportToolMetrics(params: {

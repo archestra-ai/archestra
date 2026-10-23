@@ -1,6 +1,7 @@
 "use client";
 
 import type { ConnectorType } from "@archestra/shared";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   EmbeddingModelImageSupportNotice,
   embeddingModelSupportsImages,
@@ -29,9 +30,16 @@ export function ConnectorEmbeddingModelNotice({
 function CurrentEmbeddingModelNotice() {
   const { data: organization } = useOrganization();
   const { data: session } = useSession();
-  const { data: models } = useModelsWithApiKeys({ toastOnError: false });
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const embeddingApiKeyId = organization?.embeddingChatApiKeyId;
   const embeddingModelId = organization?.embeddingModel;
+  // Only the embedding key's models: the notice needs one of them.
+  const { data: models } = useModelsWithApiKeys({
+    toastOnError: false,
+    enabled: !!embeddingApiKeyId,
+    apiKeyIds: embeddingApiKeyId ? [embeddingApiKeyId] : undefined,
+    includeAssignments: false,
+  });
 
   const dismissalScope =
     organization?.id && session?.user.id
@@ -55,6 +63,7 @@ function CurrentEmbeddingModelNotice() {
       provider={embeddingModel.provider}
       dismissalScope={dismissalScope}
       supportsImages={embeddingModelSupportsImages(embeddingModel)}
+      showSettingsLink={canSeeSettings}
     />
   );
 }

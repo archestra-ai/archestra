@@ -473,12 +473,24 @@ class OpenAppaPolicyTestsModel {
               sql`${schema.tasksTable.payload}->>'key' = ${automaticKey}`,
             ),
           );
-      const expired = await tx
-        .select({ id: runs.id })
+      const [suite] = await tx
+        .select({ files: suites.files })
+        .from(suites)
+        .where(eq(suites.organizationId, organizationId));
+      const history = await tx
+        .select({
+          id: runs.id,
+          paths: sql<
+            string[]
+          >`coalesce(array(select jsonb_array_elements(${runs.result}->'files')->>'path'), '{}')`,
+        })
         .from(runs)
         .where(eq(runs.organizationId, organizationId))
-        .orderBy(desc(runs.createdAt), desc(runs.id))
-        .offset(20);
+        .orderBy(desc(runs.createdAt), desc(runs.id));
+      const expired = expiredRuns(
+        history,
+        (suite?.files ?? []).map((file) => file.path),
+      );
       if (expired.length)
         await tx.delete(runs).where(
           and(
@@ -498,7 +510,25 @@ class OpenAppaPolicyTestsModel {
       .from(runs)
       .where(eq(runs.organizationId, organizationId))
       .orderBy(desc(runs.createdAt), desc(runs.id))
-      .limit(20);
+      .limit(RECENT_RUNS + MAX_SAVED_FILES);
   }
+}
+
+const RECENT_RUNS = 20;
+const MAX_SAVED_FILES = 32;
+
+/**
+ * Runs past the newest 20, except the newest run holding each saved file's
+ * result: a file's last result outlives later runs of other files.
+ */
+function expiredRuns(
+  newestFirst: { id: string; paths: string[] }[],
+  savedPaths: string[],
+) {
+  const unresolved = new Set(savedPaths);
+  return newestFirst.filter((run, index) => {
+    const holdsLatest = run.paths.filter((path) => unresolved.delete(path));
+    return index >= RECENT_RUNS && !holdsLatest.length;
+  });
 }
 export default OpenAppaPolicyTestsModel;

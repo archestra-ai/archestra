@@ -34,11 +34,12 @@ max_body_bytes = 65536
 
 ## Tool contracts
 
-Each `[[policy.tool]]` entry is a tool contract. It answers three questions:
+Each `[[policy.tool]]` entry is a tool contract. It answers these questions:
 
 | Field | What to write | What OpenAPPA does |
 |---|---|---|
 | `delta` | Restrictions carried by the tool's result. | Applies those restrictions when the agent receives the result. |
+| `forwards` | Restrictions carried by content the tool sends beyond its arguments. | Adds them to the label that `requires` checks. |
 | `requires` | Conditions the call must satisfy. | Checks them before allowing the call. |
 | `effects` | Side effects of a successful call. | Records them in the trajectory's history. |
 
@@ -65,15 +66,26 @@ effects = ["egress"]
 | `parameters` | JSON Schema for the tool arguments. Some input mappings require it. |
 | `tags` | Names used to select applicable authorities and sanitizers. See [Tags](#tags). |
 | `delta` | Can restrict the audience or lower trust. It cannot make the trajectory less restricted. |
+| `forwards` | Same shape as `delta`, with literal entries only: no `$<argument_name>` placeholders. |
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
 
-An omitted `delta` adds no restriction. An omitted `requires` adds no requirement.
+An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
-Only one source of contract rules is allowed: static `delta`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
+Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks both `delta` and `requires` before allowing the tool call.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+
+Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
+
+```toml
+[[policy.tool]]
+name = "mail_report"
+parameters = { type = "object", properties = { to = { type = "string" } }, required = ["to"] }
+forwards = { audience = ["internal"] }
+requires = { audience = { contains = ["$to"] } }
+```
 
 ### Tool names
 
@@ -100,7 +112,7 @@ The agent keeps using its host's tool names. A plugin implements the host lifecy
 | kagent | The entrypoint gates | `host/kagent-gate/code_execution`, `host/kagent-gate/memory_persist` |
 | kagent | The remedy tool | `appa/execute_remedy_plan` |
 
-Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory or changing its opening policy.
+Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory.
 
 A host that embeds the runtime brings its own tool identification. The adapter identifies every call's canonical id. The runtime spells a tool back through the same adapter. See [Add to your agent](/add-to-agent#how-the-hooks-reach-appa).
 
@@ -113,9 +125,41 @@ server = "demo-tools"
 delta = { trust = "suspicious" }
 ```
 
-This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[server_aliases]` maps a policy's server name to a list of configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
+This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps a policy's namespace to a list of identities the deployment reports. `aliases.mcp` maps a server name to configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. `aliases.host` maps a battery's host namespace to the host that serves the same tools, such as `claude-code = ["archestra"]`; every `host/claude-code/...` rule then names `host/archestra/...`. Aliases resolve after composition, so a root rule still matches before a battery rule for the same tool. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
 
-kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory retains its opening policy and accepted identities.
+#### Canonical tools
+
+Different harnesses spell one capability differently. Claude Code runs a shell command as `Bash` with a `command` argument. Codex runs it as `exec_command` with a `cmd` argument. A rule can name the canonical tool `tool/<namespace>/<tool>` once, and `aliases.tool` binds that canonical tool to each client tool:
+
+```toml
+[aliases.tool.coding]
+shell = [
+  { name = "host/claude-code/Bash", args = { command = "command" }, confined = true },
+  { name = "host/codex/exec_command", args = { command = "cmd" } },
+]
+
+[[policy.tool]]
+name = "tool/coding/shell(command:*.env*)"
+delta = { audience = ["self"] }
+```
+
+Composition replaces each `tool/...` rule with one copy per client tool, at the position of the original rule. Each copy names the client tool, so the example gives `host/claude-code/Bash(command:*.env*)` and `host/codex/exec_command(cmd:*.env*)`. `args` maps each canonical argument to the client's name for it. The copy renames every argument that the rule reads: in its selector, in a `$argument` recipient, in an `@provider:.../$argument` placeholder, and in `parameters`. The runtime never rewrites a call. It evaluates the tool and the arguments as the client sent them, so call digests and annotation evidence bind the exact call.
+
+`aliases.mcp` and `aliases.host` then resolve the copies like any other rule. Under `aliases.host = { claude-code = ["archestra"] }`, the first copy names `host/archestra/Bash(command:*.env*)`.
+
+A battery MAY declare `aliases.tool`, and a target MUST be in a namespace that the battery covers. Only the root declares `aliases.mcp` and `aliases.host`. The loader refuses the configuration when:
+
+- a rule reads an argument that one of its targets does not map;
+- one target maps two canonical arguments to one argument;
+- two maps bind the same client tool, after `aliases.mcp` and `aliases.host` resolve it;
+- a map binds a canonical tool to no client tool;
+- a map names a canonical namespace that no rule names, for example a battery whose map names a battery that is not included.
+
+A `tool/...` rule that no map binds is inactive. `confined_results` does not take canonical names. A target that sets `confined = true` adds its client tool to `confined_results`.
+
+An annotator, or a context provider, receives the native call. The `audiences` placeholders and `inputs` of an `[[policy.annotator]]` name native arguments, and a map does not rename them. A code annotator that reads an argument by its canonical name does not find it in a call from a client that uses another name. Its result for that call is what its own code does with a missing argument. A model-backed annotator reads the whole call, so the argument name does not change its input.
+
+kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory keeps the tool identities it accepted, and decides under its `deployment`'s current policy.
 
 Native names also work in `confined_results`, `assumed_tools`, and `provider_run_tools`. Coverage reports distinguish a rule spanning servers from an observed concrete tool. Overlapping declarations with incompatible provider-run execution settings are rejected.
 
@@ -170,6 +214,8 @@ Use `*` to match any sequence of characters, including an empty sequence:
 | `report.txt` | `report.txt` | `old-report.txt` |
 | `/docs/*` | `/docs/guide.md`, `/docs/setup/install.md` | `/private/guide.md` |
 | `*.md` | `guide.md`, `/docs/guide.md` | `guide.txt` |
+
+`*` also matches `/`, `?` and `#`. Do not put it inside a URL host: `https://*.example.com/*` also matches `https://attacker.test/?x=.example.com/`. End each host with `/` and list each subdomain, as in `https://docs.example.com/*`. OpenAPPA logs a warning at load for a pattern with `*` inside a URL host.
 
 #### Match special characters literally
 
@@ -243,10 +289,10 @@ Use `delta.audience` to restrict who can receive a tool's result. Use `requires.
 | Field | What OpenAPPA does |
 |---|---|
 | `delta.audience` | Restricts the result to the specified readers. |
-| `requires.audience.contains` | Checks that the current audience includes all specified readers. |
-| `requires.audience.within` | Checks that every reader in the current audience belongs to the specified audience. |
+| `forwards.audience` | Restricts the content the tool sends beyond its arguments to the specified readers. |
+| `requires.audience.contains` | Checks that the audience of what the call sends includes all specified readers. |
 
-In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing. The `process_internal_data` call requires the trajectory's audience to be within `internal`.
+In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing.
 
 ```toml
 [[policy.tool]]
@@ -256,10 +302,6 @@ delta = { audience = ["internal"] }
 [[policy.tool]]
 name = "publish_update"
 requires = { audience = { contains = ["public"] } }
-
-[[policy.tool]]
-name = "process_internal_data"
-requires = { audience = { within = ["internal"] } }
 ```
 
 Multiple entries combine readers from all entries. For example:
@@ -268,9 +310,8 @@ Multiple entries combine readers from all entries. For example:
 |---|---|
 | `delta = { audience = ["@finance", "@support"] }` | The result is for readers who belong to either group. |
 | `requires = { audience = { contains = ["@finance", "@support"] } }` | The current audience must include every member of both groups. |
-| `requires = { audience = { within = ["@finance", "@support"] } }` | Every current reader must belong to at least one of the two groups. |
 
-`within` checks the trajectory's audience, not the recipient of one call. Only `contains` and `within` are allowed under `requires.audience`. Other keys cause a load error.
+`contains` is the only requirement under `requires.audience`.
 
 Each audience entry can be one of the following:
 
@@ -323,7 +364,7 @@ url = "https://audience.corp/slack"
 selectors = [{ template = "viewer", feeds = "self" }, { template = "channel/<id>" }]
 ```
 
-A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](#permits-and-hint). It MUST NOT appear under `within`, beside other entries in one list, or in an annotator's answer.
+A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](#permits-and-hint). It MUST NOT appear beside other entries in one list or in an annotator's answer.
 
 Each `$<argument_name>` becomes a required top-level argument of the tool, as under `contains`, except that a selector placeholder also accepts an argument declared as an array of strings; see [Read an audience from a tool argument](#read-an-audience-from-a-tool-argument). The spelling, with each `$<argument_name>` read as a variable segment, MUST match one template the provider declares under `selectors`; see [Declare selector templates](#declare-selector-templates). A `$<argument_name>` segment matches only a `<variable>` segment of the template.
 
@@ -343,7 +384,7 @@ Under `[policy.audience]`, `self` and `internal` list the selectors that supply 
 
 A host that serves many people can name the person each session acts for. It passes that person's email address as the session's principal when the session starts. In that session, `self` is exactly that address. OpenAPPA does not ask the `self` selectors, and `internal` includes the principal beside its own sources. Children and root forks of the session act for the same principal. A session without a principal uses `[policy.audience] self` as usual.
 
-A host names the principal in process, through the embedded runtime API; the HTTP hook wire does not carry one. OpenAPPA takes the principal on the host's word; it does not authenticate it. Only a host that authenticated the person should name one, and the principal must be the address the membership services report for that person. A multi-user host usually leaves `[policy.audience] self` empty, so a session that names no principal cannot establish `self` and is denied as described below. A policy that names `self` in its boundary or starting label still needs a `self` source to load, because it is checked before any session names a principal.
+A host names the principal in process, through the embedded runtime API, or on the HTTP hook wire as the `principal` field of `session_start`. The wire carries one only under kagent, and only when the runtime sets `APPA_SESSION_PRINCIPAL=wire`; the default `none` refuses a `session_start` that carries one. The kagent plugins send the caller's `x-user-id` header. `/hook` does not authenticate its caller, so set `wire` only when kagent authenticates its users and no other client can reach `/hook`. OpenAPPA takes the principal on the host's word; it does not authenticate it. Only a host that authenticated the person should name one, and the principal must be the address the membership services report for that person. A multi-user host usually leaves `[policy.audience] self` empty, so a session that names no principal cannot establish `self` and is denied as described below. A policy that names `self` in its boundary or starting label still needs a `self` source to load, because it is checked before any session names a principal.
 
 A policy can omit `self` or `internal`. A check that needs the members of an omitted level — for example, `contains = ["internal"]` after a `delta` narrowed the audience to `self` — cannot be established. OpenAPPA denies that call and names the missing key; proposing the call again does not change the answer.
 
@@ -515,7 +556,8 @@ Use these fields to declare trust restrictions and requirements:
 | Field | Meaning | Example |
 |---|---|---|
 | `delta.trust` | Declares the result's trust rank. Reading it can lower the trajectory's trust. | `delta = { trust = "suspicious" }` |
-| `requires.trust` | Sets the minimum trust rank needed to allow the call. | `requires = { trust = "trusted" }` |
+| `forwards.trust` | Declares the trust rank of content the tool sends beyond its arguments. | `forwards = { trust = "suspicious" }` |
+| `requires.trust` | Sets the minimum trust rank of what the call sends. | `requires = { trust = "trusted" }` |
 
 Both fields must use a name from the policy's trust chain: the ordered list of ranks from least trusted to most trusted.
 
@@ -617,11 +659,11 @@ A deployment with one reviewer can permit every mark at once. `permits = { atten
 
 ## Annotators
 
-An annotator classifies a tool call. It can determine the call's output restrictions (`delta`), requirements (`requires`), and effects. The `jev` builtin determines audience and trust only: no effects, history, or attention marks. OpenAPPA checks the resulting contract before allowing the call.
+An annotator classifies a tool call. It can determine the call's output restrictions (`delta`), the restrictions of content it sends (`forwards`), requirements (`requires`), and effects. The `jev` builtin determines audience and trust only: no effects, history, or attention marks. OpenAPPA checks the resulting contract before allowing the call.
 
 Use an annotator when a script or service must determine the rules for a call. For example, a script can classify files by directory: files in `/srv/public-docs` can be shared publicly, while files in `/srv/customer-records` are restricted to internal users.
 
-A tool selects one annotator with `annotator = "<name>"`. The annotator supplies `delta`, `requires` (including attention marks), and emitted effects. A `jev` annotator supplies audience and trust only, so its effects, `requires.history`, and `requires.attention` are always empty. Do not also declare these fields on that tool.
+A tool selects one annotator with `annotator = "<name>"`. The annotator supplies `delta`, `forwards`, `requires` (including attention marks), and emitted effects. A `jev` annotator supplies audience and trust only, so its effects, `requires.history`, and `requires.attention` are always empty. Do not also declare these fields on that tool.
 
 ### Example: annotate a tool call with Claude Code
 
@@ -801,10 +843,11 @@ For the customer request, the service returns this response to classify the resu
 
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
-- `answer` must contain exactly `delta`, `requires`, and `emits`.
+- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards`. No other key is allowed.
+- `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
-- Audience and trust fields inside `delta` and `requires` are optional. An omitted field adds no restriction or requirement.
-- `requires.audience` can contain `contains`, `within`, or both.
+- Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
+- `requires.audience` must contain exactly `contains`.
 - Each history entry is `{"contains":"<effect>"}` or `{"excludes":"<effect>"}`.
 - JSON audience values use `"public"` or a list of permitted audiences. Do not put `public` inside a JSON audience list.
 - A restricted list cannot repeat entries or contain both `self` and `internal`.
@@ -883,7 +926,7 @@ When a tool result would restrict the agent, OpenAPPA can offer a sanitizer whos
 
 If the cleaned result still adds restrictions, the agent can accept them or select another compatible sanitizer. Cleaning a new result does not remove restrictions from data the agent has already read.
 
-Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy `within` or trust requirements, because changing arguments does not change the data the agent has already read.
+Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` and the file content the call sends still enter the check.
 
 OpenAPPA selects the contract that matches the new arguments and checks the call again, including its requirements, effects, and argument schema. If that contract uses an annotator, OpenAPPA requests a new annotation. Membership checks use the responses already recorded for this decision.
 
@@ -1028,11 +1071,11 @@ A withhold plan runs the tool and delivers no result Value to the agent. This in
 
 ### Subagent Returns
 
-This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork retains the source family's opening policy and frozen policy state; it does not select a return-remedy plan. See [Subagent forks and root forks](/how-it-works#subagent-forks-and-root-forks).
+This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork belongs to the source family's deployment and keeps its frozen policy state; it does not select a return-remedy plan. See [Subagent forks and root forks](/how-it-works#subagent-forks-and-root-forks).
 
 A child agent can read data without exposing it to the parent agent. `context_control = true` declares that the integration keeps the child's data separate and can withhold its answer until OpenAPPA allows it. The parent chooses how the answer will be checked or cleaned before the child starts.
 
-OpenAPPA first offers a plan that checks the child's answer without changing it. It then offers plans that use the registered `tool_output` sanitizers without tags.
+OpenAPPA first offers a plan that checks the child's answer without changing it. It then offers plans that use the registered `tool_output` sanitizers without tags. Last, it offers a plan that takes no answer.
 
 The parent supplies `label` to specify the audience and trust limits for the child's answer. `label = {}` uses the parent's current audience and trust rank, so the answer cannot add restrictions to the parent. If a plan uses a sanitizer, the cleaned answer must meet those limits.
 
@@ -1062,13 +1105,25 @@ The parent selects this sanitizer's plan by its `offer_id`. This request keeps t
 
 The chosen limits also restrict what the child can read: it must still be able to return an answer that meets them, with the selected sanitizer if needed. The child receives its answer requirements when it starts and submits its answer when it finishes its turn. If the answer does not meet those requirements, OpenAPPA explains the problem so the child can revise it.
 
+#### Void returns
+
+The plan that takes no answer declares a `void return`. The parent passes only the `offer_id`, without `label` or `return_schema`:
+
+```json
+{ "offer_id": "<the void offer ID>" }
+```
+
+Nothing the child says crosses to the parent, so the child cannot change the parent's label. No limit restricts what the child can read: it can accept any restriction its task needs. The child must end with an empty final message. OpenAPPA blocks a final message that has text, and a `StructuredOutput` call, and tells the child to stop with an empty message.
+
+Use a void return when the parent needs no answer, for example when the child acts through its own tools. The guarantee covers the child's answer only. The child's own tool calls stay subject to their contracts, as in any trajectory.
+
 ### Fan-out spawns
 
 A `fan-out spawn` starts any number of subagents under one return declaration. Claude Code's `Workflow` tool is one: its script starts agents that the parent never addresses one at a time. The parent declares the return once, at the spawn, and the declaration applies to every agent the spawn starts.
 
 - Each agent binds its own fork when it starts. It starts at the parent's label at that moment, so an agent started after another agent's answer crossed starts at the label that answer left on the parent.
 - Each agent's answer is checked separately under the declaration. An agent called with a schema answers through its `StructuredOutput` call; OpenAPPA checks that input as the answer and denies the call when it cannot cross. Its later stop is checked as another answer.
-- The offered plans are the plain check and the untagged `tool_output` sanitizers. `attest-schema` is not offered: it requires the parent to be trusted when the child starts, and later agents do not have to meet that.
+- The offered plans are the plain check, the untagged `tool_output` sanitizers, and the void return. `attest-schema` is not offered: it requires the parent to be trusted when the child starts, and later agents do not have to meet that.
 - Claude Code identifies the agents by the prompt the `Workflow` call ran in. A second `Workflow` in the same prompt is refused until the first one reports that it finished. After that report, no new agent binds to the spawn.
 
 The workflow's own result needs no check of its own. The script performs no I/O, so its result is built from the script, its arguments, and the agents' answers that crossed. An agent whose answer never crosses ends without a result. The same rule covers the result of a background `Agent`.
@@ -1264,7 +1319,7 @@ The available settings depend on the component's role:
 | `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required, except for `attest-schema`. |
 | `annotators` | Exactly one of `url` or `command`. | Required unless the declaration specifies a builtin. |
 | `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
-| `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. `readers` is allowed only on a `lookup` target. |
+| `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
 
 OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
 
@@ -1321,7 +1376,7 @@ Each component uses these fields differently:
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
 | `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
-| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, `requires`, `emits` |
+| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
 | `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
 

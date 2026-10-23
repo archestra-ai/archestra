@@ -1,12 +1,9 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ResourceAccessRelation,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { fetchInIdChunks } from "@/lib/knowledge/fetch-in-id-chunks";
 import { useOrganization } from "@/lib/organization.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
@@ -21,17 +18,6 @@ const {
   restoreKnowledgeBase,
   permanentlyDeleteKnowledgeBase,
 } = archestraApiSdk;
-
-/** How many knowledge bases a "Show" selection holds, for the filter's counts. */
-export async function countKnowledgeBases(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getKnowledgeBases({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 type KnowledgeBasesQuery = NonNullable<
   archestraApiTypes.GetKnowledgeBasesData["query"]
@@ -52,6 +38,9 @@ type KnowledgeBasesPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonal"
+  | "access"
+  | "sharedWith"
+  | "owner"
 >;
 
 /**
@@ -86,12 +75,34 @@ export function useKnowledgeBases(params?: KnowledgeBasesListParams) {
           limit: params?.query?.limit ?? 100,
           offset: params?.query?.offset ?? 0,
           search: params?.query?.search,
+          // No caller here shows which agents use a knowledge base.
+          includeAssignedAgents: false,
         },
       });
       throwOnApiError(error);
       return data?.data ?? [];
     },
     enabled: params?.enabled,
+  });
+}
+
+/** Exactly these knowledge bases, e.g. the ones an agent uses. */
+export function useKnowledgeBasesByIds(
+  ids: readonly string[],
+  options?: { enabled?: boolean },
+) {
+  const sortedIds = [...new Set(ids)].sort();
+  return useQuery({
+    queryKey: ["knowledge-bases", "by-ids", sortedIds],
+    enabled: (options?.enabled ?? true) && sortedIds.length > 0,
+    queryFn: () =>
+      fetchInIdChunks(sortedIds, async (chunk) => {
+        const { data, error } = await getKnowledgeBases({
+          query: { ids: chunk, includeAssignedAgents: false },
+        });
+        throwOnApiError(error);
+        return data?.data ?? [];
+      }),
   });
 }
 
@@ -105,7 +116,7 @@ export function useAllMatchingKnowledgeBases(
     enabled: options?.enabled,
     fetchPage: async ({ limit, offset }) => {
       const { data, error } = await getKnowledgeBases({
-        query: { ...params, limit, offset },
+        query: { ...params, limit, offset, includeAssignedAgents: false },
       });
       throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];
@@ -143,7 +154,10 @@ export function useKnowledgeBasesPaginated(
     queryKey: ["knowledge-bases", "paginated", params],
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
-      const { data, error } = await getKnowledgeBases({ query: params });
+      // The page shows how many agents use each one, which the count covers.
+      const { data, error } = await getKnowledgeBases({
+        query: { ...params, includeAssignedAgents: false },
+      });
       // Screen renders its own QueryLoadError panel; don't also toast.
       throwOnApiError(error, { toastOnError: false });
       return data;

@@ -15,15 +15,14 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: vi.fn(),
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "https://proxy.example.com",
 }));
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: () => ({ data: [] }),
-}));
-vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
-  ProviderKeyAccessFields: () => <section>Provider Keys</section>,
 }));
 vi.mock("@/components/resource-access-section", () => ({
   ResourceAccessSection: ({
@@ -48,6 +47,9 @@ const virtualKey = {
   providerApiKeys: [{ provider: "openai", providerApiKeyId: "pak-1" }],
   labels: [],
   expiresAt: null,
+  billingTeamId: null,
+  billingTeam: null,
+  spendCap: null,
 } as unknown as EditableVirtualKey;
 
 beforeEach(() => {
@@ -82,14 +84,6 @@ describe("EditVirtualKeyDialog", () => {
   it("shows reusable connection instructions without revealing the saved key", async () => {
     const user = userEvent.setup();
     renderDialog();
-
-    expect(
-      screen
-        .getByRole("button", { name: "Connect" })
-        .compareDocumentPosition(
-          screen.getByRole("button", { name: "Permissions" }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
@@ -131,10 +125,15 @@ describe("EditVirtualKeyDialog", () => {
     }
   });
 
-  it("edits access through the key's own permission policy", () => {
+  it("edits access on General through the key's own permission policy", () => {
     renderDialog();
 
+    // Access sits with the key's other settings, not behind a tab of its own.
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
     const section = screen.getByTestId("resource-access");
+    expect(section).toBeVisible();
     expect(section).toHaveAttribute("data-resource", "llmVirtualKey");
     expect(section).toHaveAttribute("data-id", "vk-1");
   });
@@ -159,6 +158,51 @@ describe("EditVirtualKeyDialog", () => {
     expect(payload.data.name).toBe("Renamed key");
     expect(payload.data).not.toHaveProperty("scope");
     expect(payload.data).not.toHaveProperty("teams");
+    // Unchanged billing stays out, so renaming never needs limit permissions.
+    expect(payload.data).not.toHaveProperty("billingTeamId");
+    expect(payload.data).not.toHaveProperty("spendCap");
+  });
+
+  it("preserves label drafts when Advanced is collapsed before saving", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.type(screen.getByLabelText("Label key"), "environment");
+    await user.type(screen.getByLabelText("Label value"), "development");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "vk-1",
+      data: expect.objectContaining({
+        labels: [{ key: "environment", value: "development" }],
+      }),
+    });
+  });
+
+  it("shows a saved cap read-only to someone who cannot manage limits", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...virtualKey,
+      spendCap: {
+        limitId: "limit-1",
+        limitValue: 500,
+        cleanupInterval: "calendar_month",
+        currentUsage: 212,
+      },
+    } as EditableVirtualKey);
+
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByLabelText("Spend cap in dollars")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("500");
+    expect(screen.getByLabelText("Spend cap in dollars")).toBeDisabled();
+    expect(screen.getByText("$212 spent this month.")).toBeVisible();
+    expect(screen.getByText(/Ask someone who manages limits/)).toBeVisible();
   });
 });
 

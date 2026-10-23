@@ -1,19 +1,30 @@
 import {
+  AGENT_OPTIONS_MAX_IDS,
+  AGENT_OPTIONS_MAX_PAGE_SIZE,
   type AgentType,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
+  DEFAULT_APP_NAME,
   getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
+  resolveMcpClientServerName,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
+import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
@@ -23,7 +34,10 @@ import {
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import type {
+  AgentTypeListPermissionChecker,
+  AgentTypePermissionChecker,
+} from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -35,11 +49,15 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
+import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
@@ -54,6 +72,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
@@ -61,18 +80,24 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
+import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
+  type AgentAccessContext,
   AgentActivationSkillPolicyResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
+  AgentOptionFiltersSchema,
+  AgentOptionSchema,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentSkillAssignmentsResponseSchema,
@@ -83,6 +108,7 @@ import {
   AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
+  ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
   constructResponseSchema,
@@ -93,6 +119,8 @@ import {
   PatchAgentActivationSkillPolicySchema,
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
+  SuggestedPromptInputSchema,
+  ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -101,7 +129,7 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -115,6 +143,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            includeBuiltIn: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include built-in agents, so ids assigned elsewhere still resolve. Only agent admins see them; ignored with `scope`.",
+              ),
+            view: z
+              .enum(["chat"])
+              .optional()
+              .describe(
+                "`chat` keeps the system chat assistant in the list for chat selection.",
+              ),
             agentType: z
               .enum(["profile", "mcp_gateway", "agent"])
               .optional()
@@ -160,7 +203,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            ids: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Only these agents (comma-separated IDs), such as the viewer's automatic pins.",
+              ),
+            excludeIds: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.",
+              ),
             access: ResourceAccessQuerySchema,
+            sharedWith: ResourceSharedWithQuerySchema,
+            owner: ResourceOwnerQuerySchema,
             labels: z
               .string()
               .optional()
@@ -207,6 +272,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.",
               ),
+            includeTools: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+              ),
+            includeTotal: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -229,19 +312,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: {
           name,
+          includeBuiltIn,
+          view,
           agentType,
           agentTypes,
           scope,
           teamIds,
           authorIds,
           excludeAuthorIds,
+          ids,
+          excludeIds,
           access,
+          sharedWith,
+          owner,
           labels,
           excludeOtherPersonalAgents,
           status,
           includeActivationSkillsCount,
           providerApiKeyId,
           pinned,
+          includeTools,
+          includeTotal,
           limit,
           offset,
           sortBy,
@@ -256,10 +347,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
+      // A list asks about whole agent types only, so it does not read the
+      // grants of every agent shared with the caller.
+      const checker = await getAgentTypeListPermissionChecker({
         userId: user.id,
         organizationId,
+        // The deleted view asks for delete, every view for read.
+        actions: status === "deleted" ? ["read", "delete"] : ["read"],
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -284,6 +378,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseReadTypes: checker.getAgentTypesWithPermission("read"),
           },
           name,
+          includeBuiltIn,
+          view,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -292,14 +388,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // authorIds and excludeAuthorIds are admin-only
           authorIds: isAdmin ? authorIds : undefined,
           excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+          ids,
+          excludeIds,
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
-          access,
+          access: resourceAccessSelection({ access, sharedWith, owner }),
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,
           pinned,
+          includeTools,
+          includeTotal,
         },
         user.id,
         isAdmin,
@@ -351,129 +451,180 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ ok: true as const });
     },
   );
-
   fastify.get(
-    "/api/agents/all",
+    "/api/agents/chat-roster",
     {
       schema: {
-        operationId: RouteId.GetAllAgents,
-        description: "Get all agents without pagination",
+        operationId: RouteId.GetChatAgentRoster,
+        description:
+          "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.",
         tags: ["Agents"],
         querystring: z.object({
-          agentType: z
-            .enum(["profile", "mcp_gateway", "agent"])
-            .optional()
-            .describe(
-              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
-            ),
-          agentTypes: z
+          bootstrap: z
             .preprocess(
-              (val) => (typeof val === "string" ? val.split(",") : val),
-              z.array(z.enum(["profile", "mcp_gateway", "agent"])),
-            )
-            .optional()
-            .describe(
-              "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
-            ),
-          excludeBuiltIn: z
-            .preprocess((val) => val === "true" || val === true, z.boolean())
-            .optional()
-            .describe(
-              "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
-            ),
-          scope: AgentScopeFilterSchema.optional().describe(
-            "Filter by scope: personal, team, org, or built_in.",
-          ),
-          excludeOtherPersonalAgents: z
-            .preprocess(
-              (val) => (typeof val === "string" ? val === "true" : val),
+              (value) => value === "true" || value === true,
               z.boolean(),
             )
-            .optional()
-            .describe(
-              "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
-            ),
-          status: z
-            .enum(["active", "deleted"])
-            .optional()
-            .describe(
-              "Filter by lifecycle status. Deleted rows require delete permission.",
-            ),
-          includeTools: z
-            .preprocess((val) => val !== "false" && val !== false, z.boolean())
-            .optional()
-            .describe(
-              "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
-            ),
-          view: z
-            .enum(["chat"])
-            .optional()
-            .describe(
-              "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
-            ),
+            .optional(),
+          ids: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(z.uuid()).max(100),
+            )
+            .optional(),
         }),
-        response: constructResponseSchema(z.array(SelectAgentSchema)),
+        response: constructResponseSchema(z.array(ChatAgentRosterSchema)),
       },
     },
-    async (
-      {
-        query: {
-          agentType,
-          agentTypes,
-          excludeBuiltIn,
-          scope,
-          excludeOtherPersonalAgents,
-          status,
-          includeTools,
-          view,
-        },
-        user,
-        organizationId,
-      },
-      reply,
-    ) => {
-      // Determine the effective type filter
-      const effectiveTypes =
-        agentTypes || (agentType ? [agentType] : undefined);
+    async ({ query, user, organizationId }, reply) => {
+      if (!query.bootstrap || query.ids !== undefined) {
+        return reply.send(
+          await AgentModel.findChatRoster(
+            await getPermittedAgentRosterOptions({
+              query: CHAT_ROSTER_QUERY,
+              userId: user.id,
+              organizationId,
+              ids: query.ids,
+            }),
+          ),
+        );
+      }
+      return reply.send(
+        await getChatRosterBootstrap({ userId: user.id, organizationId }),
+      );
+    },
+  );
 
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
+  fastify.get(
+    "/api/agents/chat-roster/page",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentRosterPage,
+        description:
+          "Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.",
+        tags: ["Agents"],
+        querystring: CursorQuerySchema.extend({
+          search: z.string().max(512).optional(),
+          sortBy: z.enum(["createdAt", "name", "chat"]).optional(),
+        }),
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(ChatAgentRosterSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query: {
+          agentType: "agent",
+          excludeBuiltIn: true,
+          includeTools: false,
+          view: "chat",
+        },
         userId: user.id,
         organizationId,
       });
-
-      const permittedTypes = getPermittedAgentTypesForList({
-        checker,
-        effectiveTypes,
-        status,
-      });
-
-      // Check admin for the specific type(s) being queried, or any type if unfiltered
-      const isAdmin = effectiveTypes
-        ? effectiveTypes.length === 1
-          ? checker.isAdmin(effectiveTypes[0])
-          : checker.hasAnyAdminPermission()
-        : checker.hasAnyAdminPermission();
-
       return reply.send(
-        await AgentModel.findAll(user.id, isAdmin, {
-          authorization: {
-            organizationId,
-            baseReadTypes: checker.getAgentTypesWithPermission("read"),
-          },
-          // agentTypes takes precedence over agentType
-          agentType: agentTypes || permittedTypes ? undefined : agentType,
-          agentTypes: permittedTypes ?? agentTypes,
-          excludeBuiltIn,
-          scope:
-            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
-          excludeOtherPersonalAgents: isAdmin
-            ? excludeOtherPersonalAgents
-            : undefined,
-          status,
-          includeTools,
-          view,
+        await AgentModel.findChatRosterPage({
+          ...params,
+          filters: query,
+          pagination: query,
         }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/options",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptions,
+        description:
+          "List authorized agent options one page at a time. Filter by up to 200 IDs; pages hold up to 1,000 items.",
+        tags: ["Agents"],
+        querystring: AgentOptionsListQuerySchema,
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(AgentOptionSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionsPage({
+          ...params,
+          // This route takes no search or picker filters, unlike /options/page;
+          // pages use the default newest-first order.
+          filters: {},
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/options/page",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptionsPage,
+        description:
+          "Fetch a bounded authorized agent selector page with server-side search and eligibility filters.",
+        tags: ["Agents"],
+        querystring: AgentOptionsQuerySchema.merge(
+          AgentOptionFiltersSchema,
+        ).merge(CursorQuerySchema),
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(AgentOptionSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionsPage({
+          ...params,
+          filters: query,
+          pagination: query,
+        }),
+      );
+    },
+  );
+  fastify.get(
+    "/api/agents/options/ids",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptionIds,
+        description:
+          "Fetch complete authorized selector IDs for an explicit select-all action without presentation metadata.",
+        tags: ["Agents"],
+        querystring: AgentOptionsQuerySchema.merge(AgentOptionFiltersSchema),
+        response: constructResponseSchema(z.array(z.uuid())),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionIds({ ...params, filters: query }),
       );
     },
   );
@@ -486,29 +637,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "For each internal agent that enforces a missing-credential behavior, the MCP servers the calling user has no usable connection to",
         tags: ["Agents"],
+        querystring: z.object({
+          ids: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(z.uuid()).max(200),
+            )
+            .optional(),
+        }),
         response: constructResponseSchema(
           z.array(AgentCredentialReadinessSchema),
         ),
       },
     },
-    async ({ user, organizationId }, reply) => {
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      const agents = await AgentModel.findAll(
-        user.id,
-        checker.isAdmin("agent"),
-        {
-          agentTypes: ["agent"],
-          excludeBuiltIn: true,
-          onlyEnforcingMissingCredentials: true,
-        },
-      );
-
+    async ({ query, user, organizationId }, reply) => {
       return reply.send(
-        await getAgentCredentialReadiness({ agents, userId: user.id }),
+        await getAgentCredentialReadinessForUser({
+          ids: query.ids,
+          userId: user.id,
+          organizationId,
+        }),
       );
     },
   );
@@ -518,15 +669,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get default MCP Gateway",
+        description:
+          "Get the caller's personal MCP Gateway, creating it on first use.",
         tags: ["MCP Gateway"],
-        response: constructResponseSchema(SelectAgentSchema),
+        querystring: z.object({
+          includeTools: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.",
+            ),
+        }),
+        response: constructResponseSchema(
+          AgentListItemSchema.omit({ pinnedAt: true }),
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const gateway = await AgentModel.ensurePersonalMcpGateway({
-        userId: request.user.id,
-        organizationId: request.organizationId,
+        userId: user.id,
+        organizationId,
+        includeTools: query.includeTools,
       });
       return reply.send(gateway);
     },
@@ -628,6 +791,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
       });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: body.runtime,
+      });
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -673,6 +842,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
+      await assertModelTrioTiers({
+        apiKeyId: body.llmApiKeyId ?? null,
+        fastModelId: body.fastModelId ?? null,
+        smartModelId: body.smartModelId ?? null,
+      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -785,6 +959,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(agent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/default-suggested-prompts",
+    {
+      schema: {
+        operationId: RouteId.GetAgentDefaultSuggestedPrompts,
+        description:
+          "Suggested prompts the platform offers for an agent that has none " +
+          "of its own. They are not stored on the agent.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.array(SuggestedPromptInputSchema)),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      return reply.send(
+        await getAgentDefaultSuggestedPrompts({
+          id,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -1080,6 +1278,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // The copy is the caller's own Agent, so the credentials it reads are
+      // checked as if they had attached them.
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: sourceAgent.runtime,
+      });
+
       // Delegate cloning logic to the model
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
@@ -1159,6 +1366,118 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/mcp-tool-preview",
+    {
+      schema: {
+        operationId: RouteId.GetAgentMcpToolPreview,
+        description:
+          "Preview the gateway's initial tools/list for the current user, with estimated tool-definition context tokens",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          client: z.enum(["claude-code", "generic"]).default("generic"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            toolExposureMode: ToolExposureModeSchema,
+            tokenCount: z.discriminatedUnion("source", [
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("claude-provider"),
+                model: z.string(),
+                observedAt: z.iso.datetime(),
+              }),
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("estimate"),
+                model: z.null(),
+                observedAt: z.null(),
+              }),
+            ]),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                description: z.string(),
+                catalogId: z.string().nullable(),
+                tokens: z.number().int().nonnegative(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, query: { client }, user, organizationId },
+      reply,
+    ) => {
+      const agent = await AgentModel.findGatewayAgentById(id);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (
+        !checker.isAdmin(agent.agentType) &&
+        !(await AgentModel.findById(id, user.id, false))
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Preview the external user's tool surface, including the attestation
+      // bytes a harness receives, without issuing an access token or recording a call.
+      const { tools, catalogIdsByName } = await buildAgentMcpToolList({
+        agent,
+        tokenAuth: { userId: user.id, organizationId },
+      });
+      const organization = await OrganizationModel.getById(organizationId);
+      const serverName = resolveMcpClientServerName({
+        gatewayName: agent.name,
+        appName: organization?.appName ?? DEFAULT_APP_NAME,
+        isPersonalGateway: agent.isPersonalGateway,
+      });
+      const tokens = estimateMcpToolTokens({
+        tools,
+        client,
+        serverName,
+      });
+      const observed =
+        client === "claude-code"
+          ? await getObservedClaudeCodeToolTokenCount({
+              organizationId,
+              gatewayId: agent.id,
+              tools,
+              serverName,
+            })
+          : null;
+      return reply.send({
+        toolExposureMode: agent.toolExposureMode ?? "full",
+        tokenCount: observed
+          ? { ...observed, source: "claude-provider" as const }
+          : {
+              total: tokens.reduce((sum, count) => sum + count, 0),
+              source: "estimate" as const,
+              model: null,
+              observedAt: null,
+            },
+        tools: tools.map((tool, index) => ({
+          name: tool.name,
+          description: removeAttestationTokens(tool.description ?? ""),
+          catalogId: catalogIdsByName.get(tool.name) ?? null,
+          tokens: tokens[index],
+        })),
+      });
     },
   );
 
@@ -1540,6 +1859,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (view === "eligible") {
         const candidates = await listPolicyIndependentAvailableAgentSkills({
+          includeContent: false,
           organizationId,
           userId: user.id,
           ...(agentId && environmentId === undefined
@@ -1851,6 +2171,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
       });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: existingAgent.runtime,
+        next: body.runtime,
+      });
 
       // Who can reach the agent is not editable here: access lives in the
       // agent's permission policy, which the permissions API writes on its own.
@@ -1918,6 +2244,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.fastModelId !== undefined && {
+            fastModelId: body.fastModelId,
+          }),
+          ...(body.smartModelId !== undefined && {
+            smartModelId: body.smartModelId,
+          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
@@ -1949,6 +2281,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "An agent's model and API key must be set together",
           );
         }
+      }
+
+      if (
+        body.llmApiKeyId !== undefined ||
+        body.fastModelId !== undefined ||
+        body.smartModelId !== undefined
+      ) {
+        await assertModelTrioTiers({
+          apiKeyId:
+            body.llmApiKeyId !== undefined
+              ? body.llmApiKeyId
+              : existingAgent.llmApiKeyId,
+          fastModelId:
+            body.fastModelId !== undefined
+              ? body.fastModelId
+              : existingAgent.fastModelId,
+          smartModelId:
+            body.smartModelId !== undefined
+              ? body.smartModelId
+              : existingAgent.smartModelId,
+        });
       }
 
       if (
@@ -1985,6 +2338,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
+
+      // A Slack bot of this agent follows its name and icon (best effort).
+      void slackAppFactory.syncAgentIdentity(id);
 
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
@@ -2324,19 +2680,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMemberDefaultAgent,
-        description: "Get the current user's default agent ID",
+        description:
+          "Get the current user's default agent ID, and their personal chat " +
+          "agent (the oldest live personal agent they authored), if any",
         tags: ["Members"],
         response: constructResponseSchema(
-          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+          z.object({
+            defaultAgentId: z.string().uuid().nullable(),
+            personalChatAgentId: z.string().uuid().nullable(),
+          }),
         ),
       },
     },
     async ({ user, organizationId }, reply) => {
-      const defaultAgentId = await MemberModel.getDefaultAgentId(
-        user.id,
-        organizationId,
-      );
-      return reply.send({ defaultAgentId });
+      const [defaultAgentId, personalChatAgentId] = await Promise.all([
+        MemberModel.getDefaultAgentId(user.id, organizationId),
+        // A lookup only: reading the list must never seed an assistant.
+        AgentModel.findPersonalChatAgentId({ userId: user.id, organizationId }),
+      ]);
+      return reply.send({ defaultAgentId, personalChatAgentId });
     },
   );
 
@@ -2383,92 +2745,111 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ defaultAgentId: body.defaultAgentId });
     },
   );
-
-  fastify.get(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.GetMemberDefaultModel,
-        description: "Get the current user's default model and API key",
-        tags: ["Members"],
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ user, organizationId }, reply) => {
-      const selection = await MemberModel.getDefaultModelSelection(
-        user.id,
-        organizationId,
-      );
-      return reply.send(selection);
-    },
-  );
-
-  fastify.put(
-    "/api/members/default-model",
-    {
-      schema: {
-        operationId: RouteId.UpdateMemberDefaultModel,
-        description: "Set the current user's default model and API key",
-        tags: ["Members"],
-        body: z.object({
-          modelId: z.string().uuid().nullable(),
-          chatApiKeyId: z.string().uuid().nullable(),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            modelId: z.string().uuid().nullable(),
-            chatApiKeyId: z.string().uuid().nullable(),
-          }),
-        ),
-      },
-    },
-    async ({ body, user, organizationId }, reply) => {
-      // The default model and its API key are a pair: persist both or neither.
-      if (
-        !isModelSelectionComplete({
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        })
-      ) {
-        throw new ApiError(
-          400,
-          "The default model and API key must be set together",
-        );
-      }
-
-      try {
-        await MemberModel.setDefaultModelSelection({
-          userId: user.id,
-          organizationId,
-          modelId: body.modelId,
-          apiKeyId: body.chatApiKeyId,
-        });
-      } catch (error) {
-        // The referenced model or API key can be deleted between the client
-        // loading its options and saving the selection.
-        if (isForeignKeyConstraintError(error)) {
-          throw new ApiError(
-            400,
-            "The selected model or API key no longer exists",
-          );
-        }
-        throw error;
-      }
-
-      return reply.send({
-        modelId: body.modelId,
-        chatApiKeyId: body.chatApiKeyId,
-      });
-    },
-  );
 };
 
 export default agentRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/agents/chat-roster?bootstrap=true` */
+export async function getChatRosterBootstrap(params: {
+  userId: string;
+  organizationId: string;
+}) {
+  const { userId, organizationId } = params;
+  // The bootstrap also carries the caller's and the organization's
+  // default agents, so a chat page can pick its agent without a second,
+  // dependent roster request for them.
+  const [rosterParams, defaultAgentId, organization] = await Promise.all([
+    getPermittedAgentRosterOptions({
+      query: CHAT_ROSTER_QUERY,
+      userId,
+      organizationId,
+    }),
+    MemberModel.getDefaultAgentId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
+  const defaultIds = [
+    ...new Set(
+      [defaultAgentId, organization?.defaultAgentId].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  const [starting, defaults] = await Promise.all([
+    AgentModel.findChatRosterBootstrap(rosterParams),
+    defaultIds.length > 0
+      ? AgentModel.findChatRoster({
+          ...rosterParams,
+          options: { ...rosterParams.options, ids: defaultIds },
+        })
+      : Promise.resolve([]),
+  ]);
+  return [
+    ...new Map(
+      [...starting, ...defaults].map((agent) => [agent.id, agent]),
+    ).values(),
+  ];
+}
+
+/** `GET /api/agents/credential-readiness` */
+export async function getAgentCredentialReadinessForUser(params: {
+  ids: string[] | undefined;
+  userId: string;
+  organizationId: string;
+}) {
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+
+  const agents = await AgentModel.findAll(
+    params.userId,
+    checker.isAdmin("agent"),
+    {
+      agentTypes: ["agent"],
+      excludeBuiltIn: true,
+      onlyEnforcingMissingCredentials: true,
+      includeTools: false,
+      ids: params.ids,
+    },
+  );
+
+  return getAgentCredentialReadiness({ agents, userId: params.userId });
+}
+
+/** `GET /api/agents/:id` */
+export function getReadableAgent(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  return requireReadableAgent(params);
+}
+
+/** `GET /api/agents/:id/default-suggested-prompts` */
+export async function getAgentDefaultSuggestedPrompts(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  // Only the agent's own prompts matter here, not the full agent.
+  const agent = await requireReadableAgent({
+    ...params,
+    load: AgentModel.findByIdForAccess,
+  });
+  const suggestedPrompts =
+    (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(agent.id) ??
+    [];
+  return getDocsSuggestedPrompts({
+    agent: { id: agent.id, suggestedPrompts },
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+}
 
 /**
  * Resolve a live agent and enforce the full read-access path shared by
@@ -2478,13 +2859,19 @@ export default agentRoutes;
  * themselves, so resolving the live agent here (findById excludes deleted
  * rows) is what keeps a deleted agent's history unreachable.
  */
-async function requireReadableAgent(params: {
+async function requireReadableAgent<
+  T extends AgentAccessContext & Pick<Agent, "agentType"> = Agent,
+>(params: {
   id: string;
   userId: string;
   organizationId: string;
-}): Promise<Agent> {
+  /** How to read the agent; the full agent unless the caller needs less. */
+  load?: (id: string) => Promise<T | null>;
+}): Promise<T> {
   // admin lookup first to learn the type, then enforce type-specific RBAC
-  const agent = await AgentModel.findById(params.id, params.userId, true);
+  const agent = params.load
+    ? await params.load(params.id)
+    : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
   if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }
@@ -2567,7 +2954,7 @@ async function validateConnectorAccess(params: {
 }
 
 function getPermittedAgentTypesForList(params: {
-  checker: AgentTypePermissionChecker;
+  checker: AgentTypePermissionChecker | AgentTypeListPermissionChecker;
   effectiveTypes: AgentType[] | undefined;
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {
@@ -2750,3 +3137,162 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
  */
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
+
+const AgentRosterQuerySchema = z.object({
+  agentType: z
+    .enum(["profile", "mcp_gateway", "agent"])
+    .optional()
+    .describe(
+      "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
+    ),
+  agentTypes: z
+    .preprocess(
+      (val) => (typeof val === "string" ? val.split(",") : val),
+      z.array(z.enum(["profile", "mcp_gateway", "agent"])),
+    )
+    .optional()
+    .describe(
+      "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
+    ),
+  excludeBuiltIn: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .describe(
+      "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
+    ),
+  scope: AgentScopeFilterSchema.optional().describe(
+    "Filter by scope: personal, team, org, or built_in.",
+  ),
+  excludeOtherPersonalAgents: z
+    .preprocess(
+      (val) => (typeof val === "string" ? val === "true" : val),
+      z.boolean(),
+    )
+    .optional()
+    .describe(
+      "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
+    ),
+  status: z
+    .enum(["active", "deleted"])
+    .optional()
+    .describe(
+      "Filter by lifecycle status. Deleted rows require delete permission.",
+    ),
+  includeTools: z
+    .preprocess((val) => val !== "false" && val !== false, z.boolean())
+    .optional()
+    .describe(
+      "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+    ),
+  view: z
+    .enum(["chat"])
+    .optional()
+    .describe(
+      "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
+    ),
+});
+
+/** Shared by every options route; IDs stay short enough for the request line. */
+const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
+  view: true,
+  includeTools: true,
+}).extend({
+  ids: z
+    .preprocess(
+      (value) => (typeof value === "string" ? value.split(",") : value),
+      z.array(z.uuid()).max(AGENT_OPTIONS_MAX_IDS),
+    )
+    .optional(),
+});
+
+/** Every response is one bounded page. */
+const AgentOptionsListQuerySchema = AgentOptionsQuerySchema.extend({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AGENT_OPTIONS_MAX_PAGE_SIZE)
+    .default(100),
+  cursor: z.string().optional(),
+});
+
+/** Types whose `*` read grant lets a roster skip per-row read probes. */
+const WILDCARD_READ_CANDIDATE_TYPES: AgentType[] = [
+  "agent",
+  "profile",
+  "mcp_gateway",
+];
+
+type AgentRosterRequest = {
+  query: z.infer<typeof AgentRosterQuerySchema>;
+  userId: string;
+  organizationId: string;
+  optionsView?: boolean;
+  ids?: string[];
+};
+
+/** The chat roster's filter: internal, non-built-in agents, no tools. */
+const CHAT_ROSTER_QUERY = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeTools: false,
+  view: "chat",
+} as const;
+
+async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
+  const { userId, organizationId } = params;
+  const {
+    agentType,
+    agentTypes,
+    excludeBuiltIn,
+    scope,
+    excludeOtherPersonalAgents,
+    status,
+    includeTools,
+    view,
+  } = params.query;
+  // Determine the effective type filter
+  const effectiveTypes = agentTypes || (agentType ? [agentType] : undefined);
+
+  // Single DB query for all permission checks
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+
+  const permittedTypes = getPermittedAgentTypesForList({
+    checker,
+    effectiveTypes,
+    status,
+  });
+
+  // Check admin for the specific type(s) being queried, or any type if unfiltered
+  const isAdmin = effectiveTypes
+    ? effectiveTypes.length === 1
+      ? checker.isAdmin(effectiveTypes[0])
+      : checker.hasAnyAdminPermission()
+    : checker.hasAnyAdminPermission();
+
+  const options = {
+    authorization: {
+      organizationId,
+      baseReadTypes: checker.getAgentTypesWithPermission("read"),
+      wildcardReadTypes: WILDCARD_READ_CANDIDATE_TYPES.filter((agentType) =>
+        checker.allowsScoped({ agentType, agentId: "*", action: "read" }),
+      ),
+    },
+    // agentTypes takes precedence over agentType
+    agentType: agentTypes || permittedTypes ? undefined : agentType,
+    agentTypes: permittedTypes ?? agentTypes,
+    excludeBuiltIn,
+    scope: scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
+    excludeOtherPersonalAgents: isAdmin
+      ? excludeOtherPersonalAgents
+      : undefined,
+    status,
+    includeTools,
+    view: params.optionsView ? "options" : view,
+    ids: params.ids,
+  } satisfies Parameters<typeof AgentModel.findAll>[2];
+  return { userId, isAgentAdmin: isAdmin, options };
+}

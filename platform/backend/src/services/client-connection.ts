@@ -13,6 +13,8 @@ class ClientConnectionService {
     clientId: ConnectionSetupClientId;
     platform: ConnectionSetupPlatform;
     exclude?: ConnectSetupPart[];
+    gateway?: string;
+    plugins?: string[];
     deviceName?: string;
   }) {
     const id = randomBytes(24).toString("hex");
@@ -59,6 +61,8 @@ class ClientConnectionService {
       clientId: pending.clientId,
       platform: pending.platform,
       exclude: pending.exclude ?? [],
+      gateway: pending.gateway ?? null,
+      plugins: pending.plugins ?? null,
       deviceName: pending.deviceName ?? null,
       userCode: userCode(id),
       expiresAt: new Date(pending.expiresAt).toISOString(),
@@ -92,7 +96,6 @@ class ClientConnectionService {
           tokenHash: pending.tokenHash,
           tokenStart: pending.tokenStart,
           expiresAt: new Date(pending.expiresAt),
-          exclude: pending.exclude,
           deviceName: pending.deviceName,
         });
       } catch (error) {
@@ -117,7 +120,7 @@ class ClientConnectionService {
     if (params.setupId && !approved)
       throw new ApiError(
         400,
-        "The setup must be unused, belong to you, match the requested client and operating system, and leave out what the prompt excluded. Start the installer again.",
+        "The setup must be unused, belong to you, and match the requested client and operating system. Start the installer again.",
       );
     return {
       status: approved ? ("approved" as const) : ("denied" as const),
@@ -157,6 +160,10 @@ interface Pending {
   clientId: ConnectionSetupClientId;
   platform: ConnectionSetupPlatform;
   exclude?: ConnectSetupPart[];
+  /** Gateway slug or id picked on the Connect page; the approval preselects it. */
+  gateway?: string;
+  /** Plugin slugs picked on the Connect page; the approval preselects them. */
+  plugins?: string[];
   deviceName?: string;
   expiresAt: number;
   pollHash: string;

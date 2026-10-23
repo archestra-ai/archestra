@@ -39,25 +39,20 @@ export async function listConnectedClients(params: {
   organizationId: string;
   userId: string;
 }): Promise<ConnectedClientRecord[]> {
-  const [redeemed, oauthClients, adoption] = await Promise.all([
+  const [redeemed, oauthClients, seen] = await Promise.all([
     ConnectedClientModel.listRedeemedForUser(params),
     OAuthClientModel.listWithUserTokens({
       userId: params.userId,
       activeOnly: true,
     }),
-    ConnectedClientModel.getAdoption({
-      organizationId: params.organizationId,
-      userId: params.userId,
+    ConnectedClientModel.getLastSeenForUser({
+      ...params,
       window: lastDays(LAST_SEEN_DAYS),
     }),
   ]);
   // Newest gateway or LLM proxy call per Connect client.
-  const member = adoption.members[0];
   const lastSeen = new Map<string, Date>();
-  for (const use of [
-    ...(member?.gatewayUses ?? []),
-    ...(member?.llmUses ?? []),
-  ]) {
+  for (const use of seen) {
     // An agent nobody listed is known to traffic only by its name.
     const key = use.agent.clientId ?? nameKey(use.agent.name);
     const prev = lastSeen.get(key);

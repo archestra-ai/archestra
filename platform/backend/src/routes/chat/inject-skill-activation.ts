@@ -320,6 +320,7 @@ export async function injectExternalMcpSkillActivation({
             tokenId: gatewayToken.tokenId,
             teamId: gatewayToken.teamId,
             isOrganizationToken: gatewayToken.isOrganizationToken,
+            serviceAccountId: gatewayToken.serviceAccountId,
             organizationId,
             isUserToken: gatewayToken.isUserToken,
             userId,
@@ -387,7 +388,6 @@ export async function injectPluginSkillActivation({
   provider: SupportedProvider;
   model: string;
 }): Promise<ChatMessage[]> {
-  if (!config.plugins.enabled) return messages;
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
   );

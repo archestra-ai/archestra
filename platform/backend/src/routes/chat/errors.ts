@@ -14,7 +14,6 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   VllmErrorTypes,
@@ -1939,7 +1938,15 @@ export function mapProviderError(
 
   // Map to error code using provider-specific mapper
   let errorCode = mapError(statusCode, parsedError);
-  const isTerminatedStream = isStreamTerminatedError(error);
+  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
+  // A proxy can serialize a native disconnect into an error frame, losing
+  // its Error prototype. Recognize that status-less fallback too, without
+  // overriding an explicit provider rejection or a more specific category.
+  const isTerminatedStream =
+    isStreamTerminatedError(error) ||
+    (statusCode === undefined &&
+      errorCode === ChatErrorCode.Unknown &&
+      errorMessage === "terminated");
 
   if (isTerminatedStream) {
     errorCode = ChatErrorCode.NetworkError;
@@ -2003,9 +2010,6 @@ export function mapProviderError(
   if (usageLimitError) {
     errorCode = ChatErrorCode.UsageLimitExceeded;
   }
-
-  // Extract the most meaningful error message
-  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
   // OpenRouter ends a streaming turn with "Upstream idle timeout exceeded" when
   // the routed upstream stops emitting tokens mid-generation (e.g. a reasoning
@@ -2077,12 +2081,7 @@ export function mapProviderError(
   // indicate a bug.
   const isExpectedProviderError =
     (statusCode !== undefined && statusCode >= 400 && statusCode < 500) ||
-    RetryableErrorCodes.has(errorCode) ||
-    // An approval-gated tool call rejected in an autonomous session (A2A,
-    // Slack, MS Teams, sub-agents) is our own policy enforcement doing its
-    // job, not a provider failure. It reaches this mapper as a bare Error
-    // with no HTTP envelope, so match the policy reason it was thrown with.
-    isToolApprovalPolicyBlockError(errorMessage);
+    RetryableErrorCodes.has(errorCode);
 
   if (!isTerminatedStream && !isExpectedProviderError) {
     captureRawProviderErrorInSentry({
@@ -2168,13 +2167,6 @@ function isStreamTerminatedError(error: unknown): boolean {
 
 function isUpstreamIdleTimeoutError(message: string): boolean {
   return /idle timeout/i.test(message);
-}
-
-// `includes` rather than equality: the error may pick up wrapper prefixes on
-// its way through the tool-execution stack, but the thrown message is always
-// the shared policy-reason constant verbatim.
-function isToolApprovalPolicyBlockError(message: string): boolean {
-  return message.includes(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
 }
 
 function isUpstreamProviderError(message: string): boolean {

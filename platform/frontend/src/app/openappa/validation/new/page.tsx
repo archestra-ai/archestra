@@ -18,6 +18,11 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
+import {
+  APPA_EDITOR_THEMES,
+  APPA_LANGUAGE_ID,
+  registerAppaLanguage,
+} from "../../_parts/appa-language";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
@@ -103,7 +108,7 @@ export default function NewValidationPage() {
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={listHref} onNavigate={cancel}>
+      <PageBackLink href={listHref} onNavigate={cancel} labelled>
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />
@@ -197,7 +202,9 @@ export default function NewValidationPage() {
               render={({ field }) => (
                 <Editor
                   height="55vh"
-                  language="plaintext"
+                  language={APPA_LANGUAGE_ID}
+                  themes={APPA_EDITOR_THEMES}
+                  beforeMount={registerAppaLanguage}
                   value={field.value}
                   onChange={(value) => field.onChange(value ?? "")}
                   options={{

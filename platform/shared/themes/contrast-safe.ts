@@ -1,15 +1,18 @@
 /**
  * Contrast-safety pass for generated theme tokens.
  *
- * tweakcn's light palettes ship control outlines, focus rings and muted text at
- * contrast ratios below WCAG 2.2 minimums, and a few ship dividers so faint
- * they disappear. This module moves only the offending tokens just far enough
- * to clear their target, preserving each theme's hue and chroma so the
- * palette's character is unchanged. It runs on the LIGHT variant only; dark
- * mode is never touched.
+ * tweakcn's palettes ship control outlines, focus rings and muted text at
+ * contrast ratios below WCAG 2.2 minimums, a few ship dividers so faint they
+ * disappear, and some ship tinted fills (the tab-picker track, the sidebar's
+ * hover/selected fill) indistinguishable from the surface beneath them. This
+ * module moves only the offending tokens just far enough to clear their
+ * target, preserving each theme's hue and chroma so the palette's character is
+ * unchanged.
  *
  * Targets follow what WCAG 2.2 actually requires of each token:
- *   - 1.4.3 Contrast (Minimum), 4.5:1 — muted (secondary) text.
+ *   - 1.4.3 Contrast (Minimum), 4.5:1 — text: muted (secondary) text on every
+ *     surface it is drawn on, and sidebar item text on the sidebar and on its
+ *     hover/selected fill.
  *   - 1.4.11 Non-text Contrast, 3:1 — boundaries needed to identify a control
  *     or its state: `input` (text fields, selects, checkboxes, radios, switch
  *     tracks) and `ring` / `sidebar-ring` (focus indicators).
@@ -18,35 +21,42 @@
  *     `sidebar-border`. These keep the theme's soft hairline and are only
  *     lifted to a visibility floor, so light mode reads as surfaces rather
  *     than a wireframe of 3:1 lines.
+ *   - No WCAG minimum — tinted fills: `muted` (tab-picker track behind the
+ *     selected tab) and `sidebar-accent` (sidebar hover/selected fill). Their
+ *     text carries the meaning, so they only need a visible step off the
+ *     surface beneath. They are lifted to a floor on the side of the surface
+ *     the theme put them (a fill that sits on the surface itself steps toward
+ *     the text colour), so a selected item never flips into a hole in the
+ *     surface. Text on a coloured fill keeps its polarity: when white text
+ *     cannot reach 4.5:1 on its pill, the pill darkens instead of the text
+ *     turning black.
+ *
+ * The light pass applies every rule. The dark pass applies only the text and
+ * tinted-fill rules: tweakcn's dark palettes deliberately draw borders and
+ * inputs as faint hairlines over translucent fills, and that is left as is.
  */
 
 /**
- * Raise the contrast of a light theme's control, focus and muted-text tokens to
- * the WCAG minimums, and lift faint decorative borders to a visibility floor,
- * returning a new token map. Tokens already meeting their target
+ * Raise the contrast of a light theme's control, focus, text and tinted-fill
+ * tokens to their targets, and lift faint decorative borders to a visibility
+ * floor, returning a new token map. Tokens already meeting their target
  * (or that are not plain `oklch()` values) are left byte-for-byte unchanged, so
  * high-contrast themes (e.g. neo-brutalism) and non-color tokens are untouched.
  */
 export function withAccessibleLightTokens(
   light: Record<string, string>,
 ): Record<string, string> {
-  const result = { ...light };
-  for (const rule of CONTRAST_RULES) {
-    const color = result[rule.token];
-    if (!color) continue;
-    const against = rule.against
-      .map((key) => result[key])
-      .filter((value): value is string => Boolean(value));
-    if (against.length === 0) continue;
-    const tintSource = rule.tintFrom ? result[rule.tintFrom] : undefined;
-    result[rule.token] = ensureMinContrast({
-      color,
-      against,
-      ratio: rule.ratio,
-      accentChroma: tintSource ? chromaOf(tintSource) : null,
-    });
-  }
-  return result;
+  return applyRules(light, [...LIGHT_ONLY_RULES, ...ALL_MODES_RULES]);
+}
+
+/**
+ * Dark-mode counterpart of {@link withAccessibleLightTokens}. Applies only the
+ * text and tinted-fill rules; borders, inputs and focus rings stay verbatim.
+ */
+export function withAccessibleDarkTokens(
+  dark: Record<string, string>,
+): Record<string, string> {
+  return applyRules(dark, ALL_MODES_RULES);
 }
 
 /**
@@ -68,6 +78,9 @@ export function contrastRatio(a: string, b: string): number | null {
 // Internal
 // ============================================================================
 
+/** WCAG 1.4.3 minimum for normal-size text. */
+const TEXT_MINIMUM = 4.5;
+
 /** WCAG 1.4.11 minimum for control boundaries and focus indicators. */
 const NON_TEXT_MINIMUM = 3;
 
@@ -77,6 +90,14 @@ const NON_TEXT_MINIMUM = 3;
  * vanishes into the surface on a washed-out display.
  */
 const DECORATIVE_BORDER_FLOOR = 1.3;
+
+/**
+ * Lowest contrast a tinted fill may have against the surface beneath it.
+ * Roughly a 0.03 lightness step near white — the step most tweakcn themes use
+ * between page, sidebar and hover fill — so a selected sidebar item or a tab
+ * track stays visible without turning into a block of colour.
+ */
+const TINTED_FILL_FLOOR = 1.1;
 
 interface ContrastRule {
   /** Token to adjust. */
@@ -92,18 +113,32 @@ interface ContrastRule {
    * recognisably the theme's colour. Neutral (grey) tokens stay neutral.
    */
   tintFrom?: string;
+  /**
+   * Stay on the side of the reference the theme put the token on (a hover
+   * fill darker than its surface stays darker). A token sitting on the
+   * reference itself steps toward the text colour: darker on a light surface,
+   * lighter on a dark one. Only when that side cannot reach the target does
+   * the token cross over.
+   */
+  keepSide?: boolean;
+  /**
+   * For text on a fill: keep the text's polarity (light-on-dark stays
+   * light-on-dark) and, when the text alone cannot reach the target that way,
+   * move this fill token away from the text instead. Without it, white text on
+   * a mid-tone pill would flip to near-black.
+   */
+  yieldTo?: string;
 }
 
 /**
- * Tokens whose light-mode contrast we guarantee, and what each is seen against:
+ * Light-only rules, and what each token is seen against:
  *   - `border` / `sidebar-border` — decorative dividers and container edges;
  *     only lifted to the visibility floor, never to 3:1
  *   - `input` — form control boundaries: text fields, select triggers,
  *     unchecked checkbox/radio outlines, unchecked switch tracks
  *   - `ring` / `sidebar-ring` — keyboard focus indicators
- *   - `muted-foreground` — secondary text, seen on both muted and base surfaces
  */
-const CONTRAST_RULES: ContrastRule[] = [
+const LIGHT_ONLY_RULES: ContrastRule[] = [
   { token: "border", against: ["background"], ratio: DECORATIVE_BORDER_FLOOR },
   {
     token: "sidebar-border",
@@ -118,10 +153,42 @@ const CONTRAST_RULES: ContrastRule[] = [
   },
   { token: "ring", against: ["background"], ratio: NON_TEXT_MINIMUM },
   { token: "sidebar-ring", against: ["sidebar"], ratio: NON_TEXT_MINIMUM },
+];
+
+/**
+ * Rules for both modes. Order matters: fills settle before the text drawn on
+ * them is checked.
+ *   - `muted` — tab-picker track and other muted fills on the page
+ *   - `sidebar-accent` — sidebar hover/selected item fill
+ *   - `sidebar-foreground` — sidebar item text
+ *   - `sidebar-accent-foreground` — hovered/selected sidebar item text
+ *   - `muted-foreground` — secondary text, seen on muted fills, the page and
+ *     the sidebar (search row, shortcut hints, inactive toggle labels)
+ */
+const ALL_MODES_RULES: ContrastRule[] = [
+  {
+    token: "muted",
+    against: ["background"],
+    ratio: TINTED_FILL_FLOOR,
+    keepSide: true,
+  },
+  {
+    token: "sidebar-accent",
+    against: ["sidebar"],
+    ratio: TINTED_FILL_FLOOR,
+    keepSide: true,
+  },
+  { token: "sidebar-foreground", against: ["sidebar"], ratio: TEXT_MINIMUM },
+  {
+    token: "sidebar-accent-foreground",
+    against: ["sidebar-accent"],
+    ratio: TEXT_MINIMUM,
+    yieldTo: "sidebar-accent",
+  },
   {
     token: "muted-foreground",
-    against: ["muted", "background"],
-    ratio: 4.5,
+    against: ["muted", "background", "sidebar"],
+    ratio: TEXT_MINIMUM,
   },
 ];
 
@@ -130,6 +197,9 @@ const CONTRAST_RULES: ContrastRule[] = [
  * the WCAG minimum after the lightness is rounded for output.
  */
 const CONTRAST_MARGIN = 0.03;
+
+/** Below this ratio a token counts as sitting on its reference surface. */
+const SAME_SURFACE_RATIO = 1.01;
 
 /** At or below this chroma a token counts as neutral (incl. cool slate greys). */
 const NEUTRAL_CHROMA = 0.012;
@@ -144,17 +214,77 @@ interface Oklch {
   rest: string[];
 }
 
+function applyRules(
+  tokens: Record<string, string>,
+  rules: ContrastRule[],
+): Record<string, string> {
+  const result = { ...tokens };
+  for (const rule of rules) {
+    const color = result[rule.token];
+    if (!color) continue;
+    const against = rule.against
+      .map((key) => result[key])
+      .filter((value): value is string => Boolean(value));
+    if (against.length === 0) continue;
+    const tintSource = rule.tintFrom ? result[rule.tintFrom] : undefined;
+    const accentChroma = tintSource ? chromaOf(tintSource) : null;
+    const adjusted = ensureMinContrast({
+      color,
+      against,
+      ratio: rule.ratio,
+      accentChroma,
+      keepSide: Boolean(rule.keepSide || rule.yieldTo),
+    });
+    if (adjusted !== null) {
+      result[rule.token] = adjusted;
+      continue;
+    }
+    // The token's own side cannot reach the target. Text with a fill to yield
+    // to moves the fill away from itself instead.
+    const fill = rule.yieldTo ? result[rule.yieldTo] : undefined;
+    if (rule.yieldTo && fill) {
+      const movedFill = ensureMinContrast({
+        color: fill,
+        against: [color],
+        ratio: rule.ratio,
+        accentChroma: null,
+        keepSide: true,
+      });
+      if (movedFill !== null) {
+        result[rule.yieldTo] = movedFill;
+        continue;
+      }
+    }
+    // Last resort: cross to whichever side reaches the target.
+    result[rule.token] =
+      ensureMinContrast({
+        color,
+        against,
+        ratio: rule.ratio,
+        accentChroma,
+        keepSide: false,
+      }) ?? color;
+  }
+  return result;
+}
+
+/**
+ * Returns the adjusted colour, or `null` when `keepSide` is set and the
+ * token's own side of the reference cannot reach the target.
+ */
 function ensureMinContrast({
   color,
   against,
   ratio,
   accentChroma,
+  keepSide,
 }: {
   color: string;
   against: string[];
   ratio: number;
   accentChroma: number | null;
-}): string {
+  keepSide: boolean;
+}): string | null {
   const original = parseOklch(color);
   if (!original) return color; // not a plain oklch() value — leave it alone
   const refLums = against
@@ -177,6 +307,17 @@ function ensureMinContrast({
   // if neither extreme reaches it (out-of-gamut edge), take the better extreme.
   const darker = solveLightness(parsed.L, 0, target, worst);
   const lighter = solveLightness(parsed.L, 1, target, worst);
+  if (keepSide) {
+    const goDarker = staysDarker({
+      lum: luminanceFromLightness(original.L, original),
+      refLum: refLums[0],
+      refL: parseOklch(against[0])?.L ?? 1,
+    });
+    const sameSide = goDarker ? darker : lighter;
+    return worst(sameSide) >= target
+      ? formatOklch({ ...parsed, L: sameSide })
+      : null;
+  }
   const best = pickBest(parsed.L, darker, lighter, worst, target);
   return formatOklch({ ...parsed, L: best });
 }
@@ -201,6 +342,24 @@ function solveLightness(
     else lo = mid;
   }
   return hi;
+}
+
+/**
+ * Whether a token on the `keepSide` path moves darker: it stays on its side of
+ * the reference, and one indistinguishable from the reference steps toward the
+ * text colour (darker on a light surface, lighter on a dark one).
+ */
+function staysDarker({
+  lum,
+  refLum,
+  refL,
+}: {
+  lum: number;
+  refLum: number;
+  refL: number;
+}): boolean {
+  if (ratioFromLuminance(lum, refLum) < SAME_SURFACE_RATIO) return refL > 0.5;
+  return lum < refLum;
 }
 
 function pickBest(

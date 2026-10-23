@@ -1,12 +1,11 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  LAZY_MODEL_SYNC_REFETCH_DELAY_MS,
-  useLlmModels,
-} from "./llm-models.query";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useLlmModels, useModelsWithApiKeys } from "./llm-models.query";
+import { llmModelsQueryKey } from "./llm-models-query-keys";
+import { availableLlmProviderApiKeysQueryKey } from "./llm-provider-api-keys-query-keys";
 import { PERSISTED_QUERY_META } from "./query-persistence";
 
 vi.mock("@archestra/shared", () => ({
@@ -16,8 +15,6 @@ vi.mock("@archestra/shared", () => ({
     updateModel: vi.fn(),
     syncLlmModels: vi.fn(),
   },
-  LAZY_MODEL_SYNC_STATUS_HEADER: "x-archestra-lazy-model-sync",
-  LAZY_MODEL_SYNC_STATUS_PENDING: "pending",
 }));
 
 vi.mock("sonner");
@@ -25,56 +22,6 @@ vi.mock("sonner");
 describe("useLlmModels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("refetches once after a pending lazy model sync, then stops", async () => {
-    const syncedModel = makeModel();
-    vi.mocked(archestraApiSdk.getLlmModels)
-      .mockResolvedValueOnce(
-        makeGetLlmModelsResult([], {
-          "x-archestra-lazy-model-sync": "pending",
-        }),
-      )
-      .mockResolvedValueOnce(makeGetLlmModelsResult([syncedModel]));
-
-    renderHook(() => useLlmModels(), {
-      wrapper: createWrapper(),
-    });
-
-    await flushQuery();
-    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(LAZY_MODEL_SYNC_REFETCH_DELAY_MS);
-    });
-    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
-
-    // the second response is no longer pending, so no further refetch is armed
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(LAZY_MODEL_SYNC_REFETCH_DELAY_MS * 2);
-    });
-    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not refetch when no lazy sync is pending", async () => {
-    vi.mocked(archestraApiSdk.getLlmModels).mockResolvedValue(
-      makeGetLlmModelsResult([makeModel()]),
-    );
-
-    renderHook(() => useLlmModels(), { wrapper: createWrapper() });
-
-    await flushQuery();
-    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(LAZY_MODEL_SYNC_REFETCH_DELAY_MS * 2);
-    });
-    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
   });
 
   it("marks the model catalog for session restoration", async () => {
@@ -85,10 +32,10 @@ describe("useLlmModels", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    renderHook(() => useLlmModels(), {
+    const { result } = renderHook(() => useLlmModels(), {
       wrapper: createWrapper(queryClient),
     });
-    await flushQuery();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(
       queryClient.getQueryCache().find({ queryKey: ["llm-models", null] })
@@ -100,9 +47,7 @@ describe("useLlmModels", () => {
   // `retry: false`, so without the query's own retry a single blip left the
   // new-chat composer stranded on "Select model" with no default (T-1317).
   it("recovers the model catalog after a transient fetch failure", async () => {
-    // Real timers + retryDelay: 0 so the retry is instant without the fake
-    // timers the other cases install for the lazy-sync refetch.
-    vi.useRealTimers();
+    // retryDelay: 0 so the retry is instant.
     vi.mocked(archestraApiSdk.getLlmModels)
       .mockResolvedValueOnce({
         data: undefined,
@@ -125,13 +70,75 @@ describe("useLlmModels", () => {
     expect(result.current.data).toHaveLength(1);
     expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
   });
+
+  // Adding the first key refetches the full list; until that lands the cache
+  // still holds the empty answer from before the key's models were synced.
+  // The sole key's list must wait for the refetch, not latch that empty list.
+  it("does not seed the sole key's models from a list being refetched", async () => {
+    let resolveRefetch: (value: unknown) => void = () => {};
+    vi.mocked(archestraApiSdk.getLlmModels).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefetch = resolve;
+      }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+    });
+    queryClient.setQueryData(llmModelsQueryKey(null), []);
+    queryClient.setQueryData(
+      availableLlmProviderApiKeysQueryKey(undefined, undefined),
+      [{ id: "key-1" }],
+    );
+    renderHook(() => useLlmModels(), {
+      wrapper: createWrapper(queryClient),
+    });
+    void queryClient.invalidateQueries({ queryKey: llmModelsQueryKey(null) });
+
+    const { result } = renderHook(() => useLlmModels({ apiKeyId: "key-1" }), {
+      wrapper: createWrapper(queryClient),
+    });
+    resolveRefetch(makeGetLlmModelsResult([makeModel()]));
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
+  });
 });
 
-async function flushQuery() {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(0);
+describe("useModelsWithApiKeys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.getModelsWithApiKeys).mockResolvedValue({
+      data: [],
+    } as never);
   });
-}
+
+  it("sends a picker's filters and keeps it apart from the full catalog", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(
+      () => ({
+        full: useModelsWithApiKeys(),
+        picker: useModelsWithApiKeys({
+          apiKeyIds: ["key-1"],
+          includeAssignments: false,
+        }),
+      }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() =>
+      expect(
+        result.current.full.isSuccess && result.current.picker.isSuccess,
+      ).toBe(true),
+    );
+    expect(
+      vi
+        .mocked(archestraApiSdk.getModelsWithApiKeys)
+        .mock.calls.map(([options]) => options?.query),
+    ).toEqual([{}, { apiKeyIds: ["key-1"], includeAssignments: false }]);
+  });
+});
 
 function createWrapper(
   queryClient = new QueryClient({
@@ -155,12 +162,11 @@ function makeModel(): archestraApiTypes.GetLlmModelsResponses["200"][number] {
 
 function makeGetLlmModelsResult(
   data: archestraApiTypes.GetLlmModelsResponses["200"],
-  headers?: HeadersInit,
 ): Awaited<ReturnType<typeof archestraApiSdk.getLlmModels>> {
   return {
     data,
     error: undefined,
     request: new Request("http://localhost/api/llm-models/available"),
-    response: new Response(null, { headers }),
+    response: new Response(null),
   } as Awaited<ReturnType<typeof archestraApiSdk.getLlmModels>>;
 }

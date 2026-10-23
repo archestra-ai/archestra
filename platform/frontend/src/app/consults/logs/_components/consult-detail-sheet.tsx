@@ -1,5 +1,6 @@
 "use client";
 
+import { isLogContentNotStored } from "@archestra/shared";
 import { Check, ChevronRight, EyeOff } from "lucide-react";
 import type { ReactNode } from "react";
 import { JsonCodeBlock } from "@/components/json-code-block";
@@ -27,112 +28,91 @@ import type {
 } from "./consult-details";
 import { ConsultOutcomeBadge } from "./consult-outcome-badge";
 
-export function ConsultDetailSheet({
-  view,
-  onClose,
-}: {
-  view: ConsultView | null;
-  onClose: () => void;
-}) {
-  return (
-    <Sheet open={view !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        {view && <ConsultDetail view={view} />}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-// === Internal components ===
-
-function ConsultDetail({ view }: { view: ConsultView }) {
+/**
+ * What the consult asked and answered: the request (or the tool call it was
+ * about), the answer, the diagnostics and the raw record. Withheld and
+ * not-stored consults say so instead.
+ */
+export function ConsultPayloads({ view }: { view: ConsultView }) {
   const { consult, toolCall, diagnostics } = view;
   // The server nulls the request of an audience-source consult for callers
   // without member:read.
   const withheld = consult.request === null;
+  // Under the Metadata only Log Content mode the request is a marker that
+  // keeps only the tool's name, and the answer and diagnostics are null.
+  const notStored = isLogContentNotStored(consult.request);
 
   return (
-    <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2 font-mono text-base">
-          <span>{consult.externalName}</span>
-          <ConsultOutcomeBadge outcome={consult.outcome} />
-        </SheetTitle>
-        <SheetDescription>
-          {formatDate({
-            date: consult.createdAt,
-            dateFormat: "MMM d, yyyy · HH:mm:ss",
-          })}{" "}
-          · {consult.durationMs} ms · {consult.role} via {consult.backend}
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="space-y-6 px-4 pb-6">
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-          <MetaRow label="Session" value={consult.sessionId} />
-          <MetaRow label="Root" value={consult.root} />
-          <MetaRow label="Trajectory" value={consult.trajectory} />
-          <MetaRow label="Call" value={consult.callId} />
-          <MetaRow label="HTTP status" value={consult.httpStatus} />
-        </dl>
-
-        {withheld ? (
-          <InlineNotice variant="neutral">
+    <div className="space-y-6">
+      {withheld ? (
+        <InlineNotice variant="neutral">
+          <EyeOff className="size-4" />
+          <span className="font-medium">Withheld</span>
+          <InlineNoticeText>
+            This consult names people; viewing it requires member access.
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : notStored ? (
+        <Section title={toolCall ? `Tool: ${toolCall.name}` : "Request"}>
+          <InlineNotice variant="neutral" className="mt-2">
             <EyeOff className="size-4" />
-            <span className="font-medium">Withheld</span>
+            <span className="font-medium">Content not stored</span>
             <InlineNoticeText>
-              This consult names people; viewing it requires member access.
+              This was logged while Log Content was set to Metadata only, so the
+              content was never stored.
             </InlineNoticeText>
           </InlineNotice>
-        ) : (
-          <>
-            <Section title={toolCall ? `Tool: ${toolCall.name}` : "Request"}>
+        </Section>
+      ) : (
+        <>
+          <Section title={toolCall ? `Tool: ${toolCall.name}` : "Request"}>
+            <JsonCodeBlock
+              value={toolCall ? toolCall.arguments : consult.request}
+              maxHeightClassName="max-h-[320px] overflow-auto"
+            />
+          </Section>
+          <Section title="Answer">
+            {consult.answer === null ? (
+              <p className="text-sm text-muted-foreground">No answer.</p>
+            ) : (
               <JsonCodeBlock
-                value={toolCall ? toolCall.arguments : consult.request}
-                maxHeightClassName="max-h-[320px] overflow-auto"
+                value={consult.answer}
+                maxHeightClassName="max-h-[240px] overflow-auto"
               />
-            </Section>
-            <Section title="Answer">
-              {consult.answer === null ? (
-                <p className="text-sm text-muted-foreground">No answer.</p>
-              ) : (
-                <JsonCodeBlock
-                  value={consult.answer}
-                  maxHeightClassName="max-h-[240px] overflow-auto"
-                />
-              )}
-            </Section>
-            <Section title="Diagnostics">
-              {consult.diagnosticsTruncated && (
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Truncated by the runtime.
-                </p>
-              )}
-              <DiagnosticsView diagnostics={diagnostics} />
-            </Section>
-          </>
-        )}
-
-        <Collapsible>
-          <CollapsibleTrigger className="group flex items-center gap-1 text-sm font-medium">
-            <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
-            <span>Raw JSON</span>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4 pt-2">
-            <JsonCodeBlock value={consult} />
-            {view.rawResponse !== null && (
-              <Section title="Raw response">
-                <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-xs">
-                  {view.rawResponse}
-                </pre>
-              </Section>
             )}
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-    </>
+          </Section>
+          <Section title="Diagnostics">
+            {consult.diagnosticsTruncated && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                Truncated by the runtime.
+              </p>
+            )}
+            <DiagnosticsView diagnostics={diagnostics} />
+          </Section>
+        </>
+      )}
+
+      <Collapsible>
+        <CollapsibleTrigger className="group flex items-center gap-1 text-sm font-medium">
+          <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
+          <span>Raw JSON</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-2">
+          <JsonCodeBlock value={consult} />
+          {view.rawResponse !== null && (
+            <Section title="Raw response">
+              <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-xs">
+                {view.rawResponse}
+              </pre>
+            </Section>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 }
+
+// === Internal components ===
 
 function DiagnosticsView({ diagnostics }: { diagnostics: ConsultDiagnostics }) {
   switch (diagnostics.kind) {
@@ -271,21 +251,6 @@ function ProbabilityRow({
         {(probability * 100).toFixed(1)}%
       </span>
     </div>
-  );
-}
-
-function MetaRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null;
-}) {
-  return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="truncate font-mono text-xs leading-5">{value ?? "—"}</dd>
-    </>
   );
 }
 

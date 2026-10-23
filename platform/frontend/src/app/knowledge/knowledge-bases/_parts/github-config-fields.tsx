@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { type ReactNode, useEffect, useId } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { SettingsLink } from "@/components/settings-link";
 import {
   FormControl,
   FormDescription,
@@ -169,9 +169,9 @@ export function GithubConfigFields({
           </Select>
           <FormDescription>
             Organization credentials support scheduled syncs.{" "}
-            <Link href="/settings/credentials" className="underline">
+            <SettingsLink href="/settings/credentials" className="underline">
               Manage credentials
-            </Link>
+            </SettingsLink>
             . {appConfigDescription}
           </FormDescription>
           {appConfigError && (
@@ -291,11 +291,12 @@ export function GithubConfigFields({
               <FormItem>
                 <FormLabel>File Types (optional)</FormLabel>
                 <FormDescription>
-                  Comma-separated extensions to index when repository files are
-                  enabled. Defaults to Markdown and YAML.
+                  Comma-separated extensions or file names to index when
+                  repository files are enabled, such as .md or Dockerfile. Use *
+                  for every text file. Defaults to Markdown and YAML.
                 </FormDescription>
                 <FormControl>
-                  <Input placeholder=".md, .mdx, .yaml, .yml" {...field} />
+                  <Input placeholder=".md, .yaml, Dockerfile" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

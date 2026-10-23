@@ -6,7 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { A2ATaskStateSchema } from "./a2a-task";
+import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -30,6 +30,8 @@ export const AgentRunActorKindSchema = z.enum([
   "user",
   "team",
   "organization",
+  "oauthClient",
+  "serviceAccount",
   "system",
 ]);
 export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;
@@ -71,6 +73,16 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
     type: z.literal("chatops"),
     bindingId: z.string().uuid(),
     threadId: z.string().min(1),
+    /**
+     * The conversation was with a Slack bot pinned to this agent, so that bot
+     * (not the main Slack app) posts the result.
+     */
+    pinnedAgentId: z.string().uuid().optional(),
+    conversationReference: z.record(z.string(), z.unknown()).optional(),
+    /** Placeholder and mute state belong to this turn, not later UI continuations. */
+    originatingTaskId: z.string().uuid().optional(),
+    placeholderActivityId: z.string().optional(),
+    muteMarkerAtStart: z.string().nullable().optional(),
   }),
   z.object({
     type: z.literal("email"),
@@ -143,6 +155,17 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
   credentialId: z.string().optional(),
   label: z.string(),
   description: z.string().optional(),
+  /**
+   * False when the caller may not use the saved credential, so they cannot
+   * add their value and an admin has to share it with them first.
+   */
+  canConnect: z.boolean().optional(),
+  /**
+   * True when the credential is an organization one and only people who
+   * manage organization settings may run with it, so the caller cannot fix
+   * this by connecting anything; an admin has to run the Agent or change it.
+   */
+  adminOnly: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema
@@ -271,6 +294,17 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
   })
   .omit({ id: true, startedAt: true, endedAt: true });
 
+/**
+ * Why a FAILED run failed, in machine-readable form. `code` comes from the
+ * vocabulary in `services/agent-runtime/run-failure.ts` (or `image.<code>` for
+ * an image-owned envelope); `retriable` says whether a new run of the same
+ * Agent is likely to succeed unchanged; `message` repeats `statusReason`.
+ */
+export const AgentRunFailureSchema = A2ATaskFailureSchema.extend({
+  message: z.string(),
+});
+export type AgentRunFailure = z.infer<typeof AgentRunFailureSchema>;
+
 export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   logs: true,
   completionTarget: true,
@@ -280,6 +314,8 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 }).extend({
   state: A2ATaskStateSchema,
   statusReason: z.string().nullable(),
+  /** Null unless the run FAILED and its failure was classified. */
+  failure: AgentRunFailureSchema.nullable(),
   stateChangedAt: z.date().nullable(),
   /** Effective Kubernetes lifetime limit, resolved for this run. */
   hardDeadlineAt: z.date(),
@@ -372,26 +408,6 @@ export const UpdateAgentRunSchema = createUpdateSchema(schema.agentRunsTable)
       title !== undefined || pinnedAt !== undefined || projectId !== undefined,
     "At least one field must be provided",
   );
-
-export const AgentRunOpenappaReviewSchema = z.object({
-  status: z.enum(["none", "pending", "no_reviewer"]),
-  canDecide: z.boolean(),
-  offerId: z.string().nullable(),
-  text: z.string().nullable(),
-  tool: z.string().nullable(),
-  arguments: z.string().nullable(),
-});
-
-export const DecideAgentRunOpenappaReviewSchema = z.object({
-  decision: z.enum(["approve", "deny"]),
-  offerId: z.string().min(1),
-});
-
-export const DecidedAgentRunOpenappaReviewSchema = z.object({
-  decision: z.enum(["approve", "deny"]),
-  offerId: z.string(),
-  steered: z.boolean(),
-});
 
 export const StartAgentRunResponseSchema = z.object({
   sessionId: z.string().uuid().optional(),

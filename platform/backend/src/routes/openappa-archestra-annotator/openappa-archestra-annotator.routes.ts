@@ -3,15 +3,28 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { openappaArchestraAnnotator } from "@/openappa/archestra-annotator";
 import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  OPENAPPA_CONTEXT_HEADER,
+  openappaAnnotatorContext,
+} from "@/openappa/encrypted-chat";
+import { openappaReplayOwner } from "@/openappa/replay-owner";
 import { openappaEnabled } from "@/openappa/service";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError, constructResponseSchema } from "@/types";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { isLoopbackRequest } from "@/utils/network";
 
 const AnnotationRequestSchema = z.object({
   system: z.string(),
   input: z.string(),
   schema: z.record(z.string(), z.unknown()),
+  attribution: z
+    .object({
+      root: z.string(),
+      trajectory: z.string(),
+      call_id: z.string().optional(),
+    })
+    .optional(),
 });
 const AnswerSchema = z.record(z.string(), z.unknown());
 
@@ -48,8 +61,18 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           throw new ApiError(401, "Unauthorized");
       },
     },
-    async (request) => {
-      const outcome = await openappaArchestraAnnotator.annotate(request.body);
+    async (request, reply) => {
+      const context = request.headers[OPENAPPA_CONTEXT_HEADER] as
+        | string
+        | undefined;
+      const replay = openappaReplayOwner(context);
+      const outcome = await openappaArchestraAnnotator.annotate({
+        request: request.body,
+        encryptedChat: replay ? null : openappaAnnotatorContext(context),
+        replay,
+        // The runtime closes the connection when its consult times out.
+        abortSignal: clientDisconnectSignal({ request, reply }),
+      });
       switch (outcome.kind) {
         case "answered":
           return outcome.answer;

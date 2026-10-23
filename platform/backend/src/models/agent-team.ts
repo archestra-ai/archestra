@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ScopedResource } from "@archestra/shared";
-import {
-  and,
-  eq,
-  inArray,
-  isNull,
-  or,
-  type SQL,
-  type SQLWrapper,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
@@ -79,8 +70,9 @@ class AgentTeamModel {
   }
 
   /**
-   * Check if a user has access to a specific agent: a grant decides for an
-   * agent or MCP gateway; see the end of the method for an LLM proxy.
+   * Check if a user has access to a specific agent: an LLM proxy serves its
+   * organization's members (any proxy for an admin); a grant decides for an
+   * agent or MCP gateway.
    */
   static async userHasAgentAccess(params: {
     userId: string;
@@ -108,6 +100,14 @@ class AgentTeamModel {
     if (!agent) {
       return false;
     }
+    // Agents and MCP gateways are reached through grants alone. An LLM proxy
+    // has no grant namespace of its own: the organization's proxy serves every
+    // member, and an administrator reaches any proxy row.
+    if (agent.agentType === "llm_proxy")
+      return (
+        isAgentAdmin ||
+        AgentModel.isOrganizationLlmProxyFor({ agentId, userId })
+      );
 
     const table = schema.agentsTable;
     const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
@@ -143,19 +143,13 @@ class AgentTeamModel {
         ),
       )
       .limit(1);
-    if (granted) return true;
-    // Agents and MCP gateways are reached through grants alone. An LLM proxy
-    // has no grant namespace of its own: the organization's proxy serves every
-    // member, and an administrator reaches any proxy row.
-    if ((await AgentModel.getAgentType(agentId)) !== "llm_proxy") return false;
-    if (isAgentAdmin) return true;
-    return AgentModel.isOrganizationLlmProxyFor({ agentId, userId });
+    return granted !== undefined;
   }
 
   /**
-   * The teams an agent's own policy grants read to. Tool policy team
-   * conditions, team limits and team statistics read this, so an agent shared
-   * with a team by grant counts as that team's agent.
+   * The teams an agent's own policy grants read to. Team limits and team
+   * statistics read this, so an agent shared with a team by grant counts as
+   * that team's agent.
    */
   static async getTeamsForAgent(agentId: string): Promise<string[]> {
     return (
@@ -365,18 +359,39 @@ class AgentTeamModel {
     });
   }
 
-  /**
-   * Whether the `agents` row's own policy grants read to the team in
-   * `teamColumn`: the join condition for per-team views such as statistics.
-   */
-  static grantsReadToTeamColumn(teamColumn: SQLWrapper): SQL {
-    const table = schema.agentsTable;
-    return ResourcePermissionPolicyModel.grantsReadToTeamColumn({
-      organizationId: table.organizationId,
-      resource: sql`CASE WHEN ${table.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END`,
-      scopeColumn: table.id,
-      teamColumn,
-    });
+  /** Object-local team read assignments, with EXISTS set semantics. */
+  static readAssignments(organizationId: string) {
+    const agent = schema.agentsTable;
+    const policy = schema.resourcePermissionPoliciesTable;
+    return db
+      .selectDistinct({
+        agentId: sql<string>`${agent.id}`.as("agent_id"),
+        teamId: sql<string>`${schema.teamsTable.id}`.as("team_id"),
+      })
+      .from(agent)
+      .innerJoin(
+        policy,
+        and(
+          eq(policy.organizationId, agent.organizationId),
+          eq(
+            policy.resource,
+            sql`CASE WHEN ${agent.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END`,
+          ),
+          eq(policy.scope, sql`${agent.id}::text`),
+        ),
+      )
+      .innerJoin(
+        sql`jsonb_array_elements(${policy.grants}) AS team_grant`,
+        ResourcePermissionPolicyModel.teamReadGrantCondition(sql`team_grant`),
+      )
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamsTable.id, sql`team_grant->'subject'->>'id'`),
+      )
+      .where(
+        and(eq(agent.organizationId, organizationId), isNull(agent.deletedAt)),
+      )
+      .as("agent_team_read_assignments");
   }
 }
 

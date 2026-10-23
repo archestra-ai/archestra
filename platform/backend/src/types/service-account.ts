@@ -30,7 +30,13 @@ export const ServiceAccountResponseSchema = z.object({
   createdBy: CreatedByNullableSchema,
   organizationId: z.string(),
   name: z.string(),
+  icon: z.string().nullable(),
   role: z.string(),
+  /**
+   * Team the account acts for: the team's grants reach it, and MCP
+   * credentials resolved at call time prefer the team's installs.
+   */
+  teamId: z.string().nullable(),
   disabled: z.boolean(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -64,14 +70,18 @@ export const ServiceAccountTokenWithValueResponseSchema =
 
 export const CreateServiceAccountBodySchema = z.object({
   name: z.string().trim().min(1).max(256),
+  icon: z.string().nullable().optional(),
   role: z.string().trim().min(1).max(256),
+  teamId: z.string().min(1).nullable().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 export const UpdateServiceAccountBodySchema = z
   .object({
     name: z.string().trim().min(1).max(256).optional(),
+    icon: z.string().nullable().optional(),
     role: z.string().trim().min(1).max(256).optional(),
+    teamId: z.string().min(1).nullable().optional(),
     disabled: z.boolean().optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   })

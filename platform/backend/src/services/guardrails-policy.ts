@@ -4,8 +4,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -18,7 +17,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
+import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -118,6 +117,9 @@ async function deploymentRefusal(params: {
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
+/** @public — the LLM annotator the default policy routes every call no rule names to; tests assert it. */
+export const UNDECLARED_TOOL_ANNOTATOR = "archestra.llm-annotator";
+
 export const guardrailsPolicyService = {
   async get(organizationId: string): Promise<GuardrailsPolicy> {
     requireEnabled();
@@ -144,11 +146,6 @@ export const guardrailsPolicyService = {
         emits: [],
       },
     };
-  },
-
-  /** The no-op annotator endpoint and the answer it serves, for offline replay. */
-  noopAnnotator() {
-    return { url: noopAnnotatorUrl(), response: this.annotate() };
   },
 
   /**
@@ -185,7 +182,10 @@ export const guardrailsPolicyService = {
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
-    const errors = [...resolution.errors];
+    const errors = [
+      ...resolution.errors,
+      ...(await openappaDeclarations.credentialErrors(content)),
+    ];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)
@@ -200,6 +200,10 @@ export const guardrailsPolicyService = {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
         resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
       else {
@@ -219,8 +223,8 @@ export const guardrailsPolicyService = {
    * Save a new revision of the organization's policy.
    *
    * Every user-driven write of the text passes here, so this is where a credential
-   * grant — an organization credential's value reaching a battery's helper sandbox
-   * — is authorized. A grant the submitted text adds, or whose key it changes
+   * grant — an organization credential's value reaching a battery's helper sandbox,
+   * or a root external or profile that names it as its `token_env` — is authorized. A grant the submitted text adds, or whose key it changes
    * against the latest revision, takes `credential:update`; removing one takes
    * nothing beyond the route's own permission. The diff runs against the latest
    * revision, so a stale `expectedRevision` still ends in the save's own conflict.
@@ -235,30 +239,21 @@ export const guardrailsPolicyService = {
     requireEnabled();
     const { organizationId, userId, content } = params;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval)
-      throw new ApiError(
-        409,
-        "Stop GitHub syncing before editing this policy.",
-      );
+      throw new ApiError(409, "Stop Git sync before editing this policy.");
     const latest = await this.get(organizationId);
     const resolved = await resolveBoth({
       organizationId,
       content,
       previous: latest.content,
     });
-    const granted = addedGrants(
-      openappaDeclarations.grants(resolved.previous),
-      openappaDeclarations.grants(resolved.submitted),
-    );
-    if (
-      granted.length > 0 &&
-      !(await userHasPermission(userId, organizationId, "credential", "update"))
-    )
-      throw new ApiError(
-        403,
-        `Credential update permission is required: this policy hands ${granted
-          .map((grant) => `${grant.variable} to ${grant.battery}`)
-          .join(", ")}`,
-      );
+    await requireGrantPermission({
+      organizationId,
+      userId,
+      granted: addedGrants(
+        openappaDeclarations.grants(resolved.previous),
+        openappaDeclarations.grants(resolved.submitted),
+      ),
+    });
     const validation = await this.validate(content, {
       organizationId,
       previous: latest.content,
@@ -289,7 +284,7 @@ export const guardrailsPolicyService = {
       } catch {
         logger.warn(
           { organizationId },
-          "Could not queue informational validation after a policy change",
+          "OpenAPPA could not queue informational validation after a policy change",
         );
       }
     }
@@ -297,13 +292,36 @@ export const guardrailsPolicyService = {
   },
 };
 
+/**
+ * A write that adds or rekeys a credential grant hands that credential's value
+ * to helper code, so it takes `use` on the credential. A key with no credential
+ * behind it yet would hand over whichever one is created under it later, so it
+ * takes `use` on every credential.
+ */
+export async function requireGrantPermission(params: {
+  organizationId: string;
+  userId: string;
+  granted: ReturnType<typeof addedGrants>;
+}): Promise<void> {
+  const { organizationId, userId, granted } = params;
+  const message = `Use access to the credential is required: this policy hands ${granted
+    .map((grant) => `${grant.variable} to ${grant.battery}`)
+    .join(", ")}`;
+  for (const key of new Set(granted.map((grant) => grant.key)))
+    await CredentialAccess.requireUseOfKey({
+      organizationId,
+      userId,
+      key,
+      message,
+    });
+}
+
 function requireEnabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
-function noopAnnotatorUrl() {
-  return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
-}
+const CODING_BATTERY = "coding";
+const CLAUDE_CODE_BATTERY = "claude-code";
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -311,14 +329,40 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, reads the organization's members as `internal`, and
- * has the organization's default model label each sandbox command.
+ * carry in this deployment, and the bundled `coding` battery over the client
+ * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
+ * onto Claude Code's tools, and the root maps it onto the other clients'. It
+ * reads the organization's members as `internal`, and has the organization's
+ * default model label each sandbox command, each shell command the client
+ * batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
-  return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
+  return `include = [
+  "${bundledEntry(ARCHESTRA_BATTERY)}",
+  "${bundledEntry(CODING_BATTERY)}",
+  "${bundledEntry(CLAUDE_CODE_BATTERY)}",
+]
 
-[server_aliases]
+[aliases.mcp]
 ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
+
+# The client battery's rules name Claude Code's tools; here they govern the
+# built-ins of whichever client runs through this deployment.
+[aliases.host]
+${CLAUDE_CODE_BATTERY} = ["archestra"]
+
+# The coding battery's tools under Codex's and OpenCode's spellings.
+[aliases.tool.${CODING_BATTERY}]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]
 
 [policy]
 version = 2
@@ -329,8 +373,10 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
-# A subagent's return that matches the bounded JSON schema its parent declared
-# at the spawn crosses at the parent's trust. Built into the runtime.
+# Lets an agent hand a risky read to a subagent. The subagent must reply in
+# the strict JSON shape the agent asked for, so injected instructions and
+# extra data can't slip back. A reply that fits gets the agent's trust.
+# Built into the runtime.
 [[policy.sanitizer]]
 name = "attest-schema"
 on = ["tool_output"]
@@ -338,11 +384,8 @@ on = ["tool_output"]
 [policy.sanitizer.permits]
 trust = { from = "suspicious", to = "trusted" }
 
-[[policy.annotator]]
-name = "noop"
-
-# Labels each sandbox command (run_command) with the organization's
-# default model, through the LLM proxy.
+# Labels each sandbox command (run_command) with the annotator model,
+# through the LLM proxy.
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
@@ -355,18 +398,67 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
+# The client batteries' shell and Monitor annotators, with the batteries' own
+# mandate, asked of the annotator model instead of a local claude process.
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
+builtin = "archestra"
+hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.monitor-requirements"
+builtin = "archestra"
+
+# Labels each call no rule names with the OpenAPPA annotator model (the
+# organization's default model unless Guardrails settings pick another).
+[[policy.annotator]]
+name = "${UNDECLARED_TOOL_ANNOTATOR}"
+builtin = "archestra"
+ranks = ["suspicious", "trusted"]
+audiences = ["self", "internal"]
+marks = []
+effects = []
+hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
+
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.
 [[policy.tool]]
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}
 
-# Tools without a specific rule have no additional restrictions.
+# Starting a subagent opens a child trajectory under this deployment's context
+# control; what the subagent hands back is checked when it returns.
+[[policy.tool]]
+name = "host/archestra/Agent"
+delta = {}
+
+# \`Task\` is the earlier name of \`Agent\`.
+[[policy.tool]]
+name = "host/archestra/Task"
+delta = {}
+
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "${UNDECLARED_TOOL_ANNOTATOR}"
 
-[externals.annotators.noop]
-url = "${noopAnnotatorUrl()}"
+# Review one exact call for any attention mark, trust or audience gap.
+[[policy.authority]]
+name = "human-approval"
+hint = "Ask the person running this session to approve this exact call."
+
+[policy.authority.permits]
+trust_below = "trusted"
+audience_missing = ["public"]
+attention = ["*"]
+
+[externals]
+timeout_ms = 20000
+
+[externals.authorities.human-approval]
+builtin = "hitl"
 `;
 }

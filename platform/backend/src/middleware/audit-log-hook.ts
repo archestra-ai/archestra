@@ -305,11 +305,6 @@ type AuditDenylistEntry = {
   value: string;
 };
 
-/** Exact route patterns audited despite a prefix denylist entry. */
-const AUDIT_DENYLIST_EXEMPT_ROUTES = new Set([
-  "/api/connection-setups/prompt-session",
-]);
-
 const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/auth/" },
   { kind: "prefix", value: "/api/health" },
@@ -323,11 +318,14 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/chat/" },
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
-  { kind: "prefix", value: "/api/members/default-model" },
   // GitHub skill read-only POSTs: discover/preview fetch remote repo data but
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // The MCP registry list is a read sent as a POST body (its ranked ids can
+  // outgrow a URL); it changes nothing.
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search" },
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search/ids" },
   // Read-only embedding/reranker connection tests: probe the provider but mutate
   // no org state. Auditing them recorded a misleading "Success" outcome on failed
   // probes (they return HTTP 200 with `{ success: false }`).
@@ -356,7 +354,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
-  // POST /api/connection-setups/prompt-session is the sole exemption.
   { kind: "prefix", value: "/api/connection-setups" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
@@ -368,9 +365,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/openai-codex-auth/" },
   // Ephemeral Telegram link code (the account-binding /link IS audited).
   { kind: "exact", value: "/api/chatops/telegram/link-code" },
-  // High-volume / best-effort artifact + recording surfaces.
+  // High-volume / best-effort artifact surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
-  { kind: "prefix", value: "/api/app-recordings" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",
@@ -403,9 +399,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
 ];
 
 function isDenylisted(url: string, routePattern: string | undefined): boolean {
-  if (routePattern && AUDIT_DENYLIST_EXEMPT_ROUTES.has(routePattern)) {
-    return false;
-  }
   return AUDIT_DENYLIST.some((entry) => {
     switch (entry.kind) {
       case "exact":

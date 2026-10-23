@@ -2,7 +2,7 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,8 +32,10 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
 | Team token | **Settings → Teams**, then the team's token | The team |
 | Organization token | **Settings → Auth** | The organization |
-| OAuth access token | An [OAuth client](/docs/mcp/authentication) that lists the agent | The client, or the signed-in user |
+| OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
+
+For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilities can share the same client credentials.
 
 What to know:
 
@@ -132,12 +134,22 @@ What to know:
 
 ## Approving Tool Calls
 
-When a tool call needs [approval](/docs/agents/guardrails), the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`:
+When your [policy](/docs/agents/guardrails/policies) asks a person to approve an action, the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`. `openappaReview.text` is what the reviewer should read:
 
 ```json
 "metadata": {
   "approvalRequests": [
-    { "approvalId": "appr-1", "toolName": "send_email", "approved": false, "resolved": false }
+    {
+      "approvalId": "appr-1",
+      "toolName": "archestra__execute_remedy_plan",
+      "approved": false,
+      "resolved": false,
+      "openappaReview": {
+        "offerId": "3f9a1c0d2b7e4a51",
+        "text": "Approve this call? send_email to ceo@example.com",
+        "expiresAt": "2026-10-13T10:00:00.000Z"
+      }
+    }
   ]
 }
 ```
@@ -157,6 +169,12 @@ Answer with a `SendMessage` that names the task and carries a decision for each 
 ```
 
 The run resumes once every request has a decision. `CancelTask` on a waiting task cancels it.
+
+What to know:
+
+- Whoever calls with the token answers, so your code decides for the reviewer. Show the text to a person before you approve.
+- An approval lets the agent continue only when the policy allows it. A decline keeps the action blocked.
+- Answer within 24 hours. After that the task is canceled and the action stays blocked.
 
 ## Other Methods
 

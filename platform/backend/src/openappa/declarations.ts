@@ -6,6 +6,7 @@ import type {
   HelperBindingInput,
   BatteryPackage as NativeBatteryPackage,
   PolicyDeclarations,
+  TokenEnvReader,
 } from "@archestra/openappa-rs";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -26,6 +27,11 @@ import type {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
+import { type DeployedBattery, declaredCredentials } from "./battery-target";
+import { withReportingTool } from "./reporting-tool";
+
+/** How each resolved entry deploys here, by its `include` spelling. */
+export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -40,7 +46,7 @@ export type EntryResolution = {
   battery: NativeBatteryPackage | null;
 };
 
-/** One `[server_aliases]` binding as the root authors it. */
+/** One `aliases.mcp` binding as the root authors it. */
 export type AliasDeclaration = {
   namespace: string;
   servers: string[];
@@ -55,6 +61,8 @@ export type PolicyResolution = {
   credentials: Record<string, string>;
   /** The annotators the root's own tool rules route calls to. */
   routedAnnotators: string[];
+  /** Every root external or profile naming a `token_env`, by reader identity. */
+  tokenEnvReaders: TokenEnvReader[];
   /**
    * Everything wrong with the declarations themselves: a shape the reader could
    * not make sense of, and an entry spelled outside the two admitted forms.
@@ -74,9 +82,11 @@ type BoundPolicy = {
 };
 
 /**
- * One credential value reaching one battery's helper sandbox: the battery an
- * include entry resolves to, a variable its manifest declares, and the store key
- * the `[credentials]` table binds to that variable.
+ * One credential value reaching code outside the platform: a battery's helper
+ * sandbox (`battery` is the name an include entry resolves to) or a root external
+ * or profile the runtime authenticates with it (`battery` is the reader's
+ * identity, its `externals` path and binding), a variable it reads, and the store
+ * key the `[credentials]` table binds to that variable.
  */
 type Grant = { battery: string; variable: string; key: string };
 
@@ -152,6 +162,9 @@ class OpenAppaDeclarations {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
     process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
       `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    // Default for an omitted `externals.max_body_bytes`. An explicit policy
+    // value is applied first and is not overwritten.
+    process.env[OPENAPPA_MAX_BODY_BYTES_ENV] = String(config.api.bodyLimit);
     return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 
@@ -219,6 +232,7 @@ class OpenAppaDeclarations {
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
       routedAnnotators: declarations.routedAnnotators,
+      tokenEnvReaders: declarations.tokenEnvReaders,
       errors,
     };
   }
@@ -246,7 +260,9 @@ class OpenAppaDeclarations {
         ]),
       );
     const read = new Set(
-      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+      resolution.entries.flatMap((entry) =>
+        entry.battery ? declaredCredentials(entry.battery) : [],
+      ),
     );
     const filling = bindings.filter(
       (binding) =>
@@ -287,6 +303,32 @@ class OpenAppaDeclarations {
         ),
       },
     };
+  }
+
+  /**
+   * Why an authored root document may not name credentials.
+   *
+   * Temporary, until credentials and Git sync are designed together: the stored
+   * bindings are the only place a credential key is set. A `[credentials]` line
+   * in the text would let whoever writes the policy, a repository commit
+   * included, hand a credential to code. A root `token_env` would read a bound
+   * variable into an external the text points anywhere, and without
+   * `[credentials]` lines it has no other way to get a value, so the root's own
+   * externals and profiles take no token for now.
+   */
+  async credentialErrors(content: string): Promise<string[]> {
+    const native = await loadNative();
+    const declarations = await native.parseOpenappaDeclarations(content);
+    return [
+      ...declarations.credentials.map(
+        ({ variable, line }) =>
+          `[credentials] (line ${line}): remove ${variable} from the policy text and bind it with bind_guardrails_credential or on the Batteries page. Credentials are set only outside the policy text for now.`,
+      ),
+      ...declarations.tokenEnvReaders.map(
+        ({ variable, reader }) =>
+          `${reader}: remove token_env = "${variable}". The policy's own externals and profiles cannot read a credential for now; only batteries can, through bindings.`,
+      ),
+    ];
   }
 
   /**
@@ -353,17 +395,25 @@ class OpenAppaDeclarations {
    */
   composeInputs(params: {
     entries: readonly EntryResolution[];
-    /** The helper endpoint for a battery, or null to compose it as the stub. */
-    helpers: (entry: EntryResolution) => HelperBindingInput | null | "stub";
+    deployed: DeployedEntries;
+    /** The helper endpoint for a battery, null when it runs none, or the stub. */
+    helpers: (
+      entry: EntryResolution,
+      deployed: DeployedBattery,
+    ) => HelperBindingInput | null | "stub";
   }): ComposeBatteryInput[] {
     return params.entries.map((entry) => {
-      const helpers = entry.battery ? params.helpers(entry) : "stub";
-      return helpers === "stub" || !entry.battery
+      const deployed = params.deployed.get(entry.entry);
+      const helpers = deployed ? params.helpers(entry, deployed) : "stub";
+      return helpers === "stub" || !deployed
         ? { entry: entry.entry, name: entry.name, policy: STUB_POLICY }
         : {
             entry: entry.entry,
             name: entry.name,
-            policy: entry.battery.policy,
+            policy: deployed.basePolicy,
+            ...(deployed.target
+              ? { targetPolicy: deployed.target.policy }
+              : {}),
             ...(helpers === null ? {} : { helpers }),
           };
     });
@@ -375,27 +425,45 @@ class OpenAppaDeclarations {
    * only being checked has no derived install row to serve its helpers from. A
    * composition that returns content is a successful validation. The batteries
    * named in `held` compose as the empty battery, as a deployment holding them
-   * back composes them.
+   * back composes them. A replay that consults the helpers passes
+   * `helperOwner`, the install id each battery's endpoints name instead.
    */
   async composeForCheck(params: {
     root: string;
     resolution: PolicyResolution;
+    deployed: DeployedEntries;
     held?: ReadonlySet<string>;
+    memberRosters?: Record<string, Record<string, string>>;
+    helperOwner?: (entry: EntryResolution, deployed: DeployedBattery) => string;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
-    return native.composeOpenappaPolicy({
+    const composed = await native.composeOpenappaPolicy({
       root: params.root,
+      memberRosters: params.memberRosters,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
-        helpers: (entry) => {
+        deployed: params.deployed,
+        helpers: (entry, deployed) => {
           if (params.held?.has(entry.name)) return "stub";
-          return entry.battery && entry.battery.externals.length > 0
-            ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
-            : null;
+          if (deployed.externals.length === 0) return null;
+          const owner =
+            params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
+          return { urlBase: helperUrlBase(owner), tokenEnv };
         },
       }),
     });
+    // A check answers as the served composition does, the yell rule included.
+    const content = composed.content ?? null;
+    return content === null
+      ? composed
+      : {
+          ...composed,
+          content: await withReportingTool({
+            composed: content,
+            validate: (text) => native.validateHostedOpenappaPolicy(text),
+          }),
+        };
   }
 
   /**
@@ -421,51 +489,69 @@ class OpenAppaDeclarations {
     const keys = new Map(
       declarations.credentials.map(({ variable, key }) => [variable, key]),
     );
-    const resolved = await Promise.all(
-      declarations.runtimeCredentials.map(async (variable) => {
-        const key = keys.get(variable);
-        if (!key) return null;
-        try {
-          const value = await resolveCredentialValue({
-            organizationId,
-            credentialId: key,
-            scope: "organization",
-          });
-          return value === null ? null : ([variable, value] as const);
-        } catch (error) {
-          // A bound credential that cannot be read fails the dispatch rather
-          // than running it as though the credential were unset. Only a
-          // refused binding is the organization's to fix; any other failure
-          // stays retryable.
-          logger.warn(
-            { organizationId, variable, error },
-            "OpenAPPA runtime credential could not be resolved",
-          );
-          if (error instanceof ApiError && error.statusCode === 400)
-            throw new OpenappaCredentialError(variable, error);
-          throw error;
-        }
-      }),
-    );
-    return {
-      content,
-      credentials: Object.fromEntries(
-        resolved.filter((entry) => entry !== null),
+    const bound = declarations.runtimeCredentials.flatMap((variable) => {
+      const key = keys.get(variable);
+      return key ? [{ variable, key }] : [];
+    });
+    const outcomes = await Promise.allSettled(
+      bound.map(({ key }) =>
+        resolveCredentialValue({
+          organizationId,
+          credentialId: key,
+          scope: "organization",
+        }),
       ),
-    };
+    );
+    const credentials: Record<string, string> = {};
+    const failures: { variable: string; error: unknown }[] = [];
+    outcomes.forEach((outcome, index) => {
+      const { variable } = bound[index];
+      if (outcome.status === "fulfilled") {
+        if (outcome.value !== null) credentials[variable] = outcome.value;
+        return;
+      }
+      logger.warn(
+        { organizationId, variable, error: outcome.reason },
+        "OpenAPPA runtime credential could not be resolved",
+      );
+      failures.push({ variable, error: outcome.reason });
+    });
+    const [failed] = failures;
+    if (failed) {
+      // A bound credential that cannot be read fails the dispatch rather than
+      // running it as though the credential were unset. Only a refused
+      // binding is the organization's to fix; any other failure stays
+      // retryable.
+      if (failed.error instanceof ApiError && failed.error.statusCode === 400)
+        throw new OpenappaCredentialError(failed.variable, failed.error);
+      throw failed.error;
+    }
+    return { content, credentials };
   }
 
-  /** Every grant a resolution holds: resolved batteries × declared variables × the table. */
+  /**
+   * Every grant a resolution holds: resolved batteries × declared variables × the
+   * table, and the root's own readers. A battery is granted what any target it
+   * may deploy as reads, since which one it takes moves without a policy write.
+   */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
     for (const entry of resolution.entries) {
       if (!entry.battery) continue;
-      for (const variable of entry.battery.credentials) {
+      for (const variable of declaredCredentials(entry.battery)) {
         const key = resolution.credentials[variable];
         if (key) grants.push({ battery: entry.name, variable, key });
       }
     }
-    return grants;
+    return [...grants, ...this.rootGrants(resolution)];
+  }
+
+  /** The grants the runtime itself sends: a root reader × the key its variable is bound to. */
+  rootGrants(resolution: PolicyResolution): Grant[] {
+    return resolution.tokenEnvReaders.flatMap(({ variable, reader }) => {
+      const key = resolution.credentials[variable];
+      return key ? [{ battery: reader, variable, key }] : [];
+    });
   }
 
   /**
@@ -560,7 +646,7 @@ class OpenAppaDeclarations {
           contentHash: params.contentHash,
           error,
         },
-        "Stored OpenAPPA battery package no longer validates; ignoring it",
+        "OpenAPPA stored battery package no longer validates; ignoring it",
       );
       return null;
     }
@@ -582,6 +668,7 @@ const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
 /** Where the addon's `builtin = "archestra"` annotator posts; read by `openappa-rs`. */
 const OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV = "APPA_ARCHESTRA_ANNOTATOR_URL";
+const OPENAPPA_MAX_BODY_BYTES_ENV = "APPA_ARCHESTRA_MAX_BODY_BYTES";
 
 /**
  * The owner a document being checked names for its helpers. No install row has

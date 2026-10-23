@@ -16,12 +16,14 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   ChannelDetailsDialog,
   channelDisplayName,
 } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentSlackBotSection } from "@/components/agent-slack-bot-section";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
@@ -39,13 +41,14 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
+import { useSlackAgentBots } from "@/lib/chatops/chatops-config.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -179,10 +182,18 @@ export function AgentChatAppsEditor({
   }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError]);
 
   const providerAvailabilityPending = configPending;
+  const slackOffered = !messagingChannelCatalog.isHidden("slack");
+  // With one bot per agent, Slack channels belong to the Slack bot section:
+  // assigning one here would not make anyone answer in it. A Slack app still
+  // routed by channel (not yet converted) keeps Slack in this list.
+  const slackBots = useSlackAgentBots({ quiet: true });
+  const slackHasAgentBots =
+    !!slackBots.data && slackBots.data.unassignedApp === null;
   const visibleProviders = CHAT_PROVIDERS.filter(
     (provider) =>
       !messagingChannelCatalog.isHidden(provider) &&
-      (provider !== "telegram" || telegramEnabled),
+      (provider !== "telegram" || telegramEnabled) &&
+      (provider !== "slack" || !slackHasAgentBots),
   );
   const visibleProviderIds = new Set(visibleProviders);
   const bindings = (data?.bindings ?? []).filter((binding) =>
@@ -208,14 +219,10 @@ export function AgentChatAppsEditor({
     isPending: agentNamesPending,
     isLoadingError: agentNamesLoadingError,
     refetch: refetchAgentNames,
-  } = useProfiles({
+  } = useAgentOptionsByIds({
     // This resolves existing assignments, including built-in agents.
-    filters: {
-      agentType: "agent",
-      includeTools: false,
-      excludeBuiltIn: false,
-    },
-    enabled: foreignAgentIds.length > 0,
+    ids: foreignAgentIds,
+    filters: { agentType: "agent", excludeBuiltIn: false },
   });
   const agentNames = new Map(agents.map((item) => [item.id, item.name]));
   const agentReferences = new Map(
@@ -266,8 +273,8 @@ export function AgentChatAppsEditor({
   const assignmentOptions = buildAssignmentOptions({
     subject,
     visibilityLocation: emailAgent
-      ? "the Permissions tab"
-      : "Permissions in the Configuration step",
+      ? "Who can use it on General"
+      : "Who can use it in the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
@@ -282,7 +289,13 @@ export function AgentChatAppsEditor({
     optionOrder,
     currentIds,
   );
-  const normalizedSelectedIds = [...selectedIds].sort();
+  // A selected channel can vanish from the list after the selection was
+  // seeded (deleted, or its provider hidden). It has nothing left to save, so
+  // it must not count as a change.
+  const bindingIds = new Set(bindings.map((binding) => binding.id));
+  const normalizedSelectedIds = selectedIds
+    .filter((id) => id.startsWith(VIRTUAL_DM_PREFIX) || bindingIds.has(id))
+    .sort();
   const isDirty =
     initializedAgentId === subjectKey &&
     (normalizedSelectedIds.length !== currentIds.length ||
@@ -407,10 +420,20 @@ export function AgentChatAppsEditor({
       });
     }
 
+    const updates = [...changedAssignments.values()];
+    // Nothing to write: the API rejects an empty plan, and there is nothing
+    // for it to do anyway.
+    if (updates.length === 0 && plan.dmProviders.length === 0) {
+      setPendingChannelDetails({});
+      setPendingPlan(null);
+      resolveSave(true);
+      return;
+    }
+
     applyBindingPlanMutation.mutate(
       {
         targetAgentId,
-        updates: [...changedAssignments.values()],
+        updates,
         directMessages: plan.dmProviders.map((provider) => ({ provider })),
       },
       {
@@ -594,6 +617,15 @@ export function AgentChatAppsEditor({
 
   return (
     <>
+      {/* The agent's own Slack bot: an existing agent only, and only where
+          Slack is offered at all. */}
+      {subjectId && slackOffered && (
+        <AgentSlackBotSection
+          agentId={subjectId}
+          agentName={subject.name}
+          agentIcon={subject.icon}
+        />
+      )}
       {/* Every chat provider hidden but email still on: there is no pool to
           pick from, so the section would only ever show an empty state. */}
       {visibleProviders.length > 0 && (
@@ -910,6 +942,7 @@ function AddChannelPicker({
   onPick: (optionId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const [provider, setProvider] = useState<ChatProvider | null>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -977,7 +1010,7 @@ function AddChannelPicker({
         ))}
         {/* An unconnected provider is only worth naming at the moment someone
             looks for one of its channels and does not find it. */}
-        {unconnectedProviders.map((candidate) => (
+        {(canSeeSettings ? unconnectedProviders : []).map((candidate) => (
           <Button
             key={candidate}
             type="button"
@@ -1155,6 +1188,7 @@ function BlockedOptions({
 
 /** Nothing is connected, and connecting is an organization-wide job. */
 function ProvidersEmptyState({ providers }: { providers: ChatProvider[] }) {
+  const canSeeSettings = useSettingsAreaAccess() === true;
   return (
     <div className="rounded-md border border-dashed px-4 py-6">
       <p className="text-sm font-medium">No messaging providers connected</p>
@@ -1162,22 +1196,24 @@ function ProvidersEmptyState({ providers }: { providers: ChatProvider[] }) {
         {listProviderNames(providers)} are connected once for the whole
         organization. Until one is, there is nothing to assign here.
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {providers.map((provider) => (
-          <Button
-            key={provider}
-            type="button"
-            variant="outline"
-            size="sm"
-            asChild
-          >
-            <Link href={`/settings/messaging-channels/${provider}`}>
-              <ChannelIcon channel={provider} className="size-4" />
-              Connect {MESSAGING_CHANNEL_LABELS[provider]}
-            </Link>
-          </Button>
-        ))}
-      </div>
+      {canSeeSettings && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {providers.map((provider) => (
+            <Button
+              key={provider}
+              type="button"
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link href={`/settings/messaging-channels/${provider}`}>
+                <ChannelIcon channel={provider} className="size-4" />
+                Connect {MESSAGING_CHANNEL_LABELS[provider]}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1200,6 +1236,7 @@ function AgentEmailSection({
   readOnly: boolean;
   onEdit: () => void;
 }) {
+  const canSeeSettings = useSettingsAreaAccess() === true;
   if (!providerEnabled) {
     return (
       <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
@@ -1208,17 +1245,19 @@ function AgentEmailSection({
           Set it up once for the organization and every agent gets its own
           address.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          asChild
-        >
-          <Link href="/settings/messaging-channels/email">
-            Set up email in Settings
-          </Link>
-        </Button>
+        {canSeeSettings && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            asChild
+          >
+            <Link href="/settings/messaging-channels/email">
+              Set up email in Settings
+            </Link>
+          </Button>
+        )}
       </div>
     );
   }
@@ -1412,7 +1451,7 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? `A personal agent answers only in its owner's direct messages. To use shared channels, open ${visibilityLocation} and add "Everyone in this organization" with "Can use" access.`
+        ? `A personal agent answers only in its owner's direct messages. To use shared channels, add a team, a role or everyone in ${visibilityLocation}.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

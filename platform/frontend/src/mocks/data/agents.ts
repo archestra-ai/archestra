@@ -1,4 +1,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+} from "@archestra/shared/built-in-agents";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
@@ -9,6 +13,7 @@ export type ExternalAgent = Extract<
 >["value"];
 
 export function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  const tools = overrides.tools ?? [];
   return {
     id: "test-agent",
     organizationId: "test-org",
@@ -20,7 +25,6 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     isDefault: false,
     isPersonalGateway: false,
     isPersonalProxy: false,
-    considerContextUntrusted: false,
     agentType: "agent",
     systemPrompt: null,
     description: null,
@@ -31,6 +35,8 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     llmApiKeyId: null,
     llmModel: null,
     modelId: null,
+    fastModelId: null,
+    smartModelId: null,
     identityProviderId: null,
     environmentId: null,
     passthroughHeaders: null,
@@ -57,6 +63,11 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     connectorIds: [],
     suggestedPrompts: [],
     pinnedAt: null,
+    // From the mock's tools: delegations are subagents, the rest are tools.
+    // The list routes also leave out the knowledge search tool for an agent
+    // without knowledge sources; pass `toolsCount` to test that case.
+    toolsCount: tools.filter((tool) => !tool.delegateToAgentId).length,
+    subagentsCount: tools.filter((tool) => tool.delegateToAgentId).length,
     ...overrides,
   };
 }
@@ -91,7 +102,17 @@ export function makeAgentCatalog({
   return {
     data: [
       ...externalAgents.map((value) => ({ type: "external" as const, value })),
-      ...agents.map((value) => ({ type: "agent" as const, value })),
+      ...agents.map((value) => ({
+        type: "agent" as const,
+        // Counted as the catalog route counts them, from the mock's tools.
+        value: {
+          ...value,
+          toolsCount: value.tools.filter((tool) => !tool.delegateToAgentId)
+            .length,
+          subagentsCount: value.tools.filter((tool) => tool.delegateToAgentId)
+            .length,
+        },
+      })),
     ],
     pagination: makePagination(total),
     totals: {
@@ -148,6 +169,19 @@ export function makeExternalAgent(
     ...overrides,
   };
 }
+
+export const builtInAgentsSeed = Object.entries(BUILT_IN_AGENT_IDS).map(
+  ([key, name]) =>
+    makeAgent({
+      id: name,
+      name: BUILT_IN_AGENT_NAMES[key as keyof typeof BUILT_IN_AGENT_NAMES],
+      authorId: null,
+      authorName: null,
+      scope: "org",
+      builtIn: true,
+      builtInAgentConfig: { name },
+    }),
+);
 
 export const agentsSeed = makeAgentsList();
 

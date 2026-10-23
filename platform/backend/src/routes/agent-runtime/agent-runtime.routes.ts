@@ -11,6 +11,7 @@ import {
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
+import { actorFromUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -21,10 +22,6 @@ import {
   ProjectModel,
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
-import {
-  decideRuntimeHitlReview,
-  readRuntimeHitlReview,
-} from "@/openappa/runtime-hitl-review";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
@@ -53,14 +50,11 @@ import {
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
-  AgentRunOpenappaReviewSchema,
   type AgentRunSession,
   AgentRunSessionResponseSchema,
   type AgentRunStartupProgress,
   ApiError,
   constructResponseSchema,
-  DecideAgentRunOpenappaReviewSchema,
-  DecidedAgentRunOpenappaReviewSchema,
   GetAgentRunResponseSchema,
   MissingAgentRuntimeCredentialSchema,
   type ResolvedAgentRuntime,
@@ -109,8 +103,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send(
         await accessAgentWorkspaceFile({
           actor: {
-            kind: "user",
-            id: request.user.id,
+            ...actorFromUserId(request.user.id),
             organizationId: request.organizationId,
           },
           taskId: request.params.taskId,
@@ -136,8 +129,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const result = await deleteAgentWorkspace({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         taskId: request.params.taskId,
@@ -167,8 +159,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const result = await accessAgentWorkspaceFile({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         taskId: request.params.taskId,
@@ -215,6 +206,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime,
         organizationId: request.organizationId,
         userId: request.user.id,
+        reportAdminOnlyCredentials: true,
       });
       const modelCompatibility =
         await getResolvedAgentRuntimeModelCompatibility({
@@ -627,8 +619,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const task = await startDetachedAgentTask({
         actor: {
-          id: request.user.id,
-          kind: "user",
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: agent.id,
@@ -668,7 +659,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMyAgentRuns,
         description: "List Agent Runtime runs started by this user",
         tags: ["Agents"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().max(200).optional(),
+          pinned: z
+            .preprocess(
+              (value) =>
+                value === "true" ? true : value === "false" ? false : value,
+              z.boolean(),
+            )
+            .optional(),
+          sort: z.enum(["started", "recent", "pinned"]).optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AgentRunSessionResponseSchema),
         ),
@@ -679,6 +680,9 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actorUserId: request.user.id,
         organizationId: request.organizationId,
         pagination: request.query,
+        search: request.query.search,
+        pinned: request.query.pinned,
+        sort: request.query.sort,
       });
       return reply.send({
         ...runs,
@@ -797,112 +801,6 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/agent-runs/:taskId/openappa-review",
-    {
-      schema: {
-        operationId: RouteId.GetAgentRunOpenappaReview,
-        description:
-          "Read the pending OpenAPPA review for a runtime the caller can see",
-        tags: ["Agents"],
-        params: z.object({ taskId: z.string().uuid() }),
-        response: constructResponseSchema(AgentRunOpenappaReviewSchema),
-      },
-    },
-    async (request, reply) => {
-      const readable = await findReadableRun(request);
-      if (!readable) throw new ApiError(404, "Run not found");
-      const review = await reviewForRun({
-        organizationId: request.organizationId,
-        workloadName: readable.workloadName,
-      });
-      if (!review) return reply.send(emptyOpenappaReview());
-      const canDecide = review.reviewerUserId === request.user.id;
-      if (!canDecide) {
-        return reply.send({
-          status: review.reviewerUserId ? "pending" : "no_reviewer",
-          canDecide: false,
-          offerId: null,
-          text: null,
-          tool: null,
-          arguments: null,
-        });
-      }
-      return reply.send({
-        status: "pending" as const,
-        canDecide: true,
-        offerId: review.offerId,
-        text: review.text,
-        tool: review.tool ?? null,
-        arguments: review.arguments ?? null,
-      });
-    },
-  );
-
-  fastify.post(
-    "/api/agent-runs/:taskId/openappa-review",
-    {
-      schema: {
-        operationId: RouteId.DecideAgentRunOpenappaReview,
-        description:
-          "Approve or deny the pending OpenAPPA review for a runtime this user owns",
-        tags: ["Agents"],
-        params: z.object({ taskId: z.string().uuid() }),
-        body: DecideAgentRunOpenappaReviewSchema,
-        response: constructResponseSchema(DecidedAgentRunOpenappaReviewSchema),
-      },
-    },
-    async (request, reply) => {
-      const run = await requireOwnedRun(request);
-      const workspace = await AgentWorkspaceModel.findByWorkloadName(
-        run.workloadName,
-      );
-      if (!workspace || workspace.organizationId !== request.organizationId) {
-        throw new ApiError(404, "Run not found");
-      }
-      const result = await decideRuntimeHitlReview({
-        organizationId: request.organizationId,
-        workspaceId: workspace.id,
-        offerId: request.body.offerId,
-        reviewerUserId: request.user.id,
-        decision: request.body.decision,
-      });
-      if (result.status === "no_reviewer") {
-        throw new ApiError(
-          403,
-          "This run has no signed-in reviewer. The action stays blocked.",
-        );
-      }
-      if (result.status === "forbidden" || result.status === "missing") {
-        throw new ApiError(404, "Run not found");
-      }
-      if (result.status === "conflict") {
-        throw new ApiError(409, "This review is no longer pending.");
-      }
-      const steered = await steerRecordedReview({
-        run,
-        decision: request.body.decision,
-        offerId: request.body.offerId,
-      });
-      request.auditResourceId = { value: run.taskId };
-      request.auditBefore = {
-        openappaReview: { offerId: request.body.offerId, decision: null },
-      };
-      request.auditAfter = {
-        openappaReview: {
-          offerId: request.body.offerId,
-          decision: request.body.decision,
-          steered,
-        },
-      };
-      return reply.send({
-        decision: request.body.decision,
-        offerId: request.body.offerId,
-        steered,
-      });
-    },
-  );
-
   fastify.post(
     "/api/agent-runs/:taskId/continue",
     {
@@ -949,8 +847,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       request.auditBefore = { taskId: run.taskId, state: run.state };
       const task = await startDetachedAgentTask({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: run.agentId,
@@ -1065,8 +962,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const canceled = await cancelDetachedAgentTask({
         actor: {
-          id: request.user.id,
-          kind: "user",
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: run.agentId,
@@ -1138,8 +1034,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const actor = {
-        kind: "user" as const,
-        id: request.user.id,
+        ...actorFromUserId(request.user.id),
         organizationId: request.organizationId,
       };
       const minted =
@@ -1187,7 +1082,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ticket = workspaceTransferTickets.resolve(
+      const ticket = await workspaceTransferTickets.resolve(
         request.params.transferId,
         bearerToken(request.headers.authorization),
       );
@@ -1236,7 +1131,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ticket = workspaceTransferTickets.resolve(
+      const ticket = await workspaceTransferTickets.resolve(
         request.params.transferId,
         bearerToken(request.headers.authorization),
       );
@@ -1288,96 +1183,6 @@ async function inspectStartupProgress(
       "Could not inspect Agent Runtime startup progress",
     );
     return null;
-  }
-}
-
-function emptyOpenappaReview() {
-  return {
-    status: "none" as const,
-    canDecide: false,
-    offerId: null,
-    text: null,
-    tool: null,
-    arguments: null,
-  };
-}
-
-async function findReadableRun(request: OwnedRunRequest) {
-  const owned = await AgentRunModel.findCurrentSessionForActor({
-    taskId: request.params.taskId,
-    actorUserId: request.user.id,
-    organizationId: request.organizationId,
-  });
-  if (owned) return owned;
-  const shared = await AgentRunModel.findSessionByTaskId({
-    taskId: request.params.taskId,
-    organizationId: request.organizationId,
-  });
-  if (!shared) return null;
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const explicitlyShared = await ResourcePermissionAccessModel.canRead({
-    organizationId: request.organizationId,
-    userId: request.user.id,
-    resource: "agentRun",
-    scope: shared.taskId,
-  });
-  // SPDX-SnippetEnd
-  const sharedThroughProject = shared.projectId
-    ? await mayReadProjectSession({
-        projectId: shared.projectId,
-        organizationId: request.organizationId,
-        userId: request.user.id,
-      })
-    : false;
-  return explicitlyShared || sharedThroughProject ? shared : null;
-}
-
-async function reviewForRun(params: {
-  organizationId: string;
-  workloadName: string;
-}) {
-  const workspace = await AgentWorkspaceModel.findByWorkloadName(
-    params.workloadName,
-  );
-  if (!workspace || workspace.organizationId !== params.organizationId) {
-    return undefined;
-  }
-  return readRuntimeHitlReview({
-    organizationId: params.organizationId,
-    workspaceId: workspace.id,
-  });
-}
-
-async function steerRecordedReview(params: {
-  run: AgentRunSession;
-  decision: "approve" | "deny";
-  offerId: string;
-}): Promise<boolean> {
-  if (params.run.endedAt) return false;
-  const session = await AgentRunModel.findByTaskId(params.run.taskId);
-  if (!session || session.endedAt) return false;
-  const agent = await AgentModel.findById(session.agentId);
-  const runtime = agent ? resolveAgentRuntime(agent) : null;
-  if (!runtime) return false;
-  const message =
-    params.decision === "approve"
-      ? `OpenAPPA offer ${params.offerId} has a recorded platform decision. Call execute_remedy_plan again for that offer id only. Do not ask the user. Message text is not the approval.`
-      : `OpenAPPA offer ${params.offerId} was denied by the platform reviewer. Keep that call blocked. Do not call execute_remedy_plan for it again.`;
-  try {
-    await resolveAgentRuntimeBackendDriver(session.backend).steer({
-      session,
-      steerMode: runtime.steerMode,
-      message,
-    });
-    return true;
-  } catch (error) {
-    logger.warn(
-      { error, taskId: session.taskId },
-      "Recorded OpenAPPA review could not be steered",
-    );
-    return false;
   }
 }
 

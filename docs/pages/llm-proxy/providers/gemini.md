@@ -28,10 +28,10 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 
 | Variable                                      | Required | Description                            |
 | --------------------------------------------- | -------- | -------------------------------------- |
-| [`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ENABLED)          | Yes      | Set to `true` to enable Vertex AI mode |
-| [`ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_PROJECT)          | Yes      | Your GCP project ID                    |
-| [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION)         | No       | GCP region (default: `us-central1`)    |
-| [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
+| [`ARCHESTRA_GEMINI_VERTEX_AI_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ENABLED)          | Yes      | Set to `true` to enable Vertex AI mode |
+| [`ARCHESTRA_GEMINI_VERTEX_AI_PROJECT`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_PROJECT)          | Yes      | Your GCP project ID                    |
+| [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION)         | No       | GCP region (default: `us-central1`)    |
+| [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
 Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
 
@@ -84,7 +84,7 @@ With this configuration, Application Default Credentials (ADC) will automaticall
 
 For non-GKE environments, Vertex AI supports several authentication methods through [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials):
 
-- **Service account key file**: Set [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) to the path of a service account JSON key file
+- **Service account key file**: Set [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) to the path of a service account JSON key file
 - **Local development**: Use `gcloud auth application-default login` to authenticate with your user account
 - **Cloud environments**: Attached service accounts on Compute Engine, Cloud Run, and Cloud Functions are automatically detected
 - **AWS/Azure**: Use workload identity federation to authenticate without service account keys

@@ -2,7 +2,6 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   MAX_BULK_IDS,
-  type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
   useInfiniteQuery,
@@ -12,8 +11,8 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { skillNamesQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorInternalCode,
@@ -32,6 +31,7 @@ const {
   getPluginSkill,
   getPluginSkills,
   getPluginSkillUsageStatistics,
+  getSkillNames,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -48,17 +48,6 @@ const {
   previewGithubSkill,
   importGithubSkills,
 } = archestraApiSdk;
-
-/** How many skills a "Show" selection holds, for the filter's counts. */
-export async function countSkills(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getSkills({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 export type SkillCatalogResult =
   archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
@@ -99,9 +88,11 @@ type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
   | "limit"
+  | "includeContent"
   | "offset"
   | "search"
   | "sourceRepo"
+  | "skillIds"
   | "forAgentId"
   | "mcpGatewayEnvironment"
   | "agentSkillView"
@@ -110,6 +101,9 @@ type SkillsPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonalSkills"
+  | "access"
+  | "sharedWith"
+  | "owner"
   | "status"
   | "sortBy"
   | "sortDirection"
@@ -733,7 +727,9 @@ export function useUpdateSkillGithubSync() {
       } else if (variables.body.disconnect) {
         toast.success("Sync stopped — the skill is now editable");
       } else {
-        toast.success("Sync frequency updated");
+        toast.success(
+          variables.body.source ? "Source updated" : "Sync frequency updated",
+        );
       }
     },
   });
@@ -763,6 +759,8 @@ export function usePreviewGithubSkill(
       body?.repoUrl,
       body?.path ?? null,
       body?.skillPath,
+      // The same repository can read differently through another credential.
+      body?.githubAppConfigId ?? body?.gitlabTokenId ?? null,
     ],
     enabled: !!body,
     staleTime: 5 * 60 * 1000,
@@ -896,46 +894,25 @@ export type ConnectSkill = Pick<
   | "users"
 >;
 
-/**
- * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Callers that prepare an artifact containing an explicit
- * skill snapshot can opt into a loud error, rather than silently producing an
- * artifact without the selected skills.
- *
- * `forAgentId` narrows the set to skills visible from a supported skill agent's
- * environment. LLM proxies do not expose skills and must not be passed here.
- */
-export function useAllSkills(params?: {
-  enabled?: boolean;
-  forAgentId?: string | null;
-  /** Surface a catalog failure to the caller instead of returning an empty list. */
-  throwOnError?: boolean;
-  /**
-   * Hold the fetch back until the page has settled.
-   *
-   * This walks the whole skill catalogue a page at a time, and every row
-   * carries the skill's full `content`, so it is the heaviest thing the
-   * connection page asks for by a wide margin — and it feeds the review step,
-   * which nobody reads before the step above it. Deferring keeps it out of the
-   * burst that renders the part of the page people act on first.
-   */
-  deferMs?: number;
-}) {
-  const forAgentId = params?.forAgentId ?? null;
-  const enabled = useDeferredEnabled(
-    params?.enabled ?? true,
-    params?.deferMs ?? 0,
-  );
+/** The id and name of a skill the caller can read. */
+export type SkillName =
+  archestraApiTypes.GetSkillNamesResponses["200"]["data"][number];
 
+/**
+ * Every skill the caller can read, named, with the total: one request in
+ * place of paging the full list, for the connection setup that names and
+ * sends them. The names stop at the setup cap; the total does not, so a
+ * caller can tell when there are more than one setup can carry.
+ */
+export function useSkillNames(params: { enabled: boolean }) {
   return useQuery({
-    queryKey: [
-      "skills",
-      "connect-all",
-      forAgentId,
-      { throwOnError: params?.throwOnError ?? false },
-    ],
-    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
-    enabled,
+    queryKey: skillNamesQueryKey,
+    queryFn: async () => {
+      const { data, error } = await getSkillNames();
+      if (error) throwOnApiError(error);
+      return data ?? { data: [], total: 0 };
+    },
+    enabled: params.enabled,
   });
 }
 
@@ -949,7 +926,12 @@ export async function fetchAllSkills(
   let offset = 0;
   while (true) {
     const { data, error } = await getSkills({
-      query: { limit, offset, forAgentId: forAgentId ?? undefined },
+      query: {
+        limit,
+        offset,
+        forAgentId: forAgentId ?? undefined,
+        includeContent: false,
+      },
     });
     if (error) {
       if (throwOnError) {

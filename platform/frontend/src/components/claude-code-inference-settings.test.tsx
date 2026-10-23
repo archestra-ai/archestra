@@ -60,6 +60,11 @@ beforeEach(() => {
       return HttpResponse.json({
         models: [
           {
+            value: "opus",
+            displayName: "Opus",
+            description: "Runtime default",
+          },
+          {
             value: "runtime-choice",
             displayName: "Runtime model",
             description: "Discovered from this CLI",
@@ -122,10 +127,8 @@ describe("Claude Code authentication", () => {
     expect(
       screen.queryByRole("button", { name: "Provider key" }),
     ).not.toBeInTheDocument();
+    // Sign in starts Claude's flow at once; there is no second button.
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sign in with Claude" }),
-    );
     await screen.findByLabelText("Authorization code");
     expect(modelRequests).toBe(0);
     fireEvent.change(screen.getByLabelText("Authorization code"), {
@@ -135,9 +138,7 @@ describe("Claude Code authentication", () => {
     await screen.findByText("Signed in for you");
     await waitFor(() => expect(modelRequests).toBe(1));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Select model|default/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Opus/i }));
     fireEvent.click(
       await screen.findByRole("option", { name: /Runtime model/ }),
     );
@@ -232,27 +233,27 @@ describe("Claude Code authentication", () => {
     // Signing in belongs to the setup banner; the settings stay quiet.
     await waitFor(() =>
       expect(
-        screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+        screen.getByRole("radio", {
+          name: /Each person's Claude subscription/,
+        }),
       ).toBeChecked(),
     );
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /A company API key/ }));
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Provider model" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/Google Cloud \(Vertex AI\) billing/),
+      screen.getByText(/Billed through Google Cloud \(Vertex AI\)/),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
     );
     expect(
       screen.queryByRole("button", { name: "Provider key" }),

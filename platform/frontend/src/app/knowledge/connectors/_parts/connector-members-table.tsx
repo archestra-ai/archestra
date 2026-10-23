@@ -14,6 +14,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +38,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import type {
@@ -49,7 +49,6 @@ import {
   useDeleteConnectorMemberOverride,
   useUpsertConnectorMemberOverride,
 } from "@/lib/knowledge/connector.query";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import { MembershipTruncationNotice } from "./connector-membership-truncation-notice";
 import {
@@ -481,8 +480,6 @@ function EditMemberAssignmentDialog({
   onClose: () => void;
 }) {
   const appName = useAppName();
-  const { data: orgMembers, isPending: isMembersPending } =
-    useOrganizationMembers();
   const upsertOverride = useUpsertConnectorMemberOverride(connectorId);
   const deleteOverride = useDeleteConnectorMemberOverride(connectorId);
   // The picker always reflects the current state: the overridden user, or
@@ -538,17 +535,11 @@ function EditMemberAssignmentDialog({
           </div>
           <div className="space-y-2">
             <Label>{appName} user</Label>
-            <UserSearchableSelect
+            <RemoteUserSelect
               value={selectedUserId}
               onValueChange={setSelectedUserId}
-              users={(orgMembers ?? []).map((user) => ({
-                userId: user.id,
-                name: user.name,
-                email: user.email,
-              }))}
               pinnedOption={{ value: UNASSIGNED_VALUE, label: "Unassigned" }}
               className="w-full"
-              disabled={isMembersPending}
             />
           </div>
         </DialogBody>

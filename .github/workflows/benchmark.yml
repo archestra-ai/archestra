@@ -49,13 +49,14 @@ jobs:
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
-        uses: ./.github/actions/setup-docker-builder
+        uses: $/.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin
@@ -175,7 +176,7 @@ jobs:
           # Scheduled runs carry no inputs and an empty dispatch field is falsy, so these fallbacks
           # are the single source of the daily selection.
           BENCH_ENVS: ${{ inputs.envs || 'basic' }}
-          BENCH_LANES: ${{ inputs.lanes || 'glm,glm-flash,deepseek-flash-0731,qwen38-flash,gemma-4-31b,spark,gpt-6-luna,mimo-26-flash,qwen36-35b-a3b,mimo-26-flash-adv-deepseek-flash' }}
+          BENCH_LANES: ${{ inputs.lanes || 'glm,glm-flash,deepseek-flash-0731,qwen38-flash,gemma-4-31b,spark,gpt-6-luna,mimo-26-flash,qwen36-35b-a3b' }}
         run: |
           set -euo pipefail
           # Dispatch inputs are the only caller-controlled values on the envsubst allowlist, and they

@@ -41,6 +41,15 @@ export function ResourceScopeFilter({
   return <AgentLabelFilter queryParamsAdapter={queryParamsAdapter} />;
 }
 
+interface ScopeFilterOptions {
+  queryParamsAdapter?: QueryParamsAdapter;
+  /**
+   * Pass the same value as the page's `ResourceAccessFilter`, so a bookmarked
+   * "Admin access" selection the filter hides does not still filter the list.
+   */
+  offerAdminAccess?: boolean;
+}
+
 interface ScopeFilterParams<Scope extends string> {
   scope: Scope | undefined;
   teamIds: undefined;
@@ -49,6 +58,10 @@ interface ScopeFilterParams<Scope extends string> {
   excludeOtherPersonal: undefined;
   /** The `ResourceAccessFilter` selection, for the list API's `access`. */
   access: ResourceAccessRelation[];
+  /** The "Shared with" selection, for the list API's `sharedWith`. */
+  sharedWith: string[] | undefined;
+  /** The "Owner" selection, for the list API's `owner`. */
+  owner: string[] | undefined;
   hasActiveScopeFilters: boolean;
 }
 
@@ -56,23 +69,26 @@ interface ScopeFilterParams<Scope extends string> {
  * Ignore retired visibility parameters in bookmarked links. The access
  * selection replaces them; a non-default one counts as an active filter.
  */
-export function useScopeFilterParams(options: {
-  includeBuiltIn: true;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<ScopeValue>;
-export function useScopeFilterParams(options?: {
-  includeBuiltIn?: false;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<SharedScopeValue>;
-export function useScopeFilterParams(options?: {
-  includeBuiltIn?: boolean;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<ScopeValue> {
+export function useScopeFilterParams(
+  options: ScopeFilterOptions & { includeBuiltIn: true },
+): ScopeFilterParams<ScopeValue>;
+export function useScopeFilterParams(
+  options?: ScopeFilterOptions & { includeBuiltIn?: false },
+): ScopeFilterParams<SharedScopeValue>;
+export function useScopeFilterParams(
+  options?: ScopeFilterOptions & { includeBuiltIn?: boolean },
+): ScopeFilterParams<ScopeValue> {
   const searchParams = useSearchParams();
   const activeSearchParams =
     options?.queryParamsAdapter?.searchParams ?? searchParams;
-  const { access, isDefault: isDefaultAccess } = useResourceAccessParam({
+  const {
+    access,
+    sharedWith,
+    owner,
+    isDefault: isDefaultAccess,
+  } = useResourceAccessParam({
     queryParamsAdapter: options?.queryParamsAdapter,
+    offerAdminAccess: options?.offerAdminAccess,
   });
   const scope =
     options?.includeBuiltIn && activeSearchParams.get("scope") === "built_in"
@@ -85,6 +101,8 @@ export function useScopeFilterParams(options?: {
     excludeAuthorIds: undefined,
     excludeOtherPersonal: undefined,
     access,
+    sharedWith,
+    owner,
     hasActiveScopeFilters: !!scope || !isDefaultAccess,
   };
 }

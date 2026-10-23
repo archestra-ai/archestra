@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { ROLE_ASSIGNMENT_BLOCKED_CODE } from "@archestra/shared";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import TeamModel from "@/models/team";
 import { describe, expect, test } from "@/test";
@@ -40,9 +41,10 @@ describe("scoped grant delegation through assignments", () => {
       userId: caller.id,
     };
     await expect(validateNewTeamMembership(context)).resolves.toBeUndefined();
-    await expect(validateInheritedTeamRoles(context)).rejects.toThrow(
-      "scoped permissions",
-    );
+    await expect(validateInheritedTeamRoles(context)).rejects.toMatchObject({
+      statusCode: 403,
+      internalCode: ROLE_ASSIGNMENT_BLOCKED_CODE,
+    });
   });
 
   test("requires both the granted action and permission management when assigning a role", async ({
@@ -82,17 +84,19 @@ describe("scoped grant delegation through assignments", () => {
       revision: 0,
       grants: [roleGrant],
     });
-    await expect(validateTeamRoles(context)).rejects.toThrow(
-      "scoped permissions",
-    );
+    await expect(validateTeamRoles(context)).rejects.toMatchObject({
+      statusCode: 403,
+      internalCode: ROLE_ASSIGNMENT_BLOCKED_CODE,
+    });
     await replacePolicy({
       ...key,
       revision: 1,
       grants: [roleGrant, { subject: callerSubject, actions: ["read"] }],
     });
-    await expect(validateTeamRoles(context)).rejects.toThrow(
-      "scoped permissions",
-    );
+    await expect(validateTeamRoles(context)).rejects.toMatchObject({
+      statusCode: 403,
+      internalCode: ROLE_ASSIGNMENT_BLOCKED_CODE,
+    });
     // Every grant is a preset, so permission management only comes bundled
     // with Full access. Edit carries the granted action and more, yet still
     // cannot hand it on.
@@ -104,9 +108,10 @@ describe("scoped grant delegation through assignments", () => {
         { subject: callerSubject, actions: ["read", "use", "update"] },
       ],
     });
-    await expect(validateTeamRoles(context)).rejects.toThrow(
-      "scoped permissions",
-    );
+    await expect(validateTeamRoles(context)).rejects.toMatchObject({
+      statusCode: 403,
+      internalCode: ROLE_ASSIGNMENT_BLOCKED_CODE,
+    });
     await replacePolicy({
       ...key,
       revision: 3,
@@ -162,9 +167,10 @@ describe("scoped grant delegation through assignments", () => {
       userId: caller.id,
       teamId: child.id,
     };
-    await expect(validateInheritedTeamRoles(context)).rejects.toThrow(
-      "scoped permissions",
-    );
+    await expect(validateInheritedTeamRoles(context)).rejects.toMatchObject({
+      statusCode: 403,
+      internalCode: ROLE_ASSIGNMENT_BLOCKED_CODE,
+    });
     await replacePolicy({
       ...key,
       revision: 1,

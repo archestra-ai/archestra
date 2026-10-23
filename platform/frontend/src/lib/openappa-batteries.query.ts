@@ -13,22 +13,15 @@ import {
   invalidatePolicyViews,
   policyDeclarationsQueryKey,
 } from "@/lib/openappa-policy-views";
-import {
-  getApiErrorType,
-  reportApiError,
-  throwOnApiError,
-} from "@/lib/utils/api";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 export type BatteryMatches =
   archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];
-export type BatteryMatch = BatteryMatches["matches"][number];
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 export type PolicyDeclarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
-export type EffectivePolicy =
-  archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 export type BatteryPolicySource =
   archestraApiTypes.GetOpenappaBatteryPolicySourceResponses["200"];
 /** What an attach names: the battery, and the catalog unless it governs the organization. */
@@ -95,22 +88,6 @@ export function useBatteryPolicySource(entry: string) {
   });
 }
 
-/** Publish a held GitHub pull under the accepting user's permissions. */
-export function useAcceptHeldPull() {
-  return useBatteryMutation<
-    void,
-    archestraApiTypes.AcceptHeldAppaGithubPullResponses["200"]
-  >(
-    async () => settled(await archestraApiSdk.acceptHeldAppaGithubPull()),
-    (accepted) =>
-      toast.success(
-        accepted.droppedBatteries.length > 0
-          ? `Repository text accepted. Dropped: ${accepted.droppedBatteries.join(", ")}`
-          : "Repository text accepted",
-      ),
-  );
-}
-
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
 export function useBatteries(enabled = true) {
   return useQuery({ ...batteriesQuery, enabled });
@@ -132,38 +109,6 @@ export function useBatteryMatches(catalogId: string, enabled: boolean) {
       return answered(data);
     },
   });
-}
-
-/** Turns a matched battery on or off for a catalog entry, installing it on first use. */
-export function useSetBatteryEnabled(catalogId: string) {
-  const client = useQueryClient();
-  return useBatteryMutation(
-    async (params: { match: BatteryMatch; enabled: boolean }) => {
-      const { match, enabled } = params;
-      if (match.install) return setInstallEnabled(match.install.id, enabled);
-      // A battery is off by being absent from the policy, so turning an
-      // unattached one off is nothing to write.
-      if (!enabled) return null;
-      const created = await createInstall(client, {
-        batteryName: match.battery,
-        catalogId,
-      });
-      if (getApiErrorType(created.error) !== "api_conflict_error")
-        return settled(created);
-      // A concurrent write attached it first: carry the choice over to its row.
-      const matches = settled(
-        await archestraApiSdk.getOpenappaBatteryMatches({
-          query: { catalogId },
-        }),
-      );
-      const install = matches.matches.find(
-        (fresh) => fresh.battery === match.battery,
-      )?.install;
-      return install
-        ? setInstallEnabled(install.id, enabled)
-        : settled(created);
-    },
-  );
 }
 
 /** Include a battery for a catalog entry, spelling the package the policy governs. */
@@ -211,35 +156,6 @@ export function useRemoveBatteryInclude() {
         await archestraApiSdk.deleteOpenappaBatteryInclude({ path: { name } }),
       ),
     () => toast.success("Battery removed"),
-  );
-}
-
-export function useUploadBatteryPackage() {
-  return useBatteryMutation(
-    async (params: {
-      name: string;
-      files: archestraApiTypes.UploadOpenappaBatteryPackageData["body"]["files"];
-    }) =>
-      settled(
-        await archestraApiSdk.uploadOpenappaBatteryPackage({
-          path: { name: params.name },
-          body: { files: params.files },
-        }),
-      ),
-    (data) => toast.success(`Battery "${data.name}" uploaded`),
-  );
-}
-
-/** Packages are deleted by the bytes they hold: a name may have several versions. */
-export function useDeleteBatteryPackage() {
-  return useBatteryMutation(
-    async (contentHash: string) =>
-      settled(
-        await archestraApiSdk.deleteOpenappaBatteryPackage({
-          path: { contentHash },
-        }),
-      ),
-    () => toast.success("Battery package deleted"),
   );
 }
 
@@ -299,15 +215,6 @@ const batteriesQuery = {
     return data ?? [];
   },
 };
-
-async function setInstallEnabled(id: string, enabled: boolean) {
-  return settled(
-    await archestraApiSdk.updateOpenappaBatteryInstall({
-      path: { id },
-      body: { enabled },
-    }),
-  );
-}
 
 /** The SDK call's data, or its refusal toasted and thrown. */
 function settled<T>(result: { data?: T; error?: unknown }): T {

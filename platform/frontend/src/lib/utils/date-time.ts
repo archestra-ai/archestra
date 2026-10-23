@@ -1,4 +1,8 @@
-import { format, formatDistanceToNow } from "date-fns";
+import {
+  format,
+  formatDistanceToNow,
+  formatDistanceToNowStrict,
+} from "date-fns";
 
 export function formatDate({
   date,
@@ -41,6 +45,8 @@ export function formatRelativeTimeFromNow(
   options?: {
     neverLabel?: string;
     invalidLabel?: string;
+    /** "1 hour ago" rather than "about 1 hour ago", for tight spaces. */
+    strict?: boolean;
   },
 ): string {
   const neverLabel = options?.neverLabel ?? "Never";
@@ -53,5 +59,16 @@ export function formatRelativeTimeFromNow(
     return invalidLabel;
   }
 
-  return formatDistanceToNow(parsedDate, { addSuffix: true });
+  return options?.strict
+    ? formatDistanceToNowStrict(parsedDate, { addSuffix: true })
+    : formatDistanceToNow(parsedDate, { addSuffix: true });
+}
+
+/** "5m ago", "2h ago", "3mo ago": strict relative time with one-letter units. */
+export function formatCompactRelativeTime(date: Date | string): string {
+  return formatRelativeTimeFromNow(date, { strict: true }).replace(
+    /(\d+) (seconds?|minutes?|hours?|days?|weeks?|months?|years?)/g,
+    (_, count: string, unit: string) =>
+      `${count}${unit.startsWith("month") ? "mo" : unit[0]}`,
+  );
 }

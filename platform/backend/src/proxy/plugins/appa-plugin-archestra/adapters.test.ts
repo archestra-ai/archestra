@@ -497,6 +497,62 @@ describe("APPA child trajectory adapters", () => {
     }
   });
 
+  test("normalizes a missing handback to client status without admitting a report", () => {
+    const status =
+      "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.";
+    const content = `  ${status} Its unsent text is not shown. Send the agent a message (SendMessage) to ask it to deliver its report.\n  \nagentId: a1 (use SendMessage with to: 'a1', summary: '<5-10 word recap>' to continue this agent)
+<usage>subagent_tokens: 1234
+tool_uses: 3
+duration_ms: 1000</usage>`;
+    const result = {
+      id: "no-handback",
+      name: "Agent",
+      content,
+      isError: false,
+    };
+    const canonical = `${status}\nagentId: a1`;
+    expect(
+      claudeCode.normalizeChildLaunchResult({ ...result, content: canonical }),
+    ).toBe(canonical);
+    for (const name of ["Agent", "Task"]) {
+      for (const returned of [
+        content,
+        [{ type: "text", text: content }],
+        `${content}\nUNCHECKED-REPORT`,
+      ]) {
+        const native = { ...result, name, content: returned };
+        expect(claudeCode.normalizeChildLaunchResult(native)).toBe(canonical);
+        expect(claudeCode.isChildCompletionResult(native)).toBe(false);
+      }
+    }
+    for (const returned of [
+      status,
+      `${status}\nagentId: bad id`,
+      `${status}\nagentId: ${"a".repeat(129)}`,
+      `UNCHECKED-REPORT\n${content}`,
+      `${status}\nUNCHECKED-REPORT`,
+      [
+        { type: "text", text: content },
+        { type: "text", text: "UNCHECKED-REPORT" },
+      ],
+      [
+        { type: "text", text: content },
+        { type: "image", source: { type: "url", url: "https://example.com" } },
+      ],
+    ]) {
+      const malformed = { ...result, content: returned };
+      expect(claudeCode.normalizeChildLaunchResult(malformed)).toBeUndefined();
+      expect(claudeCode.isChildCompletionResult(malformed)).toBe(true);
+    }
+    for (const other of [
+      { ...result, name: "Bash" },
+      { ...result, isError: true },
+    ]) {
+      expect(claudeCode.normalizeChildLaunchResult(other)).toBeUndefined();
+      expect(claudeCode.isChildCompletionResult(other)).toBe(false);
+    }
+  });
+
   test("distinguishes completed child returns from launch acknowledgments", () => {
     const safeLaunch = "Async agent launched successfully.\nagentId: a1";
     const claudeLaunch = {
@@ -968,8 +1024,46 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
 
     codex.stripCarrierMetadata(request);
 
-    expect(request.client_metadata).toEqual({ thread_id: "t1" });
+    expect(request.client_metadata).toEqual({
+      thread_id: "t1",
+      "x-codex-turn-metadata": { thread_id: "t1" },
+    });
     expect(request.metadata).toEqual({ thread_id: "t1" });
+  });
+
+  test("keeps Codex turn state beside the stripped carriers", () => {
+    // Continuing a chat that the Codex backend's misalignment monitor paused
+    // rides in the turn metadata. Dropped, the next turn is blocked again.
+    const override = JSON.stringify({ timestamp: 1792597758000 });
+    const request = {
+      client_metadata: {
+        "x-codex-turn-metadata": JSON.stringify({
+          thread_id: "t1",
+          parent_thread_id: "t0",
+          agent_id: "a1",
+          misalignment_override: override,
+        }),
+      },
+    };
+
+    codex.stripCarrierMetadata(request);
+
+    expect(
+      JSON.parse(request.client_metadata["x-codex-turn-metadata"]),
+    ).toEqual({ thread_id: "t1", misalignment_override: override });
+  });
+
+  test("drops Codex turn metadata it cannot read, so no carrier hides in it", () => {
+    const request = {
+      client_metadata: {
+        thread_id: "t1",
+        "x-codex-turn-metadata": '{"parent_thread_id": "t0"',
+      },
+    };
+
+    codex.stripCarrierMetadata(request);
+
+    expect(request.client_metadata).toEqual({ thread_id: "t1" });
   });
 
   test("mints Claude Code child ids from agent_id under the native parent session", () => {

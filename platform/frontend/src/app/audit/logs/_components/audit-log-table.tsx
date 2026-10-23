@@ -1,41 +1,38 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
-  filterControlClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Badge } from "@/components/ui/badge";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useProfilesPaginated } from "@/lib/agent.query";
-import { useApps } from "@/lib/app.query";
 import {
   type AuditActorType,
   type AuditEventName,
   type AuditLog,
   type AuditOutcome,
   useAuditLog,
+  useAuditLogResourceSearch,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useEnvironments } from "@/lib/environment.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMemberSearch } from "@/lib/member.query";
-import { useRolesPaginated } from "@/lib/role.query";
-import { useSkillsPaginated } from "@/lib/skills/skill.query";
-import { useTeams } from "@/lib/teams/team.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { AuditActorCell } from "./audit-actor-cell";
+import {
+  AuditEventCell,
+  AuditStatusCell,
+  AuditTimeCell,
+} from "./audit-event-cells";
 import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
@@ -44,29 +41,12 @@ import {
   formatAction,
   formatResourceType,
   KNOWN_RESOURCE_TYPES,
-  OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
-  resourceDisplayName,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
-const ENTITY_FILTER_LIMIT = 100;
-const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
-
-// The high-signal types whose names render in the Resource column and whose
-// entities populate the "Filter by resource" picker. Every other type keeps a
-// bare type label in the list; its full identity lives in the detail dialog.
-const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
-  "agent",
-  "app",
-  "environment",
-  "mcpServer",
-  "role",
-  "skill",
-  "team",
-]);
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
 // large string-literal union, failing with a spurious "two unrelated ColumnDef
@@ -94,35 +74,21 @@ export function AuditLogTable() {
   const actorTypeFromUrl = (searchParams.get("actorType") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditActorType;
-  const cursorFromUrl = searchParams.get("cursor");
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const searchFromUrl = searchParams.get("search");
 
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
+  // Free-text search was removed from this page; scrub it from old links.
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
-      return;
+    if (!searchFromUrl) return;
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("cursor");
-    params.delete("page");
-    params.delete("pageSize");
     params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
-  }, [
-    cursorFromUrl,
-    pageFromUrl,
-    pageSizeFromUrl,
-    pathname,
-    router,
-    searchFromUrl,
-    searchParams,
-  ]);
+  }, [pathname, router, searchFromUrl, searchParams]);
   const eventId = searchParams.get("event");
   const { data: eventFromUrl } = useAuditLog(eventId ?? undefined);
   const {
@@ -147,6 +113,11 @@ export function AuditLogTable() {
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+      // A cursor belongs to the listing it was issued for.
+      if (!("cursor" in updates)) {
+        params.delete("cursor");
+        params.delete("page");
+      }
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === "") {
           params.delete(key);
@@ -164,59 +135,68 @@ export function AuditLogTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
         updateUrlParams({ startDate, endDate });
       },
-      [cursorPagination.goNewest, updateUrlParams],
+      [updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const handleActionChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ action: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleResourceChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ resourceType: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleActorChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleEntityChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleOutcomeChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleActorTypeChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
@@ -254,9 +234,11 @@ export function AuditLogTable() {
     resourceId,
   });
 
-  // Server-side search rather than a client filter over the first N members:
-  // an org larger than one page would otherwise silently hide every actor
-  // whose name sorts past the cut-off.
+  // The actor and resource pickers search on the server and load their
+  // options only while open, so a closed picker does not refetch on window
+  // focus. A selection from the URL still loads its label.
+  const [actorPickerOpen, setActorPickerOpen] = useState(false);
+  const [resourcePickerOpen, setResourcePickerOpen] = useState(false);
   const { data: canSeeAllAuditLogs } = useHasPermissions({
     auditLog: ["admin"],
   });
@@ -267,41 +249,11 @@ export function AuditLogTable() {
   } = useMemberSearch({
     limit: ACTOR_FILTER_LIMIT,
     selectedUserIds: actorId ? [actorId] : [],
+    enabled: !!canSeeAllAuditLogs && (actorPickerOpen || !!actorId),
   });
-
-  // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
-  // history stays reachable through the picker (the audit page is admin-only,
-  // which is also what the deleted bucket requires).
-  const { data: activeAgentsResponse } = useProfilesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-    sortBy: "name",
-    sortDirection: "asc",
-    status: "active",
-  });
-  const { data: deletedAgentsResponse } = useProfilesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-    sortBy: "name",
-    sortDirection: "asc",
-    status: "deleted",
-  });
-
-  // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
-  const { data: mcpServers } = useMcpServers();
-  const { data: teams } = useTeams();
-  const { data: rolesResponse } = useRolesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-  });
-  const { data: environmentList } = useEnvironments();
-  const { data: appsResponse } = useApps({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-  });
-  const { data: skillsResponse } = useSkillsPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
+  const resourceSearch = useAuditLogResourceSearch({
+    enabled: resourcePickerOpen,
+    selectedResourceId: resourceId,
   });
 
   const rows = response?.data ?? [];
@@ -318,57 +270,25 @@ export function AuditLogTable() {
   );
 
   const entityOptions = useMemo(() => {
-    // The type goes into `description`: SearchableSelect renders it as a
-    // subtitle and matches it in search, so typing "team" finds all teams.
-    const toOptions = (
-      items: Array<{ id: string; name: string }> | undefined,
-      resourceType: string,
-    ) =>
-      (items ?? [])
-        .map((item) => ({
-          value: item.id,
-          label: item.name,
-          // Single line per option: long machine names truncate with an
-          // ellipsis (full name in the hover title, and search still matches
-          // the full label) so the popover stays scannable.
-          content: (
-            <span className="block truncate" title={item.name}>
-              {item.name}
-            </span>
-          ),
-          description: formatResourceType(resourceType),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label));
-
-    const deletedAgents = toOptions(deletedAgentsResponse?.data, "agent").map(
-      (option) => ({ ...option, description: "Agent (deleted)" }),
-    );
-    // External catalog apps carry no id (and are not audited) — only owned
-    // apps can be picked.
-    const ownedApps = appsResponse?.data?.filter(
-      (app) => app.source === "owned",
-    );
-    return [
-      { value: ALL_VALUE, label: "All resources" },
-      ...toOptions(activeAgentsResponse?.data, "agent"),
-      ...deletedAgents,
-      ...toOptions(mcpServers, "mcpServer"),
-      ...toOptions(teams, "team"),
-      ...toOptions(rolesResponse?.data, "role"),
-      ...toOptions(environmentList?.environments, "environment"),
-      ...toOptions(ownedApps, "app"),
-      ...toOptions(skillsResponse?.data, "skill"),
-    ];
-  }, [
-    activeAgentsResponse,
-    deletedAgentsResponse,
-    mcpServers,
-    teams,
-    rolesResponse,
-    environmentList,
-    appsResponse,
-    skillsResponse,
-  ]);
+    const { options, selected } = resourceSearch;
+    const listed =
+      selected && !options.some((o) => o.resourceId === selected.resourceId)
+        ? [selected, ...options]
+        : options;
+    return listed.map((option) => ({
+      value: option.resourceId,
+      label: option.name,
+      // Single line per option: long machine names truncate with an ellipsis
+      // (full name in the hover title) so the popover stays scannable. The
+      // type goes into `description`, rendered as a subtitle.
+      content: (
+        <span className="block truncate" title={option.name}>
+          {option.name}
+        </span>
+      ),
+      description: formatResourceType(option.resourceType),
+    }));
+  }, [resourceSearch]);
 
   const actionOptions = useMemo(
     () => [
@@ -411,108 +331,32 @@ export function AuditLogTable() {
   const columns = useMemo<ColumnDef<AuditLogRow>[]>(
     () => [
       {
-        id: "activity",
-        header: "Activity",
-        size: 300,
-        minSize: 240,
-        cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-medium">
-              {formatAction(row.original.action)}
-            </span>
-            <Badge
-              variant={OUTCOME_BADGE_VARIANT[row.original.outcome]}
-              className="px-1.5 py-0 text-[10px]"
-            >
-              {OUTCOME_LABEL[row.original.outcome]}
-            </Badge>
-          </div>
-        ),
+        id: "resource",
+        header: "Event",
+        size: 360,
+        minSize: 280,
+        cell: ({ row }) => <AuditEventCell event={row.original} />,
       },
       {
         id: "actor",
         header: "Actor",
-        size: 240,
-        minSize: 190,
-        cell: ({ row }) => {
-          const {
-            actorName,
-            actorEmail,
-            actorType,
-            impersonatedBy,
-            impersonatedByEmail,
-          } = row.original;
-          const label = actorName ?? actorEmail ?? "Deleted user";
-          return (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <User className="size-3.5" />
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{label}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {impersonatedBy
-                    ? `via ${impersonatedByEmail ?? "deleted user"}`
-                    : ACTOR_TYPE_LABEL[actorType]}
-                </div>
-              </div>
-            </div>
-          );
-        },
+        size: 272,
+        minSize: 230,
+        cell: ({ row }) => <AuditActorCell event={row.original} />,
       },
       {
-        id: "resource",
-        header: "Resource",
-        size: 280,
-        minSize: 220,
-        cell: ({ row }) => {
-          const { resourceType } = row.original;
-          const name =
-            resourceType && LIST_NAME_RESOURCE_TYPES.has(resourceType)
-              ? resourceDisplayName(row.original)
-              : null;
-          if (!resourceType && !name) {
-            return <span className="text-xs text-muted-foreground">—</span>;
-          }
-          const displayName =
-            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
-              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
-              : name;
-          return (
-            <div className="min-w-0">
-              <div
-                className="truncate text-sm font-medium"
-                title={name ?? undefined}
-              >
-                {displayName ?? formatResourceType(resourceType ?? "")}
-              </div>
-              {name && resourceType ? (
-                <div className="truncate text-xs text-muted-foreground">
-                  {formatResourceType(resourceType)}
-                </div>
-              ) : null}
-            </div>
-          );
-        },
+        id: "status",
+        header: () => <div className="text-right">Status</div>,
+        size: 120,
+        minSize: 108,
+        cell: ({ row }) => <AuditStatusCell event={row.original} />,
       },
       {
         id: "createdAt",
-        header: "Time",
-        size: 190,
-        minSize: 175,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="text-sm">
-              {formatRelativeTimeFromNow(row.original.createdAt)}
-            </div>
-            <div className="truncate font-mono text-[11px] text-muted-foreground">
-              {formatDate({
-                date: row.original.createdAt,
-                dateFormat: "MMM d, yyyy · HH:mm:ss",
-              })}
-            </div>
-          </div>
-        ),
+        header: () => <div className="text-right">Time</div>,
+        size: 128,
+        minSize: 120,
+        cell: ({ row }) => <AuditTimeCell event={row.original} />,
       },
     ],
     [],
@@ -528,7 +372,6 @@ export function AuditLogTable() {
     dateTimePicker.startDate !== undefined;
 
   const clearFilters = useCallback(() => {
-    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       search: null,
@@ -542,9 +385,8 @@ export function AuditLogTable() {
       endDate: null,
       cursor: null,
       page: null,
-      pageSize: null,
     });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateUrlParams]);
 
   if (isAuditLogsLoadError) {
     return (
@@ -605,6 +447,14 @@ export function AuditLogTable() {
                   onValueChange={handleEntityChange}
                   placeholder="Filter by resource"
                   items={entityOptions}
+                  pinnedItems={[{ value: ALL_VALUE, label: "All resources" }]}
+                  onSearchQueryChange={resourceSearch.onSearchQueryChange}
+                  onOpenChange={setResourcePickerOpen}
+                  emptyMessage={
+                    resourceSearch.isSearching
+                      ? "Searching…"
+                      : "No matching resources found."
+                  }
                   inactiveValue={ALL_VALUE}
                 />
               ),
@@ -627,6 +477,7 @@ export function AuditLogTable() {
                           { value: ALL_VALUE, label: "All actors" },
                         ]}
                         onSearchQueryChange={onActorSearchChange}
+                        onOpenChange={setActorPickerOpen}
                         emptyMessage={actorEmptyMessage}
                         inactiveValue={ALL_VALUE}
                       />
@@ -650,43 +501,16 @@ export function AuditLogTable() {
             items={outcomeOptions}
             inactiveValue={ALL_VALUE}
           />
-          <DateTimeRangePicker
-            startDate={dateTimePicker.startDate}
-            endDate={dateTimePicker.endDate}
-            isDialogOpen={dateTimePicker.isDateDialogOpen}
-            tempStartDate={dateTimePicker.tempStartDate}
-            tempEndDate={dateTimePicker.tempEndDate}
-            displayText={dateTimePicker.getDateRangeDisplay()}
-            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-            onTempStartDateChange={dateTimePicker.setTempStartDate}
-            onTempEndDateChange={dateTimePicker.setTempEndDate}
-            onOpenDialog={dateTimePicker.openDateDialog}
-            onApply={dateTimePicker.handleApplyDateRange}
-            className={filterControlClass({
-              active: dateTimePicker.startDate !== undefined,
-            })}
-          />
         </FilterBar>
       </CollectionFilters>
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}
+        fixedWidthColumnIds={["actor", "status", "createdAt"]}
+        flexibleColumnIds={["resource"]}
         data={rows}
         hideSelectedCount
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}

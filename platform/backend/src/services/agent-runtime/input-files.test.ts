@@ -53,7 +53,7 @@ describe("Agent run input files", () => {
       "second",
     ]);
     expect(taskWithAgentRunInputs({ task: "Read both.", inputs })).toBe(
-      `Read both.\n\nAttached files are available in the run workspace:\n- /var/run/archestra/attachments/${task.id}/notes.txt\n- /var/run/archestra/attachments/${task.id}/notes (1).txt`,
+      `Read both.\n\nAttached files are available for this run:\n- /var/run/archestra/attachments/${task.id}/notes.txt\n- /var/run/archestra/attachments/${task.id}/notes (1).txt`,
     );
     const followUp = await A2ATaskModel.createForRun({
       contextId: context.id,

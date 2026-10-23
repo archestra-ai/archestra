@@ -2,6 +2,10 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+} from "@archestra/shared/connection-setup";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
 import {
@@ -13,6 +17,8 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { SecretDecryptionError } from "@/utils/secret-decryption-error";
+import { ensurePrimaryProviderKey } from "./agent-connection-setup/credentials/primary-providers";
 
 /**
  * A non-fatal warning attached to a connection setup when the Anthropic key it
@@ -53,11 +59,18 @@ export async function ensureConnectionVirtualKey(params: {
   userTeamIds: string[];
   provider: SupportedProvider;
   /**
-   * Admin-configured default key for this provider (from the org's
-   * connectionDefaultProviderKeys mapping). Used when still valid; otherwise
+   * The client being set up. Each client gets its own key, so admin-mapped
+   * keys for one client never re-route another client's installs. Omitted by
+   * the manual flow, which keeps the shared per-user key.
+   */
+  clientId?: InstallerClientId;
+  /**
+   * Admin-configured key for this provider and client (from the org's
+   * connectionClientProviderKeys mapping). Used when still valid; otherwise
    * resolution falls back to the user's personal → team → org precedence.
    */
   preferredProviderKeyId?: string | null;
+  includeFutureProviders?: boolean;
 }): Promise<{
   virtualApiKeyId: string;
   creditWarning?: ConnectionCreditWarning;
@@ -68,8 +81,36 @@ export async function ensureConnectionVirtualKey(params: {
     userEmail,
     userTeamIds,
     provider,
+    clientId,
     preferredProviderKeyId,
   } = params;
+
+  const existingMode = await VirtualApiKeyModel.findByAuthorScopeName({
+    organizationId,
+    authorId: userId,
+    scope: "personal",
+    name: connectionVirtualKeyName({ userEmail, clientId }),
+  });
+  if (
+    existingMode?.includeFutureProviders ||
+    (!existingMode && params.includeFutureProviders)
+  ) {
+    const result = await ensurePrimaryProviderKey({
+      organizationId,
+      userId,
+      userTeamIds,
+      keyName: connectionVirtualKeyName({ userEmail, clientId }),
+      supportedProviders: [provider],
+      includeFutureProviders: true,
+      mappedKeys:
+        !existingMode && preferredProviderKeyId
+          ? [{ provider, providerApiKeyId: preferredProviderKeyId }]
+          : existingMode
+            ? await VirtualApiKeyModel.getProviderApiKeys(existingMode.id)
+            : [],
+    });
+    return { virtualApiKeyId: result.virtualApiKeyId };
+  }
 
   // Per-user providers (GitHub Copilot): the connection virtual key must wrap
   // the connecting user's OWN personal key — never an admin-configured or
@@ -121,7 +162,7 @@ export async function ensureConnectionVirtualKey(params: {
         })
       : { keyToBind: providerApiKey, creditWarning: undefined };
 
-  const name = connectionVirtualKeyName(userEmail);
+  const name = connectionVirtualKeyName({ userEmail, clientId });
   const existing = await VirtualApiKeyModel.findByAuthorScopeName({
     organizationId,
     authorId: userId,
@@ -130,7 +171,7 @@ export async function ensureConnectionVirtualKey(params: {
   });
 
   if (existing) {
-    const secret = await secretManager().getSecret(existing.secretId);
+    const secret = await readReusableConnectionSecret(existing.secretId);
     if (secret) {
       await VirtualApiKeyModel.ensureProviderMapping({
         virtualApiKeyId: existing.id,
@@ -211,7 +252,7 @@ export async function ensureConnectionPassthroughKey(params: {
   if (existing) {
     const secret =
       existing.keyType === "passthrough"
-        ? await secretManager().getSecret(existing.secretId)
+        ? await readReusableConnectionSecret(existing.secretId)
         : null;
     if (existing.keyType === "passthrough" && secret) {
       return existing.id;
@@ -273,6 +314,17 @@ export async function readVirtualKeyValue(
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+async function readReusableConnectionSecret(secretId: string) {
+  try {
+    return await secretManager().getSecret(secretId);
+  } catch (error) {
+    if (!(error instanceof SecretDecryptionError)) throw error;
+    // These tokens are generated locally. The existing replacement flow can
+    // revoke the unreadable key and provision a fresh one for new setups.
+    return null;
+  }
+}
 
 /**
  * Validates the admin-mapped key at use time (it may have been deleted or
@@ -397,9 +449,15 @@ async function probeCandidateCredit(
   return probeAnthropicCredit(apiKeyValue, baseUrl, candidate.extraHeaders);
 }
 
-function connectionVirtualKeyName(userEmail: string): string {
+function connectionVirtualKeyName(params: {
+  userEmail: string;
+  clientId?: InstallerClientId;
+}): string {
+  const client = params.clientId
+    ? ` (${INSTALLER_CLIENT_LABELS[params.clientId]})`
+    : "";
   // Virtual key names cap at 256 chars; emails are well under that.
-  return `Connection setup — ${userEmail}`.slice(0, 256);
+  return `Connection setup${client} — ${params.userEmail}`.slice(0, 256);
 }
 
 function connectionPassthroughKeyName(userEmail: string): string {

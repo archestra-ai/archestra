@@ -10,6 +10,7 @@ import type {
   AgentRuntimeSteerMode,
   EffectiveNetworkPolicy,
 } from "@/types";
+import type { A2ATaskFailure } from "@/types/a2a-task";
 import type {
   AgentWorkspaceFileRequest,
   AgentWorkspaceFileResult,
@@ -244,6 +245,8 @@ export type AgentRuntimeBackendName = AgentRuntimeBackend;
 export interface AgentRunCompletion {
   outcome: "succeeded" | "failed" | "aborted";
   reason?: string;
+  /** Classification of a failed outcome; see `run-failure.ts`. */
+  failure?: A2ATaskFailure;
 }
 
 export interface AgentRunAttachStatus {

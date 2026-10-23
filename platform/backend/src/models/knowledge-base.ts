@@ -1,7 +1,4 @@
-import type {
-  ResourceAccessRelation,
-  ResourcePermissionGrant,
-} from "@archestra/shared";
+import type { CreatedBy, ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -18,15 +15,21 @@ import {
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
+import { qualified } from "@/database/utils/qualified-column";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
   UpdateKnowledgeBase,
 } from "@/types";
+import type { ConnectorType } from "@/types/knowledge-connector";
+import type { LabelWithDetails } from "@/types/label";
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type ResourceAccessSelection,
+} from "./resource-permission-subject";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -52,7 +55,7 @@ async function buildOrgFilters(params: {
   excludeAuthorIds?: string[];
   excludeOtherPersonal?: boolean;
   /** The list's "Show" filter, read against `viewerUserId`. */
-  access?: ResourceAccessRelation[];
+  access?: ResourceAccessSelection;
 }) {
   const normalizedSearch = params.search?.trim();
   const viewer = params.viewerUserId
@@ -122,7 +125,7 @@ async function buildOrgFilters(params: {
             ...ownAudienceContext(params.organizationId),
             userId: params.viewerUserId,
             subjects: viewer.subjects,
-            relations: params.access,
+            ...params.access,
           }),
         ]
       : []),
@@ -195,7 +198,7 @@ class KnowledgeBaseModel {
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
     /** The list's "Show" filter, read against `viewerUserId`. */
-    access?: ResourceAccessRelation[];
+    access?: ResourceAccessSelection;
   }): Promise<KnowledgeBase[]> {
     const filters = await buildOrgFilters(params);
 
@@ -460,7 +463,7 @@ class KnowledgeBaseModel {
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
     /** The list's "Show" filter, read against `viewerUserId`. */
-    access?: ResourceAccessRelation[];
+    access?: ResourceAccessSelection;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -469,6 +472,152 @@ class KnowledgeBaseModel {
 
     return result?.count ?? 0;
   }
+
+  /**
+   * Everything the list shows besides each knowledge base's own row, in one
+   * statement over the page's ids: its creator, the connectors the viewer can
+   * see, its document total, the live agents in its organization assigned to
+   * it, and its labels.
+   *
+   * The document total sums every assigned connector, soft-deleted and unseen
+   * ones included. A connector gives its stored total, or a live count when
+   * it has none. The live counts come back in `firstCounts` for the caller to
+   * store, as KbConnectorDocumentCountModel.findByConnectorIds does.
+   * `identityOnly` (the trash view) reads the creator alone.
+   *
+   * Connectors come by name, agents in assignment order.
+   */
+  static async findListEnrichment(params: {
+    knowledgeBaseIds: string[];
+    organizationId: string;
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
+    identityOnly?: boolean;
+    /** False lists no agents and counts them instead. Defaults to true. */
+    includeAssignedAgents?: boolean;
+  }): Promise<{
+    byId: Map<string, KnowledgeBaseListEnrichment>;
+    firstCounts: Map<string, number>;
+  }> {
+    const byId = new Map<string, KnowledgeBaseListEnrichment>();
+    const firstCounts = new Map<string, number>();
+    if (params.knowledgeBaseIds.length === 0) return { byId, firstCounts };
+
+    const kbId = qualified(schema.knowledgeBasesTable.id);
+    const assignment = schema.knowledgeBaseConnectorAssignmentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const visibleConnectors = db
+      .select({
+        id: connector.id,
+        name: connector.name,
+        connectorType: connector.connectorType,
+      })
+      .from(assignment)
+      .innerJoin(connector, eq(assignment.connectorId, connector.id))
+      .where(
+        and(
+          eq(assignment.knowledgeBaseId, kbId),
+          notDeleted(connector),
+          await KnowledgeBaseConnectorModel.visibilityCondition(params),
+        ),
+      );
+    const empty = sql`'[]'::json`;
+    // The live agents of the organization assigned to the outer row.
+    const assignedLiveAgents = sql`${schema.agentKnowledgeBasesTable} akb
+      INNER JOIN ${schema.agentsTable} ag ON ag.id = akb.agent_id
+      WHERE akb.knowledge_base_id = ${kbId}
+        AND ag.organization_id = ${params.organizationId}
+        AND ag.deleted_at IS NULL`;
+
+    const rows = await db
+      .select({
+        id: schema.knowledgeBasesTable.id,
+        creatorUser: sql<{ id: string; name: string; email: string } | null>`(
+          SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
+          FROM ${schema.usersTable} u
+          WHERE u.id = ${qualified(schema.knowledgeBasesTable.createdBy)})`,
+        creatorServiceAccount: sql<{ id: string; name: string } | null>`(
+          SELECT json_build_object('id', sa.id, 'name', sa.name)
+          FROM ${schema.serviceAccountsTable} sa
+          WHERE sa.id = ${qualified(schema.knowledgeBasesTable.createdByServiceAccountId)})`,
+        connectors: params.identityOnly
+          ? sql<KnowledgeBaseListEnrichment["connectors"]>`${empty}`
+          : sql<KnowledgeBaseListEnrichment["connectors"]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'id', c.id, 'name', c.name, 'connectorType', c.connector_type
+              ) ORDER BY c.name, c.id), '[]'::json)
+              FROM (${visibleConnectors}) c)`,
+        documentTotals: params.identityOnly
+          ? sql<DocumentTotal[]>`${empty}`
+          : sql<DocumentTotal[]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'connectorId', a.connector_id,
+                'stored', dc.document_count,
+                'live', CASE WHEN dc.connector_id IS NULL THEN (
+                  SELECT count(*) FROM ${schema.kbDocumentsTable} d
+                  WHERE d.connector_id = a.connector_id) END
+              )), '[]'::json)
+              FROM ${schema.knowledgeBaseConnectorAssignmentsTable} a
+                LEFT JOIN ${schema.kbConnectorDocumentCountsTable} dc
+                  ON dc.connector_id = a.connector_id
+              WHERE a.knowledge_base_id = ${kbId})`,
+        assignedAgents:
+          params.identityOnly || params.includeAssignedAgents === false
+            ? sql<KnowledgeBaseListEnrichment["assignedAgents"]>`${empty}`
+            : sql<KnowledgeBaseListEnrichment["assignedAgents"]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'id', ag.id, 'name', ag.name, 'agentType', ag.agent_type
+              ) ORDER BY akb.created_at, akb.agent_id), '[]'::json)
+              FROM ${assignedLiveAgents})`,
+        // Counted in SQL only when the agents are not listed; otherwise the
+        // count is the listed agents', by the same rule.
+        assignedAgentCount:
+          params.identityOnly || params.includeAssignedAgents !== false
+            ? sql<number | null>`NULL::int`
+            : sql<
+                number | null
+              >`(SELECT count(*)::int FROM ${assignedLiveAgents})`,
+        labels: params.identityOnly
+          ? sql<LabelWithDetails[]>`${empty}`
+          : sql<LabelWithDetails[]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'keyId', kl.key_id, 'valueId', kl.value_id,
+                'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
+              ) ORDER BY lk.key), '[]'::json)
+              FROM ${schema.knowledgeBaseLabelsTable} kl
+                LEFT JOIN ${schema.labelKeysTable} lk ON lk.id = kl.key_id
+                LEFT JOIN ${schema.labelValuesTable} lv ON lv.id = kl.value_id
+              WHERE kl.knowledge_base_id = ${kbId})`,
+      })
+      .from(schema.knowledgeBasesTable)
+      .where(inArray(schema.knowledgeBasesTable.id, params.knowledgeBaseIds));
+
+    for (const row of rows) {
+      let totalDocsIndexed = 0;
+      for (const total of row.documentTotals) {
+        const documents = Number(total.stored ?? total.live ?? 0);
+        if (total.stored === null)
+          firstCounts.set(total.connectorId, documents);
+        totalDocsIndexed += documents;
+      }
+      byId.set(row.id, {
+        createdBy: row.creatorServiceAccount
+          ? CreatedByModel.fromServiceAccount(row.creatorServiceAccount)
+          : row.creatorUser
+            ? CreatedByModel.fromUser(row.creatorUser)
+            : null,
+        connectors: row.connectors,
+        totalDocsIndexed,
+        assignedAgents: row.assignedAgents,
+        assignedAgentCount: row.assignedAgentCount ?? row.assignedAgents.length,
+        labels: row.labels,
+      });
+    }
+    return { byId, firstCounts };
+  }
+
   static async findByName(
     name: string,
     organizationId: string,
@@ -546,3 +695,19 @@ function ownAudienceContext(organizationId: string) {
     ownerColumn: schema.knowledgeBasesTable.createdBy,
   };
 }
+
+type KnowledgeBaseListEnrichment = {
+  createdBy: CreatedBy | null;
+  connectors: { id: string; name: string; connectorType: ConnectorType }[];
+  totalDocsIndexed: number;
+  assignedAgents: { id: string; name: string; agentType: string }[];
+  assignedAgentCount: number;
+  labels: LabelWithDetails[];
+};
+
+/** One assigned connector's documents: its stored total, else a live count. */
+type DocumentTotal = {
+  connectorId: string;
+  stored: number | null;
+  live: number | null;
+};

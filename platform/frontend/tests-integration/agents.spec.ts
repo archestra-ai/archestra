@@ -8,6 +8,51 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("keeps the action menu open during a background list refresh", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const agent = makeAgent({ id: "refresh-agent", name: "Example agent" });
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "false" },
+        body: makeAgentCatalog({ agents: [agent] }),
+      },
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "true" },
+        body: makeAgentCatalog(),
+      },
+    ]);
+    await agentsPage.goto();
+    await expect(agentsPage.rowFor(agent.name)).toBeVisible();
+    await agentsPage.openRowMenu(agent.name);
+    const history = page.getByRole("menuitem", { name: "Version history" });
+    await expect(history).toBeVisible();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [{ ...agent, name: "Updated agent" }],
+      }),
+    });
+    // Returning to a stale tab refreshes the list while its menu is open.
+    await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(
+      agentsPage.table.getByText("Updated agent", { exact: true }),
+    ).toBeVisible();
+    await expect(history).toBeVisible();
+  });
+
   test("keeps count columns compact as the table grows", async ({
     page,
     agentsPage,
@@ -37,7 +82,6 @@ test.describe("Agents", () => {
     ]);
     await page.setViewportSize({ width: 1440, height: 900 });
     await agentsPage.goto();
-    await page.getByRole("button", { name: "View as table" }).click();
     const table = agentsPage.table.getByRole("table");
     await expect(table.getByText("All", { exact: true })).toHaveCount(2);
 
@@ -92,19 +136,10 @@ test.describe("Agents", () => {
     await agentsPage.goto();
 
     await expect(agentsPage.rowFor("Research Agent")).toBeVisible();
-    const externalCard = agentsPage.table.getByTestId(
-      "a2a-remote-agent-card-external-agent",
-    );
-    await expect(externalCard).toBeVisible();
-    await expect(externalCard.getByText("A2A", { exact: true })).toBeVisible();
+    // One list: there is no cards view to switch to.
     await expect(
-      externalCard.getByRole("checkbox", { name: "Select Partner Agent" }),
-    ).toBeEnabled();
-    await expect(
-      page.getByRole("button", { name: "View as table" }),
-    ).toHaveCount(1);
-
-    await page.getByRole("button", { name: "View as table" }).click();
+      page.getByRole("button", { name: "View as cards" }),
+    ).toHaveCount(0);
     await expect(
       agentsPage.table.getByRole("row", { name: /Partner Agent.*A2A/ }),
     ).toBeVisible();
@@ -528,20 +563,39 @@ test.describe("Agents", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     // Register this after the dynamic `/api/agents/:id` override: without the
-    // exact route winning, `/api/agents/all` is treated as id "all" and the
-    // editor receives one agent object instead of the delegation-target array.
+    // exact route winning, `/api/agents/options` is treated as id "options" and the
+    // editor receives one agent object instead of the delegation-target page.
     await mswControl.use({
       method: "get",
-      url: "/api/agents/all",
-      body: [original, clonedDraft],
+      url: "/api/agents/options",
+      body: {
+        data: [original, clonedDraft],
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      },
+    });
+    // Same for the skills count the edit page's Tools step reads on load.
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/activation-skills",
+      body: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 1,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
     });
     await dialog.getByRole("button", { name: "Clone" }).click();
     // The clone lands on its own page, open on Configuration, so it can be
     // renamed without a second navigation.
-    await page.waitForURL(/\/agents\/agent-cloned$/);
+    await page.waitForURL(/\/agents\/agent-cloned\/edit$/);
 
-    // The configuration is the page, so the clone's name is editable on the
-    // screen the clone landed on.
+    // A clone lands on its edit page, so it can be renamed straight away.
     const nameInput = page.getByRole("textbox", { name: "Name" });
     await expect(nameInput).toHaveValue(CLONE_DRAFT);
 
@@ -559,13 +613,12 @@ test.describe("Agents", () => {
     await save.click();
     const putBody = JSON.parse((await saved).request().postData() ?? "{}");
     expect(putBody.name).toBe(CLONE);
-    // Saving stays put: the record's page is where it was being edited.
-    await expect(page).toHaveURL(/\/agents\/agent-cloned$/);
+    // Saving stays on the edit page, on the step it was made from.
+    await expect(page).toHaveURL(/\/agents\/agent-cloned\/edit$/);
 
-    // The remaining configuration is a section of the same page, not a step
-    // of a separate wizard.
+    // Every other step is one click away on the same page.
     await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-    await page.waitForURL(/\/agents\/agent-cloned\?section=tools$/);
+    await page.waitForURL(/\/agents\/agent-cloned\/edit\?step=tools$/);
     await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible();
   });
 });

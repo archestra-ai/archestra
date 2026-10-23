@@ -74,6 +74,31 @@ test("does not expose runtime diagnostics in failed command errors", async () =>
   );
 });
 
+test.each([
+  null,
+  "synthetic-private-diagnostic",
+  {
+    message: "Unexpected server response: 503 synthetic-private-diagnostic",
+    error: { code: "SYNTHETIC_PRIVATE_VALUE" },
+    target: { authorization: "synthetic-token" },
+  },
+])("bounds unknown connection rejections without reporting success", async (error) => {
+  const boundary = connection();
+  boundary.exec.mockRejectedValue(error);
+  await expect(run(boundary)).rejects.toThrow(
+    /^Agent Runtime exec connection failed$/,
+  );
+});
+
+test("preserves existing Error rejections", async () => {
+  const boundary = connection();
+  const error = Object.assign(new Error("connection lost"), {
+    code: "ECONNRESET",
+  });
+  boundary.exec.mockRejectedValue(error);
+  await expect(run(boundary)).rejects.toBe(error);
+});
+
 test("streams output before the command completes, without leaking stderr", async () => {
   const boundary = connection();
   let complete!: () => void;

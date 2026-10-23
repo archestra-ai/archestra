@@ -11,8 +11,9 @@ const actual = await vi.importActual<typeof import("@/lib/auth/auth.query")>(
 );
 
 export const authQueryKeys = actual.authQueryKeys;
+/** No cold-load bootstrap seed in flight: queries fetch their own endpoints. */
+export const awaitBootstrapSeed = vi.fn(async () => null);
 export const useSession = vi.fn();
-export const useCurrentOrgMembers = vi.fn();
 export const useHasPermissions = vi.fn();
 export const useHasPagePermissions = useHasPermissions;
 const emptyCapabilities = { data: [], isPending: false, isLoading: false };

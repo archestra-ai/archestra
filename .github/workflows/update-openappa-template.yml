@@ -1,0 +1,104 @@
+name: Update OpenAPPA Template
+
+# The backend bundles a pinned snapshot of archestra-ai/openappa-config, so
+# setup can start a policy repository where GitHub's template is out of reach
+# (GitHub Enterprise Server). This proposes a bump whenever the template moves,
+# the way dependency updates arrive.
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-openappa-template
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Propose the latest OpenAPPA template
+    if: github.repository == 'archestra-ai/archestra'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      BRANCH: automation/openappa-template
+      TEMPLATE_FILE: platform/backend/src/openappa/template.generated.ts
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: $/.github/actions/setup-env
+
+      # The App token makes pushes and the new PR trigger ordinary CI.
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git config user.name "Archestra releaser automation"
+          git config user.email "releaser-bot@users.noreply.github.com"
+          git fetch origin main
+          target="$RUNNER_TEMP/openappa-template-branch"
+          git worktree add -B "$BRANCH" "$target" origin/main
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # The script comes from the trusted main checkout and only rewrites the
+      # generated file in the separate automation worktree.
+      - name: Snapshot the template
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          summary="$(pnpm --silent --dir backend update:openappa-template "" "$TARGET/$TEMPLATE_FILE")"
+          if git -C "$TARGET" diff --quiet -- "$TEMPLATE_FILE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit, push, and open a pull request
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -- "$TEMPLATE_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update the bundled OpenAPPA template"
+          git -C "$TARGET" push --force-with-lease origin "HEAD:refs/heads/$BRANCH"
+
+          pr_title="chore: update the bundled OpenAPPA template"
+          pr_body="$SUMMARY. New policy repositories on GitHub Enterprise Server start from this snapshot; github.com repositories use the template directly."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            gh pr create --base main --head "$BRANCH" --title "$pr_title" --body "$pr_body"
+          else
+            gh pr edit "$existing_pr" --title "$pr_title" --body "$pr_body"
+          fi

@@ -83,7 +83,10 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
  * nobody has to hunt for the right message to react to.
  */
 export const THREAD_MUTE_HINT =
-  'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies';
+  'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies; @mention me to resume';
+
+/** Slack's native Stop control cancels a turn without muting the thread. */
+export const SLACK_THREAD_MUTE_HINT = `Press Stop to cancel only the current answer. ${THREAD_MUTE_HINT}`;
 
 /**
  * In group conversations the agent hears every message but should not answer
@@ -101,12 +104,30 @@ export const CHATOPS_CONTEXT_COMPACTED_NOTICE =
   "🗜️ This conversation got long, so I've summarized the older messages to keep answering well. Recent messages are kept as-is — if something important got lost, just mention it again.";
 
 /**
+ * A chat without reply threads (a DM or a plain group chat) is one rolling
+ * server-side session. After this long without a message, the next message
+ * starts a new session, so yesterday's topic does not leak into today's.
+ */
+export const CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS = 8 * TimeInMs.Hour;
+
+/** Reply to a reset command. */
+export const CHATOPS_SESSION_RESET_REPLY =
+  "🆕 Started a new conversation. I no longer have the earlier messages in this chat in context.";
+
+/**
+ * Hint on the first reply after an idle rollover. Without it, the agent
+ * forgetting the earlier topic reads as a bug.
+ */
+export const CHATOPS_SESSION_ROLLOVER_HINT = `New conversation: this chat was idle for more than ${CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS / TimeInMs.Hour} hours, so earlier messages are not in my context. Send "reset" to start over at any time.`;
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {
   SELECT_AGENT: "/select-agent",
   STATUS: "/status",
   HELP: "/help",
+  SIGN_OUT: "/sign-out",
 } as const;
 
 /**

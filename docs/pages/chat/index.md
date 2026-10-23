@@ -1,78 +1,68 @@
 ---
-title: Chat
-description: Work with agents, files, projects, and apps in Archestra's built-in chat
+title: Chat & Projects
+description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
 order: 6
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Chat is where you work with agents. Each chat uses one agent, with that agent's instructions, tools, and knowledge. Every request goes through the [LLM Proxy](/docs/llm-proxy) and [MCP Gateway](/docs/mcp/gateway), so guardrails and logging apply.
+Start a conversation to delegate tasks to an agent, attach reference files, and collaborate in real time. Every prompt flows through the [LLM Proxy](/docs/llm-proxy) and [MCP Gateway](/docs/mcp/gateway), enforcing guardrails, access policies, and audit logging.
 
 ![The chat composer with agent and model selectors](/docs/automated_screenshots/chat_composer.webp)
 
-## Starting a Chat
+## Starting a Conversation
 
-Select **New chat**, or press `Alt+N`. Pick an agent from the **Agent** menu, then type your message. Press `Enter` to send and `Esc` to stop a response.
+Choose an agent and prompt it to analyze data, run commands, or generate code.
 
-You can keep typing while the agent answers. Your next message waits in a queue until the response finishes.
+1. Select **New chat** in the sidebar, or press `Option+N` (or `Alt+N` on Windows/Linux). Starting conversations requires [`chat:create`](/docs/reference/permissions#chat:create).
+2. Choose an agent from the **Agent** menu.
+3. Enter your prompt in the composer and press `Enter` to send. Press `Escape` to halt an active completion.
 
-## Choosing a Model
+You can continue typing while the agent generates a response. Queued messages wait in line and send automatically when the current turn finishes. Viewing past chats requires [`chat:read`](/docs/reference/permissions#chat:read).
 
-The model picker shows the chat's current model. A badge shows whether it comes from the agent or the organization default. Pick another model to override it for this chat, or select **Reset to default**. Tags such as Vision, PDF, and Tools show what each model supports.
+## Choosing a Model and Reasoning Depth
 
-When the model supports it, **Reasoning depth** sets how hard it thinks: Default, Low, Medium, or High.
+Override the default model and reasoning depth for an individual conversation without changing the agent definition.
 
-## Attaching Files
+The model selector displays the active model for the chat. A badge marks whether the model inherits from the agent configuration or the organization default. Choose another model to override it for this session, or select **Reset to default**. Badges like Vision, PDF, and Tools indicate each model's supported modalities.
 
-Select **Attach files** to add files to your message. Files the model cannot read are saved to the chat's **Files** panel. Admins can turn uploads off or set a size limit.
+When a selected model supports extended reasoning, **Reasoning depth** controls thinking intensity: Default, Low, Medium, or High.
 
-To keep an attachment beyond this chat, use **Save to knowledge**. See [Knowledge Files](/docs/knowledge/files).
+## Attaching Files and Running Commands
 
-## Skills and Commands
+Upload files directly into the prompt or trigger specialized skills with slash commands.
 
-Type `/` to see commands. Each skill you can use becomes a command — a "Deep Research" skill becomes `/deep-research`, for example. See [Agent Skills](/docs/agents/skills).
+Select **Attach files** in the composer to upload documents, spreadsheets, or images. Files that the model cannot process directly save into the chat's **Files** panel, where containerized agents can access them on disk. To persist an attachment for reuse across conversations, select **Save to knowledge**. See [Knowledge Files](/docs/knowledge/files).
 
-`/compact` summarizes the conversation so it stays within the model's context limit. The **Context usage** ring next to the composer shows what fills the context window and offers **Compact now**.
+Type `/` in the composer to display available commands. Every skill granted to your agent appears as an executable command — for example, `/deep-research`. See [Agent Skills](/docs/agents/skills).
 
-## Tool Calls
+Run `/compact` to summarize earlier messages and keep conversations within the model's context window. The **Context usage** ring beside the composer tracks active token consumption and provides a **Compact now** button.
 
-The agent's tool calls appear inline in the conversation. Some tools need your approval first: select **Approve** or **Decline** on the card. A call blocked by a [guardrail](/docs/agents/guardrails) shows **Rejected**. If you can edit policies, **Edit policy** opens the rule.
+## Approvals and Questions
 
-A tool can also ask you a question mid-run. Answer it in the card, or select **Dismiss question**.
+Review sensitive tool calls and provide real-time clarifications during agent execution.
 
-## Editing and Feedback
+When a tool requires human approval, execution pauses and an approval card appears inline. Select **Approve** to run the tool, or **Decline** to cancel execution and prompt the agent to adjust its plan.
 
-Each message has actions to copy, edit, or regenerate it. Rate a reply with **Good response** or **Bad response**. Editing your message resends it; editing a reply saves your corrected text.
+If an agent requires clarification mid-run, an interactive question prompt renders in the message feed. Submit your response directly in the card or select **Dismiss question**.
 
-## Side Panel
+## Managing and Sharing Conversations
 
-The panel next to the conversation has tabs:
+Manage conversations from the sidebar or share transcripts across your team.
 
-- **Files** — attachments, files the agent created, and artifacts you can copy or download as PDF. In a project chat it shows the project's files.
-- **Browser** — the live browser view, for agents with browser tools.
-- **Apps** — [apps](/docs/chat/apps) used in this chat.
+The sidebar lists recent conversations chronologically. Open a chat's context menu to pin it to the top of the list, rename it, assign it to a [project](/docs/chat/projects), or remove it with [`chat:delete`](/docs/reference/permissions#chat:delete). Press `Cmd+K` (or `Ctrl+K`) to open the search palette and jump across chats instantly.
 
-## Organizing Chats
-
-Chats are listed in the sidebar. Each chat's menu can pin, rename, move to a [project](/docs/chat/projects), or delete it. Press `Cmd+K` (or `Ctrl+K`) to search chats and jump between them.
-
-## Sharing a Chat
-
-Open **Chat actions** in the chat header and select **Share**. Choose who can view it: people, teams, service accounts, roles, or the whole organization. Shared chats are read-only — only the owner can continue them. A viewer can select **Start New Chat from here** to continue in a chat of their own.
-
-**Export Markdown** in the same menu saves the conversation as a file.
+Open **Chat actions** in the conversation header and choose **Share** to grant access to individual users, teams, or roles. Shared chats are read-only for recipients; viewers can select **Start New Chat from here** to fork the history into their own editable conversation. To save an offline transcript, select **Export Markdown** from the same header menu.
 
 ## Encrypted Chats
 
-An encrypted chat protects stored content with a key held by your browser. Recovering it without that browser requires the escrow private key. Use it for sensitive topics such as HR or legal matters.
+Protect sensitive discussions with end-to-end encryption where only the originating browser holds the decryption key.
 
-Select the lock in the composer, or press `Alt+I`, before you send the first message. Your browser creates a key for the chat and keeps it. Archestra encrypts the messages, attachments, logs, and errors with that key before storing them. It stores an escrow-encrypted copy of the key for recovery.
+Select the lock icon in the composer, or press `Option+I` (or `Alt+I` on Windows/Linux), before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
 
-An encrypted chat opens only in the browser that created it. On other devices it appears in the list, but its content cannot be opened.
+Encrypted conversations open only on the browser and device that created them. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
 
-Encryption protects stored data, not the conversation in progress. Archestra and your LLM provider still process the content to answer you. These features are off in encrypted chats: sharing, starting a new chat from it, projects, sandbox commands, compaction, and saving files to knowledge.
+To enable encrypted chats organization-wide and allow designated key holders to recover them if browser storage is lost, administrators configure key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow).
 
-### Key Escrow
-
-An administrator must configure key escrow before encrypted chats can be created. The escrow public key protects a recoverable copy of each chat key. Its private key stays with your designated key holders. See [Recovering an Encrypted Chat](/docs/admin/security/content-encryption#recovering-an-encrypted-chat) for recovery.
+<span id="encrypted-chats"></span><span id="key-escrow"></span>

@@ -1,4 +1,5 @@
 import { context, createContextKey } from "@opentelemetry/api";
+import type { Span as ErrorTrackingSpan } from "@sentry/core";
 import type { RouteCategory } from "./tracing/attributes";
 
 /**
@@ -29,4 +30,23 @@ export function getActiveChatRouteCategory(): RouteCategory | undefined {
   return context.active().getValue(CHAT_ROUTE_CATEGORY_KEY) as
     | RouteCategory
     | undefined;
+}
+
+/**
+ * Keep the originating HTTP server span by request so handlers can annotate
+ * the exact span exported by the filtered request tracer.
+ */
+const errorTrackingServerSpans = new WeakMap<object, ErrorTrackingSpan>();
+
+export function rememberErrorTrackingServerSpan(
+  span: ErrorTrackingSpan,
+  request: object,
+): void {
+  errorTrackingServerSpans.set(request, span);
+}
+
+export function getErrorTrackingServerSpan(
+  request: object,
+): ErrorTrackingSpan | undefined {
+  return errorTrackingServerSpans.get(request);
 }

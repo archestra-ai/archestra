@@ -18,7 +18,6 @@ export const E2eTestId = {
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
   SidebarUserProfile: "sidebar-user-profile",
-  SidebarNavGuardrails: "sidebar-nav-tool-guardrails",
   ManageCredentialsDialog: "manage-credentials-dialog",
   ManageCredentialsDialogTable: "manage-credentials-dialog-table",
   CredentialRow: "credential-row",
@@ -42,7 +41,6 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
-  McpServerAgentsCount: "mcp-server-agents-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
@@ -137,7 +135,7 @@ export const E2eTestId = {
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
   VirtualKeyProviderSelect: "virtual-key-provider-select",
-  VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
+  ProviderKeyPickerAvailableProvider: "provider-key-picker-available-provider",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
@@ -153,7 +151,8 @@ export const E2eTestId = {
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
-  ChatThinkingEffortSelector: "chat-thinking-effort-selector",
+  /** The composer's setup menu (model, agent, and key tabs). */
+  ChatSetupMenu: "chat-setup-menu",
   ChatPromptTextarea: "chat-prompt-textarea",
   // Queue of messages composed while a response was in-flight
   ChatMessageQueue: "chat-message-queue",
@@ -216,6 +215,10 @@ export function getChatItemUnreadIndicatorTestId(
   conversationId: string,
 ): string {
   return `${E2eTestId.ChatItemUnreadIndicator}-${conversationId}`;
+}
+
+export function getChatModelOptionTestId(modelId: string): string {
+  return `chat-model-option-${modelId}`;
 }
 
 export function getChatApiKeySelectorOptionTestId(keyId: string): string {

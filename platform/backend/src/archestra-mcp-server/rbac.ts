@@ -39,35 +39,42 @@ export const TOOL_PERMISSIONS: Record<
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,
-  get_openappa_yell: { resource: "openappaDiagnostics", action: "read" },
+  get_openappa_yell: { resource: "log", action: "read" },
   resolve_openappa_yell: {
-    resource: "openappaDiagnostics",
-    action: "update",
-  },
-  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
-  list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
-  get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
-  get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
-  preview_openappa_validation_change: {
-    resource: "openappaPolicy",
+    resource: "log",
     action: "read",
   },
-  publish_openappa_validation_change: {
-    resource: "openappaPolicy",
+  list_openappa_yells: { resource: "log", action: "read" },
+  list_openappa_consults: { resource: "log", action: "read" },
+  get_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
+  get_openappa_policy_tests: { resource: "guardrailsPolicy", action: "read" },
+  run_openappa_policy_tests: { resource: "guardrailsPolicy", action: "update" },
+  preview_guardrails_validation_change: {
+    resource: "guardrailsPolicy",
+    action: "read",
+  },
+  update_guardrails_validation: {
+    resource: "guardrailsPolicy",
     action: "update",
   },
-  list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },
-  inspect_guardrails_server: { resource: "openappaPolicy", action: "read" },
-  validate_guardrails_policy: { resource: "openappaPolicy", action: "read" },
+  list_guardrails_battery_fits: {
+    resource: "guardrailsPolicy",
+    action: "read",
+  },
+  inspect_guardrails_server: { resource: "guardrailsPolicy", action: "read" },
+  validate_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
   preview_guardrails_policy_change: {
-    resource: "openappaPolicy",
+    resource: "guardrailsPolicy",
     action: "read",
   },
-  update_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  update_guardrails_policy: { resource: "guardrailsPolicy", action: "update" },
   // The handler also requires credential:update, as the REST route does.
-  bind_guardrails_credential: { resource: "openappaPolicy", action: "update" },
+  bind_guardrails_credential: {
+    resource: "guardrailsPolicy",
+    action: "update",
+  },
   get_guardrails_policy_change_status: {
-    resource: "openappaPolicy",
+    resource: "guardrailsPolicy",
     action: "read",
   },
   create_guardrails_repository: {
@@ -75,6 +82,11 @@ export const TOOL_PERMISSIONS: Record<
     action: "update",
   },
   connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  // Same permission as the REST route's sync action.
+  sync_guardrails_repository: {
     resource: "organizationSettings",
     action: "update",
   },
@@ -154,19 +166,6 @@ export const TOOL_PERMISSIONS: Record<
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
 
-  // Policies
-  get_autonomy_policy_operators: { resource: "toolPolicy", action: "read" },
-  get_tool_invocation_policies: { resource: "toolPolicy", action: "read" },
-  create_tool_invocation_policy: { resource: "toolPolicy", action: "create" },
-  get_tool_invocation_policy: { resource: "toolPolicy", action: "read" },
-  update_tool_invocation_policy: { resource: "toolPolicy", action: "update" },
-  delete_tool_invocation_policy: { resource: "toolPolicy", action: "delete" },
-  get_trusted_data_policies: { resource: "toolPolicy", action: "read" },
-  create_trusted_data_policy: { resource: "toolPolicy", action: "create" },
-  get_trusted_data_policy: { resource: "toolPolicy", action: "read" },
-  update_trusted_data_policy: { resource: "toolPolicy", action: "update" },
-  delete_trusted_data_policy: { resource: "toolPolicy", action: "delete" },
-
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
   bulk_remove_tools_from_agents: { resource: "agent", action: "update" },
@@ -228,20 +227,20 @@ export const TOOL_PERMISSIONS: Record<
 
   // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
   // project reads the permission is only the floor: every handler runs the
-  // same owner / `scheduledTask:*` / project-member gate the REST routes use
-  // (services/schedule-trigger-access.ts), so `scheduledTask:read` never
+  // same owner / `project:*` / project-member gate the REST routes use
+  // (services/schedule-trigger-access.ts), so `project:read` never
   // widens visibility past the caller's own schedules.
-  create_schedule_trigger: { resource: "scheduledTask", action: "create" },
-  update_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  delete_schedule_trigger: { resource: "scheduledTask", action: "delete" },
-  list_schedule_triggers: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger: { resource: "scheduledTask", action: "read" },
-  list_schedule_trigger_runs: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger_run: { resource: "scheduledTask", action: "read" },
-  enable_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  disable_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  create_schedule_trigger: { resource: "project", action: "create" },
+  update_schedule_trigger: { resource: "project", action: "update" },
+  delete_schedule_trigger: { resource: "project", action: "delete" },
+  list_schedule_triggers: { resource: "project", action: "read" },
+  get_schedule_trigger: { resource: "project", action: "read" },
+  list_schedule_trigger_runs: { resource: "project", action: "read" },
+  get_schedule_trigger_run: { resource: "project", action: "read" },
+  enable_schedule_trigger: { resource: "project", action: "update" },
+  disable_schedule_trigger: { resource: "project", action: "update" },
   // Starting a run creates a run row, matching RunScheduleTriggerNow.
-  run_schedule_trigger_now: { resource: "scheduledTask", action: "create" },
+  run_schedule_trigger_now: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
@@ -275,13 +274,13 @@ export const TOOL_PERMISSIONS: Record<
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.
-  start_run: { resource: "agent", action: "read" },
-  get_run: { resource: "agent", action: "read" },
-  list_runs: { resource: "agent", action: "read" },
+  start_agent_run: { resource: "agent", action: "read" },
+  get_agent_run: { resource: "agent", action: "read" },
   list_agent_runs: { resource: "agent", action: "read" },
-  steer_run: { resource: "agent", action: "read" },
-  cancel_run: { resource: "agent", action: "read" },
-  post_run_file: { resource: "agent", action: "read" },
+  steer_agent_run: { resource: "agent", action: "read" },
+  cancel_agent_run: { resource: "agent", action: "read" },
+  post_agent_run_file: { resource: "agent", action: "read" },
+  post_agent_run_message: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
   transfer_workspace_file: { resource: "agent", action: "read" },
@@ -667,4 +666,6 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   edit_agent: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
 };

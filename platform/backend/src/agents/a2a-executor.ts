@@ -6,8 +6,10 @@ import {
   INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
   isInlineableTextMimeType,
+  type ModelSelection,
   PLAYWRIGHT_MCP_CATALOG_ID,
   requiresOpenAiResponsesApi,
+  type SubagentModelTier,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UIMessageChunk, UserContent } from "ai";
@@ -62,7 +64,11 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  type ModelTrioTiers,
+  resolveForkParentSelection,
+  resolveSubagentTierSelection,
+} from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -95,7 +101,25 @@ export interface A2AAttachment {
 export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
-export interface A2AExecuteParams {
+/**
+ * The caller forks itself: a fresh-context copy of the calling agent. It may
+ * repeat its direct parent in the chain once, and never forks again. Only a
+ * fork starts from its parent's model, optionally moved to a tier.
+ */
+type ForkOptions =
+  | { selfFork?: false }
+  | {
+      selfFork: true;
+      /** The model and key the forking parent runs on. */
+      parentLlm?: ModelSelection;
+      /** The model tier the fork runs on, relative to `parentLlm`. */
+      tier?: SubagentModelTier;
+    };
+
+/** @public — exercised by the a2a route tests (knip --production ignores tests) */
+export type A2AExecuteParams = A2AExecuteParamsBase & ForkOptions;
+
+interface A2AExecuteParamsBase {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
    */
@@ -116,8 +140,6 @@ export interface A2AExecuteParams {
 
   organizationId: string;
   userId: string;
-  /** Set when a team token made the call (userId is then "system") */
-  actorTeamId?: string;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
@@ -127,11 +149,6 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
-  /**
-   * The caller forks itself: a fresh-context copy of the calling agent. It may
-   * repeat its direct parent in the chain once, and never forks again.
-   */
-  selfFork?: boolean;
   /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
   appaSubagent?: SubagentBinding;
   /**
@@ -155,15 +172,17 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /**
+   * Someone answers this run's OpenAPPA reviews, so a reviewed remedy call
+   * pauses the run (set by the A2A manager).
+   */
+  openappaReviewPause?: boolean;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
-  /** Whether the parent execution context was still trusted at delegation time */
-  parentContextIsTrusted?: boolean;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
-
-  /** Whether to block execution when an approval-required tool is called (defaults to true) */
-  blockOnApprovalRequired?: boolean;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -228,7 +247,6 @@ export async function executeA2AMessage(
     message,
     organizationId,
     userId,
-    actorTeamId,
     sessionId,
     source,
     parentDelegationChain,
@@ -236,7 +254,7 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
-    parentContextIsTrusted,
+    chatOpsPinnedAgentId,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -312,19 +330,21 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  const { selectedModel, selectedProvider: provider } =
-    await resolveConversationLlmSelectionForAgent({
-      agent: {
-        llmApiKeyId: agent.llmApiKeyId,
-        modelId: agent.modelId,
-      },
-      organizationId,
-      userId,
-      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-      // the user driving the /chat model selector, so they resolve from the
-      // agent's own configuration rather than the caller's personal chat default.
-      includeMemberChatDefault: false,
-    });
+  const {
+    modelId: resolvedModelId,
+    selectedModel,
+    selectedProvider: provider,
+    chatApiKeyId: resolvedApiKeyId,
+  } = await resolveRunLlmSelection({
+    agent,
+    organizationId,
+    userId,
+    ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
+  });
+  // Run on the key that was selected with the model (the agent's own, or the
+  // organization default's). Without it, key lookup prefers the caller's
+  // personal key and the run sends a key the selection never chose.
+  const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -344,22 +364,29 @@ export async function executeA2AMessage(
       agentName: agent.name,
       agentId: agent.id,
       userId,
-      actorTeamId,
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       conversationId: params.conversationId,
       isolationKey,
       abortSignal,
-      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      parentLlm: resolvedModelId
+        ? { modelId: resolvedModelId, apiKeyId: resolvedApiKeyId }
+        : undefined,
+      // A delegated run's pause would never reach whoever answers the root.
+      openappaReviewPause:
+        params.openappaReviewPause === true &&
+        !parentDelegationChain &&
+        !params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -368,6 +395,7 @@ export async function executeA2AMessage(
       organizationId,
       userId,
       agentId: agent.id,
+      isFork: params.selfFork === true,
     });
 
     logger.info(
@@ -387,7 +415,7 @@ export async function executeA2AMessage(
     // Create LLM model using shared service
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
-    // Pass agent's llmApiKeyId so it can be used without user access check
+    // Pass the resolved key so it can be used without user access check
     const { model, anthropicNativeEndpoint, chatApiKeyId } =
       await createLLMModelForAgent({
         organizationId,
@@ -398,8 +426,7 @@ export async function executeA2AMessage(
         sessionId,
         source,
         externalAgentId: delegationChain,
-        agentLlmApiKeyId: agent.llmApiKeyId,
-        contextIsTrusted: parentContextIsTrusted,
+        agentLlmApiKeyId: llmApiKeyId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -556,8 +583,7 @@ export async function executeA2AMessage(
               sessionId,
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
-              agentLlmApiKeyId: agent.llmApiKeyId,
-              contextIsTrusted: parentContextIsTrusted,
+              agentLlmApiKeyId: llmApiKeyId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,
@@ -1205,6 +1231,37 @@ export async function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/**
+ * A fork starts from its parent's model, moved to its tier when one is asked
+ * for; any other run resolves from the agent's own configuration.
+ */
+async function resolveRunLlmSelection(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
+  organizationId: string;
+  userId: string;
+  parentLlm?: ModelSelection;
+  tier?: SubagentModelTier;
+}) {
+  const { llmApiKeyId, modelId } = params.agent;
+  const base = await resolveForkParentSelection({
+    agent: { llmApiKeyId, modelId },
+    organizationId: params.organizationId,
+    userId: params.userId,
+    parentLlm: params.parentLlm,
+  });
+  return params.tier
+    ? resolveSubagentTierSelection({
+        tier: params.tier,
+        parent: base,
+        agentTrio: params.agent,
+        organizationId: params.organizationId,
+      })
+    : base;
+}
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {

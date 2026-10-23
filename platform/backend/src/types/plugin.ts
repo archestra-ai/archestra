@@ -6,6 +6,7 @@ import {
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { GitProviderSchema } from "./git-host";
 import { LabelWithDetailsSchema } from "./label";
 import {
   isSafePluginPath,
@@ -14,17 +15,20 @@ import {
   PLUGIN_MAX_TOTAL_BYTES,
 } from "./plugin-file-constraints";
 
+export { PLUGIN_DELIVERY_MAX_COUNT } from "@archestra/shared/connection-setup";
 export {
   isSafePluginPath,
   PLUGIN_MAX_FILE_BYTES,
   PLUGIN_MAX_FILES,
   PLUGIN_MAX_TOTAL_BYTES,
 } from "./plugin-file-constraints";
-export const PLUGIN_DELIVERY_MAX_COUNT = 50;
-export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
+/** Byte cap on one plugin delivery, kept in whole MiB so messages read cleanly. */
+export const PLUGIN_DELIVERY_MAX_MIB = 1110;
+export const PLUGIN_DELIVERY_MAX_BYTES = PLUGIN_DELIVERY_MAX_MIB * 1024 * 1024;
 
 export const ClientTypeSchema = z.enum([
   "claude-code",
+  "claude-desktop",
   "copilot-cli",
   "codex",
   "cursor",
@@ -52,6 +56,7 @@ export const SelectPluginSchema = createSelectSchema(schema.pluginsTable, {
   clientType: ClientTypeSchema,
   supportedPlatforms: z.array(PluginPlatformSchema).min(1),
   sourceKind: PluginSourceKindSchema,
+  sourceProvider: z.union([GitProviderSchema, z.null()]),
   scope: ResourceVisibilityScopeSchema,
   githubSyncInterval: z.union([PluginGithubSyncIntervalSchema, z.null()]),
 });
@@ -86,6 +91,11 @@ export const CreatePluginSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120),
     description: z.string().max(1_000).default(""),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Emoji or base64 image data URL shown with the name."),
     clientType: ClientTypeSchema,
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
@@ -101,6 +111,11 @@ export const UpdatePluginSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120).optional(),
     description: z.string().max(1_000).optional(),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Emoji or base64 image data URL shown with the name."),
     enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
@@ -113,12 +128,16 @@ export const UpdatePluginSchema = z
           .object({
             githubAppConfigId: z.string().uuid().nullable(),
             githubPatId: z.string().uuid().nullable(),
+            gitlabTokenId: z.string().uuid().nullable().optional(),
           })
           .refine(
             (value) =>
-              [value.githubAppConfigId, value.githubPatId].filter(Boolean)
-                .length <= 1,
-            { message: "Choose only one GitHub authentication method" },
+              [
+                value.githubAppConfigId,
+                value.githubPatId,
+                value.gitlabTokenId,
+              ].filter(Boolean).length <= 1,
+            { message: "Choose only one Git authentication method" },
           )
           .optional(),
       })
@@ -171,6 +190,7 @@ export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({
 export const PluginListItemSchema = PluginWithVisibilitySchema.omit({
   githubAppConfigId: true,
   githubPatId: true,
+  gitlabTokenId: true,
   lastSyncError: true,
 }).extend({
   teams: z.array(PluginTeamSchema),

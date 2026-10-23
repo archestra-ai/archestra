@@ -65,7 +65,7 @@ describe("resolveDefaultAgentBadge", () => {
 
 describe("offersDefaultPin", () => {
   it("does not offer the pin on the row standing in as the org default", () => {
-    // That row already reads `default (org)`: pinning it would offer to make
+    // That row already reads `Org default`: pinning it would offer to make
     // true what the badge beside it says is already true.
     expect(
       offersDefaultPin({

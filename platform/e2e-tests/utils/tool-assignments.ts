@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { expect, type Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
+import { waitForAgentsTable } from "./agents-table";
 
 type AssignmentTarget = {
   page: Page;
@@ -180,20 +181,23 @@ async function openCatalogToolAssignment({
   await goToPage(page, `${pagePath}?name=${encodeURIComponent(targetName)}`);
   await page.waitForLoadState("domcontentloaded");
 
-  // The row's Edit opens the record's own page, where the configuration is
-  // edited in place. A gateway folds its editable sections into a single
-  // Settings tab, so its tools live there; every other kind keeps a Tools &
-  // Knowledge tab of its own.
+  // The row's Edit opens where the configuration is edited: an agent's edit
+  // page, whose Tools step holds its tools, or a gateway's single Settings
+  // tab.
+  const isAgent = pagePath === "/agents";
+  if (isAgent) await waitForAgentsTable(page);
   const editButton = page.getByTestId(
     `${E2eTestId.EditAgentButton}-${targetName}`,
   );
   await expect(editButton).toBeVisible({ timeout: 30_000 });
   await editButton.click();
   await page.waitForURL(new RegExp(`${pagePath}/[^/?]+`), { timeout: 30_000 });
-  // Retry the tab click until the URL says so: like the row's Edit above, the
-  // tab can render before hydration wires its handler.
-  const toolsSection = pagePath === "/mcp/gateways" ? "settings" : "tools";
-  const onToolsSection = new RegExp(`[?&]section=${toolsSection}`);
+  // Retry the step click until the URL says so: like the row's Edit above, it
+  // can render before hydration wires its handler.
+  const toolsSection = isAgent ? "tools" : "settings";
+  const onToolsSection = isAgent
+    ? /\/edit\?(?:.*&)?step=tools/
+    : /[?&]section=settings/;
   await expect(async () => {
     if (!onToolsSection.test(page.url())) {
       await page

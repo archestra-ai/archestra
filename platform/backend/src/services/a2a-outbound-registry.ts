@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import type { AgentCard } from "@a2a-js/sdk";
 import { DefaultAgentCardResolver } from "@a2a-js/sdk/client";
 import { and, eq } from "drizzle-orm";
-import { Agent as UndiciAgent } from "undici";
+import type { Agent as UndiciAgent } from "undici";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import { A2aConnectionModel, A2aRemoteAgentModel, ToolModel } from "@/models";
@@ -25,7 +24,10 @@ import type {
   UpdateA2aRemoteAgentRequest,
 } from "@/types";
 import { ApiError, CreateA2aRemoteAgentRequestSchema } from "@/types";
-import { isAllowedA2aAddress, validateOutboundUrl } from "@/utils/outbound-url";
+import {
+  createPinnedOutboundDispatcher,
+  validateOutboundUrl,
+} from "@/utils/outbound-url";
 
 const MAX_A2A_RESPONSE_BYTES = 5 * 1024 * 1024;
 const A2A_REQUEST_TIMEOUT_MS = 30_000;
@@ -129,10 +131,7 @@ export async function createA2aRemoteAgent(params: {
       // not prove that an authenticated message can execute successfully.
       lastVerifiedAt: null,
     });
-    const tool = await ToolModel.createA2aDelegationTool(
-      connection.id,
-      params.organizationId,
-    );
+    const tool = await ToolModel.createA2aDelegationTool(connection.id);
 
     const [result] = await hydratePublicRemoteAgents([
       { remoteAgent, connection, toolId: tool.id },
@@ -924,34 +923,17 @@ async function fetchA2a(params: {
 async function createPinnedA2aDispatcher(
   hostname: string,
 ): Promise<UndiciAgent> {
-  const normalizedHostname = hostname.replace(/^\[(.*)\]$/, "$1");
-  const addresses = await lookup(normalizedHostname, {
-    all: true,
-    verbatim: true,
-  });
-  if (addresses.length === 0) {
-    throw new Error("A2A hostname did not resolve to an address");
-  }
-  for (const { address } of addresses) {
-    if (!isAllowedA2aAddress(address)) {
-      throw new ApiError(
-        400,
-        "A2A hostname resolved to a private or reserved address",
-      );
+  const pinned = await createPinnedOutboundDispatcher({ hostname });
+  if (!pinned.ok) {
+    if (pinned.reason === "unresolved_host") {
+      throw new Error("A2A hostname did not resolve to an address");
     }
+    throw new ApiError(
+      400,
+      "A2A hostname resolved to a private or reserved address",
+    );
   }
-  const pinned = addresses[0];
-  return new UndiciAgent({
-    connect: {
-      lookup: (_hostname, options, callback) => {
-        if (options.all) {
-          callback(null, [pinned]);
-          return;
-        }
-        callback(null, pinned.address, pinned.family);
-      },
-    },
-  });
+  return pinned.dispatcher;
 }
 
 function isTrustedA2aUrl(

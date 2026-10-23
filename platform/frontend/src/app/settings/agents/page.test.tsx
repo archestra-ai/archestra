@@ -12,14 +12,6 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
-let mockAgents: Array<{
-  id: string;
-  name: string;
-  icon?: string | null;
-  agentType: "agent";
-  scope: "personal" | "team" | "org";
-  authorEmail?: string | null;
-}> = [];
 let mockRuntimeBackend: {
   name: "kubernetes";
   available: boolean;
@@ -126,12 +118,6 @@ vi.mock("@/components/ui/select", () => ({
   ),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useOrgScopedAgents: () => ({
-    data: mockAgents,
-  }),
-}));
-
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
     feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
@@ -143,7 +129,7 @@ vi.mock("@/lib/llm-models.query", () => ({
       {
         id: "gemini-2.5-pro",
         dbId: "gemini-2.5-pro",
-        provider: "vertex_ai",
+        provider: "gemini",
         displayName: "Gemini 2.5 Pro",
       },
     ],
@@ -200,11 +186,10 @@ beforeEach(() => {
     {
       id: "key-1",
       name: "gemini - org",
-      provider: "vertex_ai",
+      provider: "gemini",
       scope: "org",
     },
   ];
-  mockAgents = [];
   mockRuntimeBackend = null;
 
   vi.mocked(useOrganization).mockReturnValue({
@@ -226,6 +211,10 @@ beforeEach(() => {
 describe("AgentSettingsPage", () => {
   it("shows the configured runtime backend as a managed row only when enabled", () => {
     const { rerender } = renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
+    ).toBeVisible();
 
     expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
@@ -288,6 +277,29 @@ describe("AgentSettingsPage", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
+  it("offers fast and smart models only once the normal model is chosen", () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: null };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderPage();
+
+    expect(screen.queryByText("Fast model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Smart model")).not.toBeInTheDocument();
+  });
+
+  it("keeps a saved fast model that is no longer on the key visible", () => {
+    mockOrganization = { ...mockOrganization, defaultFastModelId: "gone" };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderPage();
+
+    expect(screen.getByText("Unavailable model")).toBeInTheDocument();
+  });
+
   it("hides the free-model filter for non-OpenRouter API keys", () => {
     renderPage();
 
@@ -307,39 +319,5 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
-  });
-
-  it("uses the shared agent selector for the default agent dropdown", () => {
-    mockAgents = [
-      {
-        id: "agent-1",
-        name: "Agent Builder Agent",
-        icon: "🧰",
-        agentType: "agent",
-        scope: "org",
-      },
-    ];
-
-    renderPage();
-
-    const agentSelectorCall = mockAgentSelector.mock.calls.find(
-      ([props]) =>
-        (props as { searchPlaceholder?: string }).searchPlaceholder ===
-        "Search agents...",
-    );
-    expect(agentSelectorCall).toBeDefined();
-
-    const props = agentSelectorCall?.[0] as unknown as {
-      mode: string;
-      agents: typeof mockAgents;
-      sentinelOption: { value: string; label: string };
-    };
-
-    expect(props.mode).toBe("single");
-    expect(props.agents).toEqual(mockAgents);
-    expect(props.sentinelOption).toMatchObject({
-      value: "__personal__",
-      label: "User's personal agent",
-    });
   });
 });

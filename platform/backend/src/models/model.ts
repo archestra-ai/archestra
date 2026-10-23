@@ -3,6 +3,7 @@ import {
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
   and,
   count,
@@ -25,8 +26,13 @@ import type {
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import type {
+  ProviderModelPricing,
+  ProviderPricedModel,
+} from "@/types/provider-model-pricing";
 import ModelTeamModel from "./model-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -34,8 +40,8 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
  * no cache pricing model (neither explicit nor multiplier-derivable).
  */
 interface EffectivePricing {
-  pricePerMillionInput: string;
-  pricePerMillionOutput: string;
+  pricePerMillionInput: string | null;
+  pricePerMillionOutput: string | null;
   source: PriceSource;
   /** Cache-read price per million tokens, or null when unpriced. */
   pricePerMillionCacheRead: string | null;
@@ -175,6 +181,35 @@ function readOllamaDefaultNumCtx(
 }
 
 class ModelModel {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The ids among `ids` that pass a list's `access` and `sharedWith`
+   * filters. Models are synced, not authored, so none is "mine" and an
+   * owner filter matches nothing.
+   */
+  static async idsMatchingAccess(params: {
+    organizationId: string;
+    ids: string[];
+    access: ResourceAccessFilter;
+  }): Promise<Set<string>> {
+    if (params.ids.length === 0) return new Set();
+    const condition = ResourcePermissionPolicyModel.accessRelationCondition({
+      ...params.access,
+      organizationId: params.organizationId,
+      resource: "llmModel",
+      scopeColumn: schema.modelsTable.id,
+      ownerColumn: sql`NULL`,
+    });
+    const rows = await db
+      .select({ id: schema.modelsTable.id })
+      .from(schema.modelsTable)
+      .where(and(inArray(schema.modelsTable.id, params.ids), condition));
+    return new Set(rows.map((row) => row.id));
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Find all models discovered via LLM Proxy requests.
    */
@@ -815,13 +850,33 @@ class ModelModel {
       .where(eq(schema.modelsTable.id, id));
   }
 
+  /** Attach rates for a selected instance, without mutating the shared catalog.
+   * A merged listing with different rates has no single price to display. */
+  static withProviderPricing(
+    model: Model,
+    prices: Array<ProviderModelPricing | null>,
+  ): ProviderPricedModel {
+    if (!prices.length || prices.every((price) => price === null)) return model;
+    const distinct = new Set(prices.map((price) => JSON.stringify(price)));
+    if (distinct.size > 1)
+      return {
+        ...model,
+        providerPricing: "conflicting",
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      };
+    return { ...model, ...prices[0], providerPricing: prices[0] ?? undefined };
+  }
+
   /**
    * Get effective pricing for a model.
    *
    * Input/output price uses 3-tier priority:
    * 1. Custom admin-set price (customPricePerMillionInput/Output) — if non-null
-   * 2. models.dev synced price (promptPricePerToken/completionPricePerToken × 1M) — if non-null
-   * 3. Default fallback ($30 for mini/haiku/nano models, $50 for others)
+   * 2. Selected instance price (USD/token × 1M), preserving unknown directions
+   * 3. Registry price, then the existing default estimate when no instance metadata exists
    *
    * Cache read/write price uses its own 3-tier priority:
    * 1. Custom admin-set cache price — if non-null
@@ -832,13 +887,32 @@ class ModelModel {
    * was synced/set (so cache cost is not fabricated for non-caching providers).
    */
   static getEffectivePricing(
-    model: Model | null,
+    model: ProviderPricedModel | null,
     modelId?: string,
     /** Provider hint used for cache-price derivation when `model` is null (default tier). */
     provider?: SupportedProvider,
   ): EffectivePricing {
-    const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId, provider);
+    if (model?.providerPricing && model.providerPricing !== "conflicting") {
+      model = { ...model, ...model.providerPricing };
+    }
+    const base = ModelModel.getEffectiveBasePricing(model, modelId, provider);
+    const instance = model?.providerPricing;
+    const useInstance = instance && base.source !== "custom";
+    const pricePerMillionInput = useInstance
+      ? instance === "conflicting" || instance.promptPricePerToken === null
+        ? null
+        : formatPerMillionPrice(
+            Number(instance.promptPricePerToken) * 1_000_000,
+          )
+      : base.pricePerMillionInput;
+    const pricePerMillionOutput = useInstance
+      ? instance === "conflicting" || instance.completionPricePerToken === null
+        ? null
+        : formatPerMillionPrice(
+            Number(instance.completionPricePerToken) * 1_000_000,
+          )
+      : base.pricePerMillionOutput;
+    const source = useInstance ? "provider" : base.source;
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -850,6 +924,10 @@ class ModelModel {
       pricePerMillionOutput,
       source,
       ...cache,
+      cacheSource:
+        cache.cacheSource === "models_dev" && model?.providerPricing
+          ? "provider"
+          : cache.cacheSource,
     };
   }
 
@@ -954,8 +1032,8 @@ class ModelModel {
    * the multiplier-derived fallback tier.
    */
   private static getEffectiveCachePricing(
-    model: Model | null,
-    effectivePricePerMillionInput: string,
+    model: ProviderPricedModel | null,
+    effectivePricePerMillionInput: string | null,
     providerHint?: SupportedProvider,
   ): {
     pricePerMillionCacheRead: string | null;
@@ -968,18 +1046,18 @@ class ModelModel {
     // just because its counterpart is missing.
     const provider = model?.provider ?? providerHint;
     const multiplier = provider ? CACHE_PRICE_MULTIPLIERS[provider] : undefined;
-    const priceIn = Number.parseFloat(effectivePricePerMillionInput);
+    const priceIn = Number.parseFloat(effectivePricePerMillionInput ?? "0");
 
     const read = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheRead,
       syncedPerToken: model?.cacheReadPricePerToken,
-      multiplierFactor: multiplier?.read,
+      multiplierFactor: model?.providerPricing ? undefined : multiplier?.read,
       effectivePricePerMillionInput: priceIn,
     });
     const write = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheWrite,
       syncedPerToken: model?.cacheWritePricePerToken,
-      multiplierFactor: multiplier?.write,
+      multiplierFactor: model?.providerPricing ? undefined : multiplier?.write,
       effectivePricePerMillionInput: priceIn,
     });
 
@@ -1035,6 +1113,23 @@ class ModelModel {
     }
 
     return map;
+  }
+
+  static async findByProviderAndModelIds(
+    provider: SupportedProvider,
+    modelIds: string[],
+  ): Promise<Map<string, Model>> {
+    if (!modelIds.length) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.provider, provider),
+          inArray(schema.modelsTable.modelId, modelIds),
+        ),
+      );
+    return new Map(rows.map((row) => [row.modelId, row]));
   }
 
   /**
@@ -1128,7 +1223,7 @@ class ModelModel {
    * hand omit it, which reads as "no evidence" and surfaces nothing.
    */
   static toCapabilities(
-    model: Model | null,
+    model: ProviderPricedModel | null,
     recommendedForAgents: boolean | null = null,
   ): ModelCapabilities {
     if (!model) {
@@ -1154,9 +1249,23 @@ class ModelModel {
 
     return {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
-      inputModalities: model.inputModalities,
-      outputModalities: model.outputModalities,
-      supportsToolCalling: model.supportsToolCalling,
+      inputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.inputModalities ?? null)
+        : model.inputModalities,
+      outputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.outputModalities ?? null)
+        : model.outputModalities,
+      // Chat's Azure media bridge produces files without running agent tools,
+      // even when the upstream model registry advertises native tool support.
+      supportsToolCalling:
+        model.provider === "azure" &&
+        ["image", "audio", "realtime", "translation"].includes(
+          model.azureCapabilities?.kind ?? "text",
+        )
+          ? false
+          : model.azureCapabilities
+            ? (model.azureCapabilities.supportsToolCalling ?? null)
+            : model.supportsToolCalling,
       supportsReasoningEffort: model.supportsReasoningEffort,
       supportedEndpoints: model.supportedEndpoints,
       recommendedForAgents,
@@ -1170,17 +1279,41 @@ class ModelModel {
     };
   }
 
-  static supportsTextChat(model: Model): boolean {
+  static supportsTextChat(
+    model: Model & { azureCapabilities?: AzureModelEvidence | null },
+  ): boolean {
     if (model.ignored) {
       return false;
+    }
+
+    if (model.provider === "azure" && model.azureCapabilities) {
+      return model.azureCapabilities.operations.some((operation) =>
+        ["chat", "responses", "image-generation", "realtime-turn"].includes(
+          operation,
+        ),
+      );
     }
 
     if (model.embeddingDimensions !== null) {
       return false;
     }
 
+    // Translation uses typed text as a language setting and a WAV upload as input.
+    if (
+      model.provider === "azure" &&
+      model.azureCapabilities?.kind === "translation"
+    )
+      return true;
+
     if (model.inputModalities && !model.inputModalities.includes("text")) {
       return false;
+    }
+
+    if (
+      model.provider === "azure" &&
+      model.azureCapabilities?.kind === "image"
+    ) {
+      return true;
     }
 
     if (model.outputModalities && !model.outputModalities.includes("text")) {
@@ -1190,10 +1323,13 @@ class ModelModel {
     return true;
   }
 
-  static supportsEmbeddings(model: Model): boolean {
+  static supportsEmbeddings(model: ProviderPricedModel): boolean {
     if (model.ignored) {
       return false;
     }
+
+    if (model.provider === "azure" && model.azureCapabilities)
+      return model.azureCapabilities.kind === "embedding";
 
     return model.embeddingDimensions !== null;
   }

@@ -3,6 +3,26 @@ import { describe, expect, it } from "vitest";
 import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
+  it.each([
+    RouteId.AzureCreateFile,
+    RouteId.AzureFileContentWithAgent,
+    RouteId.AzureDeleteFile,
+  ])("documents %s as requiring a principal and a configured account", (operationId) => {
+    const spec = {
+      paths: {
+        "/v1/azure/files": { post: { operationId, tags: ["LLM Proxy"] } },
+      },
+    };
+    const operation = enrichOpenApiWithRbac(spec).paths["/v1/azure/files"]
+      .post as { description?: string };
+    expect(operation.description).toContain("authenticated platform principal");
+    expect(operation.description).toContain(
+      "provider key alone is insufficient",
+    );
+    expect(operation.description).not.toContain(
+      "either an LLM provider API key",
+    );
+  });
   it("adds permission metadata plus authentication and RBAC guidance for routes with static requirements", () => {
     const spec = {
       paths: {
@@ -27,7 +47,7 @@ describe("enrichOpenApiWithRbac", () => {
 
     expect(getOperation["x-required-permissions"]).toEqual({
       kind: "static",
-      permissions: ["toolPolicy:read"],
+      permissions: ["mcpRegistry:read"],
     });
     expect(getOperation.description).toContain("Authentication:\n\n");
     expect(getOperation.description).toContain(
@@ -35,7 +55,26 @@ describe("enrichOpenApiWithRbac", () => {
     );
     expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
     expect(getOperation.description).toContain(
-      "`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+      "`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
+    );
+  });
+
+  it.each([
+    RouteId.GetAgentOptions,
+    RouteId.GetChatAgentRoster,
+  ])("documents %s as dynamically authorized", (operationId) => {
+    const spec = { paths: { "/api/agents/roster": { get: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/agents/roster"]
+      .get as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining("agent:read"),
+    });
+    expect(operation.description).not.toContain(
+      "None (no additional RBAC permission required)",
     );
   });
 
@@ -74,6 +113,34 @@ describe("enrichOpenApiWithRbac", () => {
     expect(getOperation.description).toContain(
       "None (no additional RBAC permission required)",
     );
+  });
+
+  it("documents that a credential just for the caller needs no permission", () => {
+    const spec = {
+      paths: {
+        "/api/credentials": {
+          post: {
+            operationId: RouteId.CreateRuntimeCredential,
+            description: "Create a credential definition",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const createOperation = enriched.paths["/api/credentials"].post as {
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(createOperation["x-required-permissions"]).toEqual({
+      kind: "dynamic",
+      note: expect.stringContaining("require `credential:create`"),
+      permissions: [],
+    });
   });
 
   it("documents dynamic agent RBAC checks with an explicit note", () => {

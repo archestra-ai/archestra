@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   AGENT_CATALOG_IMAGE_REGISTRY,
+  followAgentCatalogImage,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
   resolveAgentCatalogId,
@@ -60,6 +61,7 @@ describe("popular Agent images", () => {
       opencode: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-opencode:latest`,
       hermes: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-hermes:latest`,
       openclaw: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-openclaw:latest`,
+      grok: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-grok:latest`,
     });
   });
 
@@ -72,5 +74,54 @@ describe("popular Agent images", () => {
       "registry.example:5000/team/agent-claude-code:v2",
     );
     expect(images.hermes).toBe("registry.example:5000/team/agent-hermes:v2");
+  });
+});
+
+describe("followAgentCatalogImage", () => {
+  const catalogImages = getAgentCatalogImages({
+    registry: AGENT_CATALOG_IMAGE_REGISTRY,
+    tag: "1.4.0-rc.37",
+  });
+
+  test("moves a maintained image saved on an older release to the current tag", () => {
+    expect(
+      followAgentCatalogImage({
+        image: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-claude-code:1.4.0-rc.31`,
+        catalogImages,
+      }),
+    ).toBe(`${AGENT_CATALOG_IMAGE_REGISTRY}/agent-claude-code:1.4.0-rc.37`);
+    expect(
+      followAgentCatalogImage({
+        image: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex`,
+        catalogImages,
+      }),
+    ).toBe(`${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.4.0-rc.37`);
+  });
+
+  test("follows an operator's mirror, including from the public registry", () => {
+    const mirrored = getAgentCatalogImages({
+      registry: "registry.example:5000/team",
+      tag: "pinned",
+    });
+    for (const image of [
+      "registry.example:5000/team/agent-hermes:1.4.0-rc.20",
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-hermes:1.4.0-rc.20`,
+    ]) {
+      expect(followAgentCatalogImage({ image, catalogImages: mirrored })).toBe(
+        "registry.example:5000/team/agent-hermes:pinned",
+      );
+    }
+  });
+
+  test("launches digest pins and the author's own images as saved", () => {
+    for (const image of [
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-claude-code@sha256:${"a".repeat(64)}`,
+      "registry.example/team/agent-claude-code:v2",
+      "registry.example:5000/agent-claude-code",
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-claude-code-extended:1.4.0-rc.31`,
+      "ghcr.io/example/toolbox:latest",
+    ]) {
+      expect(followAgentCatalogImage({ image, catalogImages })).toBe(image);
+    }
   });
 });

@@ -7,7 +7,6 @@ import {
   GITHUB_REPO_NEW_ISSUE_URL,
   GITHUB_REPO_URL,
 } from "@archestra/shared";
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -15,16 +14,17 @@ import {
   Github,
   type LucideIcon,
   MessageCircle,
-  MoreHorizontal,
   PencilRuler,
+  Plus,
+  Search,
   Slack,
   Star,
 } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
   chatsNavItems,
@@ -33,7 +33,10 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
+import { preloadAgentsPage } from "@/app/agents/preload";
+import { prefetchMcpRegistry } from "@/app/mcp/registry/_parts/prefetch-registry";
 import { AppLogo } from "@/components/app-logo";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
@@ -54,12 +57,17 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { SHORTCUT_NEW_CHAT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -69,6 +77,7 @@ import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils/tailwind";
 import { getSettingsNavigationUrl } from "./settings-navigation";
+import { useNavPermissionMap } from "./use-settings-area-access";
 
 type SidebarMode = "chats" | "studio";
 
@@ -214,7 +223,16 @@ const NavPrimary = ({
         <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
-          className="relative"
+          className={cn(
+            "relative",
+            // The dot is pinned to the row's right edge, where a badge also
+            // ends; pad the row so the badge clears the dot instead of
+            // sitting underneath it.
+            item.beta &&
+              item.dotKey &&
+              unseenDotKeys.has(item.dotKey) &&
+              "pr-4",
+          )}
           onClick={() => {
             if (item.dotKey) onDotItemVisit(item.dotKey);
             if (isMobile) setOpenMobile(false);
@@ -223,12 +241,10 @@ const NavPrimary = ({
           <item.icon className={item.iconClassName} />
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
-            <Badge
-              variant="outline"
-              className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
-            >
-              {item.badgeLabel ?? "New"}
-            </Badge>
+            <NavItemBadge
+              label={item.badgeLabel ?? "New"}
+              tooltip={item.badgeTooltip}
+            />
           )}
           {item.dotKey && (
             <OnboardingDot
@@ -312,20 +328,26 @@ const NavPrimary = ({
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
-        {permittedHeaderItems.map(renderItem)}
+        {permittedHeaderItems.map((item) =>
+          item.url === "/chat" ? (
+            // New chat leads the Chats list, above the places it links to.
+            // Search sits on the chat list's first group label instead.
+            <SidebarNewChatItem key={item.url} />
+          ) : (
+            renderItem(item)
+          ),
+        )}
+        {/* The rail's search. Expanded, search lives on the chat list's first
+            group label, which the rail folds away. */}
         <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
           <SidebarMenuButton
-            tooltip="Search chats"
+            tooltip="Search"
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("open-conversation-search", {
-                  detail: { recentChatsView: true },
-                }),
-              );
+              window.dispatchEvent(new CustomEvent("open-conversation-search"));
             }}
           >
-            <MoreHorizontal />
-            <span>Search chats</span>
+            <Search />
+            <span>Search</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -388,6 +410,11 @@ const NavSecondary = ({
   const permittedItems = items.filter((item) =>
     isNavItemPermitted(item, permissionMap),
   );
+  // An empty group still takes its padding and gaps, leaving a blank band
+  // between the chat list and the footer.
+  if (permittedItems.length === 0 && !showCommunityLinks) {
+    return null;
+  }
 
   return (
     <SidebarGroup className={className}>
@@ -494,7 +521,7 @@ export function AppSidebar() {
     deferMs: 5000,
   });
   const formattedStarCount = starCount ?? "";
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
   // Connect is useful with either half: MCP-only (tools) or proxy-only
   // (inference). Org settings can hide a section without hiding the page.
@@ -505,8 +532,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
-  const pluginsEnabled = useFeature("plugins");
-  const openappaEnabled = useFeature("openappaEnabled");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -539,17 +564,6 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
-          .filter(
-            (item) => item.url !== "/openappa" || openappaEnabled === true,
-          )
-          // The legacy guardrails page steps aside once OpenAPPA is on: the
-          // flag alone decides, so turning it off brings the page back with
-          // its policies untouched. Waits for the flag answer like Plugins.
-          .filter(
-            (item) =>
-              item.url !== "/mcp/tool-guardrails" || openappaEnabled === false,
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -587,12 +601,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [
-      pluginsEnabled,
-      openappaEnabled,
-      guardrailsDeployment?.enabled,
-      permissionMap,
-    ],
+    [guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (
@@ -617,7 +626,20 @@ export function AppSidebar() {
           />
         )}
       </SidebarHeader>
-      <SidebarContent>
+      {/* The nav scrolls under the footer; the fade keeps the last row from
+          ending in a hard cut. It takes its own space at the end, so it covers
+          nothing once scrolled to the bottom or when nothing overflows. The
+          top fade overlaps the first rows (negative margin) so rows scrolling
+          under the header soften the same way. */}
+      <SidebarContent
+        className={cn(
+          "relative",
+          // The chat list scrolls and fades on its own; this fade would only
+          // add a blank band between it and the footer.
+          sidebarMode !== "chats" &&
+            "before:pointer-events-none before:sticky before:top-0 before:z-10 before:-mb-4 before:block before:h-4 before:shrink-0 before:bg-gradient-to-b before:from-sidebar before:to-transparent before:content-[''] after:pointer-events-none after:sticky after:bottom-0 after:-mt-2 after:block after:h-4 after:shrink-0 after:bg-gradient-to-t after:from-sidebar after:to-transparent after:content-['']",
+        )}
+      >
         {isAuthenticated &&
           permissionMap &&
           (sidebarMode === "chats" ? (
@@ -632,13 +654,14 @@ export function AppSidebar() {
                 onDotItemVisit={markSeen}
               />
               {/* Keep sessions scrollable while the navigation and community
-                  links stay in place. The fade hints at more sessions below. */}
-              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+                  links stay in place. The fades soften rows scrolling under
+                  the nav above and hint at more sessions below. */}
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 before:pointer-events-none before:absolute before:top-0 before:right-2.5 before:left-0 before:z-10 before:h-4 before:bg-gradient-to-b before:from-sidebar before:to-transparent after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-4 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
                 {/* group-data-[collapsible=icon]:overflow-hidden keeps this
                     scroller out of the tab order while collapsed — Chrome makes
                     scrollable containers keyboard-focusable, which otherwise
                     leaves an invisible tab stop on the icon rail (WCAG 2.4.3). */}
-                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-4 [scrollbar-gutter:stable] scrollbar-sidebar">
                   <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -726,63 +749,88 @@ export function AppSidebar() {
  * prefetch keeps intentional navigation fast without competing with initial
  * page API requests.
  */
-function SidebarPrefetchLink({
-  href,
-  onFocus,
-  onMouseEnter,
-  ...props
-}: React.ComponentProps<typeof Link>) {
-  const router = useRouter();
+function SidebarPrefetchLink(
+  props: Omit<React.ComponentProps<typeof IntentPrefetchLink>, "onPrefetch">,
+) {
   const queryClient = useQueryClient();
 
-  const prefetch = () => {
-    const prefetchHref = getPrefetchHref(href);
-    if (!prefetchHref) return;
-    router.prefetch(prefetchHref);
-    // Route prefetch doesn't mount client query hooks. Start the matching
-    // first page alongside it, not after the destination's JavaScript loads.
-    if (prefetchHref === "/apps") void prefetchApps(queryClient);
-  };
-
   return (
-    <Link
-      href={href}
-      prefetch={false}
-      onFocus={(event) => {
-        prefetch();
-        onFocus?.(event);
-      }}
-      onMouseEnter={(event) => {
-        prefetch();
-        onMouseEnter?.(event);
-      }}
+    <IntentPrefetchLink
       {...props}
+      // The registry is a dynamic page without a loading boundary: only a
+      // full prefetch fetches its own payload and JavaScript before the click.
+      fullPrefetch={isRegistryHref(props.href)}
+      onPrefetch={(href) => {
+        // Route prefetch doesn't mount client query hooks. Start the matching
+        // first page alongside it, not after the destination's JavaScript loads.
+        if (href === "/apps") void prefetchApps(queryClient);
+        // The route prefetch stops at the Agents page's loading boundary;
+        // load its code as well. Its data streams from the server on the
+        // click, so nothing is fetched for it here.
+        if (href === "/agents") preloadAgentsPage();
+        // The registry's payload carries no data on a client navigation (the
+        // server renders its first page only into full page loads), so its
+        // first page is fetched here, once.
+        if (isRegistryHref(href)) void prefetchMcpRegistry(queryClient, href);
+      }}
     />
   );
 }
 
-/**
- * Converts a Next.js Link href into the string URL required by router.prefetch.
- * Sidebar links currently pass strings, but this keeps manual prefetch safe if
- * a future item uses a UrlObject with query or hash fields.
- */
-function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
-  if (typeof href === "string") return href;
-  if (!href.pathname) return null;
-
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(href.query ?? {})) {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item != null) searchParams.append(key, String(item));
-      }
-      continue;
-    }
-    if (value != null) searchParams.set(key, String(value));
-  }
-
-  const query = searchParams.toString();
-  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
+function isRegistryHref(href: unknown): href is string {
+  return (
+    typeof href === "string" &&
+    (href === "/mcp/registry" || href.startsWith("/mcp/registry?"))
+  );
 }
 
 const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();
+
+function NavItemBadge({ label, tooltip }: { label: string; tooltip?: string }) {
+  const badge = (
+    <Badge
+      variant="outline"
+      className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
+    >
+      {label}
+    </Badge>
+  );
+  if (!tooltip) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The Chats sidebar's first action: an outlined button, set apart from the
+ * plain rows below it, with the shortcut that does the same (Alt+N, handled
+ * by `useConversationSearch`). In the collapsed rail it is a plain icon like
+ * its neighbours. An action rather than a place, so it never shows as the
+ * current page.
+ */
+function SidebarNewChatItem() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        tooltip="New chat"
+        className="h-9 rounded-lg border bg-sidebar-raised font-medium shadow-xs group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none"
+      >
+        <SidebarPrefetchLink
+          href="/chat"
+          onClick={() => {
+            if (isMobile) setOpenMobile(false);
+          }}
+        >
+          <Plus />
+          <span className="min-w-0 flex-1 truncate">New chat</span>
+          <ShortcutHint modifier="alt" letter={SHORTCUT_NEW_CHAT.label} />
+        </SidebarPrefetchLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}

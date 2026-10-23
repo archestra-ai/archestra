@@ -6,6 +6,7 @@
  */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
+const { Client } = require('../../backend/node_modules/pg');
 const { test } = require('node:test');
 const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
@@ -133,8 +134,12 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
-  const { declared, call } = await startSpawn(run, { ...schema, additionalProperties: false });
-  assert.equal(declared.result.isError, true, 'the delegation tool describes this dialect to the model');
+  await assert.rejects(
+    () => startSpawn(run, { ...schema, additionalProperties: false }),
+    /return_schema.*does not compile.*return shape/,
+    'the delegation tool rejects an unsupported return-shape dialect',
+  );
+  const call = await run.hook(run.parent, run.spawnCall('s1'));
   assert.equal(call.decision, 'deny_call', 'a refused declaration leaves the spawn held');
 });
 
@@ -163,6 +168,24 @@ test("an attested child may read untrusted data and still answer at its parent's
   assert.equal((await run.hook(run.parent, run.call('p1', 'publish'))).decision, 'allow_call', 'the parent is still trusted');
 });
 
+// The pinned runtime still offers the attestation to a suspicious parent and
+// refuses it on execution with no answer. That answer reaches the model as an
+// error result, not as a runtime failure that ends the turn.
+test('a suspicious parent is not offered an attested return', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const held = await run.hook(run.parent, run.call('r1', 'read_inbox'));
+  await run.remedy(run.parent, 'r1:accept', { offer_id: held.offers[0].offer_id, label: {} });
+  assert.equal((await run.hook(run.parent, run.call('r2', 'read_inbox'))).decision, 'allow_call');
+  await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'r2', output: 'lease ends in 3 days', outcome: 'success' });
+
+  const probe = await run.hook(run.parent, run.spawnCall('s1:declare'));
+  assert.equal(probe.decision, 'deny_call', 'an undeclared spawn is held');
+  const returns = probe.offers.map((offer) => offer.returns);
+  assert.ok(returns.includes('as_spoken'));
+  assert.ok(!returns.some((route) => route?.sanitizer === 'attest-schema'), 'the attestation would be refused');
+});
+
 test('a child returning as spoken may not read untrusted data', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
@@ -171,4 +194,135 @@ test('a child returning as spoken may not read untrusted data', { skip: !databas
   const read = await run.hook(run.child, run.call('r1', 'read_inbox'));
   assert.equal(read.decision, 'deny_call');
   assert.deepEqual(read.offers ?? [], [], 'no remedy lets its free text carry untrusted data to the parent');
+});
+
+// A child that answers a follow-up returns again under the same spawn call.
+// The LLM proxy approves such a child once, with its newest return, and it
+// accepts the return the spawn call kept. It also ends a turn that has no text
+// as a turn, not as a child end. The tests below are the reasons.
+
+/** A child that returns as spoken, with each of its turns ended. */
+async function returningChild(turns) {
+  const run = family();
+  await startSpawn(run);
+  await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+  const childEnd = (output) =>
+    run.hook(run.child, { event: 'child_end', operation_id: `turn:${randomUUID()}`, spawn_call_id: 's1', output });
+  const end = async (output) => {
+    assert.equal((await childEnd(output)).decision, 'ack', 'each turn crosses its own return');
+  };
+  for (const output of turns) await end(output);
+  const turnEnd = () => run.hook(run.child, { event: 'turn_end', operation_id: `turn:${randomUUID()}` });
+  const call = () => run.hook(run.child, run.call(randomUUID(), 'publish'));
+  const approve = (output) =>
+    run.hook(run.parent, {
+      event: 'tool_result',
+      tool_call_id: 's1',
+      spawned_id: run.child.session_id,
+      output,
+      outcome: 'success',
+    });
+  const crossed = async () =>
+    (await native.loadChildReturns(run.organization, run.parent.session_id, { childSessionId: run.child.session_id })).map(
+      (record) => record.value,
+    );
+  return { childEnd, end, turnEnd, call, approve, crossed };
+}
+
+test('a child end with no value ends the child', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild([]);
+  await child.end(undefined);
+
+  assert.equal((await child.call()).decision, 'deny_call', 'the ended child can call no tool');
+  assert.equal((await child.childEnd('answer to a follow-up')).decision, 'block', 'and it can return nothing');
+  assert.deepEqual(await child.crossed(), []);
+});
+
+test('a child whose turn ended as a turn can still work and return', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild([]);
+  assert.equal((await child.turnEnd()).decision, 'ack');
+
+  assert.equal((await child.call()).decision, 'allow_call');
+  await child.end('answer to a follow-up');
+  assert.deepEqual(await child.crossed(), ['answer to a follow-up']);
+  assert.equal((await child.approve('answer to a follow-up')).decision, 'ack');
+});
+
+test('a spawn result is replayed only for the latest return of its child', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild(['first answer', 'second answer']);
+  assert.deepEqual(await child.crossed(), ['second answer', 'first answer'], 'the newest return is first');
+
+  const older = await child.approve('first answer');
+  assert.equal(older.decision, 'block', 'an older return is not replayed');
+  assert.notEqual(older.approved_output, 'first answer');
+});
+
+test('a spawn call keeps the first return that the runtime approved for it', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild(['first answer']);
+  const first = await child.approve('first answer');
+  assert.equal(first.decision, 'ack');
+  assert.equal(first.approved_output, 'first answer');
+
+  await child.end('second answer');
+  assert.deepEqual(await child.crossed(), ['second answer', 'first answer']);
+  const second = await child.approve('second answer');
+  assert.equal(second.decision, 'ack');
+  assert.equal(second.approved_output, 'first answer', 'the later result gets the kept return');
+});
+
+// The decision `child_return` comes from a child's event when the value that crossed differs
+// from what the child said, and only there: the parent's spawn result answers `ack` with the
+// text it was handed. The host echoes the returned value, then reports the parent's result.
+test('a rewritten child return answers child_return, crosses through its echo, and the parent result keeps it', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const listSchema = {
+    type: 'object',
+    properties: {
+      days: { type: 'integer', minimum: 0, maximum: 365 },
+      list: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 365 }, maxItems: 256 },
+    },
+    required: ['days', 'list'],
+  };
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    for (const event of ['child_return', 'child_end']) {
+      const run = family();
+      const { declared, call } = await startSpawn(run, listSchema);
+      assert.equal(declared.result.isError, false);
+      assert.equal(call.decision, 'allow_call');
+      await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+      const said = `{ "days": 3, "list": [${Array.from({ length: 256 }, (_, i) => 100 + (i % 200)).join(', ')}] }`;
+      const extra = event === 'child_end' ? { spawn_call_id: 's1' } : {};
+      const staged = await run.hook(run.child, { event, operation_id: 'runtime-return:s1:r1', output: said, ...extra });
+      assert.equal(staged.decision, 'child_return', 'the crossed form differs from what was said');
+      assert.equal(staged.value, JSON.stringify(JSON.parse(said)));
+      const echo = await run.hook(run.child, { event, operation_id: 'runtime-return:s1:r1:echo', output: staged.value, ...extra });
+      assert.equal(echo.decision, 'ack', 'the canonical value crosses');
+      const records = await crossedReturns(run);
+      assert.deepEqual(records.map((record) => record.value), [staged.value]);
+      const result = (output) => run.hook(run.parent, { event: 'tool_result', tool_call_id: 's1', spawned_id: run.child.session_id, output, outcome: 'success' });
+      const first = await result(staged.value);
+      assert.equal(first.decision, 'ack', 'the parent result is never child_return');
+      assert.equal(first.approved_output, staged.value);
+      // Over 1 KiB, the stored text is in the decision and the column holds its digest.
+      const stored = (await client.query(
+        'SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+        [run.organization, run.parent.session_id, 's1'],
+      )).rows[0];
+      assert.equal(stored.decision.approved_output, staged.value);
+      assert.match(stored.approved_output, /^sha256:[0-9a-f]{64}$/);
+      // A replay, and a later return for the same call, come back as the first.
+      assert.deepEqual(await result(staged.value), first);
+      await run.hook(run.child, { event: 'child_return', operation_id: 'runtime-return:s1:r2', output: '{"days":4,"list":[9]}' });
+      const later = await result('{"days":4,"list":[9]}');
+      assert.equal(later.approved_output, staged.value, 'the kept return comes from the stored decision');
+    }
+  } finally {
+    await client.end();
+  }
 });

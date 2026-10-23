@@ -15,7 +15,7 @@ beforeEach(() => {
   >);
 });
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",
@@ -52,9 +52,6 @@ vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
-vi.mock("./batteries-panel", () => ({
-  BatteriesUploadAction: () => null,
-}));
 const setupState = vi.hoisted(() => ({
   isFresh: false as boolean | undefined,
 }));
@@ -88,7 +85,7 @@ test.each([
   expect(
     screen.getByRole("heading", {
       level: 1,
-      name: `${title} Alpha`,
+      name: `${title} Beta`,
     }),
   ).toBeVisible();
   expect(
@@ -115,11 +112,11 @@ test("a fresh Overview hides the tabs until a policy is saved", () => {
   ).not.toBeInTheDocument();
   // The header keeps naming the page and what it is for, tabs or no tabs.
   expect(
-    screen.getByRole("heading", { level: 1, name: "Guardrails Alpha" }),
+    screen.getByRole("heading", { level: 1, name: "Guardrails Beta" }),
   ).toBeInTheDocument();
 });
 
-test("the header labels the feature as Alpha on every tab", () => {
+test("the header labels the feature as Beta on every tab", () => {
   setupState.isFresh = false;
   vi.mocked(usePathname).mockReturnValue("/openappa/policy");
   vi.mocked(useSearchParams).mockReturnValue(
@@ -132,7 +129,7 @@ test("the header labels the feature as Alpha on every tab", () => {
     </OpenAppaPageLayout>,
   );
 
-  expect(screen.getByText("Alpha")).toBeInTheDocument();
+  expect(screen.getByText("Beta")).toBeInTheDocument();
   // The browser tab keeps the plain name; the badge is only for the page.
   expect(document.title).toBe("Policy - Archestra");
 });

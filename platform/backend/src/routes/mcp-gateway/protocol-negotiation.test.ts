@@ -14,7 +14,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
 import {
@@ -51,26 +50,30 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   async function setup({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }: {
     makeAgent: (args?: Record<string, unknown>) => Promise<{ id: string }>;
     makeOrganization: () => Promise<{ id: string }>;
+    makeServiceAccountToken: (args: {
+      organizationId: string;
+    }) => Promise<{ value: string }>;
   }) {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     return { agent, token };
   }
 
   test("a legacy initialize keeps working and reports the legacy revision", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -99,11 +102,16 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("a client declaring an older supported revision is still served", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // Regression guard on the negotiation layer itself: it must not narrow
     // acceptance to the two advertised revisions and turn away clients the SDK
     // has always negotiated.
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     for (const declaredVersion of [
       LEGACY_MCP_PROTOCOL_REVISION,
@@ -129,8 +137,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("server/discover returns the same capabilities the handshake advertises", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -162,11 +175,84 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     );
   });
 
+  test("both handshakes describe the gateway to the model in instructions", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    const described = await makeAgent({
+      organizationId: org.id,
+      description:
+        "  Tools for the support team. Prefer the ticketing tools.\n",
+    });
+    const undescribed = await makeAgent({
+      organizationId: org.id,
+      description: "   ",
+    });
+    const verbose = await makeAgent({
+      organizationId: org.id,
+      description: "a".repeat(5000),
+    });
+
+    async function handshake(agentId: string) {
+      const initialize = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agentId}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: LEGACY_MCP_PROTOCOL_REVISION,
+            capabilities: {},
+            clientInfo: { name: "legacy-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+      const discover = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agentId}`,
+        headers: makeMcpHeaders(token.value, {
+          "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+          "mcp-method": "server/discover",
+        }),
+        payload: { jsonrpc: "2.0", method: "server/discover", id: 2 },
+      });
+      expect(initialize.statusCode).toBe(200);
+      expect(discover.statusCode).toBe(200);
+      return [initialize.json().result, discover.json().result];
+    }
+
+    for (const result of await handshake(described.id)) {
+      expect(result.instructions).toBe(
+        "Tools for the support team. Prefer the ticketing tools.",
+      );
+    }
+    // Clients add instructions to every prompt, so a long description is cut.
+    for (const result of await handshake(verbose.id)) {
+      expect(result.instructions).toHaveLength(2000);
+      expect(result.instructions.endsWith("…")).toBe(true);
+    }
+    // Without a description there is nothing to say, so the field is omitted
+    // rather than sent empty.
+    for (const result of await handshake(undescribed.id)) {
+      expect(result).not.toHaveProperty("instructions");
+    }
+  });
+
   test("a routing header that disagrees with the body is rejected", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -194,8 +280,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("a declared stateless request without routing headers is rejected", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -213,8 +304,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("an unsupported declared version is rejected", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -234,8 +330,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("tools/list carries private cache hints for both revisions", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     for (const headers of [
       makeMcpHeaders(token.value),
@@ -262,13 +363,18 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("a 2026-07-28 request is not refused by the bundled SDK transport", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The SDK version this runs on validates MCP-Protocol-Version against its
     // own supported list, which ends at 2025-11-25, and 400s anything newer.
     // The gateway answers for the new revision itself, so a declared
     // 2026-07-28 request must reach the tool surface rather than being
     // rejected by the transport underneath.
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -291,10 +397,15 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("every cacheable result carries private cache hints", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The revision requires ttlMs/cacheScope on all five of these, not just
     // tools/list.
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     for (const method of [
       "tools/list",
@@ -319,8 +430,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("results carry the complete envelope and a stable tool order", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -346,8 +462,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("ping answers for legacy clients and is refused for 2026-07-28", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     // A legacy client keeps the SDK's automatic pong.
     const legacy = await app.inject({
@@ -378,8 +499,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("capabilities no longer advertise unimplemented subscriptions", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -402,18 +528,14 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       toolExposureMode: "full",
       organizationId: org.id,
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "xh-catalog",
@@ -457,8 +579,13 @@ describe("MCP Gateway - protocol revision negotiation", () => {
   test("GET declines streaming for the stateless revision", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { agent, token } = await setup({ makeAgent, makeOrganization });
+    const { agent, token } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await app.inject({
       method: "GET",

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 
 import { GET } from "./route";
 
@@ -35,6 +35,7 @@ describe("Disconnect agent instructions", () => {
       "opencode",
       "cursor",
       "claude-desktop",
+      "kilo",
       "generic",
     ]) {
       const instructions = await read(`?client=${client}`);
@@ -92,4 +93,33 @@ describe("Disconnect agent instructions", () => {
     expect(instructions).toContain("do not change anything there");
     expect(instructions).toContain("Do not force it to close.");
   });
+
+  it("undoes Kilo Code's setup in its own config, plugin and skills folders", async () => {
+    const instructions = await read("?client=kilo");
+    expect(instructions).toContain("# Disconnect Kilo Code");
+    expect(instructions).toContain(
+      "ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/kilo-startup-guard.sh",
+    );
+    expect(instructions).toContain("~/.config}/kilo/kilo.json");
+    expect(instructions).toContain("kilo mcp logout SERVER_NAME");
+    expect(instructions).toContain(
+      "~/.archestra/kilo-routing-plugin-state.json",
+    );
+    expect(instructions).not.toContain("opencode");
+  });
+});
+
+test("Pi recovery uses the snapshot helper and preserves shared skills and missing originals", async () => {
+  const response = GET(
+    new Request("http://localhost:3000/disconnect.md?client=pi"),
+  );
+  const text = await response.text();
+  expect(text).toContain("arcpi --disconnect");
+  expect(text).not.toContain("-startup-guard");
+  expect(text).not.toContain("Delete the");
+  expect(text).toContain("install-state.json");
+  expect(text).toContain("Do not infer original settings");
+  expect(text).toContain(
+    "Do not revoke shared keys or remove shared marketplace files",
+  );
 });

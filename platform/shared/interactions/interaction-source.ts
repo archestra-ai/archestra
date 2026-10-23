@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { OpenCodeFamilyClientId } from "../opencode-family";
 
 /**
  * Where an LLM proxy request originated from.
@@ -11,6 +12,10 @@ export const InteractionSourceSchema = z.enum([
   "opencode:subagent",
   "opencode:title",
   "opencode:compaction",
+  "kilo:main",
+  "kilo:subagent",
+  "kilo:title",
+  "kilo:compaction",
   "chat",
   "chat:compaction",
   "a2a:compaction",
@@ -18,8 +23,10 @@ export const InteractionSourceSchema = z.enum([
   "chat:tool_call_repair",
   "a2a:tool_call_repair",
   "skill:description_generation",
+  // Retained for historical logs after the legacy feature was removed.
   "guardrail:dual_llm",
   "guardrail:annotator",
+  "guardrail:hitl_summary",
   "chatops:slack",
   "chatops:ms-teams",
   "chatops:telegram",
@@ -36,6 +43,25 @@ export const InteractionSourceSchema = z.enum([
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
 
+/** How an OpenCode-family client frames a turn. */
+export type OpenCodeFamilyTurnKind =
+  | "main"
+  | "subagent"
+  | "title"
+  | "compaction";
+
+/**
+ * The source of an OpenCode-family turn, e.g. `kilo:subagent`. The return
+ * type holds every member's sources to the schema above, so adding a family
+ * member without its sources fails to compile.
+ */
+export function openCodeFamilySource(
+  clientId: OpenCodeFamilyClientId,
+  kind: OpenCodeFamilyTurnKind,
+): InteractionSource {
+  return `${clientId}:${kind}` as const;
+}
+
 /**
  * Display configuration for interaction sources.
  * Used by both frontend (SourceBadge) and any other consumer that needs
@@ -51,6 +77,10 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "opencode:subagent": { label: "OpenCode Sub-agent" },
   "opencode:title": { label: "OpenCode Title" },
   "opencode:compaction": { label: "OpenCode Compaction" },
+  "kilo:main": { label: "Kilo Code Main" },
+  "kilo:subagent": { label: "Kilo Code Sub-agent" },
+  "kilo:title": { label: "Kilo Code Title" },
+  "kilo:compaction": { label: "Kilo Code Compaction" },
   chat: { label: "Chat" },
   "chat:compaction": { label: "Chat Compaction" },
   "a2a:compaction": { label: "Agent Context Compaction" },
@@ -58,8 +88,9 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "chat:tool_call_repair": { label: "Chat Tool Call Repair" },
   "a2a:tool_call_repair": { label: "Agent Tool Call Repair" },
   "skill:description_generation": { label: "Skill Description Generation" },
-  "guardrail:dual_llm": { label: "Dual LLM Sanitization" },
+  "guardrail:dual_llm": { label: "Dual LLM Sanitization (legacy)" },
   "guardrail:annotator": { label: "Guardrails Annotator" },
+  "guardrail:hitl_summary": { label: "Guardrails Review Summary" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },
   "chatops:telegram": { label: "Telegram" },

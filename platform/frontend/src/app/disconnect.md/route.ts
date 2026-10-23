@@ -1,4 +1,8 @@
-import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  type OpenCodeFamilyDescriptor,
+  openCodeFamilyRecord,
+} from "@archestra/shared";
 import {
   CLAUDE_DESKTOP_PROFILE_ID,
   INSTALLER_CLIENT_IDS,
@@ -16,10 +20,10 @@ import {
 /**
  * Agent instructions that undo what the connect setup installed in one client:
  * the MCP gateway entry, skills and plugins, the LLM proxy settings, and the
- * shell-profile startup check. The reverse steps mirror
- * backend/src/services/connection-setup-script.ts and the startup guard's own
- * disconnect actions (startup-guard.clients.ts); for clients with a guard, the
- * guard runs them itself via ARCHESTRA_GUARD_ACTION=disconnect.
+ * shell-profile startup check. The reverse steps mirror the setup scripts in
+ * backend/src/services/agent-connection-setup/agents/ and the startup guard's
+ * own disconnect actions (agent-connection-setup/guard/clients/); for clients
+ * with a guard, the guard runs them itself via ARCHESTRA_GUARD_ACTION=disconnect.
  */
 export function GET(request: Request) {
   const origin = requestOrigin(request);
@@ -109,6 +113,19 @@ interface GuardClient {
 }
 
 const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
+  pi: {
+    binary: "arcpi",
+    inventory: `- Inspect the presence of ~/.archestra/pi/install-state.json without printing its contents: it can contain private recovery data.
+- The Pi connection owns one MCP registration and OAuth record, its extension, arcpi launcher, and the PATH blocks it added.
+- Models and unrelated user settings, skills, sessions, and shared marketplace checkouts must remain.`,
+    manual: `- Run arcpi --disconnect. Pi's proxy, gateway and shared-skills association are restored together.
+- If arcpi is not on PATH, run node ~/.archestra/pi/lifecycle.cjs disconnect (use the home-directory equivalent on Windows).
+- If the helper reports edited files, preserve those edits and resolve the reported conflict before retrying.
+- If the original snapshot is missing or predates this installer, stop. Do not infer original settings or delete configuration. Review existing .archestra-backup files with the user.
+- Do not revoke shared keys or remove shared marketplace files.`,
+    finish:
+      "Open a new terminal and run pi. The disconnected arcpi launcher is removed; other clients remain configured.",
+  },
   "claude-code": {
     binary: "claude",
     inventory: `- MCP: claude mcp list. The gateway is the server whose URL starts with {{BASE}}/mcp/.
@@ -155,33 +172,25 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
 - Skills and plugins: the extraKnownMarketplaces entry in ~/.copilot/settings.json cloned
   from {{HOST}}/skills/, and the plugins installed from it (named PLUGIN@MARKETPLACE; see
   copilot plugin --help for the list command).
-- LLM proxy: export COPILOT_PROVIDER_TYPE, COPILOT_PROVIDER_BASE_URL,
+- LLM proxy: the archestra provider and its models in ~/.copilot/providers.json
+  (respect COPILOT_HOME and COPILOT_PROVIDERS_CONFIG overrides); the selected model in
+  ~/.copilot/settings.json. Setup ownership and the previous model are recorded in
+  a sidecar at the registry path with .archestra-state.json appended.
+- Optional environment settings: export COPILOT_PROVIDER_TYPE, COPILOT_PROVIDER_BASE_URL,
   COPILOT_PROVIDER_API_KEY and COPILOT_PROVIDER_HEADERS lines in ~/.zshrc, ~/.bashrc
-  and ~/.profile (on Windows, user environment variables of the same names).`,
+  and ~/.profile; fish set -gx lines in config.fish or conf.d/*.fish
+  (on Windows, user environment variables of the same names).`,
     manual: `- copilot mcp remove SERVER_NAME.
 - For each plugin from the marketplace: copilot plugin uninstall PLUGIN@MARKETPLACE.
   Then copilot plugin marketplace remove MARKETPLACE.
-- Remove the export COPILOT_PROVIDER_* lines found above. Leave COPILOT_MODEL alone.`,
+- Remove only the archestra provider whose baseUrl points to {{BASE}}, and its models.
+  If settings.json still selects the model in the setup state file, restore previousModel
+  (or remove the model setting if previousModel is null). Remove the setup state file.
+- Remove the COPILOT_PROVIDER_* assignments found above. Remove COPILOT_MODEL only when it selects an archestra/ model; preserve other choices.`,
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
-  opencode: {
-    binary: "opencode",
-    inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/opencode/opencode.json. The gateway is the mcp
-  entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
-  options.baseURL points at {{HOST}}, or x-archestra-* headers added to a provider.
-- Skills: the folder \${XDG_CONFIG_HOME:-~/.config}/opencode/skills/MARKETPLACE cloned from {{HOST}}/skills/.
-- Routing plugin: \${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/archestra-llm-proxy.js.`,
-    manual: `- opencode mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from opencode.json.
-- Delete the skills folder named above.
-- Remove the provider entry that points at {{HOST}}, or only the baseURL and
-  x-archestra-* headers that were added to the user's own provider.
-- Routing plugin: if ~/.archestra/opencode-routing-plugin-state.json says the plugin
-  file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.
-  Then delete the state file and any ~/.archestra/opencode-*.key file.`,
-    finish:
-      "Do not restart OpenCode from inside this conversation. Tell the user to close OpenCode and launch opencode in a new terminal.",
-  },
+  ...openCodeFamilyRecord(openCodeFamilyGuardClient),
 };
 
 function focusedInstructions(
@@ -190,6 +199,14 @@ function focusedInstructions(
 ): string | null {
   if (!isInstallerClientId(client)) return null;
   const details = GUARD_CLIENTS[client];
+  if (client === "pi" && details)
+    return instructions({
+      target,
+      label: INSTALLER_CLIENT_LABELS.pi,
+      inventory: details.inventory,
+      remove: details.manual,
+      finish: details.finish,
+    });
   const guard = startupGuardStem(client);
   if (!details || !guard) {
     return client === "cursor" ? cursorInstructions(target) : null;
@@ -246,11 +263,15 @@ function cursorInstructions(target: DeploymentTarget): string {
     inventory: `- MCP: the mcpServers entry in ~/.cursor/mcp.json whose URL starts with ${base}/mcp/.
 - Skills: a folder in ~/.cursor/skills/ that is a git clone of ${host}/skills/
   (check with git -C FOLDER remote get-url origin).
-- LLM proxy and User Rules: Cursor keeps these in its settings UI, not in a file.`,
+- LLM proxy: Settings > Models > API Keys, with Override OpenAI Base URL pointing
+  at ${host}. Setup wrote it into Cursor's settings database and kept a copy of
+  that database as state.vscdb.archestra-backup beside it.
+- User Rules: Cursor keeps these in its settings UI, not in a file.`,
     remove: `- Remove the gateway entry from ~/.cursor/mcp.json and keep the other servers.
 - Delete the skills folder found above.
 - Ask the user to open Settings > Models > API Keys, turn off Override OpenAI Base URL
-  if it points at ${host}, and remove the key they entered for it.
+  if it points at ${host}, and remove the key in the API Key field. Do not restore
+  the database backup: it would undo every Cursor setting changed since setup.
 - If the user pasted runtime handoff instructions into Customize > Rules > User Rules,
   ask them to delete that text. Do not change their other rules.`,
     finish:
@@ -302,4 +323,30 @@ function genericInstructions(target: DeploymentTarget): string {
 - If the app keeps these settings in its UI, tell the user exactly where to change them.`,
     finish: "Reload or restart the app if it needs to.",
   });
+}
+
+/** OpenCode and Kilo Code: one layout, from the family descriptor. */
+function openCodeFamilyGuardClient(client: OpenCodeFamilyDescriptor) {
+  const configDir = `\${XDG_CONFIG_HOME:-~/.config}/${client.dir}`;
+  const state = `~/.archestra/${client.stateName}`;
+  const mcpAddFile = client.mcpAddConfigFile;
+  return {
+    binary: client.binary,
+    inventory: `- Config: ${configDir}/${client.configFile}${mcpAddFile ? ", the file setup writes" : ""}. The gateway is the mcp
+  entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
+  options.baseURL (V1) or settings.baseURL (V2 providers) points at {{HOST}}, or x-archestra-* headers added to a provider.
+${mcpAddFile ? `  Check ${mcpAddFile} in the same folder too: ${client.binary} mcp add writes there, and it can have comments.\n` : ""}- Skills: the folder ${configDir}/skills/MARKETPLACE cloned from {{HOST}}/skills/.
+- Routing plugin: ${configDir}/plugins/archestra-llm-proxy.js.`,
+    manual: `- ${client.binary} mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from ${client.configFile}${mcpAddFile ? ` (or ${mcpAddFile},\n  editing it as text so its comments stay)` : ""}.
+- Delete the skills folder named above.
+- If ${state}-primary-state.json exists, restore its sections and fields
+  into ${client.configFile}: null means delete the field or provider entry. Then delete
+  that state file and ${state}-primary.key.
+- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
+  x-archestra-* headers that were added to the user's own provider.
+- Routing plugin: if ${state}-routing-plugin-state.json says the plugin
+  file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.
+  Then delete the state file and any ${state}-*.key file.`,
+    finish: `Do not restart ${client.label} from inside this conversation. Tell the user to close ${client.label} and launch ${client.binary} in a new terminal.`,
+  };
 }

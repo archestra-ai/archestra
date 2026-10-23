@@ -10,7 +10,11 @@ import {
 } from "@/knowledge-base/pdf-ocr";
 import { knowledgeRetrievalBackend } from "@/knowledge-base/retrieval-backends/registry";
 import logger from "@/logging";
-import { KbDocumentModel, KbFileModel } from "@/models";
+import {
+  KbConnectorDocumentCountModel,
+  KbDocumentModel,
+  KbFileModel,
+} from "@/models";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import { taskQueueService } from "@/task-queue";
 import { ApiError } from "@/types";
@@ -257,6 +261,10 @@ export async function indexFilesIntoKnowledgeBase(params: {
       failures.push({ fileId, error: message });
     }
   }
+
+  // Counted even when every file failed: a file can fail after its document
+  // row was written.
+  await KbConnectorDocumentCountModel.refresh(connectorId);
 
   if (documentIds.length > 0) {
     await taskQueueService.enqueue({

@@ -27,8 +27,11 @@ describe("GET /api/openappa/remedies", () => {
     expect(response.statusCode).toBe(200);
     return response.json();
   };
-  const block = (body: RemediesView, kind: string) =>
-    body.blocks.find((each) => each.kind === kind);
+  const block = (
+    body: RemediesView,
+    kind: string,
+    level: string | null = null,
+  ) => body.blocks.find((each) => each.kind === kind && each.level === level);
   // The view reads the text, whether or not the runtime composes it.
   const saveRoot = async (content: string) => {
     const latest = await guardrailsPolicyService.get(ctx.organizationId);
@@ -149,43 +152,52 @@ url = "https://approvals.corp/review"
         lastConsult: null,
       },
     ]);
+    // Only wired authorities lift anything: legal-reviewer never shows.
     expect(body.blocks).toEqual([
       {
         kind: "trust",
-        rules: 1,
-        approvers: 1,
-        cleaners: 0,
+        level: "suspicious",
+        approvers: ["finance-officer"],
+        cleaners: [],
         unservedMarks: [],
         covered: true,
       },
       {
         kind: "audience",
-        rules: 1,
-        approvers: 1,
-        cleaners: 0,
+        level: "internal",
+        approvers: ["human"],
+        cleaners: [],
+        unservedMarks: [],
+        covered: true,
+      },
+      {
+        kind: "audience",
+        level: "self",
+        approvers: ["human"],
+        cleaners: [],
         unservedMarks: [],
         covered: true,
       },
       {
         kind: "effects",
-        rules: 1,
-        approvers: 1,
-        cleaners: 0,
+        level: null,
+        approvers: ["finance-officer"],
+        cleaners: [],
         unservedMarks: [],
         covered: true,
       },
       {
         kind: "approvals",
-        rules: 2,
-        approvers: 1,
-        cleaners: 0,
+        level: null,
+        approvers: ["human"],
+        cleaners: [],
         unservedMarks: [],
         covered: true,
       },
     ]);
   });
 
-  test("a mark no wired authority gives, and a block kind no remedy lifts, are uncovered", async () => {
+  test("a mark no wired authority gives, and a level nothing wired lifts, are uncovered", async () => {
     const content = `[policy]
 version = 2
 
@@ -216,16 +228,19 @@ builtin = "hitl"
 
     const body = await view();
 
-    expect(block(body, "trust")).toMatchObject({
-      rules: 1,
-      approvers: 0,
-      cleaners: 0,
+    expect(block(body, "trust", "suspicious")).toMatchObject({
+      approvers: [],
+      cleaners: [],
       covered: false,
     });
-    expect(block(body, "audience")).toMatchObject({ rules: 0, covered: true });
+    expect(block(body, "audience", "internal")).toMatchObject({
+      covered: false,
+    });
+    expect(block(body, "audience", "self")).toMatchObject({ covered: false });
+    // No rule excludes an effect, so there is nothing to cover.
+    expect(block(body, "effects")).toBeUndefined();
     expect(block(body, "approvals")).toMatchObject({
-      rules: 2,
-      approvers: 1,
+      approvers: ["sre-reviewer"],
       unservedMarks: ["mail-review"],
       covered: false,
     });
@@ -293,7 +308,15 @@ version = 2
         lastConsult: null,
       },
     ]);
-    expect(block(body, "audience")).toMatchObject({ cleaners: 1 });
+    expect(block(body, "audience", "internal")).toMatchObject({
+      cleaners: ["strip-customer-pii"],
+      covered: true,
+    });
+    // The sanitizer relabels internal data only; self stays uncovered.
+    expect(block(body, "audience", "self")).toMatchObject({
+      cleaners: [],
+      covered: false,
+    });
   });
 
   test("the latest consult of a remedy shows only with organization-wide consult access", async ({

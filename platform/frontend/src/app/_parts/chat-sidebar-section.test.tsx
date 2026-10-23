@@ -1,10 +1,21 @@
 import {
+  archestraApiSdk,
   getChatItemGeneratingIndicatorTestId,
   getChatItemUnreadIndicatorTestId,
 } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { preloadConversationActionParts } from "@/components/chat/conversation-actions";
 
 // Mock ResizeObserver used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -14,6 +25,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockRouterPrefetch = vi.fn();
 const { mockUpdateRunMutate, mockUpdateRunMutateAsync } = vi.hoisted(() => ({
   mockUpdateRunMutate: vi.fn(),
   mockUpdateRunMutateAsync: vi.fn().mockResolvedValue(undefined),
@@ -47,10 +59,13 @@ vi.mock("@/lib/chat/global-chat.context", () => ({
   useGlobalChat: () => ({
     animatingTitleIds: new Set(),
     markTitleAnimating: vi.fn(),
-    getSession: (id: string) =>
-      mockChatState.sessionStatusById[id]
-        ? { status: mockChatState.sessionStatusById[id] }
-        : undefined,
+    generatingConversationIds: new Set(
+      Object.entries(mockChatState.sessionStatusById)
+        .filter(
+          ([, status]) => status === "submitted" || status === "streaming",
+        )
+        .map(([id]) => id),
+    ),
   }),
 }));
 
@@ -76,6 +91,7 @@ let mockConversations: Array<{
   };
 }> = [];
 
+const mockUseProjects = vi.fn();
 let mockProjects: Array<{
   id: string;
   name: string;
@@ -94,26 +110,51 @@ let mockApps: Array<{
   pinnedAt: string | null;
 }> = [];
 
+// True while the pinned-apps request is still in flight.
+let mockAppsLoading = false;
+
 let mockRuns: Array<Record<string, unknown>> = [];
 
-vi.mock("@/lib/agent-runtime.query", () => ({
-  useMyAgentRuns: () => ({
-    data: mockRuns,
-    isLoading: false,
-  }),
-  useUpdateAgentRun: () => ({
-    mutate: mockUpdateRunMutate,
-    mutateAsync: mockUpdateRunMutateAsync,
-  }),
-  useCancelAgentRun: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useDeleteAgentRun: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
+let useRealRunsQuery = false;
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: {
+      ...actual.archestraApiSdk,
+      getMyAgentRuns: vi.fn(),
+      getMyAgentRun: vi.fn(),
+    },
+  };
+});
+vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent-runtime.query")>();
+  return {
+    useMyAgentRun: (taskId: string, enabled: boolean) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test mode is fixed before mounting.
+          actual.useMyAgentRun(taskId, enabled)
+        : { data: undefined },
+    useMyAgentRuns: (enabled: boolean, options: { pinned?: boolean }) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test mode is selected before mounting and never changes during a render.
+          actual.useMyAgentRuns(enabled, options)
+        : { data: mockRuns, isLoading: false },
+    useUpdateAgentRun: () => ({
+      mutate: mockUpdateRunMutate,
+      mutateAsync: mockUpdateRunMutateAsync,
+    }),
+    useCancelAgentRun: () => ({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
+    useDeleteAgentRun: () => ({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
+  };
+});
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
@@ -131,18 +172,36 @@ vi.mock("@/lib/chat/chat.query", () => ({
     variables: undefined,
   }),
   usePinConversation: () => ({ mutate: vi.fn() }),
+  fetchConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
-  useProjects: () => ({ data: mockProjects }),
+  SIDEBAR_PINNED_PROJECTS_QUERY: { pinned: true, limit: 100, offset: 0 },
+  // Answers like the endpoint: `pinned` splits the list, results are paged.
+  useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
+    mockUseProjects(filters);
+    const data =
+      filters?.pinned === undefined
+        ? mockProjects
+        : mockProjects.filter((p) => Boolean(p.pinnedAt) === filters.pinned);
+    return { data: { data, pagination: { total: data.length } } };
+  },
   usePinProject: () => ({ mutate: vi.fn() }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateProjectFromConversation: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
-  useApps: () => ({ data: { data: mockApps } }),
+  SIDEBAR_PINNED_APPS_QUERY: { limit: 100, offset: 0, pinned: true },
+  useApps: () =>
+    mockAppsLoading
+      ? { data: undefined, isLoading: true }
+      : { data: { data: mockApps }, isLoading: false },
   usePinApp: () => ({ mutate: vi.fn() }),
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
@@ -155,19 +214,19 @@ vi.mock("@/components/agent-icon", () => ({
 }));
 
 vi.mock("@/app/_parts/conversation-project-actions", () => ({
+  // The real menu fetches and searches its own projects; this stand-in picks
+  // the first fixture project.
   ConversationProjectActions: ({
     projectId,
-    projects,
     onProjectChange,
   }: {
     projectId: string | null;
-    projects: Array<{ id: string; name: string }>;
     onProjectChange: (projectId: string | null) => Promise<void>;
   }) => (
     <button
       type="button"
       onClick={() =>
-        void onProjectChange(projectId ? null : (projects[0]?.id ?? null))
+        void onProjectChange(projectId ? null : (mockProjects[0]?.id ?? null))
       }
     >
       {projectId ? "Remove from project" : "Add to project"}
@@ -240,15 +299,20 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarMenuSubButton: ({
     children,
     onClick,
+    asChild,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
     className?: string;
-  }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
+    asChild?: boolean;
+  }) =>
+    asChild ? (
+      children
+    ) : (
+      <button type="button" onClick={onClick}>
+        {children}
+      </button>
+    ),
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
@@ -282,6 +346,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
       {children}
     </button>
   ),
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
@@ -339,7 +404,7 @@ vi.mock("lucide-react", async (importOriginal) => {
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // Import after mocks
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ChatSidebarSection } from "./chat-sidebar-section";
 
@@ -350,6 +415,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 6 /* July */, 16, 12));
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
+    prefetch: mockRouterPrefetch,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(usePathname).mockImplementation(() => mockChatState.pathname);
   vi.mocked(useSearchParams).mockReturnValue({
@@ -358,6 +424,9 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(true);
 });
 
@@ -374,6 +443,7 @@ function makeConv(
   return {
     id,
     title,
+    userId: "user-1",
     pinnedAt: opts?.pinnedAt ?? null,
     updatedAt,
     lastMessageAt: opts?.lastMessageAt ?? updatedAt,
@@ -387,6 +457,9 @@ function daysAgo(n: number) {
   return subDays(new Date(), n).toISOString();
 }
 
+// The conversation menu's project picker is a lazy chunk; load it first.
+beforeAll(() => preloadConversationActionParts());
+
 describe("ChatSidebarSection", () => {
   const fadeIn = {
     pending: () => true,
@@ -398,7 +471,9 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
+    mockAppsLoading = false;
     mockRuns = [];
+    useRealRunsQuery = false;
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -416,21 +491,119 @@ describe("ChatSidebarSection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows current runs and old pins immediately, then reaches older runs on demand", async () => {
+    useRealRunsQuery = true;
+    const makeRun = (
+      taskId: string,
+      title: string,
+      pinnedAt: string | null = null,
+    ) => ({
+      taskId,
+      title,
+      pinnedAt,
+      startedAt: daysAgo(2),
+      endedAt: daysAgo(1),
+      stateChangedAt: daysAgo(1),
+      state: "TASK_STATE_COMPLETED",
+      agent: { id: "agent-1", name: "Runtime", icon: null },
+    });
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: query?.pinned
+              ? [makeRun("old-pin", "Old pinned run", daysAgo(200))]
+              : query?.offset
+                ? [makeRun("older", "Older run")]
+                : [makeRun("current", "Current run")],
+            pagination: { hasNext: query?.pinned ? false : !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChatSidebarSection fadeIn={fadeIn} />
+      </QueryClientProvider>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Current run")).toBeInTheDocument();
+    expect(screen.getByText("Old pinned run")).toBeInTheDocument();
+    expect(screen.queryByText("Older run")).not.toBeInTheDocument();
+    expect(archestraApiSdk.getMyAgentRuns).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "More runs" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Older run")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Older run"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/older");
+    queryClient.clear();
+  });
+
+  it("keeps the selected older session reachable and preserves chat unread state", async () => {
+    useRealRunsQuery = true;
+    mockChatState.pathname = "/chat/runs/selected-session";
+    mockConversations = [
+      { ...makeConv("unread-chat", "Unread chat"), unread: true },
+      makeConv("extra-chat-1", "Another recent chat"),
+      makeConv("extra-chat-2", "Third recent chat"),
+    ];
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockResolvedValue({
+      data: { data: [], pagination: { hasNext: false } },
+      error: undefined,
+    } as never);
+    vi.mocked(archestraApiSdk.getMyAgentRun).mockResolvedValue({
+      data: {
+        taskId: "selected-turn",
+        viewerRole: "owner",
+        sessionId: "selected-session",
+        title: "Selected retained run",
+        pinnedAt: null,
+        startedAt: daysAgo(200),
+        endedAt: daysAgo(200),
+        stateChangedAt: daysAgo(200),
+        state: "TASK_STATE_COMPLETED",
+        workspace: null,
+        agent: { id: "agent-1", name: "Runtime", icon: null },
+      },
+      error: undefined,
+    } as never);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChatSidebarSection fadeIn={fadeIn} slots={1} />
+      </QueryClientProvider>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Selected retained run")).toBeInTheDocument();
+    expect(
+      screen.getByTestId(getChatItemUnreadIndicatorTestId("unread-chat")),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Selected retained run"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/selected-session");
+    queryClient.clear();
+  });
+
   it("does not render when no conversations exist", () => {
     mockConversations = [];
     const { container } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(container.innerHTML).toBe("");
   });
 
-  it("opens an OpenAPPA configuration session in chat", () => {
+  it("links an OpenAPPA configuration session to its chat, warming the route on hover", () => {
     mockConversations = [
       { ...makeConv("policy-session", "Review policy"), origin: "user" },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    fireEvent.click(screen.getByText("Review policy"));
-    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
-      "/chat/policy-session",
-    );
+    const row = screen.getByRole("link", { name: /Review policy/ });
+    expect(row).toHaveAttribute("href", "/chat/policy-session");
+    expect(mockRouterPrefetch).not.toHaveBeenCalled();
+    fireEvent.mouseEnter(row);
+    expect(mockRouterPrefetch).toHaveBeenCalledWith("/chat/policy-session");
   });
 
   it("collapses pinned and date groups independently and restores their chats", () => {
@@ -450,6 +623,36 @@ describe("ChatSidebarSection", () => {
     fireEvent.click(pinned);
     expect(screen.getByText("Pinned chat")).toBeInTheDocument();
     expect(today).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    { pinned: true, firstLabel: "Pinned" },
+    { pinned: false, firstLabel: "Today" },
+  ])("puts search on the first group label ($firstLabel) and opens the palette from it", ({
+    pinned,
+    firstLabel,
+  }) => {
+    mockConversations = [
+      ...(pinned
+        ? [makeConv("pinned", "Pinned chat", { pinnedAt: daysAgo(0) })]
+        : []),
+      makeConv("today", "Today's chat"),
+      makeConv("older", "Older chat", { lastMessageAt: daysAgo(3) }),
+    ];
+    const onOpen = vi.fn();
+    window.addEventListener("open-conversation-search", onOpen);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    const searchButtons = screen.getAllByRole("button", { name: "Search" });
+    expect(searchButtons).toHaveLength(1);
+    // The label button and search share the label row.
+    expect(
+      screen.getByRole("button", { name: firstLabel }).parentElement,
+    ).toContainElement(searchButtons[0]);
+
+    fireEvent.click(searchButtons[0]);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    window.removeEventListener("open-conversation-search", onOpen);
   });
 
   it.each([
@@ -487,13 +690,11 @@ describe("ChatSidebarSection", () => {
       },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    const label = screen.getByText("Daily summary");
     expect(screen.getAllByLabelText("Scheduled task")).toHaveLength(1);
-    fireEvent.click(label);
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(screen.getByRole("link", { name: /Daily summary/ })).toHaveAttribute(
+      "href",
       "/chat/scheduled-chat?scheduleTriggerId=trigger-1&scheduleRunId=run-1",
     );
-    mockRouterPush.mockClear();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Reports" }),
     );
@@ -812,6 +1013,27 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
+  it("asks the server for pinned projects only", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Pinned one",
+        icon: null,
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+      { id: "project-2", name: "Not pinned", icon: null, pinnedAt: null },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    // The sidebar never asks for the whole list: every chat page renders it.
+    for (const [filters] of mockUseProjects.mock.calls) {
+      expect(filters).toMatchObject({ pinned: true, limit: 100, offset: 0 });
+    }
+    expect(screen.getByText("Pinned one")).toBeInTheDocument();
+    expect(screen.queryByText("Not pinned")).not.toBeInTheDocument();
+  });
+
   it("shows a pinned project's emoji and name when an emoji is present", () => {
     mockProjects = [
       {
@@ -882,6 +1104,37 @@ describe("ChatSidebarSection", () => {
     expect(
       screen.getAllByTestId("app-catalog-icon").map((el) => el.textContent),
     ).toEqual(["🚀", "📋"]);
+  });
+
+  it("draws the Pinned list once every pinned source has answered, in pin order", () => {
+    mockConversations = [
+      makeConv("chat-1", "Pinned chat", { pinnedAt: "2026-01-04T00:00:00Z" }),
+    ];
+    mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+    mockAppsLoading = true;
+
+    const { rerender } = render(<ChatSidebarSection fadeIn={fadeIn} />);
+    // Chats are in, apps are not: showing the chat now would push it down a
+    // row as soon as the more recently pinned app lands.
+    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pinned chat")).not.toBeInTheDocument();
+
+    mockAppsLoading = false;
+    rerender(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    const boardRow = screen.getByText("Sprint Board");
+    const chatRow = screen.getByText("Pinned chat");
+    expect(
+      boardRow.compareDocumentPosition(chatRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("routes an app without an icon through the fallback for its kind", () => {

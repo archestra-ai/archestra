@@ -1,0 +1,1 @@
+ALTER TABLE "a2a_task" ADD COLUMN "failure" jsonb;

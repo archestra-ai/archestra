@@ -1,7 +1,7 @@
 "use client";
 
+import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import {
-  Github,
   Info,
   Loader2,
   MoreHorizontal,
@@ -21,6 +21,7 @@ import {
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -40,13 +41,9 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
-import { useFeature } from "@/lib/config/config.query";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useCreateGithubPat } from "@/lib/github-pat.query";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -64,6 +61,7 @@ import {
   pluginDraftFromPlugin,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
+import { PluginGitSourceCard } from "../_parts/plugin-git-source";
 import { PluginGithubUpdatesDialog } from "../_parts/plugin-github-updates-dialog";
 import { PluginInstallDialog } from "../_parts/plugin-install-dialog";
 import {
@@ -84,13 +82,7 @@ import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
  * mirrors the skill page.
  */
 export default function PluginDetailPage({ id }: { id: string }) {
-  const enabled = useFeature("plugins");
-  const {
-    data: plugin,
-    isPending,
-    isLoadingError,
-    refetch,
-  } = usePlugin(enabled === true ? id : null);
+  const { data: plugin, isPending, isLoadingError, refetch } = usePlugin(id);
 
   // Hold the last plugin this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -107,20 +99,8 @@ export default function PluginDetailPage({ id }: { id: string }) {
   const [isLeavingAfterDelete, setIsLeavingAfterDelete] = useState(false);
   const router = useRouter();
 
-  if (enabled === undefined || (enabled && isPending && !heldPlugin)) {
+  if (isPending && !heldPlugin) {
     return <PluginPageLoading />;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-        maxWidth="wizard"
-      >
-        <div />
-      </PageLayout>
-    );
   }
 
   if (isLoadingError) {
@@ -173,8 +153,6 @@ function PluginDetailView({
   const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
   const isReadOnly = canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
-  const createGithubPat = useCreateGithubPat();
 
   const isGithubPlugin = plugin.sourceKind === "github";
   const actionModel = getPluginActionModel({
@@ -206,12 +184,6 @@ function PluginDetailView({
   const [base, setBase] = useState<PluginDraft>(seed);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isPluginDraftDirty(draft, base);
-  const ownership = useResourceOwnershipTransfer({
-    kind: "plugin",
-    resource: { ...plugin, name: plugin.displayName },
-    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
-    onTransferred: () => router.push("/plugins"),
-  });
 
   useEffect(() => {
     if (isDirty) return;
@@ -223,68 +195,19 @@ function PluginDetailView({
     setDraft((prev) => ({ ...prev, ...patch }));
   const discardChanges = () => setDraft(base);
 
-  const isComplete = isPluginDraftComplete({
-    draft,
-    isGithubPlugin,
-    seedAuthMethod: base.githubAuthMethod,
-  });
+  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
-    let submitted = { ...draft, labels: finalLabels };
+    const submitted = { ...draft, labels: finalLabels };
     setIsSaving(true);
-    let githubPatId =
-      submitted.githubAuthMethod === "pat" ? plugin.githubPatId : null;
-    if (
-      isGithubPlugin &&
-      submitted.githubAuthMethod === "pat" &&
-      submitted.githubToken.trim()
-    ) {
-      const created = await createGithubPat
-        .mutateAsync({
-          name: `${plugin.displayName} token`,
-          token: submitted.githubToken.trim(),
-        })
-        .catch(() => null);
-      if (!created) {
-        setIsSaving(false);
-        return;
-      }
-      githubPatId = created.id;
-      // The typed token is exchanged for a saved credential, so it is dropped
-      // from the draft rather than kept around in component state.
-      submitted = { ...submitted, githubToken: "" };
-      setDraft(submitted);
-    }
-    const githubAppConfigId =
-      submitted.githubAuthMethod === "github_app"
-        ? submitted.githubAppConfigId || null
-        : null;
-    const baseGithubPatId =
-      base.githubAuthMethod === "pat" ? plugin.githubPatId : null;
-    const baseGithubAppConfigId =
-      base.githubAuthMethod === "github_app"
-        ? base.githubAppConfigId || null
-        : null;
-    const githubAuthenticationChanged =
-      githubPatId !== baseGithubPatId ||
-      githubAppConfigId !== baseGithubAppConfigId;
+    // A Git plugin's source saves from its own dialog; the page only owns
+    // what the repository does not.
     const saved = await updatePlugin
       .mutateAsync({
         ...(isGithubPlugin
-          ? {
-              githubSource: {
-                repoUrl: submitted.githubRepoUrl.trim(),
-                ref: submitted.githubSyncRef.trim() || null,
-                syncInterval: submitted.githubSyncInterval,
-                ...(githubAuthenticationChanged
-                  ? {
-                      authentication: { githubAppConfigId, githubPatId },
-                    }
-                  : {}),
-              },
-            }
+          ? {}
           : {
               displayName: submitted.displayName.trim(),
               description: submitted.description,
@@ -293,6 +216,7 @@ function PluginDetailView({
               files: submitted.files,
             }),
         labels: submitted.labels,
+        icon: submitted.icon,
       })
       .catch(() => null);
     setIsSaving(false);
@@ -327,20 +251,6 @@ function PluginDetailView({
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
-  // A GitHub App configuration the reader cannot list still has to show as the
-  // plugin's current one rather than as an empty select.
-  const githubAppConfigOptions =
-    plugin.githubAppConfigId &&
-    !githubAppConfigs.some((config) => config.id === plugin.githubAppConfigId)
-      ? [
-          {
-            id: plugin.githubAppConfigId,
-            name: "Current GitHub App configuration",
-          },
-          ...githubAppConfigs,
-        ]
-      : githubAppConfigs;
-
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -353,21 +263,24 @@ function PluginDetailView({
 
   return (
     <PageLayout
-      icon={<PluginSourceGlyph plugin={plugin} />}
+      icon={
+        isGithubPlugin ? (
+          <GitSourceTooltip
+            label={`${plugin.githubSyncInterval ? "Checked against" : "Imported from"} ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`}
+            detail={plugin.sourceRepo}
+          >
+            <PluginSourceGlyph plugin={plugin} />
+          </GitSourceTooltip>
+        ) : (
+          <PluginSourceGlyph plugin={plugin} />
+        )
+      }
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{plugin.displayName}</span>
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>
-          {isGithubPlugin && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              <Github className="h-3 w-3" />
-              {plugin.githubSyncInterval
-                ? "Checked against GitHub"
-                : "Imported from GitHub"}
-            </Badge>
-          )}
           {!plugin.enabled && (
             <Badge variant="outline" className="font-normal">
               Disabled
@@ -459,7 +372,6 @@ function PluginDetailView({
                   )}
                 </DropdownMenuItem>
               )}
-              {ownership.menuItem}
               {isGithubPlugin && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 variant="destructive"
@@ -495,7 +407,6 @@ function PluginDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {ownership.dialog}
         </div>
       }
     >
@@ -519,6 +430,15 @@ function PluginDetailView({
           )
         )}
 
+        {/* Where the files come from comes first: it is why they are locked. */}
+        {isGithubPlugin && activeSection === "general" && (
+          <PluginGitSourceCard
+            plugin={plugin}
+            canEdit={!isReadOnly}
+            onReview={() => setUpdatesOpen(true)}
+          />
+        )}
+
         <PluginForm
           draft={draft}
           onChange={patchDraft}
@@ -527,7 +447,6 @@ function PluginDetailView({
           pluginSlug={plugin.pluginSlug}
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
-          githubAppConfigs={githubAppConfigOptions}
           activeSection={activeSection}
         />
 

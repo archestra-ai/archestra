@@ -20,7 +20,6 @@ vi.mock("@/lib/organization.query");
 // The scope check behind Edit/Delete asks which teams the caller belongs to.
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
-  countSkills: async () => 0,
   useAllMatchingSkills: () => ({ data: [] }),
   useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSkillsList: vi.fn(),
@@ -518,6 +517,24 @@ describe("SkillsPage rows", () => {
     expect(vi.mocked(useSkillsList)).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("lists skills without their SKILL.md bodies in both the complete and paged views", () => {
+    mockUseFeature.mockImplementation(
+      (name: string) => name === "mcpGatewaySkillsEnabled",
+    );
+
+    render(<SkillsPage />);
+
+    // The default view walks every page; the table never shows a body.
+    expect(vi.mocked(useSkillsList)).toHaveBeenCalledWith(
+      expect.objectContaining({ includeContent: false }),
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(vi.mocked(useSkillsPaginated)).toHaveBeenCalledWith(
+      expect.objectContaining({ includeContent: false }),
+      expect.anything(),
     );
   });
 

@@ -1,5 +1,8 @@
 import config from "@/config";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { ruleLine, seedCoverage } from "@/test/openappa-coverage";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -41,11 +44,23 @@ describe("GET /api/openappa/coverage/summary", () => {
         catchAll: 0,
       },
       // The default policy includes the archestra battery, which has no
-      // server to bind while the built-in catalog is not seeded.
+      // server to bind while the built-in catalog is not seeded, so the whole
+      // composition is refused, the coding and claude-code batteries with it.
       batteries: {
         active: [],
-        broken: [{ name: "archestra", status: "refused", tools: 0 }],
+        broken: [
+          { name: "archestra", status: "refused", tools: 0 },
+          { name: "claude-code", status: "refused", tools: 0 },
+          { name: "coding", status: "refused", tools: 0 },
+        ],
         available: [],
+      },
+      // Nothing composed before that refusal, so nothing is enforced.
+      composition: {
+        kind: "root_only",
+        servedRootRevision: null,
+        refusedRootRevision: 0,
+        rulesMayDiffer: false,
       },
     });
   });
@@ -69,18 +84,19 @@ describe("GET /api/openappa/coverage/summary", () => {
     expect(result.totals).toEqual({
       tools: 10,
       root: 2,
-      battery: 5,
-      notEnforced: 2,
+      battery: 7,
+      notEnforced: 0,
       notCovered: 1,
       catchAll: 0,
     });
-    // Gh's battery needs a credential, so neither of its rules holds.
+    // GitHub waits on the token for its multi-user target; its base composes,
+    // so both of its rules hold.
     expect(result.batteries).toEqual({
       active: [
         { name: "acme", tools: 3 },
         { name: "microsoft-learn", tools: 2 },
       ],
-      broken: [{ name: "github", status: "missing_credentials", tools: 2 }],
+      broken: [{ name: "github", status: "missing_credentials", tools: 0 }],
       available: [],
     });
   });
@@ -113,7 +129,13 @@ describe("GET /api/openappa/coverage/summary", () => {
       { name: "linear", servers: ["Linear"], tools: 1 },
     ]);
   });
-  for (const variant of ["noop", "annotator", "static", "missing"] as const) {
+  for (const variant of [
+    "noop",
+    "annotator",
+    "llm",
+    "static",
+    "missing",
+  ] as const) {
     test(`classifies ${variant} catch-all consistently in summary, filters, and server counts`, async ({
       makeInternalMcpCatalog,
       makeTool,
@@ -139,16 +161,20 @@ describe("GET /api/openappa/coverage/summary", () => {
       const replacement =
         variant === "annotator"
           ? '[[policy.tool]]\nname = "*"\nannotator = "classifier"'
-          : variant === "static"
-            ? '[[policy.tool]]\nname = "*"\ndelta = { trust = "suspicious" }'
-            : variant === "missing"
-              ? ""
-              : wildcard;
+          : variant === "llm"
+            ? `[[policy.tool]]\nname = "*"\nannotator = "${UNDECLARED_TOOL_ANNOTATOR}"`
+            : variant === "static"
+              ? '[[policy.tool]]\nname = "*"\ndelta = { trust = "suspicious" }'
+              : variant === "missing"
+                ? ""
+                : wildcard;
       const policy =
         content.replace(wildcard, replacement) +
         (variant === "annotator"
           ? '\n[[policy.annotator]]\nname = "classifier"\n[externals.annotators.classifier]\nurl = "http://127.0.0.1:9000/classifier"\n'
-          : "");
+          : variant === "llm"
+            ? `\n[[policy.annotator]]\nname = "${UNDECLARED_TOOL_ANNOTATOR}"\nbuiltin = "archestra"\n`
+            : "");
       const latest = await guardrailsPolicyService.get(ctx.organizationId);
       const update = guardrailsPolicyService.update({
         organizationId: ctx.organizationId,
@@ -167,7 +193,7 @@ describe("GET /api/openappa/coverage/summary", () => {
         return;
       }
       await update;
-      const covered = variant === "annotator";
+      const covered = variant === "annotator" || variant === "llm";
       expect((await summary()).totals).toMatchObject({
         root: 2,
         battery: 4,
@@ -209,7 +235,12 @@ describe("GET /api/openappa/coverage/summary", () => {
           source: "catchall",
           name: "*",
           line: ruleLine(policy, "*"),
-          annotator: variant === "noop" ? "noop" : "classifier",
+          annotator:
+            variant === "noop"
+              ? "noop"
+              : variant === "llm"
+                ? UNDECLARED_TOOL_ANNOTATOR
+                : "classifier",
         });
       const entitiesResponse = await ctx.app.inject({
         method: "GET",

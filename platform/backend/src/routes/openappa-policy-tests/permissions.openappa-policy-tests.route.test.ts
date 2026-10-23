@@ -12,10 +12,14 @@ describe("policy test authorization", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
   });
-  test("members can read but cannot save or execute checks", async ({
+  test("policy readers can read but cannot save or execute checks", async ({
     makeMember,
+    makeCustomRole,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    const reader = await makeCustomRole(ctx.organizationId, {
+      permission: { guardrailsPolicy: ["read"] },
+    });
+    await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
     const read = await ctx.app.inject({
       method: "GET",
       url: "/api/openappa/policy-tests",

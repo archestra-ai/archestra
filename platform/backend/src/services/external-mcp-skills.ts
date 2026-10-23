@@ -10,24 +10,36 @@ import {
 import McpServerUserModel from "@/models/mcp-server-user";
 import { readExternalMcpSkill } from "@/skills/mcp-external";
 import type {
+  ExternalMcpSkillCatalogItem,
   ExternalMcpSkillDetail,
   ExternalMcpSkillListItem,
   McpServer,
   ToolOwner,
 } from "@/types";
 
-export async function listExternalMcpSkills(params: {
-  userId?: string;
-  organizationId: string;
-  isMcpServerAdmin: boolean;
-  environmentId?: string | null;
-}): Promise<ExternalMcpSkillListItem[]> {
+/**
+ * Skills projected from the caller's accessible MCP installations. Usage
+ * summaries aggregate every recorded activation of the listed skills, so
+ * they are opt-in (`includeUsage`): only the Skills page shows them, and
+ * activation and count paths issue no usage query.
+ */
+export async function listExternalMcpSkills(
+  params: ExternalMcpSkillListParams & { includeUsage: true },
+): Promise<ExternalMcpSkillListItem[]>;
+export async function listExternalMcpSkills(
+  params: ExternalMcpSkillListParams & { includeUsage?: false },
+): Promise<ExternalMcpSkillCatalogItem[]>;
+export async function listExternalMcpSkills(
+  params: ExternalMcpSkillListParams & { includeUsage?: boolean },
+): Promise<ExternalMcpSkillCatalogItem[] | ExternalMcpSkillListItem[]> {
   const servers = (
     await McpServerModel.findAll(
       params.userId,
       params.isMcpServerAdmin,
       params.organizationId,
       params.environmentId,
+      undefined,
+      { includeAssignedAgents: false },
     )
   ).filter(
     (server) =>
@@ -52,7 +64,7 @@ export async function listExternalMcpSkills(params: {
     skillsByCatalog.set(skill.catalogId, catalogSkills);
   }
 
-  const projected = servers.flatMap((server) =>
+  const projected: ExternalMcpSkillCatalogItem[] = servers.flatMap((server) =>
     (server.catalogId ? (skillsByCatalog.get(server.catalogId) ?? []) : []).map(
       (skill) => ({
         source: "external_mcp" as const,
@@ -69,24 +81,13 @@ export async function listExternalMcpSkills(params: {
       }),
     ),
   );
-  const usageSummaries = await ExternalMcpSkillUsageEventModel.getSummaries(
-    projected.map(({ mcpServerId, uri }) => ({ mcpServerId, uri })),
-  );
-  const result = projected.map((skill) => {
-    const usage = usageSummaries.get(skill.mcpServerId)?.get(skill.uri);
-    return {
-      ...skill,
-      usageCount: usage?.usageCount ?? 0,
-      usageUserCount: usage?.usageUserCount ?? 0,
-      lastUsedAt: usage?.lastUsedAt ?? null,
-    };
-  });
-  return result.sort(
+  projected.sort(
     (a, b) =>
       a.name.localeCompare(b.name) ||
       a.serverName.localeCompare(b.serverName) ||
       a.mcpServerId.localeCompare(b.mcpServerId),
   );
+  return params.includeUsage ? withUsageSummaries(projected) : projected;
 }
 
 export async function getExternalMcpSkill(params: {
@@ -100,11 +101,13 @@ export async function getExternalMcpSkill(params: {
   tokenAuth?: TokenAuthContext;
 }): Promise<ExternalMcpSkillDetail | null> {
   const listed = await listExternalMcpSkills(params);
-  const metadata = listed.find(
+  const match = listed.find(
     (skill) =>
       skill.id === params.id && skill.mcpServerId === params.mcpServerId,
   );
-  if (!metadata) return null;
+  if (!match) return null;
+  // Summarize usage for the one matched skill, not the whole listing.
+  const [metadata] = await withUsageSummaries([match]);
   const live = await readExternalMcpSkill({
     mcpServerId: metadata.mcpServerId,
     uri: metadata.uri,
@@ -152,6 +155,30 @@ export async function canReadExternalMcpSkillUsage(params: {
   );
 }
 
+type ExternalMcpSkillListParams = {
+  userId?: string;
+  organizationId: string;
+  isMcpServerAdmin: boolean;
+  environmentId?: string | null;
+};
+
+async function withUsageSummaries(
+  skills: ExternalMcpSkillCatalogItem[],
+): Promise<ExternalMcpSkillListItem[]> {
+  const usageSummaries = await ExternalMcpSkillUsageEventModel.getSummaries(
+    skills.map(({ mcpServerId, uri }) => ({ mcpServerId, uri })),
+  );
+  return skills.map((skill) => {
+    const usage = usageSummaries.get(skill.mcpServerId)?.get(skill.uri);
+    return {
+      ...skill,
+      usageCount: usage?.usageCount ?? 0,
+      usageUserCount: usage?.usageUserCount ?? 0,
+      lastUsedAt: usage?.lastUsedAt ?? null,
+    };
+  });
+}
+
 function isExternalSkillServer(server: McpServer): boolean {
   return (
     server.catalogId !== null &&
@@ -188,7 +215,9 @@ async function isExternalSkillInstallationInOrganization(params: {
   organizationId: string;
 }): Promise<boolean> {
   if (params.server.teamId !== null) {
-    const team = await TeamModel.findById(params.server.teamId);
+    const team = await TeamModel.findById(params.server.teamId, {
+      includeMembers: false,
+    });
     return team?.organizationId === params.organizationId;
   }
   if (params.server.ownerId === null) return false;

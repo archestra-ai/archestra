@@ -2,14 +2,21 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
   isModelSelectionComplete,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   RouteId,
-  type SupportedProvider,
 } from "@archestra/shared";
-import { and, eq, inArray, like } from "drizzle-orm";
+import {
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+} from "@archestra/shared/connection-setup";
+import { and, desc, eq, inArray, like, notExists, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -34,6 +41,7 @@ import {
   AgentModel,
   InteractionModel,
   InternalMcpCatalogModel,
+  KbConnectorDocumentCountModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
@@ -45,7 +53,6 @@ import {
   OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -57,6 +64,7 @@ import {
   ApiError,
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
+  type ConnectionClientProviderKeys,
   constructResponseSchema,
   KeywordRankingStatusSchema,
   type NetworkPolicy,
@@ -74,6 +82,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -198,22 +207,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)",
+          "Update security settings (default tool guardrails, chat file uploads)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      // A deployment that does not carry the Apps Hackathon must never store
-      // it as switched on — that is what keeps "never for enterprise" a
-      // property of the system rather than of a hidden UI section. Dropped
-      // rather than refused, so an unrelated security save from a stale client
-      // still goes through.
-      const { appsHackathonRecorderEnabled, ...withoutHackathon } = body;
-      const patch = config.hackathonRecorder.enabled ? body : withoutHackathon;
-
-      const organization = await OrganizationModel.patch(organizationId, patch);
+      const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -306,24 +307,41 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       // The default model and its API key are a pair: persist both or neither.
+      const currentOrg =
+        body.defaultModelId !== undefined ||
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+          ? await OrganizationModel.getById(organizationId)
+          : null;
+      const merged = {
+        modelId:
+          body.defaultModelId !== undefined
+            ? body.defaultModelId
+            : (currentOrg?.defaultModelId ?? null),
+        apiKeyId:
+          body.defaultLlmApiKeyId !== undefined
+            ? body.defaultLlmApiKeyId
+            : (currentOrg?.defaultLlmApiKeyId ?? null),
+        fastModelId:
+          body.defaultFastModelId !== undefined
+            ? body.defaultFastModelId
+            : (currentOrg?.defaultFastModelId ?? null),
+        smartModelId:
+          body.defaultSmartModelId !== undefined
+            ? body.defaultSmartModelId
+            : (currentOrg?.defaultSmartModelId ?? null),
+      };
+
       // Validate the merged result only when this update touches either field.
       if (
         body.defaultModelId !== undefined ||
         body.defaultLlmApiKeyId !== undefined
       ) {
-        const currentOrg = await OrganizationModel.getById(organizationId);
-        const mergedModelId =
-          body.defaultModelId !== undefined
-            ? body.defaultModelId
-            : (currentOrg?.defaultModelId ?? null);
-        const mergedApiKeyId =
-          body.defaultLlmApiKeyId !== undefined
-            ? body.defaultLlmApiKeyId
-            : (currentOrg?.defaultLlmApiKeyId ?? null);
         if (
           !isModelSelectionComplete({
-            modelId: mergedModelId,
-            apiKeyId: mergedApiKeyId,
+            modelId: merged.modelId,
+            apiKeyId: merged.apiKeyId,
           })
         ) {
           throw new ApiError(
@@ -333,13 +351,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         await assertOrganizationDefaultModelSelection({
           organizationId,
-          modelId: mergedModelId,
-          apiKeyId: mergedApiKeyId,
+          modelId: merged.modelId,
+          apiKeyId: merged.apiKeyId,
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
-          modelId: mergedModelId,
+          modelId: merged.modelId,
         });
+      }
+
+      if (
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+      ) {
+        await assertModelTrioTiers(merged);
       }
 
       if (body.defaultAgentId) {
@@ -385,38 +411,24 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(400, "Agent is not an MCP gateway");
         }
-      }
-
-      if (body.connectionDefaultProviderKeys) {
-        const keyIds = Object.values(body.connectionDefaultProviderKeys);
-        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
-        const keysById = new Map(keys.map((k) => [k.id, k]));
-        for (const [provider, keyId] of Object.entries(
-          body.connectionDefaultProviderKeys,
-        )) {
-          const key = keysById.get(keyId);
-          if (!key || key.organizationId !== organizationId) {
-            throw new ApiError(404, "Provider API key not found");
-          }
-          if (key.provider !== provider) {
+        // One member's personal gateway is no default for everyone. A value
+        // saved before this rule may be resubmitted unchanged.
+        if (agent.isPersonalGateway) {
+          const current = await OrganizationModel.getById(organizationId);
+          if (current?.connectionDefaultMcpGatewayId !== agent.id) {
             throw new ApiError(
               400,
-              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
-            );
-          }
-          // Per-user providers (GitHub Copilot) can't back a shared default:
-          // each user connects their own account at setup time, so an admin
-          // default would be meaningless (and the connection flow would refuse
-          // to wrap someone else's personal key).
-          if (
-            providerRequiresPerUserCredential(provider as SupportedProvider)
-          ) {
-            throw new ApiError(
-              400,
-              `${provider} is per-user — each user connects their own account, so it can't be set as a default provider key for setup commands.`,
+              "A personal MCP gateway cannot be the default",
             );
           }
         }
+      }
+
+      if (body.connectionClientProviderKeys) {
+        await validateConnectionClientProviderKeys({
+          organizationId,
+          mapping: body.connectionClientProviderKeys,
+        });
       }
 
       const organization = await OrganizationModel.patch(organizationId, body);
@@ -435,7 +447,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateIntegrationSettings,
         description:
-          "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
+          "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or coding agent templates, order coding agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
         tags: ["Organization"],
         body: UpdateIntegrationSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -953,6 +965,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete all KB documents (chunks cascade via FK)
       await KbDocumentModel.deleteByOrganization(organizationId);
+      await KbConnectorDocumentCountModel.refreshForOrganization({
+        organizationId,
+      });
 
       // Reset connector checkpoints so next sync does a full re-ingest
       await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(
@@ -1153,8 +1168,19 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMemberSignupStatus,
         description:
-          "Get which members have completed signup (have an account record)",
+          "Get which members have not completed signup (no account record). Pass `userIds` to ask about the members on screen instead of every member.",
         tags: ["Organization"],
+        querystring: z.object({
+          userIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string()).max(100),
+            )
+            .optional()
+            .describe(
+              "Only these members (comma-separated user IDs), such as the rows of one Users page. Without it, every member of the organization is checked.",
+            ),
+        }),
         response: constructResponseSchema(
           z.object({
             pendingSignupMembers: z.array(
@@ -1172,96 +1198,73 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      // Get all member user IDs for this organization
-      const members = await db
-        .select({ userId: schema.membersTable.userId })
-        .from(schema.membersTable)
-        .where(eq(schema.membersTable.organizationId, organizationId));
-
-      if (members.length === 0) {
+    async ({ organizationId, query }, reply) => {
+      if (query.userIds && query.userIds.length === 0) {
         return reply.send({ pendingSignupMembers: [] });
       }
 
-      const memberUserIds = members.map((m) => m.userId);
+      const members = schema.membersTable;
+      const users = schema.usersTable;
+      const invitations = schema.invitationsTable;
 
-      // Find which of these users have an account record
-      const usersWithAccounts = await db
-        .select({ userId: schema.accountsTable.userId })
-        .from(schema.accountsTable)
-        .where(inArray(schema.accountsTable.userId, memberUserIds));
-
-      const hasAccountSet = new Set(usersWithAccounts.map((a) => a.userId));
-      const pendingUserIds = memberUserIds.filter(
-        (id) => !hasAccountSet.has(id),
-      );
-
-      if (pendingUserIds.length === 0) {
-        return reply.send({ pendingSignupMembers: [] });
-      }
-
-      // Look up auto-provisioned invitations to get provider and invitation ID
-      const invitations = await db
-        .select({
-          id: schema.invitationsTable.id,
-          email: schema.invitationsTable.email,
-          status: schema.invitationsTable.status,
-        })
-        .from(schema.invitationsTable)
+      // The newest auto-provisioned invitation for the member's email, if
+      // any: its status carries the provider ("auto-provisioned:<provider>")
+      // and its id builds the sign-up link.
+      const invitation = db
+        .select({ id: invitations.id, status: invitations.status })
+        .from(invitations)
         .where(
           and(
-            eq(schema.invitationsTable.organizationId, organizationId),
-            like(
-              schema.invitationsTable.status,
-              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
-            ),
+            eq(invitations.organizationId, members.organizationId),
+            eq(invitations.email, users.email),
+            like(invitations.status, `${AUTO_PROVISIONED_INVITATION_STATUS}%`),
           ),
-        );
-
-      // Build email → { provider, invitationId } map
-      const emailToInvitation = new Map<
-        string,
-        { provider: string | null; invitationId: string }
-      >();
-      for (const inv of invitations) {
-        const parts = inv.status.split(":");
-        emailToInvitation.set(inv.email, {
-          provider: parts.length === 2 ? parts[1] : null,
-          invitationId: inv.id,
-        });
-      }
-
-      // Get emails for pending users
-      const pendingUsers = await db
-        .select({
-          id: schema.usersTable.id,
-          email: schema.usersTable.email,
-          name: schema.usersTable.name,
-          image: schema.usersTable.image,
-          role: schema.membersTable.role,
-        })
-        .from(schema.membersTable)
-        .innerJoin(
-          schema.usersTable,
-          eq(schema.membersTable.userId, schema.usersTable.id),
         )
+        .orderBy(desc(invitations.createdAt))
+        .limit(1)
+        .as("auto_provisioned_invitation");
+
+      // One statement: the members (of one page, when `userIds` is given)
+      // that have no account row yet, each with its invitation. This used to
+      // read every member id, every account of those members and every
+      // auto-provisioned invitation, then send every pending member of the
+      // organization on each Users page load.
+      const rows = await db
+        .select({
+          userId: members.userId,
+          name: users.name,
+          email: users.email,
+          image: users.image,
+          role: members.role,
+          invitationId: invitation.id,
+          invitationStatus: invitation.status,
+        })
+        .from(members)
+        .innerJoin(users, eq(members.userId, users.id))
+        .leftJoinLateral(invitation, sql`true`)
         .where(
           and(
-            eq(schema.membersTable.organizationId, organizationId),
-            inArray(schema.usersTable.id, pendingUserIds),
+            eq(members.organizationId, organizationId),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(schema.accountsTable)
+                .where(eq(schema.accountsTable.userId, members.userId)),
+            ),
+            query.userIds ? inArray(members.userId, query.userIds) : undefined,
           ),
         );
 
-      const pendingSignupMembers = pendingUsers.map((u) => {
-        const inv = emailToInvitation.get(u.email);
+      const pendingSignupMembers = rows.map((row) => {
+        const parts = row.invitationStatus?.split(":") ?? [];
         return {
-          userId: u.id,
-          name: u.name,
-          email: u.email,
-          image: u.image,
-          role: u.role,
-          provider: inv?.provider ?? null,
-          invitationId: inv?.invitationId ?? null,
+          userId: row.userId,
+          name: row.name,
+          email: row.email,
+          image: row.image,
+          role: row.role,
+          provider: parts.length === 2 ? parts[1] : null,
+          invitationId: row.invitationId ?? null,
         };
       });
 
@@ -1304,59 +1307,63 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (result.status === "not_found") {
         throw new ApiError(404, "User not found");
       }
+      await openappaBatteriesService.recompileOrganizations([organizationId]);
 
       return reply.send({ success: true });
     },
   );
 
   fastify.get(
-    "/api/organization/members",
+    "/api/organization/member-options",
     {
       schema: {
-        operationId: RouteId.GetOrganizationMembers,
+        operationId: RouteId.GetOrganizationMemberOptions,
         description:
-          "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.",
+          "Search visible organization member identities in bounded pages. The same directory visibility applies: member:read sees all members; other authenticated callers see only teammates.",
         tags: ["Organization"],
+        querystring: CursorQuerySchema.extend({
+          search: z.string().optional(),
+          searchMode: z
+            .enum(["name", "name_or_email"])
+            .default("name_or_email"),
+          ids: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+          emails: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+        }),
         response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              email: z.string(),
-            }),
+          createCursorPaginatedResponseSchema(
+            z.object({ id: z.string(), name: z.string(), email: z.string() }),
           ),
         ),
       },
     },
-    async ({ organizationId, user, headers, serviceAccount }, reply) => {
-      // member:read (admins, custom roles) sees the whole roster; everyone else
-      // sees only the users they share a team with, so a member can pick a chat
-      // share recipient without the org directory being exposed to (or scanned
-      // for) them. Forward serviceAccount + the resolved userContext exactly as
-      // the auth middleware does, so service-account callers are checked against
-      // their own permissions (not the synthetic user) and user callers against
-      // request.organizationId rather than the session cookie.
+    async ({ organizationId, user, headers, serviceAccount, query }, reply) => {
       const { success: canSeeAllMembers } = await hasPermission(
         { member: ["read"] },
         headers,
         serviceAccount,
         { userId: user.id, organizationId },
       );
-      const members = canSeeAllMembers
-        ? await MemberModel.findAllByOrganization(organizationId)
-        : await MemberModel.findByUserIdsInOrganization({
-            organizationId,
-            userIds: await TeamModel.getTeammateUserIdsInOrganization({
-              userId: user.id,
-              organizationId,
-            }),
-          });
-      // These model queries also select role/systemRole for admin surfaces that
-      // reuse them; this endpoint exposes identity only. Project explicitly so
-      // the privileged fields never depend on response-schema serialization to
-      // be dropped — a member without member:read must not learn teammates' roles.
       return reply.send(
-        members.map(({ id, name, email }) => ({ id, name, email })),
+        await MemberModel.findOptions({
+          organizationId,
+          viewerId: user.id,
+          canSeeAllMembers,
+          pagination: { limit: query.limit, cursor: query.cursor },
+          search: query.search,
+          searchMode: query.searchMode,
+          ids: query.ids,
+          emails: query.emails,
+        }),
       );
     },
   );
@@ -1471,13 +1478,61 @@ export default organizationRoutes;
 // === Internal helpers ===
 
 /**
- * Refuse a role assignment that would hand out more than the caller holds.
- * Resolved through `getPermissionsForUserContext` so a service-account caller
- * is measured against its own role rather than a synthetic user, and compared
- * with the same `validateRolePermissions` rule custom-role authoring uses —
- * which deliberately ignores the UI-behavior resources, where the admin role
- * legitimately holds less than the member role.
+ * Every mapped key must belong to the organization, match its provider, and
+ * be a provider the client can route — one key per provider, except where a
+ * provider's keys are separate endpoints. Per-user providers (GitHub Copilot)
+ * can't be mapped: each user connects their own account at setup time, and
+ * the connection flow refuses to wrap someone else's personal key.
  */
+async function validateConnectionClientProviderKeys(params: {
+  organizationId: string;
+  mapping: ConnectionClientProviderKeys;
+}) {
+  const entries = Object.entries(params.mapping).flatMap(([clientId, keys]) =>
+    (keys ?? []).map((key) => ({
+      ...key,
+      clientId: clientId as InstallerClientId,
+    })),
+  );
+  const keys = await LlmProviderApiKeyModel.findByIds([
+    ...new Set(entries.map((entry) => entry.providerApiKeyId)),
+  ]);
+  const keysById = new Map(keys.map((key) => [key.id, key]));
+  const seen = new Set<string>();
+  for (const { clientId, provider, providerApiKeyId } of entries) {
+    const key = keysById.get(providerApiKeyId);
+    if (!key || key.organizationId !== params.organizationId) {
+      throw new ApiError(404, "Provider API key not found");
+    }
+    if (key.provider !== provider) {
+      throw new ApiError(
+        400,
+        `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+      );
+    }
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new ApiError(
+        400,
+        `${provider} is per-user — each user connects their own account, so it can't be mapped to a setup command's virtual key.`,
+      );
+    }
+    if (!INSTALLER_CLIENT_KEY_PROVIDERS[clientId].includes(provider)) {
+      throw new ApiError(
+        400,
+        `${INSTALLER_CLIENT_LABELS[clientId]} can't route ${provider} requests.`,
+      );
+    }
+    const slot = `${clientId}:${provider}`;
+    if (seen.has(slot) && !providerHasEndpointLocalModels(provider)) {
+      throw new ApiError(
+        400,
+        `${INSTALLER_CLIENT_LABELS[clientId]} can map only one ${provider} key.`,
+      );
+    }
+    seen.add(slot);
+  }
+}
+
 async function assertCallerCanGrantRole(params: {
   role: OrganizationRole;
   userId: string;

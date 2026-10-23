@@ -39,7 +39,7 @@ This builds, migrates, measures, and tears down the disposable stack. It refuses
 | `tools` | Short prompt and one function definition | Same JSON completion; no tool invocation |
 | `stream` | Short prompt, streaming enabled | 20 content events with a requested 10 ms delay before each event |
 
-All scenarios use the standard OpenAI chat proxy route and synthetic provider-key passthrough. This exercises the existing backend and its interaction persistence. It does not exercise virtual-key validation, configured security rules, dual-LLM quarantine, or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
+All scenarios use the standard OpenAI chat proxy route and synthetic provider-key passthrough. This exercises the existing backend and its interaction persistence. It does not exercise virtual-key validation, configured security rules or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
 
 Defaults: concurrency 1, 10, and 50; three repeats; 1,000 measured requests per non-streaming block; 100 per streaming block. Each block first warms its own keep-alive connection pool with `max(30, concurrency)` requests. Direct and proxy blocks alternate order between repeats.
 

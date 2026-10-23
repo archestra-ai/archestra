@@ -1,4 +1,13 @@
-import { and, eq, exists, isNull, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 
 /**
@@ -7,58 +16,40 @@ import db, { schema } from "@/database";
  * or app is the tenant boundary.
  */
 export function interactionBelongsToOrganization(organizationId: string): SQL {
-  const agentBelongsToOrganization = exists(
-    db
-      .select({ value: sql`1` })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, schema.interactionsTable.profileId),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      ),
-  );
-  const connectorBelongsToOrganization = exists(
-    db
-      .select({ value: sql`1` })
-      .from(schema.knowledgeBaseConnectorsTable)
-      .where(
-        and(
-          eq(
-            schema.knowledgeBaseConnectorsTable.id,
-            schema.interactionsTable.connectorId,
+  const t = schema.interactionsTable;
+  // Correlated EXISTS lets PostgreSQL pick per query between hashing the
+  // organization's owners once (a wide log scan) and probing each row's owner
+  // by primary key (one session's few rows); an uncorrelated set is always
+  // hashed in full, which costs more than the rows it filters on a large
+  // organization. Each owner table appears once, so it is read at most once.
+  const owns = (
+    ownerTable:
+      | typeof schema.agentsTable
+      | typeof schema.knowledgeBaseConnectorsTable
+      | typeof schema.appsTable,
+    ownerId: typeof t.profileId | typeof t.connectorId | typeof t.appId,
+  ) =>
+    or(
+      isNull(ownerId),
+      exists(
+        db
+          .select({ value: sql`1` })
+          .from(ownerTable)
+          .where(
+            and(
+              eq(ownerTable.id, ownerId),
+              eq(ownerTable.organizationId, organizationId),
+            ),
           ),
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            organizationId,
-          ),
-        ),
       ),
-  );
-  const appBelongsToOrganization = exists(
-    db
-      .select({ value: sql`1` })
-      .from(schema.appsTable)
-      .where(
-        and(
-          eq(schema.appsTable.id, schema.interactionsTable.appId),
-          eq(schema.appsTable.organizationId, organizationId),
-        ),
-      ),
-  );
+    );
 
+  // Every owner the row names belongs here, and it names at least one.
   return and(
-    or(
-      agentBelongsToOrganization,
-      connectorBelongsToOrganization,
-      appBelongsToOrganization,
-    ),
-    or(isNull(schema.interactionsTable.profileId), agentBelongsToOrganization),
-    or(
-      isNull(schema.interactionsTable.connectorId),
-      connectorBelongsToOrganization,
-    ),
-    or(isNull(schema.interactionsTable.appId), appBelongsToOrganization),
+    or(isNotNull(t.profileId), isNotNull(t.connectorId), isNotNull(t.appId)),
+    owns(schema.agentsTable, t.profileId),
+    owns(schema.knowledgeBaseConnectorsTable, t.connectorId),
+    owns(schema.appsTable, t.appId),
   ) as SQL;
 }
 

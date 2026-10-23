@@ -14,7 +14,7 @@ import { expect, test } from "vitest";
 
 const exec = promisify(execFile);
 
-test("reinitializing a retained workspace refreshes Git auth without duplicating URL rewrites", async () => {
+test("reinitializing a retained workspace refreshes Git auth and commit identity without duplicating URL rewrites", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "agent-init-"));
   try {
     const bin = path.join(root, "bin");
@@ -24,6 +24,10 @@ test("reinitializing a retained workspace refreshes Git auth without duplicating
       gh,
       `#!/bin/sh
 if [ "$1 $2" = "auth login" ]; then cat > "$HOME/current-token"; fi
+if [ "$1" = "api" ]; then
+  printf 'HTTP/2.0 200 OK\\r\\nContent-Type: application/json\\r\\n\\r\\n'
+  printf '{"login":"octo-dev","id":4242,"type":"User","name":"Octo Dev"}'
+fi
 `,
     );
     await chmod(gh, 0o755);
@@ -46,7 +50,7 @@ if [ "$1 $2" = "auth login" ]; then cat > "$HOME/current-token"; fi
         [
           path.resolve(
             import.meta.dirname,
-            "../../../../agent_images/bin/archestra-agent-init",
+            "../../../../docker_images/agent/bin/archestra-agent-init",
           ),
         ],
         {
@@ -69,6 +73,15 @@ if [ "$1 $2" = "auth login" ]; then cat > "$HOME/current-token"; fi
       expect(rewrites.stdout.trim().split("\n")).toEqual([
         "git@github.com:",
         "ssh://git@github.com/",
+      ]);
+      const identity = await exec(
+        "git",
+        ["config", "--global", "--get-regexp", "^user\\."],
+        { env },
+      );
+      expect(identity.stdout.trim().split("\n")).toEqual([
+        "user.name Octo Dev",
+        "user.email 4242+octo-dev@users.noreply.github.com",
       ]);
     }
   } finally {
@@ -101,7 +114,7 @@ fi
       [
         path.resolve(
           import.meta.dirname,
-          "../../../../agent_images/bin/archestra-agent-init",
+          "../../../../docker_images/agent/bin/archestra-agent-init",
         ),
       ],
       {
@@ -123,6 +136,76 @@ fi
     expect(failure).toMatchObject({ version: 1, code: "github_configuration" });
     expect(failure.message).toContain("GitHub credential");
     expect(JSON.stringify(failure)).not.toContain("synthetic-secret");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  {
+    response: "HTTP/2.0 401 Unauthorized",
+    exitCode: 78,
+    failureCode: "github_credential_rejected",
+  },
+  // An App installation token works for Git but has no user profile.
+  {
+    response: "HTTP/2.0 403 Forbidden",
+    exitCode: 0,
+    failureCode: undefined,
+  },
+])("checks the GitHub account before the Agent starts: $response", async ({
+  response,
+  exitCode,
+  failureCode,
+}) => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-init-account-"));
+  try {
+    const bin = path.join(root, "bin");
+    await mkdir(bin);
+    const gh = path.join(bin, "gh");
+    await writeFile(
+      gh,
+      `#!/bin/sh
+if [ "$1 $2" = "auth login" ]; then cat >/dev/null; fi
+if [ "$1" = "api" ]; then
+  printf '%s\\r\\n\\r\\n{"message":"synthetic-secret-do-not-forward"}' "$TEST_RESPONSE"
+  echo 'synthetic-secret-do-not-forward' >&2
+  exit 1
+fi
+`,
+    );
+    await chmod(gh, 0o755);
+    const env = {
+      PATH: `${bin}:${process.env.PATH}`,
+      HOME: root,
+      GIT_CONFIG_GLOBAL: path.join(root, ".gitconfig"),
+      GITHUB_TOKEN: "synthetic-secret-do-not-forward",
+      TEST_RESPONSE: response,
+      ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: path.join(root, "turn"),
+    };
+    const result = await exec(
+      "sh",
+      [
+        path.resolve(
+          import.meta.dirname,
+          "../../../../docker_images/agent/bin/archestra-agent-init",
+        ),
+      ],
+      { env },
+    ).catch((error) => error);
+    expect(result.code ?? 0).toBe(exitCode);
+    expect(result.stderr).not.toContain("synthetic-secret");
+    const email = await exec(
+      "git",
+      ["config", "--global", "--get", "user.email"],
+      { env },
+    ).catch((error) => error);
+    expect(email.code).toBe(1);
+    const failure = await readFile(path.join(root, "turn.failure"), "utf8")
+      .then((text) => JSON.parse(text))
+      .catch(() => undefined);
+    expect(failure?.code).toBe(failureCode);
+    expect(JSON.stringify(failure ?? {})).not.toContain("synthetic-secret");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

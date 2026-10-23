@@ -12,15 +12,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DialogDismissProvider,
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface TabbedDialogNavItem<TSection extends string> {
   id: TSection;
   label: string;
+  /** A short state line under the label, e.g. "2 providers". */
+  status?: string;
+  /** Compact context beside the tab label, such as a status tooltip. */
+  indicator?: ReactNode;
 }
 
 interface TabbedDialogShellProps<TSection extends string> {
@@ -42,6 +54,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   children: ReactNode;
   footer: ReactNode;
   sidebarFooter?: ReactNode;
+  mobileNavigation?: ReactNode;
   headerExtra?: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -69,6 +82,7 @@ export function TabbedDialogShell<TSection extends string>({
   children,
   footer,
   sidebarFooter,
+  mobileNavigation,
   headerExtra,
   className,
   contentClassName,
@@ -77,6 +91,8 @@ export function TabbedDialogShell<TSection extends string>({
   getNavItemTestId,
   isDirty = false,
 }: TabbedDialogShellProps<TSection>) {
+  const isMobile = useIsMobile();
+  const activeNavItem = navItems.find((item) => item.id === activeSection);
   const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
   const formContent = (
@@ -85,6 +101,7 @@ export function TabbedDialogShell<TSection extends string>({
         <nav
           className={cn(
             "w-[240px] border-r flex flex-col shrink-0",
+            "hidden md:flex",
             sidebarClassName,
           )}
         >
@@ -111,19 +128,35 @@ export function TabbedDialogShell<TSection extends string>({
                 type="button"
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
+                aria-label={
+                  navItem.status || navItem.indicator
+                    ? navItem.label
+                    : undefined
+                }
+                aria-description={navItem.status}
                 className={cn(
                   "justify-start font-normal w-full",
+                  navItem.status && "h-auto flex-col items-start gap-0 py-1.5",
                   activeSection === navItem.id &&
                     "bg-accent text-accent-foreground font-medium",
                 )}
                 onClick={() => onActiveSectionChange(navItem.id)}
               >
-                {navItem.label}
+                <span>{navItem.label}</span>
+                {navItem.indicator}
+                {navItem.status && (
+                  <span
+                    aria-hidden
+                    className="max-w-full truncate text-xs font-normal text-muted-foreground"
+                  >
+                    {navItem.status}
+                  </span>
+                )}
               </Button>
             ))}
           </div>
 
-          {sidebarFooter && (
+          {sidebarFooter && !isMobile && (
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {sidebarFooter}
             </div>
@@ -132,30 +165,66 @@ export function TabbedDialogShell<TSection extends string>({
       )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">
-          <div className="min-w-0">
-            <DialogTitle className="truncate">{title}</DialogTitle>
+        <div className="grid min-h-[72px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-b px-4 py-4 md:flex md:gap-4">
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="break-words md:truncate">
+              {title}
+            </DialogTitle>
             {headerDescription && (
               <div className="mt-1 text-sm text-muted-foreground">
                 {headerDescription}
               </div>
             )}
           </div>
-          <div className="flex min-w-0 items-center justify-end gap-3">
-            {headerExtra}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0 rounded-xs opacity-70 hover:opacity-100"
-              onClick={guard.requestClose}
-            >
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </div>
+          {headerExtra && (
+            <div className="col-span-2 row-start-2 min-w-0 md:ml-auto">
+              {headerExtra}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="col-start-2 row-start-1 shrink-0 self-start rounded-xs opacity-70 hover:opacity-100 md:self-center"
+            onClick={guard.requestClose}
+          >
+            <XIcon className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </Button>
         </div>
 
+        {showSidebar &&
+          (mobileNavigation ?? (
+            <div className="border-b px-4 py-3 md:hidden">
+              <Select
+                value={activeSection}
+                onValueChange={(value) =>
+                  onActiveSectionChange(value as TSection)
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Dialog section">
+                  <SelectValue>
+                    {isMobile && activeNavItem ? (
+                      <span className="flex items-center gap-2">
+                        {activeNavItem.label}
+                        {activeNavItem.indicator}
+                      </span>
+                    ) : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {navItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      <span className="flex items-center gap-2">
+                        {item.label}
+                        {item.indicator}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           <div
             className={cn(
@@ -165,6 +234,9 @@ export function TabbedDialogShell<TSection extends string>({
           >
             <TabbedDialogFooterSlot.Provider value={footerSlot}>
               {children}
+              {sidebarFooter && isMobile && (
+                <div className="mt-4 md:hidden">{sidebarFooter}</div>
+              )}
             </TabbedDialogFooterSlot.Provider>
           </div>
         </div>

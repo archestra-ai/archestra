@@ -7,16 +7,23 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
+import { memberPermissions } from "@archestra/shared/access-control";
+import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
+import db from "@/database";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
+import * as hitlReview from "@/openappa/hitl-review";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
   getHitlReviewResult,
+  peekHitlDecision,
+  peekHitlRuling,
   recordHitlRuling,
+  sealHitlClosure,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { signPeerProof } from "@/openappa/peer-claims";
@@ -156,6 +163,7 @@ describe("OpenAPPA tool execution", () => {
       config.openappa = {
         enabled: true,
         yellEnabled: false,
+        yellForwardingEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,
         postgresMaxConnections: 10,
       };
@@ -953,33 +961,22 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
   });
 
-  test("chat client: user declines passes deny ruling", async () => {
+  test("chat client: a consumed human approval appends its provenance after the untouched result", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-hitl",
-      text: "Approve this email?",
+      text: "Approve this issue?",
       session_id: "session-1",
+      tool: "github__create_issue",
+      arguments: "{}",
     });
-    const executeSpy = vi
-      .spyOn(openappaService, "executeRemedyByOffer")
-      .mockResolvedValue({
-        result: {
-          content: [{ type: "text", text: "Declined" }],
-          _meta: { trace: "kept" },
-        },
-        known: true,
-      });
-
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+      result: { content: [{ type: "text", text: "Authorized" }] },
+      known: true,
+    });
     const elicitSpy = vi.fn().mockResolvedValue({
       status: "answered",
-      result: { action: "decline" },
+      result: { action: "accept", content: { action: "approve" } },
     });
-
-    const chatContext: ArchestraContext = {
-      ...mockContext,
-      elicitation: {
-        elicit: elicitSpy,
-      } as any,
-    };
 
     const result = await executeArchestraTool(
       toolFullName,
@@ -987,21 +984,136 @@ describe("OpenAPPA tool execution", () => {
         ...{ offer_id: "offer-hitl", trajectory: trajectory() },
         plan: "Human review",
       },
-      chatContext,
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
     );
 
-    expect(executeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        args: { offer_id: "offer-hitl" },
-        ruling: "deny",
-      }),
-    );
-    // The card reads the ruling from _meta; the model reads only the text.
-    expect(result.content).toEqual([{ type: "text", text: "Declined" }]);
-    expect(result._meta).toEqual({
-      trace: "kept",
-      [MCP_HUMAN_RULING_META_KEY]: "deny",
+    // The native result block stays first and unchanged; the provenance note
+    // follows it so the model does not mistake the card for its own doing.
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]).toEqual({ type: "text", text: "Authorized" });
+    expect(content).toHaveLength(2);
+    expect(content[1].text).toContain("reviewer selected Approve");
+    expect(content[1].text).toMatch(/offer IDs? by design/);
+    expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: an approval answered after a policy publish says the policy changed, not that it was approved", async () => {
+    await publishRevision(orgId, 1);
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this issue?",
+      session_id: "session-1",
+      tool: "github__create_issue",
+      arguments: "{}",
     });
+    // The dispatch that runs the remedy carries the policy saved while the
+    // reviewer decided, publishes it, and finds the offer retired.
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockImplementation(
+      async () => {
+        await publishRevision(orgId, 2);
+        return {
+          result: {
+            content: [
+              {
+                type: "text",
+                text: "[appa] this offer no longer stands; re-propose the call",
+              },
+            ],
+          },
+          known: true,
+        };
+      },
+    );
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-hitl",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    const text = JSON.stringify(result.content);
+    expect(extractMcpHumanRuling(result)).toBe("superseded");
+    expect(result.isError).toBe(false);
+    expect(text).toContain("policy changed");
+    expect(text).toContain("Propose the call again");
+    expect(text).not.toContain("reviewer selected Approve");
+  });
+
+  test("chat client: a retired offer with no publish keeps the reviewer's answer", async () => {
+    await publishRevision(orgId, 1);
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this issue?",
+      session_id: "session-1",
+    });
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+      result: {
+        content: [
+          {
+            type: "text",
+            text: "[appa] this offer no longer stands; re-propose the call",
+          },
+        ],
+      },
+      known: true,
+    });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-hitl",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    expect(extractMcpHumanRuling(result)).toBe("approve");
+    expect(JSON.stringify(result.content)).not.toContain("policy changed");
+  });
+
+  test("chat client: a form decline is not a human denial", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this email?",
+      session_id: "session-1",
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "decline" },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        ...{ offer_id: "offer-hitl", trajectory: trajectory() },
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      ok: false,
+      outcome: "review_declined",
+      offer_id: "offer-hitl",
+    });
+    expect(JSON.stringify(result.content)).toContain("not a human denial");
+    expect(extractMcpHumanRuling(result)).toBeNull();
+    expect(result._meta?.[MCP_HUMAN_RULING_META_KEY]).toBeUndefined();
   });
 
   test("chat client: a ruling on an offer the runtime does not know is not shown as given", async () => {
@@ -1036,6 +1148,11 @@ describe("OpenAPPA tool execution", () => {
   });
 
   test.each([
+    {
+      response: { status: "answered", result: { action: "decline" } },
+      outcome: "review_declined",
+      reason: "not a human denial",
+    },
     {
       response: { status: "unanswered" },
       outcome: "review_unanswered",
@@ -1110,7 +1227,8 @@ describe("OpenAPPA tool execution", () => {
       offerId: "offer-hitl",
     };
     expect(await getHitlReviewResult(lookup)).toBe(outcome);
-    expect(await consumeHitlRuling(lookup)).toBeUndefined();
+    expect(await peekHitlDecision(lookup)).toMatchObject({ ruling: "none" });
+    expect(await consumeHitlRuling(lookup)).toBe("none");
     expect(
       await getHitlAskUserArguments({
         session: lookup.session,
@@ -1120,6 +1238,19 @@ describe("OpenAPPA tool execution", () => {
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
       false,
     );
+
+    const again = await executeArchestraTool(toolFullName, args, {
+      ...chatContext,
+      currentToolCallId: "control-no-answer-again",
+    });
+    expect(elicitSpy).toHaveBeenCalledTimes(1);
+    expect(again.structuredContent).toMatchObject({
+      ok: false,
+      outcome,
+      offer_id: "offer-hitl",
+    });
+    expect(extractMcpHumanRuling(again)).toBeNull();
+    expect(executeSpy).not.toHaveBeenCalled();
 
     // A late approval cannot change this logical execution, even when the
     // live native review has disappeared. Replays do not reopen the question.
@@ -1139,6 +1270,294 @@ describe("OpenAPPA tool execution", () => {
         session: { ...lookup.session, session_id: "other-run" },
       }),
     ).toBeUndefined();
+  });
+
+  test("a closure between the initial peek and staging is not asked or executed", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-late-seal",
+      text: "Approve this call?",
+      session_id: "session-1",
+    });
+    const peek = vi
+      .spyOn(hitlReview, "peekHitlDecision")
+      .mockImplementation(async (params) => {
+        peek.mockRestore();
+        const seen = await hitlReview.peekHitlDecision(params);
+        if (!seen) {
+          await hitlReview.sealHitlClosure({
+            session: params.session,
+            offerId: params.offerId,
+            closure: "cancelled",
+          });
+        }
+        return seen;
+      });
+    const elicitSpy = vi.fn();
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-late-seal",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } },
+    );
+
+    expect(elicitSpy).not.toHaveBeenCalled();
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(extractMcpHumanRuling(result)).toBeNull();
+    expect(result._meta?.[MCP_HUMAN_RULING_META_KEY]).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      ok: false,
+      outcome: "review_cancelled",
+      offer_id: "offer-late-seal",
+    });
+  });
+
+  test("a closure sealed while the question is open cannot grant the later accept", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-sealed-late",
+      text: "Approve this call?",
+      session_id: "session-1",
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    let release: (value: {
+      status: "answered";
+      result: { action: "accept"; content: { action: "approve" } };
+    }) => void = () => {};
+    const elicitSpy = vi.fn(
+      () =>
+        new Promise<{
+          status: "answered";
+          result: { action: "accept"; content: { action: "approve" } };
+        }>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-sealed-late",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } },
+    );
+    await vi.waitFor(() => expect(elicitSpy).toHaveBeenCalledTimes(1));
+    expect(
+      await sealHitlClosure({
+        session: { organization_id: orgId, session_id: "session-1" },
+        offerId: "offer-sealed-late",
+        closure: "unavailable",
+      }),
+    ).toBe("sealed");
+    release({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+    const result = await pending;
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(extractMcpHumanRuling(result)).toBeNull();
+    expect(result._meta?.[MCP_HUMAN_RULING_META_KEY]).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      ok: false,
+      offer_id: "offer-sealed-late",
+    });
+  });
+
+  test("two concurrent inline accepts execute one claimed approval", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-inline-race",
+      text: "Approve this call?",
+      session_id: "session-1",
+    });
+    const lookup = {
+      session: { organization_id: orgId, session_id: "session-1" },
+      offerId: "offer-inline-race",
+    };
+    let entered = 0;
+    let openGate: (() => void) | undefined;
+    const bothWaiting = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+    const releases: Array<
+      (value: {
+        status: "answered";
+        result: { action: "accept"; content: { action: "approve" } };
+      }) => void
+    > = [];
+    const elicitSpy = vi.fn(
+      () =>
+        new Promise<{
+          status: "answered";
+          result: { action: "accept"; content: { action: "approve" } };
+        }>((resolve) => {
+          releases.push(resolve);
+          entered += 1;
+          if (entered === 2) openGate?.();
+        }),
+    );
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockImplementation(async () => {
+        expect(await peekHitlRuling(lookup)).toBeUndefined();
+        return {
+          result: { content: [{ type: "text", text: "Applied" }] },
+          known: true,
+        };
+      });
+    const args = {
+      offer_id: "offer-inline-race",
+      trajectory: trajectory(),
+      plan: "Human review",
+    };
+    const elicitation = { elicit: elicitSpy };
+    const first = executeArchestraTool(toolFullName, args, {
+      ...mockContext,
+      currentToolCallId: "inline-a",
+      elicitation,
+    });
+    const second = executeArchestraTool(toolFullName, args, {
+      ...mockContext,
+      currentToolCallId: "inline-b",
+      elicitation,
+    });
+    await bothWaiting;
+    const accept = {
+      status: "answered" as const,
+      result: {
+        action: "accept" as const,
+        content: { action: "approve" as const },
+      },
+    };
+    for (const release of releases) release(accept);
+    const results = await Promise.all([first, second]);
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(executeSpy.mock.calls[0]?.[0].ruling).toBe("approve");
+    expect(
+      results.filter((result) => extractMcpHumanRuling(result) === "approve"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => extractMcpHumanRuling(result) === null),
+    ).toHaveLength(1);
+    expect(await peekHitlRuling(lookup)).toBeUndefined();
+  });
+
+  test("a stored approval that arrives during a no-viewer close is claimed once", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-race",
+      text: "Approve this call?",
+      session_id: "session-1",
+    });
+    const lookup = {
+      session: { organization_id: orgId, session_id: "session-1" },
+      offerId: "offer-race",
+    };
+    await stageHitlReview({
+      ...lookup,
+      review: { offerId: "offer-race", text: "Approve this call?" },
+    });
+    let entered = 0;
+    let openGate: (() => void) | undefined;
+    const bothWaiting = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+    const releases: Array<(value: { status: "no_viewer" }) => void> = [];
+    const elicitSpy = vi.fn(
+      () =>
+        new Promise<{ status: "no_viewer" }>((resolve) => {
+          releases.push(resolve);
+          entered += 1;
+          if (entered === 2) openGate?.();
+        }),
+    );
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockImplementation(async () => {
+        expect(await peekHitlRuling(lookup)).toBeUndefined();
+        return {
+          result: { content: [{ type: "text", text: "Applied" }] },
+          known: true,
+        };
+      });
+    const args = {
+      offer_id: "offer-race",
+      trajectory: trajectory(),
+      plan: "Human review",
+    };
+    const elicitation = { elicit: elicitSpy };
+
+    const first = executeArchestraTool(toolFullName, args, {
+      ...mockContext,
+      currentToolCallId: "race-a",
+      elicitation,
+    });
+    const second = executeArchestraTool(toolFullName, args, {
+      ...mockContext,
+      currentToolCallId: "race-b",
+      elicitation,
+    });
+    await bothWaiting;
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    for (const release of releases) release({ status: "no_viewer" });
+    const results = await Promise.all([first, second]);
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(executeSpy.mock.calls[0]?.[0].ruling).toBe("approve");
+    expect(
+      results.filter((result) => extractMcpHumanRuling(result) === "approve"),
+    ).toHaveLength(1);
+    expect(await peekHitlRuling(lookup)).toBeUndefined();
+    expect(elicitSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test("a stored none without a closure fails closed and is not asked again", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-legacy",
+      text: "Approve this call?",
+      session_id: "session-1",
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+    const lookup = {
+      session: { organization_id: orgId, session_id: "session-1" },
+      offerId: "offer-legacy",
+    };
+    await stageHitlReview({
+      ...lookup,
+      review: { offerId: lookup.offerId, text: "Approve this call?" },
+    });
+    expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-legacy",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      {
+        ...mockContext,
+        currentToolCallId: "legacy-none",
+        elicitation: { elicit: elicitSpy },
+      },
+    );
+
+    expect(elicitSpy).not.toHaveBeenCalled();
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      ok: false,
+      outcome: "review_invalid",
+      offer_id: "offer-legacy",
+    });
+    expect(extractMcpHumanRuling(result)).toBeNull();
+    expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
   });
 
   test("a reviewed call with no handler stays blocked without an unreachable consult", async () => {
@@ -1727,8 +2146,10 @@ describe("OpenAPPA tool execution", () => {
 describe("list_guardrails_battery_fits", () => {
   const toolFullName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_guardrails_battery_fits`;
   const originalOpenappaConfig = { ...config.openappa };
+  const sandbox = config.daggerRuntime.enabled;
   afterEach(() => {
     config.openappa = originalOpenappaConfig;
+    config.daggerRuntime.enabled = sandbox;
   });
 
   const setUp = async (fixtures: {
@@ -1803,6 +2224,8 @@ describe("list_guardrails_battery_fits", () => {
       makeAgentTool,
     });
 
+    // With the sandbox, linear deploys its multi-user target, whose rule shadows the base's.
+    config.daggerRuntime.enabled = true;
     // Docs and Acme already have their batteries declared, so only Linear fits.
     expect(await fits({ mcpServerId: null }, context)).toEqual([
       expect.objectContaining({
@@ -1890,6 +2313,7 @@ describe("list_guardrails_battery_fits", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    makeCustomRole,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -1897,8 +2321,11 @@ describe("list_guardrails_battery_fits", () => {
     const org = await makeOrganization();
     const owner = await makeUser();
     const viewer = await makeUser();
-    await makeMember(owner.id, org.id, { role: "member" });
-    await makeMember(viewer.id, org.id, { role: "member" });
+    const reader = await makeCustomRole(org.id, {
+      permission: { ...memberPermissions, guardrailsPolicy: ["read"] },
+    });
+    await makeMember(owner.id, org.id, { role: reader.role });
+    await makeMember(viewer.id, org.id, { role: reader.role });
     const linear = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: owner.id,
@@ -1923,3 +2350,20 @@ describe("list_guardrails_battery_fits", () => {
     expect(await fits({ mcpServerId: null }, context(viewer.id))).toEqual([]);
   });
 });
+
+/** Publish revision `revision` of the organization's policy line, as the runtime's store does. */
+async function publishRevision(organizationId: string, revision: number) {
+  const hash = `test-policy-${revision}`;
+  await db.execute(sql`
+    INSERT INTO openappa_policy_files (hash, bytes) VALUES (${hash}, '\\x00')
+    ON CONFLICT DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO openappa_deployments (name, head) VALUES (${organizationId}, ${revision})
+    ON CONFLICT (name) DO UPDATE SET head = excluded.head
+  `);
+  await db.execute(sql`
+    INSERT INTO openappa_policy_revisions (deployment, revision, hash)
+    VALUES (${organizationId}, ${revision}, ${hash})
+  `);
+}

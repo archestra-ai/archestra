@@ -1,28 +1,39 @@
 "use client";
 
-import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
+import {
+  type CSSProperties,
+  startTransition,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  MOBILE_HEADER_ACTIONS_CONTAINER_ID,
+  MOBILE_HEADER_TITLE_CONTAINER_ID,
+} from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
-import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
+import { DevFeedbackLauncher } from "@/components/dev-feedback/dev-feedback-launcher";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
-import { OnboardingSurveyDialog } from "@/components/onboarding-survey-dialog";
 import {
   SidebarCircleToggle,
+  SidebarPlaceholder,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
+import { afterNextPaint, appInteractive } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
+import { seededConversationId } from "@/lib/auth/shell-seed";
 import {
   ConnectivityProvider,
   useConnectivity,
@@ -31,12 +42,18 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
+import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
 import { AppSidebar } from "./sidebar";
+import {
+  SidebarResizeHandle,
+  useSidebarWidthState,
+} from "./sidebar-resize-handle";
 import {
   EnvSiteNotificationBar,
   SiteNotificationBar,
@@ -73,19 +90,14 @@ export function AppShell({ children }: AppShellProps) {
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
   const isAuthCallback =
-    pathname === "/oauth-callback" || pathname === "/github/callback";
+    pathname === "/oauth-callback" ||
+    pathname === "/github/callback" ||
+    pathname === "/github/app-setup";
   // Full-page app runtimes all live under /a/… (the owned standalone
   // /a/[appId] and the external /a/catalog/[catalogId]), so the whole
   // namespace is chrome-less by construction — no per-route regexes to keep in
   // sync. (The /apps gallery itself keeps the shell.)
   const isAppRuntime = pathname.startsWith("/a/");
-  // The hackathon submission review host is its own full-page surface (banner +
-  // metadata + the read-only replay player); it brings its own chrome, so the
-  // app sidebar/header stay out of its way.
-  const isReview = pathname === "/review" || pathname.startsWith("/review/");
-  // Driven by the offline video renderer: its frames must contain the replay
-  // and nothing of the surrounding app.
-  const isRecordingRender = pathname.startsWith(APP_RECORDING_RENDER_ROUTE);
   // Chat and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their
@@ -95,17 +107,19 @@ export function AppShell({ children }: AppShellProps) {
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
+  const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.
+  // The banner waits for the page's first data (see useShellReady).
+  const shellReady = useShellReady();
+  // A server-seeded page has the banner and the sidebar's data in its HTML,
+  // so both render with the page instead of after it.
+  const shellSeeded = useIsShellSeeded();
   const { data: notification } = useActiveSiteNotification({
-    enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
+    enabled: shellReady && !isAuthPage && !isBrowserPreview && !isAppRuntime,
   });
 
   const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(
-    !isAuthPage &&
-      !isBrowserPreview &&
-      !isAppRuntime &&
-      !isRecordingRender &&
-      !isReview,
+    !isAuthPage && !isBrowserPreview && !isAppRuntime,
   );
   if (redirectingToTwoFactorSetup) {
     return (
@@ -115,15 +129,9 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Chromeless surfaces (browser preview, app runtime, video render, review):
+  // Chromeless surfaces (browser preview, app runtime):
   // no sidebar/header/version.
-  if (
-    isBrowserPreview ||
-    isAppRuntime ||
-    isRecordingRender ||
-    isReview ||
-    isAuthCallback
-  ) {
+  if (isBrowserPreview || isAppRuntime || isAuthCallback) {
     return (
       <>
         <MaintenanceModeOverlay />
@@ -162,15 +170,35 @@ export function AppShell({ children }: AppShellProps) {
     <ConnectivityProvider>
       <McpDeploymentStatusFeed />
       <NavigationStatusProvider>
-        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SidebarProvider
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          style={
+            {
+              "--sidebar-width": `${sidebarWidth.width}px`,
+            } as CSSProperties
+          }
+          // The width follows the pointer while dragging; easing it would lag,
+          // and an eased collapse button would trail behind the sidebar edge.
+          className={cn(
+            sidebarWidth.resizing &&
+              "cursor-col-resize select-none **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none **:data-[slot=sidebar-circle-toggle]:transition-none",
+          )}
+        >
           <SkipToContentLink />
           {/* The toggle is position:fixed, so DOM order only affects focus
                 order: keeping it before the sidebar means expanding it with
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
-          <AppSidebar />
+          <DeferredSidebar defer={isChat && !shellSeeded} />
+          <SidebarResizeHandle
+            width={sidebarWidth.width}
+            onWidthChange={sidebarWidth.setWidth}
+            onResizingChange={sidebarWidth.setResizing}
+          />
           <MaintenanceModeOverlay />
+          <DevFeedbackLauncher />
           {/* MAIN_CONTENT_ID + tabIndex={-1} make this the "skip to main
               content" target (WCAG 2.4.1 Bypass Blocks), so activating that
               link moves keyboard focus past the sidebar navigation and into
@@ -180,7 +208,7 @@ export function AppShell({ children }: AppShellProps) {
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}
-            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-hidden focus:outline-none"
+            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-clip focus:outline-none"
           >
             <div className="shrink-0">
               <ConnectivityBar />
@@ -192,11 +220,17 @@ export function AppShell({ children }: AppShellProps) {
                 />
               )}
               <ImpersonationBanner />
-              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+              <header className="h-14 border-b border-border flex md:hidden items-center justify-between gap-4 px-4 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
                 <NavAwareSidebarTrigger />
                 <div
+                  id={MOBILE_HEADER_TITLE_CONTAINER_ID}
+                  className="flex min-w-0 flex-1 items-center"
+                />
+                {/* Collapsed while empty, so the header gap does not push a
+                    page's title row off the right edge. */}
+                <div
                   id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 empty:hidden"
                 />
               </header>
             </div>
@@ -212,18 +246,70 @@ export function AppShell({ children }: AppShellProps) {
               >
                 {children}
               </div>
-              <Version />
+              {/* The new-chat screen shows its own version line under the
+                  composer (`ChatPageContent` in `app/chat/page.client.tsx`)
+                  and hides this one with the `hide-version` body class, but
+                  only after it mounts: rendering it there would draw two
+                  lines on the server and drop one as the page starts,
+                  moving the centred composer. */}
+              {pathname !== "/chat" && !seededConversationId(pathname) && (
+                <Version />
+              )}
             </div>
           </main>
           <Toaster />
           <ConversationSearchProvider />
-          <OnboardingSurveyDialog />
-          <FeedbackPopupDialog />
+          <AfterIdle>
+            <OnboardingSurveyDialog />
+          </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
     </ConnectivityProvider>
   );
 }
+
+/**
+ * On chat pages the server did not seed, the sidebar after the page's first
+ * commit. Its navigation, conversation list and their queries are not what
+ * the visitor came for, so the first render draws its empty frame at the
+ * exact width, and the real sidebar replaces it in a transition right after
+ * the page (the chat composer) has committed and painted. A seeded page has
+ * the sidebar's data and renders it in the HTML. Its code ships with the
+ * shell: loaded later, it would not be there when the page hydrates, and the
+ * server's sidebar would drop to the frame and back.
+ */
+function DeferredSidebar({ defer }: { defer: boolean }) {
+  // Only where the composer is the first screen. Elsewhere the sidebar mounts
+  // with the page, as before: deferring it there buys nothing and moves its
+  // mount into the moment someone starts using the page.
+  const [mounted, setMounted] = useState(!defer);
+  useEffect(() => {
+    afterNextPaint(() => startTransition(() => setMounted(true)));
+  }, []);
+  if (!mounted) return <SidebarPlaceholder collapsible="icon" />;
+  return <AppSidebar />;
+}
+
+/** Renders its children from the first idle callback after the app is interactive. */
+function AfterIdle({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void appInteractive.whenIdle().then(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return ready ? <>{children}</> : null;
+}
+
+const OnboardingSurveyDialog = lazyComponent(() =>
+  import("@/components/onboarding-survey-dialog").then(
+    (m) => m.OnboardingSurveyDialog,
+  ),
+);
 
 function ConnectivityBar() {
   const { state, retry } = useConnectivity();
@@ -317,7 +403,7 @@ function NavAwareSidebarTrigger() {
   const { showCollapsedToggleDot } = useNavOnboarding();
   return (
     <SidebarTrigger
-      className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2"
+      className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2"
       showDot={showCollapsedToggleDot}
     />
   );

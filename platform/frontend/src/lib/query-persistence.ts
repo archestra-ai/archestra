@@ -21,6 +21,27 @@ import {
  */
 export const PERSISTED_QUERY_META = { persist: true } as const;
 
+/** How long a query stays fresh by default, so SSR data is not refetched. */
+export const DEFAULT_STALE_TIME = 60 * 1_000;
+
+/**
+ * `staleTime` for a persisted list that a mutation elsewhere on the page can
+ * outdate: fresh only while it still holds the server's own seed.
+ *
+ * `refetchOnMount: "always"` revalidates a restored snapshot when the query
+ * mounts, but not when an already-mounted query switches keys: TanStack Query
+ * then fetches only stale data. A list whose key settles after hydration
+ * (the Agents and MCP Gateways tables learn which automatic pins to leave out
+ * a moment later) would otherwise show a snapshot saved mid-mutation — a row
+ * that was pinned just before the reload, still listed under its tile.
+ */
+export function seedOnlyStaleTime(
+  seed: unknown,
+): (query: { state: { data: unknown } }) => number {
+  return (query) =>
+    seed !== undefined && query.state.data === seed ? DEFAULT_STALE_TIME : 0;
+}
+
 /**
  * Bounded retry for the shell/bootstrap queries the new-chat composer cannot
  * draw without — the agent roster and the model catalog. The app-wide default
@@ -43,7 +64,18 @@ export const BOOTSTRAP_QUERY_RETRY = (failureCount: number): boolean =>
 export function restorePersistedQueryCache(client: QueryClient): void {
   const snapshot = readSnapshot();
   if (!snapshot) return;
-  hydrate(client, snapshot.state);
+  // A query that already holds data got it from this page: the document's
+  // server seed, or a read since mount. The snapshot is older than that
+  // whatever the clocks say, so it never replaces such a value.
+  const cache = client.getQueryCache();
+  hydrate(client, {
+    ...snapshot.state,
+    queries: snapshot.state.queries.filter(
+      (query) =>
+        cache.find({ queryKey: query.queryKey, exact: true })?.state.data ===
+        undefined,
+    ),
+  });
 }
 
 /**

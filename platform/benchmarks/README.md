@@ -90,6 +90,8 @@ For an optimization comparison on one CI runner, manually run this workflow at t
 
 ## Recorded Optimization Comparison
 
+[2026-10-23-ci-followup.json](baselines/2026-10-23-ci-followup.json) records the final additional optimization pass after integrating the same `main` changes into both revisions. It retains all six alternating trials, direct controls, pooled results, raw-file digests and both single-build CI runs. The baseline already includes the earlier optimizations below. The public docs table uses the later single-build run; paired results have two builds resident and remain separate.
+
 [2026-10-23-optimization.json](baselines/2026-10-23-optimization.json) records all final trial summaries, environment details, source revisions and SHA-256 digests of the per-request raw files. It includes the slower sequential runs; none were discarded. The individual request samples remain local diagnostic artifacts, following the existing summary-only baseline convention.
 
 Baseline: `795f52fcd90fccf94c9ca210d5a8fdaa42c8c3d5`. Optimized backend: `cfe85dca1f464d825f24cff73d5369f9ff46c45f`. The benchmark harness is identical at both revisions.

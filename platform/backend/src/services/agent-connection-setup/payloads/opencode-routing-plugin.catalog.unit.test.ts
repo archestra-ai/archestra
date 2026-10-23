@@ -494,6 +494,82 @@ describe("managed catalog plugin", () => {
     expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
+  test("a passthrough route the catalog adds after setup carries the setup's passthrough key", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-new-route-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    // The user's own xAI sign-in. Setup ran before the deployment routed
+    // xAI, so its params carry the passthrough key for OpenAI only.
+    await mkdir(path.join(root, "data", "kilo"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "kilo", "auth.json"),
+      JSON.stringify({
+        xai: { type: "oauth", access: "native-xai-token", refresh: "r" },
+      }),
+    );
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const xaiRoute = "https://deployment.example/v1/xai/agent";
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          ...catalog,
+          routes: { ...catalog.routes, xai: xaiRoute },
+          managed: { ...catalog.managed, xai: ["grok-x"] },
+          passthrough: ["openai", "xai"],
+        },
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: { vendor: { options: {} }, xai: { options: {} } },
+    };
+    await hooks.config(config);
+    expect(config.provider.xai.options).toEqual({
+      baseURL: xaiRoute,
+      headers: {
+        "X-Archestra-Agent-Id": "kilo",
+        "X-Archestra-Virtual-Key": "passthrough-secret",
+      },
+    });
+    // The organization's credential still goes without it.
+    expect(config.provider.vendor.options).toMatchObject({
+      apiKey: "managed-secret",
+    });
+    expect(JSON.stringify(config.provider.vendor)).not.toContain(
+      "passthrough-secret",
+    );
+  });
+
   test("keeps the client's provider names and ids and adds no provider of its own", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-names-"));
     roots.push(root);
@@ -743,6 +819,15 @@ describe("managed catalog plugin", () => {
     expect(result.finalAuth).toBe("Bearer native-openai-token");
     expect(result.finalAccount).toBe("acct");
   });
+
+  test("V2 gives a passthrough route the catalog adds after setup the setup's passthrough key", async () => {
+    // Setup knew only Google's passthrough route.
+    const result = await runManagedOpenAi(true, {
+      google: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+    });
+    expect(result.hook.Authorization).toBe("Bearer native-openai-token");
+    expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
+  });
 });
 
 /** Runs the V2 transform twice over providers the client already lists. */
@@ -844,7 +929,12 @@ console.log(JSON.stringify({ vendor: pack("vendor"), openai: pack("openai"), cal
 
 const openAiRoute = "https://deployment.example/v1/openai/agent";
 
-async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
+async function prepareManagedOpenAi(
+  nativeAllowed: boolean,
+  routeHeaders: Record<string, Record<string, string>> = {
+    openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+  },
+): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-openai-"));
   roots.push(root);
   const revision = path.join(root, "revision");
@@ -856,9 +946,7 @@ async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
     JSON.stringify({
       routes: {},
       headers: { "X-Archestra-Agent-Id": "opencode" },
-      routeHeaders: {
-        openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
-      },
+      routeHeaders,
       managedKeyPath: keyPath,
       clientId: "opencode",
       origin: "https://deployment.example",
@@ -882,7 +970,10 @@ async function prepareManagedOpenAi(nativeAllowed: boolean): Promise<string> {
   return path.join(revision, "routing.mjs");
 }
 
-function runManagedOpenAi(nativeAllowed: boolean): Promise<{
+function runManagedOpenAi(
+  nativeAllowed: boolean,
+  routeHeaders?: Record<string, Record<string, string>>,
+): Promise<{
   hook: Record<string, string>;
   sourceConnection: { id: string } | null;
   finalUrl: string;
@@ -894,7 +985,7 @@ function runManagedOpenAi(nativeAllowed: boolean): Promise<{
   keptAuth: string | null;
   redirect: string;
 }> {
-  return prepareManagedOpenAi(nativeAllowed).then(
+  return prepareManagedOpenAi(nativeAllowed, routeHeaders).then(
     (file) =>
       new Promise((resolve, reject) => {
         const child = spawn(

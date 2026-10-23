@@ -139,6 +139,9 @@ Grok Build differs from the other clients in three ways:
   still applies policy to each tool call.
 - Title, summary and suggestion calls use the Agent's model through the proxy.
   Telemetry, auto-update, remote configuration and xAI-hosted tools are off.
+- A turn the model itself ended early (output limit, request limit, refusal,
+  cancellation) fails with `grok_turn_failed`. A turn the provider or the CLI
+  broke fails with the retriable `grok_unavailable`.
 
 The six public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package

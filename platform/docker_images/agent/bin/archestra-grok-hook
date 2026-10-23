@@ -66,7 +66,8 @@ case "${event}" in
       *:max_turns:*|*:max_turn_requests:*) failure=max_turn_requests ;;
       *:refusal:*) failure=refusal ;;
       StopCancelled:*) failure=cancelled ;;
-      *) failure=error ;;
+      StopFailure:*) failure=unavailable ;;
+      *) failure="${reason}" ;;
     esac
     "${script_dir}/archestra-grok-turn-failure" "${failure}" 2>/dev/null
     ;;

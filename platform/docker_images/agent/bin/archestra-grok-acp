@@ -137,6 +137,9 @@ def main() -> int:
         agent.request("initialize", {"protocolVersion": 1, "clientCapabilities": {}}, timeout=60)
         if resume:
             session_id = session_file.read_text().strip()
+            # An empty mcpServers list keeps the servers from config.toml: on
+            # 1.0.67 a loaded session re-emits _x.ai/mcp_initialized with the
+            # gateway's tool count, which wait_for_gateway relies on.
             agent.request(
                 "session/load",
                 {"sessionId": session_id, "cwd": os.getcwd(), "mcpServers": []},
@@ -166,7 +169,8 @@ def main() -> int:
         stop_reason = response.get("result", {}).get("stopReason")
     except (OSError, RuntimeError, TimeoutError, KeyError, ValueError) as error:
         print(f"archestra: Grok Build session failed: {type(error).__name__}", file=sys.stderr)
-        stop_reason = None
+        # The driver, not the model, ended the turn; the platform may retry.
+        stop_reason = "unavailable"
         session_id = session_file.read_text().strip() if session_file.exists() else ""
     finally:
         agent.stop()

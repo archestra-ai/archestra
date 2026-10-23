@@ -18,8 +18,12 @@ case "${1:-}" in
     message="The model refused to complete the turn." ;;
   cancelled)
     message="The Grok Build turn was cancelled before it completed." ;;
+  unavailable)
+    # Retriable: the provider or the CLI failed, not the model's own decision.
+    code=grok_unavailable
+    message="Grok Build could not complete the turn because the model provider did not answer. Check the configured provider credential, model availability, and network access, then retry." ;;
   *)
-    message="Grok Build could not complete the turn. Check the configured provider credential, model availability, and network access, then retry." ;;
+    message="Grok Build could not complete the turn. Grok reported: ${1:-unknown}." ;;
 esac
 
 "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" "${code}" "${message}"

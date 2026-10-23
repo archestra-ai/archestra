@@ -138,6 +138,11 @@ def rename_tools(response: dict) -> None:
         local = name.replace("__", "--")
         if names.get(local, name) != name:
             # Two gateway names would share one local name; keep the first.
+            print(
+                f"archestra: gateway tool {name} is hidden: it shares the local name {local} with {names[local]}",
+                file=sys.stderr,
+                flush=True,
+            )
             continue
         names[local] = name
         listed.append({**tool, "name": local})

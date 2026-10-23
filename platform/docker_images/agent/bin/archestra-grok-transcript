@@ -139,10 +139,13 @@ def tool_output(update: dict) -> tuple[str, bool]:
         return text, False
     raw = update.get("rawOutput")
     output = raw.get("output") if isinstance(raw, dict) and raw.get("type") == "MCP" else None
-    if isinstance(output, dict) and len(output) == 1:
+    if isinstance(output, dict) and output:
         # Grok wraps an MCP result as {"OkayOutput": ...} or an error variant.
-        (variant, value), = output.items()
-        return serialized(value), "Okay" not in variant
+        # Tolerate extra keys beside the variant, should a later CLI add them.
+        variants = [key for key in output if isinstance(key, str) and key.endswith("Output")]
+        variant = next(iter(output)) if len(output) == 1 else variants[0] if len(variants) == 1 else None
+        if variant is not None:
+            return serialized(output[variant]), "Okay" not in variant
     return (serialized(raw) if raw is not None else ""), False
 
 

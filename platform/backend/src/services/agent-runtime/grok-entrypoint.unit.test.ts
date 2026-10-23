@@ -425,8 +425,8 @@ describe("Grok Build turn hooks", () => {
       event: "StopFailure",
       payload: { error: "server_error" },
       answer:
-        "Grok Build could not complete the turn. Check the configured provider credential, model availability, and network access, then retry.\n",
-      failure: "grok_turn_failed",
+        "Grok Build could not complete the turn because the model provider did not answer. Check the configured provider credential, model availability, and network access, then retry.\n",
+      failure: "grok_unavailable",
     },
     {
       event: "StopFailure",
@@ -769,6 +769,59 @@ describe("Grok Build readable transcript", () => {
           },
         ],
       });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("unpacks an MCP result envelope that carries extra keys", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+    try {
+      const session = path.join(root, "grok", "sessions", "%2Fwork", "s-1");
+      await mkdir(session, { recursive: true });
+      const update = (value: Record<string, unknown>) =>
+        JSON.stringify({
+          method: "session/update",
+          params: { sessionId: "s-1", update: value },
+        });
+      await writeFile(
+        path.join(session, "updates.jsonl"),
+        [
+          update({
+            sessionUpdate: "tool_call",
+            toolCallId: "c-1",
+            title: "github__list_repos",
+          }),
+          update({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "c-1",
+            status: "completed",
+            rawOutput: {
+              type: "MCP",
+              output: { OkayOutput: "acme/app", meta: { elapsedMs: 12 } },
+            },
+          }),
+        ].join("\n"),
+      );
+      await exec(
+        "python3",
+        [path.join(IMAGE_BIN, "archestra-grok-transcript"), "s-1"],
+        {
+          env: {
+            PATH: process.env.PATH,
+            GROK_HOME: path.join(root, "grok"),
+            ARCHESTRA_AGENT_RUNTIME_DIR: root,
+          },
+        },
+      );
+      expect(
+        JSON.parse(
+          await readFile(path.join(root, "readable-transcript.json"), "utf8"),
+        ).entries,
+      ).toEqual([
+        { type: "tool_call", name: "github__list_repos", toolCallId: "c-1" },
+        { type: "tool_result", text: "acme/app", toolCallId: "c-1" },
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

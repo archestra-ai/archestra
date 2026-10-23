@@ -907,7 +907,11 @@ async function startAdapter(
     );
     if (!port) await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (!port) throw new Error("the wire adapter did not start");
+  if (!port) {
+    adapter.kill();
+    await rm(root, { recursive: true, force: true });
+    throw new Error("the wire adapter did not start");
+  }
   return {
     port: Number(port),
     stop: () => {

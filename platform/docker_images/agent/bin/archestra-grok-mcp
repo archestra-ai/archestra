@@ -16,6 +16,7 @@ on Grok's behalf, because Grok itself offers the model only `search_tool` and
 `use_tool`.
 """
 
+import contextlib
 import json
 import os
 import sys
@@ -194,9 +195,15 @@ def rename_tools(response: dict, fresh: bool = True) -> None:
 
 def publish_catalog(catalog: dict) -> None:
     temporary = f"{CATALOG_FILE}.tmp"
-    with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
-        json.dump(catalog, file)
-    os.replace(temporary, CATALOG_FILE)
+    try:
+        with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+            json.dump(catalog, file)
+        os.replace(temporary, CATALOG_FILE)
+    except OSError:
+        # A half-written file never replaces the catalog, and never stays.
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        raise
 
 
 def write(message: dict) -> None:

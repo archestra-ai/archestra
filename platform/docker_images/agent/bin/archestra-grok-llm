@@ -18,6 +18,7 @@ Headers, call ids, text and Grok's own tools pass through unchanged. The
 adapter exits when the launcher that started it is gone.
 """
 
+import contextlib
 import http.client
 import json
 import os
@@ -67,25 +68,28 @@ def catalog() -> Catalog | None:
     """The published catalog, or None before the bridge listed the gateway."""
     with catalog_lock:
         try:
-            mtime = os.stat(CATALOG_FILE).st_mtime_ns
+            # The file read is the file whose time is kept: the bridge
+            # replaces the path atomically, so the two cannot drift apart.
+            with open(CATALOG_FILE, encoding="utf-8") as file:
+                mtime = os.fstat(file.fileno()).st_mtime_ns
+                if mtime == catalog_state["mtime"]:
+                    return catalog_state["catalog"]
+                published = json.load(file)
         except OSError:
             catalog_state.update(mtime=None, catalog=None)
             return None
-        if mtime != catalog_state["mtime"]:
-            loaded = None
-            try:
-                with open(CATALOG_FILE, encoding="utf-8") as file:
-                    published = json.load(file)
-                tools, names = published.get("tools"), published.get("names")
-                if isinstance(tools, list) and isinstance(names, dict):
-                    loaded = Catalog(
-                        [tool for tool in tools if isinstance(tool, dict) and isinstance(tool.get("name"), str)],
-                        {local: gateway for local, gateway in names.items() if isinstance(local, str) and isinstance(gateway, str)},
-                    )
-            except (OSError, ValueError, AttributeError):
-                loaded = None
-            catalog_state.update(mtime=mtime, catalog=loaded)
-        return catalog_state["catalog"]
+        except ValueError:
+            catalog_state.update(mtime=mtime, catalog=None)
+            return None
+        loaded = None
+        tools, names = published.get("tools"), published.get("names")
+        if isinstance(tools, list) and isinstance(names, dict):
+            loaded = Catalog(
+                [tool for tool in tools if isinstance(tool, dict) and isinstance(tool.get("name"), str)],
+                {local: gateway for local, gateway in names.items() if isinstance(local, str) and isinstance(gateway, str)},
+            )
+        catalog_state.update(mtime=mtime, catalog=loaded)
+        return loaded
 
 
 class NotReady(Exception):
@@ -141,8 +145,12 @@ def wrapped_arguments(key: str, arguments: str) -> str:
     try:
         tool_input = json.loads(arguments or "{}")
     except ValueError:
+        print(f"archestra: the model's arguments for {key} are not JSON; the tool runs without them", file=sys.stderr, flush=True)
         tool_input = {}
-    return json.dumps({"tool_name": key, "tool_input": tool_input if isinstance(tool_input, dict) else {}}, ensure_ascii=False)
+    if not isinstance(tool_input, dict):
+        print(f"archestra: the model's arguments for {key} are not an object; the tool runs without them", file=sys.stderr, flush=True)
+        tool_input = {}
+    return json.dumps({"tool_name": key, "tool_input": tool_input}, ensure_ascii=False)
 
 
 class Rewriter:
@@ -302,7 +310,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(response.status)
             for name, value in response.getheaders():
                 if name.lower() not in HOP_HEADERS:
-                    self.send_header(name, value)
+                    # A header value never starts a line of its own.
+                    self.send_header(name, value.replace("\r", "").replace("\n", ""))
             self.end_headers()
             if streaming:
                 self.stream(response, rewriter)
@@ -403,9 +412,14 @@ def main() -> None:
     server.daemon_threads = True
     port = server.server_address[1]
     temporary = f"{PORT_FILE}.tmp"
-    with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
-        file.write(f"{port}\n")
-    os.replace(temporary, PORT_FILE)
+    try:
+        with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+            file.write(f"{port}\n")
+        os.replace(temporary, PORT_FILE)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        raise
     threading.Thread(target=watch_parent, args=(os.getppid(),), daemon=True).start()
     server.serve_forever()
 

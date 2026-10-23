@@ -1,4 +1,5 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -113,6 +114,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -128,9 +130,11 @@ import {
   type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -174,6 +178,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
@@ -196,6 +201,7 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  attributionLabels?: AttributionLabels;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
@@ -500,6 +506,7 @@ export async function handleLLMProxy<
   // The first credential that names a billing team pays; the passthrough key
   // resolves first, matching its precedence for per-key limits.
   let billingTeamId = authOverride?.billingTeamId;
+  let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -817,6 +824,8 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
+        providerKey.organizationId !== resolvedAgent.organizationId ||
+        personalToken.organizationId !== resolvedAgent.organizationId ||
         (!internalCall &&
           !(await LlmProviderApiKeyModel.canUseKey(
             providerKey,
@@ -1119,6 +1128,15 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    if (
+      provider.unavailableUsageAccounting &&
+      config.llmProxy.usageAccountingMode === "enforce"
+    ) {
+      throw new ApiError(
+        422,
+        "Authoritative usage and cost accounting are unavailable for this media operation",
+      );
+    }
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1126,6 +1144,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
+        unpricedMediaModel: provider.unavailableUsageAccounting
+          ? requestAdapter.getModel()
+          : undefined,
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
@@ -1543,16 +1564,54 @@ export async function handleLLMProxy<
     });
     let billingMode = credentialBillingMode;
 
+    if (providerName === "azure") {
+      const original = requestAdapter.getOriginalRequest() as Record<
+        string,
+        unknown
+      >;
+      const metadata = original.metadata as Record<string, unknown> | undefined;
+      const type = String(provider.interactionType);
+      const operation =
+        type === "azure:images"
+          ? metadata?.operation === "image-edit"
+            ? "image-edit"
+            : "image-generation"
+          : type === "azure:audio"
+            ? original.operation === "speech"
+              ? "audio-speech"
+              : original.operation === "transcriptions"
+                ? "audio-transcription"
+                : "audio-translation"
+            : type === "azure:realtime"
+              ? "realtime-turn"
+              : provider.spanName === "embedding"
+                ? "embedding"
+                : type === "azure:responses"
+                  ? "responses"
+                  : "chat";
+      await validateAzureModelOperation({
+        providerApiKeyId: perKeyChatApiKeyId,
+        modelId: requestAdapter.getModel(),
+        operation,
+        parameters: original,
+      });
+    }
+
     // Create client with observability (each provider handles metrics internally)
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
+      provider.cancelOnDisconnect ||
       providerName === "microsoft-365-copilot" ||
+      providerName === "azure" ||
       provider.interactionType === "azure:realtime" ||
       proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
+      ...(providerName === "azure"
+        ? { azureRequest: getAzureProxyIngress(request) }
+        : {}),
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
       abortSignal,
@@ -1666,7 +1725,16 @@ export async function handleLLMProxy<
         entity,
       ]),
     );
+    attributionLabels = await resolveRequestAttributionLabels({
+      organizationId: resolvedAgent.organizationId,
+      authMethod,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      oauthClientId: authenticatedApp?.id,
+      billingTeamId,
+    });
     const ctx: LLMProxyContext<TRequest> = {
+      attributionLabels,
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
@@ -1799,17 +1867,32 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage },
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(
+              { error: errorMessage },
+              {
+                inputTokens: 0,
+                outputTokens: 0,
+                usageUnavailable: true,
+                costUnavailable: true,
+              },
+            )
+          : { error: errorMessage }) as InteractionResponse,
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
         // Mirrors `model`, as every write path does now that nothing rewrites
         // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1904,6 +1987,7 @@ async function handleStreaming<
   ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -2049,13 +2133,25 @@ async function handleStreaming<
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
-        response: response as InteractionResponse,
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(response, {
+              inputTokens: 0,
+              outputTokens: 0,
+              usageUnavailable: true,
+              costUnavailable: true,
+            })
+          : response) as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
         toolCallBlock,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2118,7 +2214,7 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce")
+        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -2216,7 +2312,12 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
+        await persistProxyInteraction({
+          record,
+          encryptedChat,
+          streamTiming,
+          attributionLabels,
+        });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2853,6 +2954,10 @@ async function handleStreaming<
       );
       streamError = settlementError;
     }
+    if (provider.binaryStream && reply.raw.headersSent) {
+      reply.raw.destroy();
+      return reply;
+    }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     // Read once, here: nothing else writes to the client before the error
     // frame, so `terminalSent` cannot change after this point.
@@ -2911,6 +3016,7 @@ async function handleNonStreaming<
   ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -3044,6 +3150,7 @@ async function handleNonStreaming<
             record,
             encryptedChat,
             streamTiming,
+            attributionLabels,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3419,6 +3526,7 @@ async function handleNonStreaming<
         record: refusalRecord,
         encryptedChat,
         streamTiming,
+        attributionLabels,
       });
 
       if (pluginRegistry && pluginContext) {
@@ -3593,7 +3701,12 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction({ record, encryptedChat, streamTiming });
+    await persistProxyInteraction({
+      record,
+      encryptedChat,
+      streamTiming,
+      attributionLabels,
+    });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3974,15 +4087,18 @@ async function persistProxyInteraction({
   record,
   encryptedChat,
   streamTiming,
+  attributionLabels,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
+  attributionLabels?: AttributionLabels;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
   await InteractionModel.create(

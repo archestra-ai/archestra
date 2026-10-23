@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
-  TOOL_GET_RUN_FULL_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
-  TOOL_START_RUN_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
+  TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
@@ -291,8 +293,10 @@ describe("model-facing runtime tools", () => {
 
     expect(started.result.isError).not.toBe(true);
     expect(started.result.structuredContent).toMatchObject({
-      runtime: "dedicated",
-      session_id: started.task.id,
+      run: { run_id: started.task.id },
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${started.task.id}$`),
+      ),
     });
     expect(started.starts).toHaveLength(1);
     expect(started.starts[0].systemParams).not.toHaveProperty(
@@ -348,20 +352,154 @@ describe("model-facing runtime tools", () => {
     const context = { ...seeded.context, openappaRuntimeCall: undefined };
 
     const read = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
       context,
     );
     const steered = await executeArchestraTool(
-      TOOL_STEER_RUN_FULL_NAME,
-      { task_id: seeded.task.id, message: "Carry on" },
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id, message: "Carry on" },
       context,
     );
 
     expect(read.isError).not.toBe(true);
     expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
     expect(steered.isError).not.toBe(true);
+    // The acknowledgement carries the handle and nothing the run produced.
+    expect(steered.structuredContent).toEqual({
+      status: "steered",
+      run_id: seeded.task.id,
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${seeded.task.id}$`),
+      ),
+      next_step: expect.any(String),
+    });
     expect(steer).toHaveBeenCalledOnce();
+  });
+
+  test.for([
+    "no runtime metadata",
+    "no workspace",
+    "the run reading itself",
+  ] as const)("a proof gets only metadata and the run page for %s", async (scenario, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const task =
+      scenario === "no runtime metadata"
+        ? await A2ATaskModel.createForRun({
+            contextId: seeded.task.contextId,
+            agentId: seeded.context.agentId,
+          })
+        : seeded.task;
+    if (scenario === "no workspace") {
+      await db
+        .delete(schema.agentWorkspacesTable)
+        .where(eq(schema.agentWorkspacesTable.id, task.id));
+    }
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: task.id },
+      scenario === "the run reading itself"
+        ? {
+            ...seeded.context,
+            openappaRuntimeCall: {
+              session: seeded.child,
+              toolCallId: "call-self",
+              spawn: false,
+            },
+          }
+        : seeded.context,
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      run: { run_id: task.id },
+      run_url:
+        scenario === "no runtime metadata"
+          ? null
+          : expect.stringMatching(new RegExp(`/chat/runs/${task.id}$`)),
+      output: "",
+      requests: [],
+      workspace: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW ARTIFACT");
+  });
+
+  test("status reasons and run titles stay out of model-facing results under Guardrails", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId: null,
+    });
+    await db
+      .update(schema.a2aTasksTable)
+      .set({ state: "TASK_STATE_FAILED", statusReason: "SECRET ERROR" })
+      .where(eq(schema.a2aTasksTable.id, seeded.task.id));
+    await db
+      .update(schema.agentRunsTable)
+      .set({ title: "SECRET TITLE" })
+      .where(eq(schema.agentRunsTable.taskId, seeded.task.id));
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+    const list = (args: Record<string, unknown>, appId?: string) =>
+      executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [seeded.context.agentId], ...args },
+        { ...context, ...(appId ? { appId } : {}) },
+      );
+
+    const mine = await list({ mine_only: true });
+    const all = await list({});
+    const read = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      context,
+    );
+    for (const result of [mine, all, read]) {
+      expect(result.isError).not.toBe(true);
+      expect(JSON.stringify(result)).not.toContain("SECRET ERROR");
+    }
+    expect(mine.structuredContent).toMatchObject({
+      runs: [{ run_id: seeded.task.id, status_reason: expect.any(String) }],
+      summary: { total: 1, by_state: { failed: 1 } },
+    });
+    expect(all.structuredContent).toMatchObject({
+      runs: [{ run_id: seeded.task.id, title: "", prompt: "" }],
+    });
+    // An app's own code renders the title; it is not a model's context.
+    expect(
+      (await list({}, crypto.randomUUID())).structuredContent,
+    ).toMatchObject({ runs: [{ title: "SECRET TITLE" }] });
+
+    await GuardrailsDeploymentModel.setEnabled(false);
+    expect((await list({ mine_only: true })).structuredContent).toMatchObject({
+      runs: [{ status_reason: "SECRET ERROR" }],
+    });
   });
 
   test("no proof does not read, steer or write a run bound to a parent", async ({
@@ -388,18 +526,18 @@ describe("model-facing runtime tools", () => {
     const context = { ...seeded.context, openappaRuntimeCall: undefined };
 
     const read = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
       context,
     );
     const steered = await executeArchestraTool(
-      TOOL_STEER_RUN_FULL_NAME,
-      { task_id: seeded.task.id, message: "SECRET STEER" },
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id, message: "SECRET STEER" },
       context,
     );
     const written = await executeArchestraTool(
       TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
-      { task_id: seeded.task.id, path: "note.txt", content: "SECRET FILE" },
+      { run_id: seeded.task.id, path: "note.txt", content: "SECRET FILE" },
       context,
     );
 
@@ -451,18 +589,18 @@ describe("model-facing runtime tools", () => {
       const context = { ...seeded.context, openappaRuntimeCall: undefined };
 
       const read = await executeArchestraTool(
-        TOOL_GET_RUN_FULL_NAME,
-        { task_id: seeded.task.id },
+        TOOL_GET_AGENT_RUN_FULL_NAME,
+        { run_id: seeded.task.id },
         context,
       );
       const steered = await executeArchestraTool(
-        TOOL_STEER_RUN_FULL_NAME,
-        { task_id: seeded.task.id, message: "Carry on" },
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+        { run_id: seeded.task.id, message: "Carry on" },
         context,
       );
       const written = await executeArchestraTool(
         TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
-        { task_id: seeded.task.id, path: "note.txt", content: "PLAIN FILE" },
+        { run_id: seeded.task.id, path: "note.txt", content: "PLAIN FILE" },
         context,
       );
 
@@ -511,8 +649,8 @@ describe("model-facing runtime tools", () => {
     };
 
     const steered = await executeArchestraTool(
-      TOOL_STEER_RUN_FULL_NAME,
-      { task_id: seeded.task.id, message: "SECRET STEER" },
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id, message: "SECRET STEER" },
       stranger,
     );
 
@@ -703,8 +841,8 @@ describe("model-facing runtime tools", () => {
     ]);
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
       seeded.context,
     );
 
@@ -741,8 +879,8 @@ describe("model-facing runtime tools", () => {
     ]);
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
       seeded.context,
     );
 
@@ -771,8 +909,8 @@ describe("model-facing runtime tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
       {
         ...seeded.context,
         openappaRuntimeCall: {
@@ -812,14 +950,14 @@ describe("model-facing runtime tools", () => {
     const steer = vi.spyOn(backend, "steer").mockResolvedValue();
 
     const steered = await executeArchestraTool(
-      TOOL_STEER_RUN_FULL_NAME,
-      { task_id: seeded.task.id, message: "SECRET STEER" },
+      TOOL_STEER_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id, message: "SECRET STEER" },
       seeded.context,
     );
     const written = await executeArchestraTool(
       TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
       {
-        task_id: seeded.task.id,
+        run_id: seeded.task.id,
         path: "note.txt",
         content: "SECRET FILE",
       },
@@ -959,7 +1097,7 @@ async function releasedSpawn(organizationId: string) {
     input: {
       semantic: {
         event: "tool_call",
-        tool: "archestra__start_run",
+        tool: "archestra__start_agent_run",
         spawn: true,
       },
     },
@@ -1052,7 +1190,7 @@ for (const transformed of [false, true]) {
         new Error("the runtime snapshot changed"),
       );
       const stream = await workspaceTransferTickets.read({
-        ticket: workspaceTransferTickets.resolve(
+        ticket: await workspaceTransferTickets.resolve(
           minted.ticket.id,
           minted.token,
         ),
@@ -1156,7 +1294,7 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
   expect(backend.runWorkspaceTransferCommand).not.toHaveBeenCalledWith(
     expect.objectContaining({ args: ["discard", "big"] }),
   );
-  const ticket = workspaceTransferTickets.resolve(
+  const ticket = await workspaceTransferTickets.resolve(
     minted.ticket.id,
     minted.token,
   );
@@ -1222,7 +1360,7 @@ test("the transfer tool reports a held export with the Guardrails ruling, not an
   const result = await executeArchestraTool(
     TOOL_TRANSFER_WORKSPACE_FILE_FULL_NAME,
     {
-      task_id: seeded.task.id,
+      run_id: seeded.task.id,
       direction: "download",
       path: "reports/progress.md",
       local_path: "/tmp/progress.md",
@@ -1292,7 +1430,7 @@ test("a held protected export names the Guardrails ruling and issues no ticket",
 test.for([
   false,
   true,
-])("a signed released get_run proof executes once and replay cannot read the runtime again (wrapped=%s)", async (wrapped, {
+])("a signed released get_agent_run proof executes once and replay cannot read the runtime again (wrapped=%s)", async (wrapped, {
   makeAgent,
   makeMember,
   makeOrganization,
@@ -1332,7 +1470,7 @@ test.for([
     input: {
       semantic: {
         event: "tool_call",
-        tool: "archestra__get_run",
+        tool: "archestra__get_agent_run",
         spawn: false,
       },
     },
@@ -1341,11 +1479,11 @@ test.for([
   const prior = config.openappa.offerSigningSecret;
   config.openappa.offerSigningSecret = "synthetic-runtime-dispatch-test-secret";
   try {
-    const args = { task_id: seeded.task.id };
+    const args = { run_id: seeded.task.id };
     const proof = signRuntimeToolProof({
       session,
       toolCallId: "signed-get-run",
-      action: "get_run",
+      action: "get_agent_run",
       arguments: args,
       spawn: false,
       secret: config.openappa.offerSigningSecret,
@@ -1364,10 +1502,10 @@ test.for([
       wrapped
         ? executeArchestraTool(
             TOOL_RUN_TOOL_FULL_NAME,
-            { tool_name: TOOL_GET_RUN_FULL_NAME, tool_args: signed },
+            { tool_name: TOOL_GET_AGENT_RUN_FULL_NAME, tool_args: signed },
             context,
           )
-        : executeArchestraTool(TOOL_GET_RUN_FULL_NAME, signed, context);
+        : executeArchestraTool(TOOL_GET_AGENT_RUN_FULL_NAME, signed, context);
     const first = await dispatch();
     expect(JSON.stringify(first.content)).toContain("checked answer");
     const replay = await dispatch();
@@ -1654,7 +1792,7 @@ async function seededRun(params: {
   };
 }
 
-/** Calls start_run with no proof; the launch seam is replaced, not the gate. */
+/** Calls start_agent_run with no proof; the launch seam is replaced, not the gate. */
 async function startWithoutProof(params: {
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;
   makeMember: (
@@ -1688,7 +1826,7 @@ async function startWithoutProof(params: {
     .mockResolvedValue(task);
   try {
     const result = await executeArchestraTool(
-      TOOL_START_RUN_FULL_NAME,
+      TOOL_START_AGENT_RUN_FULL_NAME,
       { agent_id: agent.id, message: "Do the work" },
       {
         agent: { id: agent.id, name: agent.name },

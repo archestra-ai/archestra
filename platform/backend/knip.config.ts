@@ -16,7 +16,9 @@ const config: KnipConfig = {
     "scripts/create-statistics-index.mjs!",
     // GitHub Actions runs these CLIs to propose stable client version updates.
     "scripts/update-codex-models-client-version.mjs!",
+    "scripts/update-copilot-chat-client-version.mjs!",
     "scripts/update-grok-client-version.mjs!",
+    "scripts/update-vscode-client-version.mjs!",
     "scripts/update-openappa-template.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",

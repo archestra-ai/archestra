@@ -1,8 +1,9 @@
 import {
-  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
+  PROVIDER_MODEL_TIERS,
+  type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { KILO_GUARD_CLIENT, OPENCODE_GUARD_CLIENT } from "../guard/clients";
@@ -14,6 +15,7 @@ import {
 import { managedRuntimeInstall } from "../payloads/managed-runtime-install";
 import { openCodeMcpMergeScript } from "../payloads/opencode-mcp-config";
 import {
+  type ManagedRuntimeCatalog,
   openCodePrimaryConfig,
   openCodePrimaryConfigScript,
 } from "../payloads/opencode-primary-config";
@@ -60,9 +62,33 @@ function opencodeProviderTarget(
   }
   return {
     id: route.openCodeProviderId,
-    model: proxy.model ?? DEFAULT_MODELS[proxy.provider],
+    model: proxy.model ?? PROVIDER_MODEL_TIERS[proxy.provider].normal,
   };
 }
+
+/**
+ * The global model an older connection pinned before provider-key connections
+ * moved to runtime routing, so reconnecting can clear it. It must match what
+ * those connections wrote, so it keeps the default models of that time.
+ */
+function opencodeLegacyModelRef(
+  client: OpenCodeFamilyClient,
+  ctx: SetupScriptContext,
+): string {
+  const target = opencodeProviderTarget(client, ctx);
+  const provider = (ctx.proxy as SetupScriptProxySection).provider;
+  const model =
+    ctx.proxy?.model ?? LEGACY_PINNED_DEFAULT_MODELS[provider] ?? target.model;
+  return `${target.id}/${model}`;
+}
+
+const LEGACY_PINNED_DEFAULT_MODELS: Partial<Record<SupportedProvider, string>> =
+  {
+    anthropic: "claude-opus-4-8",
+    openai: "gpt-5.5",
+    gemini: "gemini-3.6-flash",
+    openrouter: "openrouter/auto",
+  };
 
 /**
  * Primary-providers mode: the Archestra providers authenticate with the
@@ -257,7 +283,8 @@ function opencodeRoutingPluginBash(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
-  providerTwins?: Record<string, string>;
+  /** Setup-time catalog for the fallback plugin; the runtime builds its own. */
+  catalog?: ManagedRuntimeCatalog;
 }): string {
   const runtime = params.context
     ? managedRuntimeInstall({ ...params, context: params.context })
@@ -323,7 +350,8 @@ function opencodeRoutingPluginPowerShell(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
-  providerTwins?: Record<string, string>;
+  /** Setup-time catalog for the fallback plugin; the runtime builds its own. */
+  catalog?: ManagedRuntimeCatalog;
 }): string {
   const runtime = params.context
     ? managedRuntimeInstall({ ...params, context: params.context })
@@ -415,18 +443,12 @@ ${opencodeOwnedMergeBash(
 
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const {
-        routes,
-        routeHeaders,
-        providers,
-        nativeProviders,
-        nativeRoutes,
-        appName,
-      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      const { routes, routeHeaders, catalog, unsupported, appName } =
+        openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`say "Configuring model providers in ${client.label}"
 command -v node >/dev/null 2>&1 || { err "Node.js is required to configure model providers"; exit 1; }
 ARCHESTRA_OC_NOTICES="$(ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(openCodePrimaryConfigScript(client))} <<'ARCHESTRA_PRIMARY_CATALOG'
-${JSON.stringify({ providers, nativeProviders, nativeRoutes, appName })}
+${JSON.stringify({ appName, routes, catalog, unsupported })}
 ARCHESTRA_PRIMARY_CATALOG
 )"
 [ -z "$ARCHESTRA_OC_NOTICES" ] || printf '%s\\n' "$ARCHESTRA_OC_NOTICES" | while IFS= read -r archNotice; do
@@ -435,7 +457,7 @@ ARCHESTRA_PRIMARY_CATALOG
     warn:*) warn "\${archNotice#warn:}" ;;
   esac
 done
-${opencodeRoutingPluginBash({ client, context: ctx, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
+${opencodeRoutingPluginBash({ client, context: ctx, routes, routeHeaders, catalog, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
@@ -444,7 +466,7 @@ ${opencodeRoutingPluginBash({ client, context: ctx, routes, routeHeaders, provid
         ]),
       );
       const headers = opencodeProxyHeaders(client, ctx.proxy);
-      const legacyTarget = opencodeProviderTarget(client, ctx);
+      const legacyModel = opencodeLegacyModelRef(client, ctx);
       const manual =
         "The routing plugin is installed. Node.js or Python is required to remove provider settings left by an older connection.";
       sections.push(`say "Routing supported ${client.label} providers through the LLM proxy"
@@ -455,7 +477,7 @@ ${opencodeOwnedMergeBash(
     ARCHESTRA_OC_MCP_NAME: "",
     ARCHESTRA_OC_PROVIDER_ROUTES: JSON.stringify(routes),
     ARCHESTRA_OC_RUNTIME_ROUTING: "1",
-    ARCHESTRA_OC_LEGACY_MODEL: `${legacyTarget.id}/${legacyTarget.model}`,
+    ARCHESTRA_OC_LEGACY_MODEL: legacyModel,
     ARCHESTRA_OC_HEADERS: JSON.stringify(headers),
   },
   manual,
@@ -586,19 +608,13 @@ finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
   }
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const {
-        routes,
-        routeHeaders,
-        providers,
-        nativeProviders,
-        nativeRoutes,
-        appName,
-      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      const { routes, routeHeaders, catalog, unsupported, appName } =
+        openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`Say ${psq(`Configuring model providers in ${client.label}`)}
 $env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
 $env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
 $env:ARCHESTRA_OC_PRIMARY = 'stdin'
-$archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, nativeRoutes, appName }))}
+$archPrimaryCatalog = ${psq(JSON.stringify({ appName, routes, catalog, unsupported }))}
 $archPrimaryScript = @'
 ${openCodePrimaryConfigScript(client)}
 '@
@@ -617,10 +633,10 @@ finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile
   Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue
 }
-${opencodeRoutingPluginPowerShell({ client, context: ctx, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
+${opencodeRoutingPluginPowerShell({ client, context: ctx, routes, routeHeaders, catalog, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(client, ctx.proxy);
-      const legacyTarget = opencodeProviderTarget(client, ctx);
+      const legacyModel = opencodeLegacyModelRef(client, ctx);
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
           route.openCodeProviderId,
@@ -656,7 +672,7 @@ ${managedHeaders}
 ${opencodeRoutingPluginPowerShell({ client, context: ctx, routes, headers })}
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['provider']) { Set-ArchProp $archCfg 'provider' ([pscustomobject]@{}) }
-if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(`${legacyTarget.id}/${legacyTarget.model}`)}) { $archCfg.PSObject.Properties.Remove('model') }
+if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(legacyModel)}) { $archCfg.PSObject.Properties.Remove('model') }
 $archStateFile = Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-connection-state.json`)}
 if (Test-Path $archStateFile) {
   $archState = Get-Content -Raw -Path $archStateFile | ConvertFrom-Json

@@ -19,11 +19,16 @@ crate-type = ["cdylib"]
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
-# and the attestation offered only where the parent covers its rank (#713).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784" }
+# the attestation offered only where the parent covers its rank (#713),
+# and the archestra battery's agent-run rules (#716); then explicit
+# no-remedy refusal feedback (#720), a failed subagent reported as stopped
+# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
+# escape (#724).
+# Pin #725's atomic remedy claim fix directly until it lands upstream.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

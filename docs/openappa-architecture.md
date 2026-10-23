@@ -748,11 +748,11 @@ sequenceDiagram
 
 For external clients, the gateway might lack the proxy session or call ID. `rememberYellSession` caches this routing under a hash of organization, message, and `with_trajectory`. `recallYellSession` consumes the entry. Modified arguments or missing cache entries fail to route. The handler also verifies caller session permissions. Internal Chat uses its bound conversation context.
 
-`executeYell` creates an `openappa_yells` row and triggers `yell:<call-id>`. `captureYellReport` opens a temporary loopback listener on `127.0.0.1` using a random token. The native reporter builds the archive. Archestra stores the exact gzip payload, forwarding it only when analytics is permitted. Forwarding preserves `x-appa-signature`, rejects redirects, and applies an 8-second timeout. Delivery failures are recorded locally.
+`executeYell` creates an `openappa_yells` row and triggers `yell:<call-id>`. `captureYellReport` opens a temporary loopback listener on `127.0.0.1` using a random token. The native reporter builds the archive. Archestra stores the exact gzip payload, forwarding it only when `ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED=true`. Forwarding preserves `x-appa-signature`, rejects redirects, and applies an 8-second timeout. Delivery failures are recorded locally. Encrypted-chat reports remain encrypted locally and are never forwarded.
 
 `get_openappa_yell({id})` reads stored reports under `log:read`. Report contents remain untrusted diagnostic data. Reading reports does not resolve them or grant policy edit rights. The first UI chat that reads a report becomes its investigation chat in `openappa_yells.conversation_id`; later chats never replace it. Yell responses return that chat only to its owner, and only while it is not deleted. `resolve_openappa_yell({id, resolved})` sets the status under `log:read` and `update` and writes the same `openappaYell.updated` audit entry as the HTTP route. HTTP routes support listing, summaries, archive downloads, and status updates. Unlike consult logs, reading organization yells does not require the diagnostics `admin` action.
 
-The reporting flag controls `yell` advertisement, while analytics controls upstream transmission. Automatic failure reports (such as missing remedy tools) are recorded locally without invoking the model yell flow.
+The reporting flag controls `yell` advertisement. A separate forwarding flag defaults off in every environment and controls upstream transmission independently of analytics. Enabling it does not automatically resend stored archives. Automatic failure reports (such as missing remedy tools) are recorded locally without invoking the model yell flow.
 
 Sources: [`yell-session.ts`](../platform/backend/src/openappa/yell-session.ts), [`executeYell`](../platform/backend/src/openappa/service.ts), [`yell-receiver.ts`](../platform/backend/src/openappa/yell-receiver.ts), [`client-failure-report.ts`](../platform/backend/src/openappa/client-failure-report.ts), [`yell routes`](../platform/backend/src/routes/openappa-yells/openappa-yells.routes.ts).
 
@@ -811,10 +811,10 @@ Gateway -> Runtime: bind child, inherit restrictions, then deliver inputs
 Gateway -> Ledger: launch outcome under the call ID
 Proxy -> Parent: the recorded outcome, not the client's result
 Runtime -> Proxy: model calls and results under the stored child identity
-Gateway -> Parent: get_run returns the recorded admitted ChildReturn
+Gateway -> Parent: get_agent_run returns the recorded admitted ChildReturn
 ```
 
-Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task. Unrelated sessions and oversized values are withheld. File reads cross the same boundary.
+Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_agent_run` returns only the exact admitted value for the run's current turn. Unrelated sessions and oversized values are withheld; a run with no governed producer returns metadata and the run link only. File reads cross the same boundary.
 
 Downloads check the pinned content, size, and checksum before issuing a ticket. They require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces. Cross-runtime external publishing is refused without an egress crossing.
 
@@ -886,7 +886,8 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
 | `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting. |
-| `ARCHESTRA_ANALYTICS` | Environment-dependent | Unset enables analytics in production/prod. `disabled` prevents upstream yell forwarding, not local storage. |
+| `ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED` | `false` | Explicit opt-in to upstream yell forwarding, independent of analytics. |
+| `ARCHESTRA_ANALYTICS` | Environment-dependent | Unset enables analytics in production/prod. `disabled` turns analytics off independently of yell forwarding. |
 | `ARCHESTRA_DATABASE_URL` | None | Database connection string. Strips `schema` parameter on init. |
 | `ARCHESTRA_CODE_RUNTIME_ENABLED` | `false` | Required for sandbox helper script execution. |
 

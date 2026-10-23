@@ -20,12 +20,13 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
+  AgentRunFailure,
   AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
   InsertAgentRunRecord,
 } from "@/types";
-import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
+import { A2A_TERMINAL_TASK_STATES, type A2ATaskState } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -147,6 +148,64 @@ class AgentRunModel {
     return run && (!workspace || run.workloadName === workspace.workloadName)
       ? run
       : null;
+  }
+
+  /**
+   * The current turn's task of a run addressed by its stable run id: the
+   * workspace id, or the task id of a run with no workspace. Null when the id
+   * names a later turn of a workspace rather than the run. Organization-scoped
+   * only; callers authorize access to the returned task.
+   */
+  static async findCurrentTurnTaskId(params: {
+    runId: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const workspaces = schema.agentWorkspacesTable;
+    const [workspace] = await db
+      .select({ lastTaskId: workspaces.lastTaskId })
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.id, params.runId),
+          eq(workspaces.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    if (workspace) return workspace.lastTaskId;
+    const [laterTurn] = await db
+      .select({ id: schema.agentRunsTable.id })
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        workspaces,
+        eq(workspaces.workloadName, schema.agentRunsTable.workloadName),
+      )
+      .where(eq(schema.agentRunsTable.taskId, params.runId))
+      .limit(1);
+    return laterTurn ? null : params.runId;
+  }
+
+  /** Stable run ids for task ids: the task's workspace id, else the task id. */
+  static async findRunIdsByTaskIds(
+    taskIds: string[],
+  ): Promise<Map<string, string>> {
+    if (taskIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        taskId: schema.agentRunsTable.taskId,
+        workspaceId: schema.agentWorkspacesTable.id,
+      })
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
+      )
+      .where(inArray(schema.agentRunsTable.taskId, taskIds));
+    const runIds = new Map(taskIds.map((taskId) => [taskId, taskId]));
+    for (const row of rows) runIds.set(row.taskId, row.workspaceId);
+    return runIds;
   }
 
   /** Stream history metadata in bounded pages; cursor comparisons stay in PostgreSQL. */
@@ -421,6 +480,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -467,6 +527,7 @@ class AgentRunModel {
     agentIds: string[];
     organizationId: string;
     limit: number;
+    state?: A2ATaskState;
     thread?: { bindingId: string; threadId: string };
   }) {
     if (params.agentIds.length === 0) return [];
@@ -474,6 +535,7 @@ class AgentRunModel {
     const rows = await db
       .select({
         taskId: schema.agentRunsTable.taskId,
+        runId: sql<string>`coalesce(${schema.agentWorkspacesTable.id}, ${schema.agentRunsTable.taskId})`,
         title: schema.agentRunsTable.title,
         actorKind: schema.agentRunsTable.actorKind,
         actorId: schema.agentRunsTable.actorId,
@@ -483,6 +545,7 @@ class AgentRunModel {
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -506,6 +569,13 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
       )
       .leftJoin(
         schema.usersTable,
@@ -540,6 +610,17 @@ class AgentRunModel {
             : undefined,
           inArray(schema.agentRunsTable.agentId, params.agentIds),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
+          params.state
+            ? eq(schema.a2aTasksTable.state, params.state)
+            : undefined,
+          // One row per run: its current turn.
+          or(
+            isNull(schema.agentWorkspacesTable.id),
+            eq(
+              schema.agentWorkspacesTable.lastTaskId,
+              schema.agentRunsTable.taskId,
+            ),
+          ),
         ),
       )
       .orderBy(desc(schema.agentRunsTable.startedAt))
@@ -821,6 +902,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -909,6 +991,20 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+/** A FAILED task's stored classification plus its status reason. */
+function failureExpression(): SQL<AgentRunFailure | null> {
+  const failure = schema.a2aTasksTable.failure;
+  return sql<AgentRunFailure | null>`
+    CASE WHEN ${schema.a2aTasksTable.state} = 'TASK_STATE_FAILED'
+      AND ${failure} IS NOT NULL
+    THEN jsonb_build_object(
+      'code', ${failure}->>'code',
+      'retriable', (${failure}->>'retriable')::boolean,
+      'message', COALESCE(${schema.a2aTasksTable.statusReason}, '')
+    ) END
+  `;
 }
 
 function hardDeadlineAtExpression(): SQL<Date> {

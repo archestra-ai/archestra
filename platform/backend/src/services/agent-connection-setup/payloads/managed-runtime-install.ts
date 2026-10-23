@@ -3,6 +3,7 @@ import type { SetupScriptContext } from "../types";
 import { managedRuntimeManifest } from "./managed-runtime";
 import {
   MANAGED_RUNTIME_BOOTSTRAP,
+  MANAGED_TUI_BOOTSTRAP,
   managedPluginBootstrap,
 } from "./managed-runtime-bootstrap";
 import { publicManagedCatalog } from "./opencode-primary-config";
@@ -13,7 +14,6 @@ export function managedRuntimeInstall(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
-  providerTwins?: Record<string, string>;
 }): { script: string; v1: string; v2: string } | null {
   const source = params.context.managedRuntimeSource;
   if (!source) return null;
@@ -32,7 +32,6 @@ export function managedRuntimeInstall(params: {
     routes: params.routes,
     headers: params.headers,
     routeHeaders: params.routeHeaders,
-    providerTwins: params.providerTwins,
     mcp: params.context.mcp,
     skipRelpath: `.archestra/${params.client.stateName}-startup-guard.skip`,
     ...(params.context.proxy?.virtualKey
@@ -54,6 +53,16 @@ const root = path.join(os.homedir(), ".archestra", ${JSON.stringify(`${params.cl
 const manifest = ${JSON.stringify(manifest)};
 const params = ${JSON.stringify(privateParams)};
 params.apiMajor = params.clientId === "opencode" && Number(process.env.ARCHESTRA_OC_RUNTIME_API_MAJOR) >= 2 ? 2 : 1;
+params.questionCards = false;
+try {
+  const version = require("node:child_process").execFileSync(${JSON.stringify(params.client.binary)}, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).match(/(\\d+)\\.(\\d+)\\.(\\d+)/);
+  if (version) {
+    const [major, minor, patch] = version.slice(1).map(Number);
+    params.questionCards = params.apiMajor === 1 && (params.clientId === "opencode"
+      ? major === 1 && (minor > 19 || (minor === 19 && patch >= 3))
+      : major === 7 && (minor > 8 || (minor === 8 && patch >= 15)));
+  }
+} catch { /* Unknown clients keep native questions. */ }
 if (params.managedKeyFile) {
   params.managedKeyPath = path.join(os.homedir(), ".archestra", params.managedKeyFile);
   delete params.managedKeyFile;
@@ -148,6 +157,30 @@ atomic(path.join(root, "bootstrap.cjs"), bootstrap);
 atomic(path.join(root, "params.json"), JSON.stringify(params));
 atomic(path.join(root, "current.json"), JSON.stringify(manifest));
 atomic(ownerFile, JSON.stringify({ clientId: params.clientId, installation: params.installation, bootstrapHash: fingerprint }));
+// Register the TUI entry of this connection plugin separately: older server
+// plugin loaders treat every export as a server hook. Never load UI there.
+if (params.questionCards) {
+  const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), ${JSON.stringify(params.client.dir)});
+  const tuiConfig = path.join(configDir, "tui.json");
+  const tuiCommented = path.join(configDir, "tui.jsonc");
+  const tuiEntry = path.join(root, "tui.mjs");
+  try {
+    if (fs.existsSync(tuiEntry)) check(tuiEntry);
+    atomic(tuiEntry, ${JSON.stringify(MANAGED_TUI_BOOTSTRAP)});
+    if (fs.existsSync(tuiCommented)) throw new Error("tui.jsonc needs manual plugin registration");
+    fs.mkdirSync(configDir, { recursive: true });
+    check(configDir);
+    if (fs.existsSync(tuiConfig)) check(tuiConfig);
+    const cfg = fs.existsSync(tuiConfig) ? JSON.parse(fs.readFileSync(tuiConfig, "utf8")) : {};
+    if (!cfg || typeof cfg !== "object" || Array.isArray(cfg) ||
+        (cfg.plugin !== undefined && !Array.isArray(cfg.plugin))) throw new Error("Unsupported TUI configuration");
+    const spec = require("node:url").pathToFileURL(tuiEntry).href;
+    cfg.plugin = [...(cfg.plugin || []).filter(item => item !== spec), spec];
+    atomic(tuiConfig, JSON.stringify(cfg, null, 2) + "\\n");
+  } catch (error) {
+    console.error("Connection installed with native question fallback: " + error.message);
+  }
+}
 } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 `,
   };

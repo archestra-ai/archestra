@@ -340,8 +340,12 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${rawToken}`,
     });
     expect(script.statusCode).toBe(200);
-    expect(script.body).toContain("archestra-anthropic");
-    expect(script.body).toContain("archestra-vllm");
+    // Anthropic maps onto OpenCode's own provider; vLLM has none, so the
+    // installer names it instead of adding a provider.
+    expect(script.body).toContain('"anthropic":["anthropic-model"]');
+    expect(script.body).toContain('"archestra-anthropic":"anthropic"');
+    expect(script.body).not.toContain("archestra-vllm");
+    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
     expect(script.body).toContain("opencode-primary.key");
   });
 
@@ -404,7 +408,7 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${rawToken}`,
     });
     expect(script.statusCode, script.body).toBe(200);
-    expect(script.body).toContain("archestra-anthropic");
+    expect(script.body).toContain('"anthropic":["claude-test"]');
     expect(script.body).not.toContain("microsoft-365-copilot");
   });
 
@@ -1090,8 +1094,12 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${rawToken}`,
     });
     expect(script.statusCode).toBe(200);
-    expect(script.body).toContain(`"archestra-${provider}"`);
-    expect(script.body).toContain(`"wireId":"${provider}:example/coder"`);
+    // None of these providers has an OpenCode provider of its own, so the
+    // installer carries no route for it and never adds an Archestra one.
+    expect(script.body).not.toContain(`"archestra-${provider}"`);
+    expect(script.body).not.toContain("example/coder");
+    expect(script.body).toContain('"routes":{}');
+    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
     expect(script.body).not.toContain('"archestra-openai"');
     expect(script.body).toContain("opencode-primary-state.json");
   });

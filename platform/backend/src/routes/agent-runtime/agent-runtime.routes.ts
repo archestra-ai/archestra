@@ -1082,7 +1082,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ticket = workspaceTransferTickets.resolve(
+      const ticket = await workspaceTransferTickets.resolve(
         request.params.transferId,
         bearerToken(request.headers.authorization),
       );
@@ -1131,7 +1131,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ticket = workspaceTransferTickets.resolve(
+      const ticket = await workspaceTransferTickets.resolve(
         request.params.transferId,
         bearerToken(request.headers.authorization),
       );

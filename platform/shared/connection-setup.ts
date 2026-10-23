@@ -1,7 +1,7 @@
 import { STARTUP_GUARD_INSTALL } from "./consts";
 import {
-  DEFAULT_MODELS,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  PROVIDER_MODEL_TIERS,
   type SupportedProvider,
 } from "./model-constants";
 import { OPENCODE_FAMILY, openCodeFamilyRecord } from "./opencode-family";
@@ -41,7 +41,7 @@ export function defaultConnectionModel({
     if (preferred) return preferred;
   }
   return (
-    modelIds.find((id) => id === DEFAULT_MODELS[provider]) ??
+    modelIds.find((id) => id === PROVIDER_MODEL_TIERS[provider].normal) ??
     modelIds[0] ??
     null
   );

@@ -79,7 +79,7 @@ Bots also read the channel's description from Slack, to know what the channel is
 ## What to Know
 
 - **New people:** someone who messages a bot without an Archestra account gets one. It has the organization's default role for new users, set in **Settings → Auth**. Find these accounts in **Settings → Users**.
-- **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
+- **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
 - **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. Files posted earlier in the same thread count too. With a [code sandbox](/docs/agents#code-sandbox), it can open other files, such as ZIP archives.
 - **File limits:** 20 files per message, 10 MB per file, 25 MB in total. Archestra skips larger files and tells the agent which files it did not get.
 - **Agent experience:** connecting moves your existing Slack apps to Slack's agent experience, which the **Stop** button and DM prompts need. Slack cannot switch an app back.

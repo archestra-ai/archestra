@@ -5,7 +5,7 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
-  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
@@ -1855,7 +1855,7 @@ export class ChatOpsManager {
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
       ...(provider.providerId === "slack"
         ? [
-            `As the primary agent responding directly to this Slack thread, proactively send brief updates after meaningful milestones, when the plan materially changes, or when blocked or awaiting a user decision. During long-running work, occasionally explain what is still running or being waited on. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable, only while that task is active. If needed, discover it through the gateway's tool search. Keep updates to one or two sentences covering the result and next step; avoid narrating individual commands, repeating unchanged status, or duplicating acknowledgments or input notices already sent by the platform. Continue working after posting; sending a message does not end the turn or wait for a reply. Collect input and approvals through the available question or approval interface. Your final answer is posted automatically; do not send it with this tool. Delegated subagents must report internally to their parent and never post externally.`,
+            `As the primary agent responding directly to this Slack thread, proactively send brief updates after meaningful milestones, when the plan materially changes, or when blocked or awaiting a user decision. During long-running work, occasionally explain what is still running or being waited on. Use ${archestraMcpBranding.getToolName(TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable, only while that task is active. If needed, discover it through the gateway's tool search. Keep updates to one or two sentences covering the result and next step; avoid narrating individual commands, repeating unchanged status, or duplicating acknowledgments or input notices already sent by the platform. Continue working after posting; sending a message does not end the turn or wait for a reply. Collect input and approvals through the available question or approval interface. Your final answer is posted automatically; do not send it with this tool. Delegated subagents must report internally to their parent and never post externally.`,
           ]
         : []),
       ...(isGroup
@@ -3119,7 +3119,6 @@ export class ChatOpsManager {
           agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
           organizationId: params.organizationId,
           userId: params.userId,
-          includeMemberChatDefault: false,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);

@@ -1,4 +1,4 @@
-import { getAzureModelKind } from "@archestra/shared";
+import { azureModelEvidence, getAzureModelKind } from "@archestra/shared";
 import {
   getAzureManagementBearerTokenProvider,
   getAzureOpenAiBearerTokenProvider,
@@ -100,13 +100,22 @@ export async function fetchAzureModels(
     }
 
     const data = (await response.json()) as {
-      data?: { id: string; model?: string }[];
+      data?: {
+        id: string;
+        model?: string;
+        capabilities?: Record<string, unknown>;
+      }[];
     };
     const models = (data.data ?? []).map((dep) => ({
       id: dep.id,
       displayName: dep.id,
       provider: "azure" as const,
-      capabilities: azureMediaCapabilities(dep.model ?? dep.id),
+      capabilities: azureMediaCapabilities(dep.model, dep.capabilities),
+      azureCapabilities: azureModelEvidence({
+        underlyingModelName: dep.model,
+        capabilities: dep.capabilities,
+        source: "deployment",
+      }),
       // Data-plane deployments carry the backing model name; use it for pricing.
       ...(dep.model ? { underlyingModelName: dep.model } : {}),
     }));
@@ -158,14 +167,26 @@ async function fetchAzureDeploymentList(params: {
     }
 
     const data = (await response.json()) as {
-      data?: { id: string; model?: string }[];
+      data?: {
+        id: string;
+        model?: string;
+        capabilities?: Record<string, unknown>;
+      }[];
     };
 
     return (data.data ?? []).map((deployment) => ({
       id: deployment.id,
       displayName: deployment.id,
       provider: "azure" as const,
-      capabilities: azureMediaCapabilities(deployment.model ?? deployment.id),
+      capabilities: azureMediaCapabilities(
+        deployment.model,
+        deployment.capabilities,
+      ),
+      azureCapabilities: azureModelEvidence({
+        underlyingModelName: deployment.model,
+        capabilities: deployment.capabilities,
+        source: "deployment",
+      }),
       // Deployments carry the backing model name; use it for pricing.
       ...(deployment.model ? { underlyingModelName: deployment.model } : {}),
     }));
@@ -221,6 +242,11 @@ async function fetchAzureModelList(params: {
         displayName: model.id,
         provider: "azure" as const,
         capabilities: azureMediaCapabilities(model.id),
+        azureCapabilities: azureModelEvidence({
+          underlyingModelName: model.id,
+          source: "catalog",
+          capabilities: model.capabilities,
+        }),
       }));
   } catch (error) {
     logger.error({ error }, "Error fetching Azure models");
@@ -438,9 +464,11 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
       id: deployment.name,
       displayName: deployment.name,
       provider: "azure" as const,
-      capabilities: azureMediaCapabilities(
-        deployment.properties?.model?.name ?? deployment.name,
-      ),
+      capabilities: azureMediaCapabilities(deployment.properties?.model?.name),
+      azureCapabilities: azureModelEvidence({
+        underlyingModelName: deployment.properties?.model?.name,
+        source: "deployment",
+      }),
       // Management deployments expose the backing model name; use it for pricing.
       ...(deployment.properties?.model?.name
         ? { underlyingModelName: deployment.properties.model.name }
@@ -545,8 +573,16 @@ const AZURE_RESOURCE_HOST_SUFFIXES = [
   ".cognitiveservices.azure.com",
 ];
 
-function azureMediaCapabilities(modelName: string): ModelInfo["capabilities"] {
-  switch (getAzureModelKind(modelName)) {
+function azureMediaCapabilities(
+  modelName?: string,
+  capabilities?: Record<string, unknown>,
+): ModelInfo["capabilities"] {
+  const evidence = azureModelEvidence({
+    underlyingModelName: modelName,
+    capabilities,
+    source: "deployment",
+  });
+  switch (evidence?.kind) {
     case "image":
       return {
         inputModalities: ["text"],

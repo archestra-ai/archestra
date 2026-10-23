@@ -5,6 +5,7 @@ pub mod client;
 pub mod config;
 pub mod elicitation;
 pub mod fixture_mcp;
+pub mod guardrails_native;
 pub mod interactions;
 pub mod lifecycle;
 pub mod mcp_lock;

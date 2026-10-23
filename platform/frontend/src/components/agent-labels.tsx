@@ -26,6 +26,7 @@ interface ProfileLabelsProps {
   onLabelsChange: (labels: ProfileLabel[]) => void;
   showLabel?: boolean;
   showDescription?: boolean;
+  description?: string;
 }
 
 export interface ProfileLabelsRef {
@@ -34,7 +35,13 @@ export interface ProfileLabelsRef {
 
 export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
   function ProfileLabels(
-    { labels, onLabelsChange, showLabel = true, showDescription = true },
+    {
+      labels,
+      onLabelsChange,
+      showLabel = true,
+      showDescription = true,
+      description = "Use key-value labels to organize and filter this resource.",
+    },
     ref,
   ) {
     const [newLabelKey, setNewLabelKey] = useState("");
@@ -130,11 +137,7 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
     return (
       <div className="grid gap-2">
         {showLabel && <Label>Labels</Label>}
-        {showDescription && (
-          <FieldDescription>
-            Use key-value labels to organize and filter this resource.
-          </FieldDescription>
-        )}
+        {showDescription && <FieldDescription>{description}</FieldDescription>}
 
         <div className="flex gap-2 items-end">
           <div className="flex-1">

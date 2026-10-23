@@ -19,7 +19,7 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
       if (hasTag(operation, "LLM Proxy")) {
         operation.description = appendDescriptionSection(
           operation.description,
-          createLlmProxyAuthenticationSection(),
+          createLlmProxyAuthenticationSection(operation.operationId),
         );
       }
 
@@ -229,7 +229,26 @@ function createAuthenticationSection(operationId: string): string {
   ].join("\n");
 }
 
-function createLlmProxyAuthenticationSection(): string {
+const PROVIDER_FILE_ROUTES = new Set<string>([
+  RouteId.AzureCreateFile,
+  RouteId.AzureCreateFileWithAgent,
+  RouteId.AzureRetrieveFile,
+  RouteId.AzureRetrieveFileWithAgent,
+  RouteId.AzureListFiles,
+  RouteId.AzureListFilesWithAgent,
+  RouteId.AzureFileContent,
+  RouteId.AzureFileContentWithAgent,
+  RouteId.AzureDeleteFile,
+  RouteId.AzureDeleteFileWithAgent,
+]);
+
+function createLlmProxyAuthenticationSection(operationId?: string): string {
+  if (operationId && PROVIDER_FILE_ROUTES.has(operationId))
+    return [
+      "Authentication:",
+      "",
+      "Requires an authenticated platform principal and one permitted configured Azure account. A provider key alone is insufficient. File handles are scoped to the principal, organization, and provider account. See [Azure Provider Files](/docs/llm-proxy/providers/azure#use-provider-files).",
+    ].join("\n");
   return [
     "Authentication:",
     "",

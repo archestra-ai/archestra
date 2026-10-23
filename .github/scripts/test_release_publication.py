@@ -181,7 +181,7 @@ gh() {
 
     def test_chart_destination_is_independent_and_requires_mcp_reference(self):
         section = WORKFLOW.read_text().split(
-            "      - name: Publish approved stable artifacts without rebuilding\n", 1
+            "      - name: Publish stable artifacts without rebuilding\n", 1
         )[1].split("      - name:", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         mcp_image = "registry.example.invalid/relocated/mcp@sha256:" + "a" * 64

@@ -2233,9 +2233,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     const response = await post(payload(false));
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["x-should-retry"]).toBe("false");
     expect(response.body).not.toContain("private native database error");
-    expect(response.body).toContain("OpenAPPA could not safely complete");
+    expect(response.body).toContain("Guardrails failed unexpectedly");
   });
 
   test("a refused policy names what to fix and is not a retryable outage", async () => {
@@ -2251,7 +2252,26 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.json().error.message).toContain(
-      'the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+      'Guardrails refused the organization\'s policy (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+    );
+  });
+
+  test("a conversation whose content the policy runtime cannot store fails once, with what to do", async () => {
+    fail = true;
+    failure = Object.assign(
+      new Error(
+        "OpenAPPA processing interrupted: storage failure: receipt storage failed: PostgreSQL ERROR (SQLSTATE 22P05)",
+      ),
+      { code: "storage" },
+    );
+
+    const response = await post(payload(false));
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-should-retry"]).toBe("false");
+    expect(response.headers["retry-after"]).toBeUndefined();
+    expect(response.json().error.message).toMatch(
+      /^Guardrails cannot store this conversation because it contains a NUL character \(U\+0000\), usually from a tool that printed binary data\. Every retry sends the same conversation and fails the same way\. Rewind the conversation to before that tool output, or start a new conversation\./,
     );
   });
 
@@ -3515,9 +3535,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
       expect(answered.statusCode, answered.body).toBe(200);
       const sent = providerRequests.at(-1) as {
+        system?: unknown;
         messages: { role: string; content: unknown }[];
       };
-      // The model receives the user's answer as the result of its question.
+      // Preserve the answer and put turn-specific guidance after it, not in system.
       expect(sent.messages.at(-1)).toEqual({
         role: "user",
         content: [
@@ -3526,8 +3547,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             tool_use_id: question.id,
             content: answer,
           }),
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "Question tools collect the user's decisions.",
+            ),
+          },
         ],
       });
+      expect(JSON.stringify(sent.system ?? "")).not.toContain(
+        "Question tools collect the user's decisions.",
+      );
     });
 
     test.each([
@@ -8597,9 +8627,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(providerRequests).toHaveLength(0);
         const { message } = response.json().error;
         expect(message).toContain(
-          "this subagent did not start through a checked spawn",
+          "this subagent because it did not start through a checked spawn",
         );
-        expect(message).toContain("start a new subagent");
+        expect(message).toContain("Start a new subagent");
       });
     });
 
@@ -11310,6 +11340,109 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ]),
       });
       expect(events.filter((event) => event.spawned_id)).toEqual([]);
+    });
+
+    test.for([
+      false,
+      true,
+    ])("a Claude Code subagent that failed before it returned closes its spawn, and the parent goes on (is_error=%s)", async (isError) => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "3c1d9e2a-6f4b-4a8e-9d2c-5e7f8a9b0c1d";
+      native.loadChildReturns.mockImplementation(async () => []);
+      // The runtime closes a spawn that returned nothing and withholds the
+      // client's text.
+      const reason =
+        "the spawn did not take: no prepared fork to open this child";
+      const fallback = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_result" || event.outcome !== "failure")
+          return fallback?.(raw);
+        events.push(event);
+        return JSON.stringify({
+          decision: "block",
+          reason,
+          approved_output: `[appa] Tool output withheld: ${reason}`,
+          output_source: "runtime",
+        });
+      });
+      const send = (messages: unknown[]) => {
+        const body = payload(false, messages);
+        body.tools.push({
+          name: "Agent",
+          description: "Launch a subagent",
+          input_schema: { type: "object", properties: {} },
+        });
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...internalCallHeader(),
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.285 (external, cli)",
+            "x-claude-code-session-id": session,
+          },
+          payload: body,
+        });
+      };
+      // OpenAPPA releases the spawn and marks its prompt.
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: {
+          name: "Agent",
+          input: { description: "lint", prompt: spawnPrompt },
+        },
+      };
+      const root = await send([{ role: "user", content: "Lint" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const call = noticeFrom(root.body, false);
+      expect(String(call.input.prompt)).toContain(
+        "[appa] delegated trajectory",
+      );
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await send([
+        { role: "user", content: "Lint" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: call.id,
+              name: call.name,
+              input: call.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          // The client's own text: the child failed before it returned, so
+          // the result carries no return marker.
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: call.id,
+              ...(isError ? { is_error: true } : {}),
+              content: [{ type: "text", text: "API Error: 401 CHILD FAILED" }],
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "tool_result",
+          outcome: "failure",
+        }),
+      );
+      const forwarded = JSON.stringify(providerRequests.at(-1));
+      expect(forwarded).toContain(`[appa] Tool output withheld: ${reason}`);
+      expect(forwarded).not.toContain("CHILD FAILED");
     });
 
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({

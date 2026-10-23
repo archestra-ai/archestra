@@ -957,8 +957,9 @@ export function copyCsv({
   bySplit: boolean;
 }) {
   const esc = (s: string | number) => {
-    const t = String(s);
-    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    let t = String(s);
+    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
+    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   };
   const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
   let lines: (string | number)[][];

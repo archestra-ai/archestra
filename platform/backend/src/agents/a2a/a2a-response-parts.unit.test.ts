@@ -15,7 +15,7 @@ describe("A2A final response parts", () => {
         },
         {
           type: "dynamic-tool",
-          toolName: "start_run",
+          toolName: "start_agent_run",
           toolCallId: "call",
           state: "output-available",
           input: {},

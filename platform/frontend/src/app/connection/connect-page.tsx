@@ -932,7 +932,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Sign in with the pi mcp login command printed by the installer.",
         "Open a new terminal and run arcpi. It checks proxy access, gateway sign-in and shared skills before starting.",
         "Use the startup menu or arcpi --disconnect to restore the saved configuration. Shared marketplace files and local skills are preserved.",
-        "Compaction uses the connected proxy. Nested tool calls and tree summaries are blocked.",
+        "Compaction and tree summaries use the connected proxy and retain the policy session. Nested tool calls remain blocked.",
       ];
     case "copilot-cli":
       return [

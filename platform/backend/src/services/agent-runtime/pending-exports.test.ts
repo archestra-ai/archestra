@@ -868,7 +868,7 @@ function readFile(
 ) {
   return executeArchestraTool(
     READ,
-    { task_id: seeded.taskId, path },
+    { run_id: seeded.taskId, path },
     seeded.context,
   );
 }
@@ -877,7 +877,7 @@ function transfer(seeded: Seeded, path = "out/report.txt") {
   return executeArchestraTool(
     TRANSFER,
     {
-      task_id: seeded.taskId,
+      run_id: seeded.taskId,
       direction: "download",
       path,
       local_path: "/tmp/report.txt",
@@ -898,7 +898,7 @@ async function downloaded(
   const token = /Bearer ([A-Za-z0-9_-]+)/.exec(command)?.[1];
   if (!ticketId || !token) throw new Error("no ticket in the command");
   const stream = await workspaceTransferTickets.read({
-    ticket: workspaceTransferTickets.resolve(ticketId, token),
+    ticket: await workspaceTransferTickets.resolve(ticketId, token),
     offset: 0,
     length: -1,
   });

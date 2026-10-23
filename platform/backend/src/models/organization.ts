@@ -902,6 +902,8 @@ class OrganizationModel {
         : null,
       defaultLlmProvider: defaultKeyRows[0]?.provider ?? null,
       defaultAgentId: org.defaultAgentId ?? null,
+      defaultFastModelId: org.defaultFastModelId ?? null,
+      defaultSmartModelId: org.defaultSmartModelId ?? null,
       rerankerModel: org.rerankerModel ?? null,
       ocrModel: org.ocrModel ?? null,
       requireTwoFactor: org.requireTwoFactor,

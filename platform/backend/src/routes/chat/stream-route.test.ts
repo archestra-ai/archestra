@@ -790,8 +790,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       if (value && typeof value === "object" && "apiKey" in value)
         value.apiKey = "";
     }
-    config.chat.defaultProvider = "anthropic";
-    config.chat.defaultModel = "claude-sonnet-4-5";
 
     const compactedMessages = [
       {
@@ -938,8 +936,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       if (value && typeof value === "object" && "apiKey" in value)
         value.apiKey = "";
     }
-    config.chat.defaultProvider = "anthropic";
-    config.chat.defaultModel = "claude-sonnet-4-5";
 
     mockStreamText.mockClear();
 

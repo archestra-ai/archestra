@@ -1028,9 +1028,9 @@ fn allowed_spawn_binding(
         if status != "complete" {
             return Ok(None);
         }
-        let input: Value = row.get("input");
+        let input = crate::sealed::unescape(row.get("input"))?;
         let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
+        let Some(decision) = decision.map(crate::sealed::unescape).transpose()? else {
             return Ok(None);
         };
         let semantic = input.get("semantic").unwrap_or(&input);

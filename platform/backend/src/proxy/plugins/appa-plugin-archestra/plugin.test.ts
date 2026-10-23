@@ -475,6 +475,10 @@ describe("asking through the client's own question tool", () => {
       pending: boolean;
       /** The newest user turn arrives without content. */
       noContent?: boolean;
+      stringContent?: boolean | string;
+      assistantTail?: boolean;
+      controlTail?: Record<string, unknown>[];
+      historyTail?: Record<string, unknown>[];
     }) {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({
@@ -505,24 +509,58 @@ describe("asking through the client's own question tool", () => {
         binding.requiresRemedyContinuation = true;
         binding.requiresQuestionContinuation = true;
       }
-      const system = [{ type: "text", text: "client system" }];
+      const system = [
+        {
+          type: "text",
+          text: "client system",
+          cache_control: { type: "ephemeral" },
+        },
+      ];
       const request = {
         system,
         messages: [
+          { role: "user", content: "historic user" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "signed reasoning",
+                signature: "signature",
+              },
+              { type: "tool_use", id: "toolu_1", name: "tool", input: {} },
+            ],
+          },
           params.noContent
             ? { role: "user" }
-            : {
-                role: "user",
-                content: [
-                  {
-                    type: "tool_result",
-                    tool_use_id: "toolu_1",
-                    content: "done",
-                  },
-                ],
-              },
-        ],
+            : params.stringContent
+              ? {
+                  role: "user",
+                  content:
+                    typeof params.stringContent === "string"
+                      ? params.stringContent
+                      : "latest user",
+                }
+              : {
+                  role: "user",
+                  content: [
+                    {
+                      type: "tool_result",
+                      tool_use_id: "toolu_1",
+                      content: "done",
+                      cache_control: { type: "ephemeral" },
+                    },
+                  ],
+                },
+        ] as Record<string, unknown>[],
       };
+      if (params.assistantTail)
+        request.messages.push({ role: "assistant", content: "prefill" });
+      if (params.controlTail)
+        request.messages.push(...structuredClone(params.controlTail));
+      if (params.historyTail)
+        request.messages.push(...structuredClone(params.historyTail));
+      const beforeMessages = structuredClone(request.messages);
       await plugin.onBeforeModel({ ...context, request });
       await plugin.onCleanup(context);
       return {
@@ -530,6 +568,8 @@ describe("asking through the client's own question tool", () => {
         system: JSON.stringify(request.system),
         turn: JSON.stringify(request.messages.at(-1)),
         systemUntouched: request.system === system && system.length === 1,
+        beforeMessages,
+        messages: request.messages,
       };
     }
 
@@ -591,7 +631,7 @@ describe("asking through the client's own question tool", () => {
       }
     });
 
-    test("a create still puts the guidance in system", async ({
+    test("an Anthropic create keeps fixed guidance in system and puts per-turn guidance after tool results", async ({
       makeOrganization,
     }) => {
       config.openappa.enabled = true;
@@ -606,10 +646,164 @@ describe("asking through the client's own question tool", () => {
       expect(result.binding?.threadContinue).toBe(false);
       expect(result.system).toContain(FIXED);
       for (const text of PER_TURN) {
-        expect(result.system).toContain(text);
-        expect(result.turn).not.toContain(text);
+        expect(result.system).not.toContain(text);
+        expect(result.turn).toContain(text);
+      }
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+      expect((result.messages.at(-1)?.content as unknown[])[0]).toEqual(
+        (result.beforeMessages.at(-1)?.content as unknown[])[0],
+      );
+    });
+
+    test("Anthropic pending state does not change the system cache prefix", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const pending = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+      const idle = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: false,
+      });
+      expect(pending.system).toBe(idle.system);
+      for (const text of PER_TURN) {
+        expect(pending.turn).toContain(text);
+        expect(idle.turn).not.toContain(text);
       }
     });
+
+    for (const assistantTail of [false, true]) {
+      test(`Anthropic guidance preserves native control-frame ordering with assistant tail ${assistantTail}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const controlTail = [
+          {
+            role: "system",
+            content: [{ type: "text", text: "native effort control" }],
+          },
+        ];
+        const result = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          assistantTail,
+          controlTail,
+        });
+        expect(result.messages.slice(-1)).toEqual(controlTail);
+        const userIndex = result.messages.length - 2;
+        expect(result.messages[userIndex].role).toBe("user");
+        for (const text of PER_TURN)
+          expect(JSON.stringify(result.messages[userIndex])).toContain(text);
+        const historyLength = assistantTail
+          ? result.beforeMessages.length - 1
+          : result.beforeMessages.length - 2;
+        expect(result.messages.slice(0, historyLength)).toEqual(
+          result.beforeMessages.slice(0, historyLength),
+        );
+        if (!assistantTail)
+          expect((result.messages[userIndex].content as unknown[])[0]).toEqual(
+            (result.beforeMessages[userIndex].content as unknown[])[0],
+          );
+        expect(result.messages.length).toBe(
+          result.beforeMessages.length + (assistantTail ? 1 : 0),
+        );
+      });
+    }
+
+    test("Anthropic guidance leaves mid-history control frames and signed assistant content unchanged", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        historyTail: [
+          { role: "system", content: "native hook control" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "signed continuation",
+                signature: "continuation-signature",
+              },
+              { type: "text", text: "assistant continuation" },
+            ],
+          },
+        ],
+      });
+      expect(result.messages.slice(0, -1)).toEqual(result.beforeMessages);
+      expect(result.messages.at(-1)?.role).toBe("user");
+      for (const text of PER_TURN) expect(result.turn).toContain(text);
+    });
+
+    test("Anthropic guidance does not duplicate an identical final user string", async ({
+      makeOrganization,
+    }) => {
+      const { id } = await makeOrganization();
+      const source = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+      const guidance = (
+        source.messages.at(-1)?.content as { type: string; text?: string }[]
+      ).find((block) => block.type === "text")?.text;
+      expect(guidance).toBeDefined();
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+        stringContent: guidance,
+      });
+      expect(
+        (result.messages.at(-1)?.content as { text?: string }[]).filter(
+          (block) => block.text === guidance,
+        ),
+      ).toHaveLength(1);
+      expect(result.messages.slice(0, -1)).toEqual(
+        result.beforeMessages.slice(0, -1),
+      );
+    });
+
+    for (const shape of [
+      "stringContent",
+      "noContent",
+      "assistantTail",
+    ] as const) {
+      test(`Anthropic tail guidance preserves history with ${shape}`, async ({
+        makeOrganization,
+      }) => {
+        const { id } = await makeOrganization();
+        const result = await guided({
+          organizationId: id,
+          thread: "create",
+          pending: true,
+          [shape]: true,
+        });
+        for (const text of PER_TURN) {
+          expect(result.turn).toContain(text);
+          expect(result.system).not.toContain(text);
+        }
+        const preserved =
+          shape === "assistantTail"
+            ? result.beforeMessages
+            : result.beforeMessages.slice(0, -1);
+        expect(result.messages.slice(0, preserved.length)).toEqual(preserved);
+        if (shape === "stringContent")
+          expect(
+            (result.messages.at(-1)?.content as { text: string }[])[0].text,
+          ).toBe("latest user");
+      });
+    }
   });
 
   test("forces Codex to execute an offered remedy instead of asking in prose", async ({
@@ -1512,10 +1706,12 @@ describe("asking through the client's own question tool", () => {
       });
       await plugin.onBeforeModel({ ...context, request });
 
-      expect(request.system).toContain(
+      expect(JSON.stringify(request.messages)).toContain(
         "Ask the user with the declared ask_user tool, one call for each offer ID below",
       );
-      expect(request.system).toContain('Offer IDs: ["offer-hitl"]');
+      expect(JSON.stringify(request.messages)).toContain(
+        'Offer IDs: [\\"offer-hitl\\"]',
+      );
       // The question goes through the question tool, never plain text.
       expect(request.system).toContain("not in plain text");
       expect(request.system).not.toContain("Immediately");
@@ -2130,13 +2326,13 @@ describe("asking through the client's own question tool", () => {
       });
       const continuationRequest = { system: "Base", messages: [] };
       await plugin.onBeforeModel({ ...context, request: continuationRequest });
-      expect(continuationRequest.system).toContain(
-        'approved OpenAPPA offer IDs ["offer-hitl"]',
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
+        'approved OpenAPPA offer IDs [\\"offer-hitl\\"]',
       );
-      expect(continuationRequest.system).toContain(
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
         "In your next response, call only execute_remedy_plan, once for each approved offer",
       );
-      expect(continuationRequest.system).toContain(
+      expect(JSON.stringify(continuationRequest.messages)).toContain(
         "Retry the blocked call in a later response",
       );
       const resumed = await plugin.onPrepareToolCalls({
@@ -3299,10 +3495,24 @@ describe("asking through the client's own question tool", () => {
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
+    client?: "opencode" | "kilo";
   }) {
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const adapter =
+      params.client === "kilo"
+        ? new AppaKiloAdapter()
+        : params.client === "opencode"
+          ? new AppaOpenCodeAdapter()
+          : new AppaClaudeCodeAdapter();
+    const nativeName = params.client ? "question" : "AskUserQuestion";
+    const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = { "user-agent": "claude-code/1" };
+    context.headers = params.client
+      ? {
+          "user-agent": `${params.client}/1`,
+          "x-opencode-session": params.sessionId,
+          "x-archestra-question-cards": "1",
+        }
+      : { "user-agent": "claude-code/1" };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3315,7 +3525,7 @@ describe("asking through the client's own question tool", () => {
         namespaces: new Map(),
       },
       customTools: new Set(),
-      declaredTools: [{ name: "AskUserQuestion" }],
+      declaredTools: [{ name: nativeName }],
       session: {},
     };
     let askCount = 0;
@@ -3333,14 +3543,14 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: true,
+        canShowToolCallReview: !params.client,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: true,
+        canShowToolCallReview: !params.client,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
@@ -3376,11 +3586,13 @@ describe("asking through the client's own question tool", () => {
         toolResults: [
           {
             id: answerId,
-            name: "AskUserQuestion",
+            name: nativeName,
             content: JSON.stringify(
               label === ""
-                ? "The user did not answer the questions."
-                : `Your questions have been answered: "${question}"="${label}". You can now continue with these answers in mind.`,
+                ? params.client
+                  ? "User dismissed the question."
+                  : "The user did not answer the questions."
+                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3395,6 +3607,159 @@ describe("asking through the client's own question tool", () => {
     };
     return { plugin, context, trusted, askCard, answer };
   }
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
+    const offerId = `offer-${client}-cards`;
+    const f = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-cards`,
+      offerId,
+    });
+    const command = `echo ${"full-command ".repeat(500)}`;
+    await stageInspectableReview(f.trusted.session, offerId, command);
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await f.plugin.onSessionInit(f.context);
+      const first = await f.askCard();
+      expect(first.card.question).toContain("Call preview (");
+      expect(first.card.question).not.toContain(command);
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      await f.answer(first.answerId, first.card.question, "Inspect");
+      expect(
+        await peekHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBeUndefined();
+      const inspected = await f.askCard();
+      expect(inspected.card.question).toContain(command);
+      expect(inspected.card.question).toContain("Full review:");
+      expect(inspected.reviewDetails).toBeUndefined();
+      await f.answer(inspected.answerId, inspected.card.question, "Allow");
+      expect(
+        await consumeHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBe("approve");
+      await f.answer(inspected.answerId, inspected.card.question, "Deny");
+      expect(
+        await peekHitlRuling({ session: f.trusted.session, offerId }),
+      ).toBeUndefined();
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+      await f.plugin.onCleanup(f.context);
+    }
+  });
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
+    const offerId = `offer-${client}-scope`;
+    const owner = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-owner`,
+      offerId,
+    });
+    const other = inspectableClaudeReview({
+      client,
+      sessionId: `user:user|${client}-other`,
+      offerId,
+    });
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await stageInspectableReview(owner.trusted.session, offerId, "pwd");
+      await stageInspectableReview(other.trusted.session, offerId, "pwd");
+      await owner.plugin.onSessionInit(owner.context);
+      await other.plugin.onSessionInit(other.context);
+      const card = await owner.askCard();
+      await other.answer(card.answerId, card.card.question, "Allow");
+      expect(
+        await peekHitlRuling({ session: owner.trusted.session, offerId }),
+      ).toBeUndefined();
+      expect(
+        await peekHitlRuling({ session: other.trusted.session, offerId }),
+      ).not.toBe("approve");
+      await owner.answer(card.answerId, card.card.question, "Allow");
+      expect(
+        await consumeHitlRuling({ session: owner.trusted.session, offerId }),
+      ).toBe("approve");
+
+      const altered = await other.askCard();
+      await other.answer(altered.answerId, "Run bash?", "Allow");
+      expect(
+        await peekHitlRuling({ session: other.trusted.session, offerId }),
+      ).not.toBe("approve");
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+      await owner.plugin.onCleanup(owner.context);
+      await other.plugin.onCleanup(other.context);
+    }
+  });
+
+  test.each([
+    "opencode",
+    "kilo",
+  ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
+    const results = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const calls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      for (const action of ["dismiss", "stale", "deny"] as const) {
+        const offerId = `offer-${client}-${action}`;
+        const f = inspectableClaudeReview({
+          client,
+          sessionId: `user:user|${client}-${action}`,
+          offerId,
+        });
+        await stageInspectableReview(f.trusted.session, offerId, "pwd");
+        await f.plugin.onSessionInit(f.context);
+        try {
+          const card = await f.askCard();
+          if (action === "stale")
+            await stageInspectableReview(
+              f.trusted.session,
+              offerId,
+              "echo changed",
+            );
+          await f.answer(
+            card.answerId,
+            card.card.question,
+            action === "dismiss" ? "" : action === "deny" ? "Deny" : "Allow",
+          );
+          const ruling = await peekHitlRuling({
+            session: f.trusted.session,
+            offerId,
+          });
+          if (action === "deny") expect(ruling).toBe("deny");
+          else expect(ruling).not.toBe("approve");
+          if (action === "dismiss") expect(ruling).not.toBe("deny");
+        } finally {
+          await f.plugin.onCleanup(f.context);
+        }
+      }
+    } finally {
+      results.mockRestore();
+      calls.mockRestore();
+    }
+  });
 
   const INSPECTABLE_REVIEW_TEXT = [
     "[OpenAPPA] Approve this call?",
@@ -3440,7 +3805,7 @@ describe("asking through the client's own question tool", () => {
     try {
       await plugin.onSessionInit(context);
       const first = await askCard();
-      expect(first.card.question).toBe("Run archestra__start_run?");
+      expect(first.card.question).toBe("Run archestra__start_agent_run?");
       expect(first.card.options.map((option) => option.label)).toEqual([
         "Allow",
         "Deny",
@@ -8205,8 +8570,8 @@ describe("AppaPluginArchestra", () => {
   }
 
   for (const { name, wrapped } of [
-    { name: "archestra__get_run", wrapped: false },
-    { name: "archestra__get_run", wrapped: true },
+    { name: "archestra__get_agent_run", wrapped: false },
+    { name: "archestra__get_agent_run", wrapped: true },
     { name: "agent__worker", wrapped: false },
     { name: "agent__worker", wrapped: true },
   ]) {
@@ -8278,7 +8643,8 @@ describe("AppaPluginArchestra", () => {
             proof,
             organizationId: organization.id,
             callerId: "user:user",
-            action: name === "archestra__get_run" ? "get_run" : name,
+            action:
+              name === "archestra__get_agent_run" ? "get_agent_run" : name,
             arguments: original,
             secret: config.openappa.offerSigningSecret,
           }),

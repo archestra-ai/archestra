@@ -1935,16 +1935,19 @@ describe("ConnectCommandPanel", () => {
     });
 
     it("surfaces the model in the review step and sends it with the setup", async () => {
+      modelsByProviderMock.mockReturnValue({
+        openai: [{ id: "gpt-5.5" }, { id: "gpt-6.1-sol" }],
+      });
       renderPanel({ client: findClient("copilot-cli") });
 
       // first supported provider (OpenAI) → its default model is preselected
-      expect(await screen.findByText("gpt-5.5")).toBeInTheDocument();
+      expect(await screen.findByText("gpt-6.1-sol")).toBeInTheDocument();
       expect(screen.getByTestId("connect-change-model")).toBeInTheDocument();
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({
             clientId: "copilot-cli",
-            model: "gpt-5.5",
+            model: "gpt-6.1-sol",
           }),
         ),
       );

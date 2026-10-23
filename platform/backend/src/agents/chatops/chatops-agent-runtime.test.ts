@@ -1,4 +1,4 @@
-import { TOOL_POST_RUN_MESSAGE_FULL_NAME } from "@archestra/shared";
+import { TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { onTestFinished, vi } from "vitest";
 import * as a2aExecutor from "@/agents/a2a-executor";
@@ -207,7 +207,7 @@ test.each([
       viewerRole: "owner",
     });
     const update = await executeArchestraTool(
-      TOOL_POST_RUN_MESSAGE_FULL_NAME,
+      TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       {
         task_id: run?.taskId,
         message: "I found the cause and am checking the fix.",
@@ -289,7 +289,7 @@ test("runtime updates report transport failures and respect a thread stopped mid
   if (!run) throw new Error("Expected a runtime run");
   const post = () =>
     executeArchestraTool(
-      TOOL_POST_RUN_MESSAGE_FULL_NAME,
+      TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       { task_id: run.taskId, message: "Still investigating." },
       {
         agent: { id: agent.id, name: agent.name },
@@ -510,7 +510,7 @@ test.each([
   const prompt = JSON.stringify(spec);
   expect(prompt).toContain(incoming.text);
   expect(prompt).not.toContain("You are replying via");
-  expect(prompt.includes(TOOL_POST_RUN_MESSAGE_FULL_NAME)).toBe(
+  expect(prompt.includes(TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME)).toBe(
     providerId === "slack",
   );
   expect(prompt.includes("proactively send brief updates")).toBe(
@@ -1141,7 +1141,7 @@ async function latestRun() {
     await A2ATaskModel.listForActor({
       actorKind: "user",
       actorId: userId,
-      agentId: agent.id,
+      agentIds: [agent.id],
       pageSize: 1,
     })
   ).tasks;

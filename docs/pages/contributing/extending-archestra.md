@@ -34,7 +34,7 @@ Most of the wiring is a typed record, so the compiler lists it for you.
 - **Types:** create `backend/src/types/llm-providers/<provider>/` with `api.ts`, `messages.ts`, `tools.ts`, and `index.ts`. Re-export OpenAI's schemas with `.passthrough()` to keep custom fields. Export the namespace from `backend/src/types/llm-providers/index.ts`.
 - **Adapter:** create `backend/src/routes/proxy/adapters/<provider>.ts` with `createOpenAiCompatibleAdapterFactory`, and export it from `adapters/index.ts`.
 - **Proxy route:** copy `backend/src/routes/proxy/routes/deepseek.ts`. Register the route IDs in `shared/routes.ts`, export the plugin from `backend/src/routes/index.ts`, and add it to `registerWorkerRoutes` in `backend/src/server.ts`.
-- **Configuration:** in `backend/src/config.ts`, expose `llm.<provider>.baseUrl` and `chat.<provider>.apiKey`. Add both to `.env.example` and to the [Configuration](/docs/reference/configuration) reference.
+- **Configuration:** in `backend/src/config.ts`, expose `llm.<provider>.baseUrl` and `chat.<provider>.apiKey`. Add both to `.env.example` and to the [Configuration](/docs/admin/deployment/configuration) reference.
 
 <span id="native-api-providers"></span>
 
@@ -138,7 +138,7 @@ Set `requiresResultVerification = true` on an external backend. Archestra then r
 
 ### Wire It In
 
-1. Expose the connection settings under `kb` in `backend/src/config.ts`, with matching `ARCHESTRA_KNOWLEDGE_BASE_*` variables in `.env.example` and the [Configuration](/docs/reference/configuration) reference.
+1. Expose the connection settings under `kb` in `backend/src/config.ts`, with matching `ARCHESTRA_KNOWLEDGE_BASE_*` variables in `.env.example` and the [Configuration](/docs/admin/deployment/configuration) reference.
 2. Construct the backend in `backend/src/knowledge-base/retrieval-backends/registry.ts`. The registry has no selector yet, so add an enum setting and a switch where the singleton is built.
 3. Add a document-deletion hook. PostgreSQL deletes chunks by foreign-key cascade, which an external index never sees.
 

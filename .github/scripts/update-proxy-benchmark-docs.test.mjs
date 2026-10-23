@@ -236,11 +236,24 @@ test("concurrent branch updates are not overwritten; permission failures remain 
     const f = fixture();
     f.github.rest.git.updateRef = async ({ force }) => {
       assert.equal(force, false);
+      if (status !== 403) f.current.head.sha = "f".repeat(40);
       throw Object.assign(new Error("GitHub rejected the update"), { status });
     };
     if (status === 403)
       await assert.rejects(commitBenchmarkDocs(f), /rejected/);
     else assert.equal(await commitBenchmarkDocs(f), "superseded");
+  }
+});
+
+test("a rejected write at an unchanged head fails visibly instead of claiming a race", async () => {
+  for (const status of [409, 422]) {
+    const f = fixture();
+    f.github.rest.git.updateRef = async () => {
+      throw Object.assign(new Error("Write rejected without a newer head"), {
+        status,
+      });
+    };
+    await assert.rejects(commitBenchmarkDocs(f), /without a newer head/);
   }
 });
 

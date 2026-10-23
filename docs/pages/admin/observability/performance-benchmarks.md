@@ -24,9 +24,9 @@ Release Please PRs regenerate this table from successful CI measurements. Each w
 <!-- proxy-benchmark-results:start -->
 | Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chat (c=50) | 322.3 | 100.00% | 141.80 / 154.27 / 158.68 | 129.35 / 141.45 / 146.67 | 153.21 / 165.59 / 169.56 | — |
-| Tool definition (c=50) | 311.5 | 100.00% | 147.03 / 161.55 / 165.34 | 135.02 / 147.82 / 151.28 | 159.45 / 173.67 / 176.04 | — |
-| Streaming (c=50) | 99.9 | 100.00% | — | — | 355.57 / 366.90 / 367.65 | 138.64 |
+| Chat (c=50) | 204.6 | 100.00% | 176.74 / 460.28 / 476.97 | 170.35 / 447.06 / 464.67 | 194.38 / 481.07 / 490.44 | — |
+| Tool definition (c=50) | 273.3 | 100.00% | 165.26 / 191.37 / 212.67 | 151.70 / 174.21 / 190.66 | 179.19 / 210.07 / 228.02 | — |
+| Streaming (c=50) | 98.7 | 100.00% | — | — | 354.11 / 381.27 / 382.29 | 149.90 |
 <!-- proxy-benchmark-results:end -->
 
 Gateway latency spans server receipt through response serialization, including authentication and awaited persistence. Gateway overhead subtracts each request's upstream SDK-call duration before calculating percentiles. Client latency ends after complete body delivery; streaming reports time to first content, with complete-stream gateway timing unmeasured (`—`).

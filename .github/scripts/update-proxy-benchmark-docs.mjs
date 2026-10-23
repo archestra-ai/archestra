@@ -134,7 +134,8 @@ export async function commitBenchmarkDocs({
       force: false,
     });
   } catch (error) {
-    if (error.status === 409 || error.status === 422) return "superseded";
+    if ((error.status === 409 || error.status === 422) && !(await isCurrent()))
+      return "superseded";
     throw error;
   }
   return "updated";

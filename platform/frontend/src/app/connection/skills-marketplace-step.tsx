@@ -769,6 +769,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
     client.id === "codex" ||
     client.id === "copilot-cli" ||
     client.id === "cursor" ||
+    client.id === "pi" ||
     isOpenCodeFamilyClient(client.id) ||
     usesGenericInstructions(client)
   );

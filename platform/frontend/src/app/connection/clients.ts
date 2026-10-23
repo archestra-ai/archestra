@@ -7,9 +7,13 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeFamilyDescriptor,
   openCodePassthroughBaseUrl,
+  PI_MARK,
   type SupportedProvider,
 } from "@archestra/shared";
-import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
+import {
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  NATIVE_SESSION_CLIENT_LABELS,
+} from "@archestra/shared/connection-setup";
 import {
   CLAUDE_MARK,
   GROK_MARK,
@@ -878,6 +882,52 @@ export COPILOT_MODEL="<model-name>"`,
           ],
         };
       },
+    },
+  },
+  {
+    id: "pi",
+    label: "Pi",
+    sub: "Open-source coding CLI",
+    ...markFields(PI_MARK),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "~/.pi/agent/mcp.json",
+      language: "json",
+      steps: [
+        {
+          title: "Install Pi 1.4 or later",
+          body: "Install @earendil-works/pi-coding-agent with pnpm, then use the setup command on this page. Include both tools and the LLM proxy.",
+          buildCommand: () => "pnpm add -g @earendil-works/pi-coding-agent",
+          language: "bash",
+        },
+        {
+          title: "Sign in to the gateway",
+          body: "The installer adds direct MCP tools and the native guardrails extension. Complete the browser sign-in before starting Pi.",
+          buildCommand: ({ serverName }) =>
+            `pi mcp login ${shellArg(serverName)}`,
+          language: "bash",
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: [...INSTALLER_CLIENT_KEY_PROVIDERS.pi],
+      build: () => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Run the connection setup",
+            body: "Keep tools and the LLM proxy selected. The installer saves your authorized provider catalog and installs the native guardrails extension, shared skills and arcpi launcher.",
+          },
+          {
+            title: "Start Pi with guardrails",
+            code: "arcpi",
+            language: "bash",
+            body: "Native tools and compaction use the same policy session as model requests. Tree navigation and summaries retain the policy session. Nested tool execution remains blocked. Use Pi’s /model picker to switch among the connected providers and models. Providers outside this connection remain blocked.",
+          },
+        ],
+      }),
     },
   },
   ...POPULAR_GENERIC_CLIENTS.map(

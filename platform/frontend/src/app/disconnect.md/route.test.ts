@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 
 import { GET } from "./route";
 
@@ -107,4 +107,19 @@ describe("Disconnect agent instructions", () => {
     );
     expect(instructions).not.toContain("opencode");
   });
+});
+
+test("Pi recovery uses the snapshot helper and preserves shared skills and missing originals", async () => {
+  const response = GET(
+    new Request("http://localhost:3000/disconnect.md?client=pi"),
+  );
+  const text = await response.text();
+  expect(text).toContain("arcpi --disconnect");
+  expect(text).not.toContain("-startup-guard");
+  expect(text).not.toContain("Delete the");
+  expect(text).toContain("install-state.json");
+  expect(text).toContain("Do not infer original settings");
+  expect(text).toContain(
+    "Do not revoke shared keys or remove shared marketplace files",
+  );
 });

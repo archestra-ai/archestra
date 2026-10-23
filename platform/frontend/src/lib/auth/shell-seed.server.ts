@@ -373,6 +373,7 @@ async function readConnectionApproval(options: {
     skillNames,
     plugins,
     availableApiKeys,
+    models,
   });
   const queries = connectionApprovalSeedQueries({
     connectRequest: options.connectRequest,
@@ -421,6 +422,7 @@ async function prepareFirstSetup(params: {
   llmProxy: archestraApiTypes.GetLlmProxyResponses["200"] | null | undefined;
   skillNames: archestraApiTypes.GetSkillNamesResponses["200"] | undefined;
   plugins: archestraApiTypes.GetPluginsResponses["200"] | undefined;
+  models: archestraApiTypes.GetLlmModelsResponses["200"] | undefined;
   availableApiKeys:
     | archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"]
     | undefined;
@@ -477,6 +479,7 @@ async function prepareFirstSetup(params: {
     skillNames: params.skillNames ?? null,
     plugins: params.plugins ?? null,
     availableKeys: params.availableApiKeys ?? null,
+    models: params.models,
   });
   if (!inputs) return undefined;
   const inputsKey = connectionSetupInputsKey(inputs);

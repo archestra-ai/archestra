@@ -239,6 +239,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["openid", "profile", "email"],
@@ -261,6 +262,7 @@ describe("OAuth helper functions", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
+            resource: "https://example.com/mcp",
             scopes_supported: ["mcp:read", "mcp:write"],
           }),
         }) as Mock;
@@ -287,6 +289,7 @@ describe("OAuth helper functions", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
+            issuer: "https://example.com",
             authorization_endpoint: "https://example.com/authorize",
             token_endpoint: "https://example.com/token",
             scopes_supported: ["api:read"],
@@ -308,6 +311,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           scopes_supported: ["jira:read"],
@@ -340,6 +344,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          resource: "https://example.com/mcp",
           scopes_supported: ["mcp:read"],
         }),
       }) as Mock;
@@ -369,6 +374,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           scopes_supported: ["jira:read"],
@@ -433,6 +439,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["jira:read"],
@@ -461,6 +468,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["jira:write"],
@@ -581,6 +589,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
         }),
@@ -600,10 +609,7 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://auth.example.com/authorize",
         tokenEndpoint: "https://auth.example.com/token",
         registrationEndpoint: undefined,
-        // Carried out of discovery for the RFC 9207 issuer check. This
-        // metadata declares neither, so there is nothing to record and the
-        // server has not advertised iss support.
-        issuer: undefined,
+        issuer: "https://auth.example.com",
         issParameterSupported: false,
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -735,7 +741,7 @@ describe("OAuth helper functions", () => {
       });
     });
 
-    test("accepts an issuer that differs from the discovery URL only by a trailing slash", async () => {
+    test("rejects an issuer that differs from the discovery URL only by a trailing slash", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -747,19 +753,16 @@ describe("OAuth helper functions", () => {
       }) as Mock;
       globalThis.fetch = fetchMock;
 
-      const endpoints = await discoverOAuthEndpoints({
-        server_url: "https://auth.example.com",
-        supports_resource_metadata: false,
-      });
-
-      expect(endpoints.registrationEndpoint).toBe(
-        "https://auth.example.com/register",
-      );
-      // The first candidate matched, so discovery stopped there.
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await expect(
+        discoverOAuthEndpoints({
+          server_url: "https://auth.example.com",
+          supports_resource_metadata: false,
+        }),
+      ).rejects.toThrow("issuer does not match");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    test("falls back to the first valid metadata when no candidate matches the discovery URL", async () => {
+    test("accepts the matching root issuer during legacy discovery from an MCP URL", async () => {
       // Servers without protected resource metadata are discovered from the
       // MCP URL itself, which is not an issuer; their metadata lives at the
       // origin and must keep working.
@@ -832,6 +835,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://mcp.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           registration_endpoint: "https://auth.example.com/register",
@@ -850,7 +854,7 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
         tokenEndpoint: "https://legacy-idp.example.com/oauth/token",
         registrationEndpoint: "https://auth.example.com/register",
-        issuer: undefined,
+        issuer: "https://mcp.example.com",
         issParameterSupported: false,
       });
 
@@ -927,6 +931,7 @@ describe("OAuth routes", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
+        issuer: "https://login.example.com/tenant/v2.0",
         authorization_endpoint:
           "https://login.example.com/tenant/oauth2/v2.0/authorize",
         token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
@@ -1012,6 +1017,7 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1435,6 +1441,7 @@ describe("OAuth routes", () => {
             ok: true,
             status: 200,
             json: async () => ({
+              issuer: "https://mcp.example.com",
               authorization_endpoint: "https://auth.example.com/authorize",
               token_endpoint: tokenEndpoint,
               registration_endpoint: registrationEndpoint,
@@ -1768,6 +1775,7 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1827,6 +1835,7 @@ describe("OAuth dynamic client registration client name", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://mcp.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           registration_endpoint: REGISTRATION_ENDPOINT,
@@ -2074,6 +2083,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
         return {
           ok: true,
           json: async () => ({
+            issuer: "https://mcp.example.com",
             authorization_endpoint: "https://auth.example.com/authorize",
             token_endpoint: "https://auth.example.com/token",
             registration_endpoint: REGISTRATION_ENDPOINT,

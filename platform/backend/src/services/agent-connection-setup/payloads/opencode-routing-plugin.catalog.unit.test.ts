@@ -516,6 +516,16 @@ describe("managed catalog plugin", () => {
       key: "passthrough-secret",
     },
     {
+      setup: "an older setup with an empty passthrough field",
+      installed: {
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        passthroughHeaders: {},
+      },
+      key: "passthrough-secret",
+    },
+    {
       setup: "a setup that left an empty entry for the route",
       installed: {
         routeHeaders: { xai: {} },

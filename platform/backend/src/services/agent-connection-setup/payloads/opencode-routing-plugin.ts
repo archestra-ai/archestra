@@ -606,11 +606,11 @@ export default {
  * without it the proxy rejects the user's own sign-in there.
  */
 const RUNTIME_ROUTE_HEADERS = `const installedRouteHeaders = runtimeParams.routeHeaders ?? {};
-const passthroughHeaders = runtimeParams.passthroughHeaders ?? Object.values(installedRouteHeaders)
-  .map((headers) => Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => name.toLowerCase() === ${JSON.stringify(VIRTUAL_KEY_HEADER.toLowerCase())})))
-  .find((headers) => Object.keys(headers).length > 0);
+const nonEmptyHeaders = (headers) => headers && Object.keys(headers).length > 0 ? headers : undefined;
+const passthroughKeyOnly = (headers) => nonEmptyHeaders(Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => name.toLowerCase() === ${JSON.stringify(VIRTUAL_KEY_HEADER.toLowerCase())})));
+const passthroughHeaders = nonEmptyHeaders(runtimeParams.passthroughHeaders) ?? Object.values(installedRouteHeaders).map(passthroughKeyOnly).find(Boolean);
 const routeHeaders = passthroughHeaders
-  ? { ...installedRouteHeaders, ...Object.fromEntries(catalogPassthrough.map((id) => [id, Object.keys(installedRouteHeaders[id] ?? {}).length ? installedRouteHeaders[id] : passthroughHeaders])) }
+  ? { ...installedRouteHeaders, ...Object.fromEntries(catalogPassthrough.map((id) => [id, nonEmptyHeaders(installedRouteHeaders[id]) ?? passthroughHeaders])) }
   : installedRouteHeaders;`;
 
 function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {

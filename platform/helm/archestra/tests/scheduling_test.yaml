@@ -1,0 +1,509 @@
+suite: web and worker scheduling
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: web omits scheduling constraints by default
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: web inherits every shared scheduling field
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set: &sharedScheduling
+      archestra.nodeSelector: &sharedSelector
+        kubernetes.io/os: linux
+        nodepool: shared
+      archestra.tolerations: &sharedTolerations
+        - key: shared
+          operator: Exists
+          effect: NoSchedule
+      archestra.affinity: &sharedAffinity
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/part-of: archestra
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web inherits shared scheduling for explicit null fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: null
+      archestra.web.tolerations: null
+      archestra.web.affinity: null
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web clears shared scheduling with explicit empty collections
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: {}
+      archestra.web.tolerations: []
+      archestra.web.affinity: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: web uses its own selector, taint tolerations and required affinity without merging shared or
+      other tier fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: &webSelector
+        nodepool: general-purpose
+      archestra.web.tolerations: &webTolerations
+        - key: dedicated
+          operator: Equal
+          value: web
+          effect: NoSchedule
+      archestra.web.affinity: &webAffinity
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nodepool
+                    operator: In
+                    values:
+                      - general-purpose
+      archestra.worker.nodeSelector: &workerSelector
+        nodepool: memory-optimized
+      archestra.worker.tolerations: &workerTolerations
+        - key: dedicated
+          operator: Equal
+          value: workers
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+      archestra.worker.affinity: &workerAffinity
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nodepool
+                    operator: In
+                    values:
+                      - memory-optimized
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *webSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *webTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *webAffinity
+  - it: web overrides nodeSelector while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: *webSelector
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *webSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web clears nodeSelector while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web overrides tolerations while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.tolerations: *webTolerations
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *webTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web clears tolerations while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.tolerations: []
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web overrides affinity while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.affinity: *webAffinity
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *webAffinity
+  - it: web clears affinity while inheriting other shared fields
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.affinity: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: web ignores scheduling overrides for the other tier
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.worker.nodeSelector: *workerSelector
+      archestra.worker.tolerations: *workerTolerations
+      archestra.worker.affinity: *workerAffinity
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: worker omits scheduling constraints by default
+    template: archestra-worker.yaml
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: worker inherits every shared scheduling field
+    template: archestra-worker.yaml
+    set: *sharedScheduling
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker inherits shared scheduling for explicit null fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.nodeSelector: null
+      archestra.worker.tolerations: null
+      archestra.worker.affinity: null
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker clears shared scheduling with explicit empty collections
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.nodeSelector: {}
+      archestra.worker.tolerations: []
+      archestra.worker.affinity: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: worker uses its own selector, taint tolerations and required affinity without merging shared or
+      other tier fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: *webSelector
+      archestra.web.tolerations: *webTolerations
+      archestra.web.affinity: *webAffinity
+      archestra.worker.nodeSelector: *workerSelector
+      archestra.worker.tolerations: *workerTolerations
+      archestra.worker.affinity: *workerAffinity
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *workerSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *workerTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *workerAffinity
+  - it: worker overrides nodeSelector while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.nodeSelector: *workerSelector
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *workerSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker clears nodeSelector while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.nodeSelector: {}
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker overrides tolerations while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.tolerations: *workerTolerations
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *workerTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker clears tolerations while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.tolerations: []
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: worker overrides affinity while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.affinity: *workerAffinity
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *workerAffinity
+  - it: worker clears affinity while inheriting other shared fields
+    template: archestra-worker.yaml
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.worker.affinity: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: worker ignores scheduling overrides for the other tier
+    template: archestra-worker.yaml
+    set:
+      archestra.web.nodeSelector: *webSelector
+      archestra.web.tolerations: *webTolerations
+      archestra.web.affinity: *webAffinity
+    asserts:
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - isNull:
+          path: spec.template.spec.tolerations
+      - isNull:
+          path: spec.template.spec.affinity
+  - it: web inherits shared settings when its entire section is null
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web: null
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *sharedSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *sharedTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *sharedAffinity
+  - it: web uses its own scheduling when workers run in process
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.worker.enabled: false
+      archestra.nodeSelector: *sharedSelector
+      archestra.tolerations: *sharedTolerations
+      archestra.affinity: *sharedAffinity
+      archestra.web.nodeSelector: *webSelector
+      archestra.web.tolerations: *webTolerations
+      archestra.web.affinity: *webAffinity
+      archestra.worker.nodeSelector: *workerSelector
+      archestra.worker.tolerations: *workerTolerations
+      archestra.worker.affinity: *workerAffinity
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: *webSelector
+      - equal:
+          path: spec.template.spec.tolerations
+          value: *webTolerations
+      - equal:
+          path: spec.template.spec.affinity
+          value: *webAffinity
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_PROCESS_TYPE
+  - it: omits the disabled worker despite worker scheduling overrides
+    template: archestra-worker.yaml
+    set:
+      archestra.worker.enabled: false
+      archestra.web.nodeSelector: *webSelector
+      archestra.web.tolerations: *webTolerations
+      archestra.web.affinity: *webAffinity
+      archestra.worker.nodeSelector: *workerSelector
+      archestra.worker.tolerations: *workerTolerations
+      archestra.worker.affinity: *workerAffinity
+    asserts:
+      - hasDocuments:
+          count: 0

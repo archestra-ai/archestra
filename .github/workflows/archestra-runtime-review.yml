@@ -25,7 +25,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft &&
       !contains(github.event.pull_request.title, '[WIP]')
-    uses: archestra-ai/code-review-action/.github/workflows/resolve-actor-token.yml@9c1bcf2430c7701d68f18f6d263b5d302bea414d # v0.2.2
+    uses: archestra-ai/code-review-action/.github/workflows/resolve-actor-token.yml@57f545b3f6874a3876039e8d8239ee780b15a5c7 # v0.3.0
 
   review:
     name: Archestra Review
@@ -40,7 +40,7 @@ jobs:
       pull-requests: write # Post the review comment and inline comments.
       checks: read # Count the failing checks of the reviewed commit.
       actions: read # The shared job asks for it (CI triage); unused by a review.
-    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@2c755554c9931eb5b26c4917c534482b4360f979 # v1.5.0
+    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@e056f9a75ab0989415271d40c6cec6b0a4a5c81c # v1.6.0
     with:
       kind: review
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}

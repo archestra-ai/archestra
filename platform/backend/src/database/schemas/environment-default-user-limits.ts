@@ -11,7 +11,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { LimitCleanupInterval } from "@/types";
+import type { BudgetCleanupInterval } from "@/types";
 import environmentsTable from "./environment";
 import organizationsTable from "./organization";
 
@@ -55,7 +55,7 @@ const environmentDefaultUserLimitsTable = pgTable(
     /** Models covered by the limit. Null means all models. */
     model: jsonb("model").$type<string[] | null>(),
     cleanupInterval: varchar("cleanup_interval")
-      .$type<LimitCleanupInterval>()
+      .$type<BudgetCleanupInterval>()
       .notNull()
       .default("calendar_month"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

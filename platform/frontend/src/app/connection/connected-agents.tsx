@@ -84,10 +84,21 @@ export function useConnectedAgents(): {
 function connectClientOf(record: ConnectedClient): ConnectClient {
   const listed = CONNECT_CLIENTS.find((c) => c.id === record.clientId);
   if (listed) return listed;
+  // Pi's native OAuth registration uses the name "pi". Recognize its mark
+  // for display only: retain the opaque connection id and generic actions.
+  const piDisplay =
+    record.clientId.startsWith("oauth:") &&
+    record.name.trim().toLowerCase() === "pi"
+      ? CONNECT_CLIENTS.find((c) => c.id === "pi")
+      : undefined;
   return {
     ...GENERIC_CLIENT,
     id: record.clientId,
-    label: record.name,
+    label: piDisplay?.label ?? record.name,
+    svg: piDisplay?.svg,
+    svgViewBox: piDisplay?.svgViewBox,
+    iconColor: piDisplay?.iconColor,
+    tileBg: piDisplay?.tileBg,
     sub: "Signed in to the gateway",
     iconOverride: {
       ...GENERIC_CLIENT.iconOverride,
@@ -481,7 +492,7 @@ function DisconnectSteps({
           <CopyPrompt text={disconnectPrompt(data, client, origin)} />
         )}
       </div>
-      {!manualOnly && guard && (
+      {!manualOnly && (guard || client.id === "pi") && (
         <div className="space-y-2">
           <p className="text-muted-foreground">
             If {nameOf(client)}
@@ -489,9 +500,11 @@ function DisconnectSteps({
           </p>
           <CopyPrompt
             text={
-              windows
-                ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
-                : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
+              client.id === "pi"
+                ? "arcpi --disconnect"
+                : windows
+                  ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
+                  : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
             }
           />
         </div>

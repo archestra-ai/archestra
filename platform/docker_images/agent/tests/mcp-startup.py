@@ -41,6 +41,12 @@ class Gateway(ThreadingHTTPServer):
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
+        # Grok side calls (no use_tool) that carry the task text.
+        self.aux_task_requests = []
+
+    def inference(self):
+        """Every model request that worked on the task, side calls included."""
+        return self.requests + self.aux_task_requests
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -116,6 +122,15 @@ class Handler(BaseHTTPRequestHandler):
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:
                 names.append(tool.get("name") or tool.get("function", {}).get("name", ""))
+        if CLIENT == "grok" and "use_tool" not in names:
+            # Session summaries and other side calls declare no gateway route.
+            # One that carries the task still counts as inference for the
+            # barrier: it must not run before the catalog is loaded.
+            if "recovery tool" in json.dumps(request.get("messages") or ""):
+                self.server.aux_task_requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
+            self.reply_id = "aux"
+            self.chat(None, request)
+            return
         if not names:
             self.respond({"id": "resp_aux", "object": "response", "status": "completed", "output": [], "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}})
             return
@@ -126,6 +141,9 @@ class Handler(BaseHTTPRequestHandler):
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
+        if CLIENT == "grok":
+            # Grok reaches MCP tools only through its use_tool dispatcher.
+            tool = "use_tool" if len(self.server.calls) < len(TOOLS) else None
         if self.path.split("?", 1)[0].endswith("/messages"):
             self.anthropic(tool)
         elif self.path.endswith("/chat/completions"):
@@ -156,7 +174,9 @@ class Handler(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
+            # The bridge spells gateway `__` as `--`; Grok prefixes its server name.
+            arguments = json.dumps({"tool_name": "archestra__" + TOOLS[len(self.server.calls)].replace("__", "--"), "tool_input": {}}) if CLIENT == "grok" else "{}"
+            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": arguments}}]}
             finish = "tool_calls"
         response = {"id": "chatcmpl-test", "object": "chat.completion", "created": 1, "model": "gpt-4.1", "choices": [{"index": 0, "message": message, "finish_reason": finish}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
         if request.get("stream"):
@@ -258,7 +278,7 @@ class StartupTest(unittest.TestCase):
             server = Gateway(failure)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             origin = f"http://127.0.0.1:{server.server_port}"
-            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT == "hermes" else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
+            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT in ("hermes", "grok") else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "grok-4.7" if CLIENT == "grok" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
             if submission_failure:
                 # Only the task paste fails; the pane and MCP status probes work.
                 shim = root / "shim"
@@ -279,6 +299,7 @@ class StartupTest(unittest.TestCase):
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
                         server.requests.clear()
+                        server.aux_task_requests.clear()
                         server.calls.clear()
                         server.catalog_sent = False
                         server.list_started.clear()
@@ -334,15 +355,15 @@ class StartupTest(unittest.TestCase):
                         os.write(fd, b"\x1b[1;1R")
                     if b"\x1b[c" in chunk:
                         os.write(fd, b"\x1b[?1;2c")
-                if idle and server.requests:
+                if idle and server.inference():
                     self.fail("Idle resume submitted inference without a prompt")
-                if (failure or submission_failure) and server.requests:
-                    self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
+                if (failure or submission_failure) and server.inference():
+                    self.fail("Inference ran after required gateway discovery failed: " + repr(server.inference()[:1]))
                 if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
                     break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()
-                    self.assertFalse(server.requests, "Inference began while tools/list was held")
+                    self.assertFalse(server.inference(), "Inference began while tools/list was held")
                     if not failure and time.monotonic() - held_since >= hold:
                         print(f"{CLIENT}: releasing discovery barrier", flush=True)
                         server.release.set()
@@ -361,7 +382,7 @@ class StartupTest(unittest.TestCase):
                 self.assertEqual(binding, env["ARCHESTRA_AGENT_RUNTIME_BINDING"], f"{path}: missing or stale workspace binding")
             if failure:
                 self.assertTrue(server.discovery_failed.is_set(), details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 self.assertTrue(Path(turn_prefix + ".failure").exists(), details)
                 envelope = json.loads(Path(turn_prefix + ".failure").read_text())
                 self.assertIn(envelope["code"], ("mcp_startup", "codex_startup"))
@@ -372,7 +393,7 @@ class StartupTest(unittest.TestCase):
                 return
             if submission_failure:
                 self.assertTrue(server.catalog_sent, details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 envelope = json.loads(Path(turn_prefix + ".failure").read_text())
                 self.assertEqual(envelope["code"], "task_submission", details)
                 self.assertNotIn("MCP", envelope["message"])
@@ -386,7 +407,7 @@ class StartupTest(unittest.TestCase):
                 # Claude's terminal gate must finish even for an idle restore.
                 if CLIENT == "claude-code" or server.list_started.is_set():
                     self.assertTrue(server.catalog_sent, details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 self.assertFalse(server.calls, details)
                 self.assertIsNone(status, "Idle resumed client exited")
                 print(f"{CLIENT}: saved session restored with no automatic inference", flush=True)
@@ -394,8 +415,14 @@ class StartupTest(unittest.TestCase):
             self.assertTrue(server.list_started.is_set(), details)
             self.assertEqual(server.calls, TOOLS, details + "\nRequests: " + repr(server.requests[:2]))
             self.assertGreaterEqual(len(server.requests), 4, details)
+            for request in server.aux_task_requests:
+                self.assertTrue(request["catalog_sent"], "A side call worked on the task before catalog discovery")
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")
+                if CLIENT == "grok":
+                    # Grok declares its MCP dispatcher, not each gateway tool.
+                    self.assertTrue({"search_tool", "use_tool"} <= set(request["names"]), request)
+                    continue
                 for tool in TOOLS:
                     self.assertTrue(any(name.endswith(tool.removeprefix("archestra__")) for name in request["names"]), (tool, request))
             if not plain:

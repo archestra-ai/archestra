@@ -22,15 +22,26 @@ const timeSeries = (scale: number) =>
 
 const modelStatistics = MODEL_NAMES.map((model, index) => {
   const cost = 100 - index * 12;
+  const inputTokens = 1_000_000 - index * 1_000;
+  const outputTokens = 400_000 - index * 1_000;
+  const cacheReadTokens = 200_000 - index * 1_000;
+  const cacheWriteTokens = 0;
+  const totalTokens =
+    inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
   return {
     model,
     requests: 500 - index * 20,
-    inputTokens: 1_000_000 - index * 1_000,
-    outputTokens: 400_000 - index * 1_000,
-    cacheReadTokens: 200_000 - index * 1_000,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens,
     cost,
     percentage: 100 / MODEL_NAMES.length,
-    timeSeries: timeSeries(cost / 20),
+    timeSeries: timeSeries(cost / 20).map((point) => ({
+      ...point,
+      totalTokens,
+    })),
   };
 });
 

@@ -263,6 +263,16 @@ describe("UsageStatisticsModel.getAppUsage", () => {
       billingMode: "metered",
       inputTokens: 100,
       outputTokens: 10,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 15,
+      createdAt: DAY_2,
+    });
+    await makeInteraction(agent.id, {
+      appId: board.id,
+      source: "app:llm_complete",
+      inputTokens: 80,
+      inputTokensEstimated: true,
+      outputTokens: 5,
       createdAt: DAY_2,
     });
     await makeInteraction(agent.id, {
@@ -293,9 +303,12 @@ describe("UsageStatisticsModel.getAppUsage", () => {
         day: "2026-10-02",
         appId: board.id,
         runs: 0,
-        llmRequests: 1,
-        inputTokens: 100,
-        outputTokens: 10,
+        llmRequests: 2,
+        inputTokens: 180,
+        outputTokens: 15,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 15,
+        totalTokens: 170,
         billedCost: 0.25,
         subscriptionCost: 0,
       }),
@@ -313,7 +326,8 @@ describe("UsageStatisticsModel.getAppUsage", () => {
     expect(result.totals).toMatchObject({
       runs: 2,
       toolCalls: 1,
-      llmRequests: 1,
+      llmRequests: 2,
+      totalTokens: 170,
       billedCost: 0.25,
     });
   });

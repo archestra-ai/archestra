@@ -46,11 +46,11 @@ describe("usage exploration", () => {
     await user.click(screen.getByRole("button", { name: /^Show / }));
     await user.click(screen.getByRole("menuitem", { name: "Tokens" }));
     await user.click(screen.getByRole("button", { name: "split by None" }));
-    await user.click(screen.getByRole("menuitem", { name: "Input / output" }));
+    await user.click(screen.getByRole("menuitem", { name: "Token type" }));
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
     await user.click(screen.getByRole("button", { name: "Copy as CSV" }));
     expect(write).toHaveBeenCalledWith(
-      "Model,Input,Output,total\nexample-model,80,20,100",
+      "Model,Input,Output,Cache reads,Cache writes,total\nexample-model,80,20,1000,10,1110",
     );
   });
   it("clears a row comparison through the shared toolbar", async () => {

@@ -3,6 +3,7 @@
 // and the REST call that returns the same data.
 
 import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ import {
   Segmented,
   SummaryTable,
 } from "./cost-explorer-parts";
+import { getCostLimitsLabel, getCostLimitsLink } from "./cost-limit-link";
 import { fmtMetric, KpiTile } from "./cost-overview";
 
 export default function CostExplorer() {
@@ -53,6 +55,7 @@ export default function CostExplorer() {
   const appName = useAppName();
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
   const canGroup = (group: DimId) =>
     (group !== "app" || canReadApps) && (group !== "skill" || canReadSkills);
   const [q, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
@@ -150,6 +153,17 @@ export default function CostExplorer() {
     .filter((r) => focus.has(r.key))
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
+  const focusedRows = cube.rows.filter((row) => focus.has(row.key));
+  const limitsLink = canReadLimits
+    ? getCostLimitsLink(
+        q,
+        focusedRows.length === 1 ? focusedRows[0] : undefined,
+      )
+    : null;
+  const limitsLabel = getCostLimitsLabel(
+    q,
+    focusedRows.length === 1 ? focusedRows[0] : undefined,
+  );
 
   return (
     <div
@@ -316,6 +330,18 @@ export default function CostExplorer() {
               onChange={(chart) => setQ((p) => ({ ...p, chart }))}
             />
           </div>
+          {limitsLink && (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="min-w-0 max-w-full"
+            >
+              <Link href={limitsLink} title={limitsLabel}>
+                <span className="max-w-64 truncate">{limitsLabel}</span>
+              </Link>
+            </Button>
+          )}
         </div>
 
         {/* Headline */}

@@ -71,6 +71,13 @@ export function renderStartupGuardPowerShell(
   client: StartupGuardClient,
 ): string {
   const resources = guardResources(ctx);
+  if (client.proxyCheckLabel)
+    for (const resource of resources)
+      if (resource.kind === "proxy") resource.label = client.proxyCheckLabel;
+  if (client.healthProbe)
+    for (const resource of resources) {
+      resource.downMarker = `"${resource.kind === "proxy" ? "llm" : resource.kind}":"down"`;
+    }
   const remoteEntries = resources
     .map(
       (r) =>
@@ -131,9 +138,10 @@ $GuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $SkipFile = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
 $DisconnectedKinds = @()
 if (Test-Path $SkipFile) { $DisconnectedKinds = @(Get-Content -Path $SkipFile | Where-Object { $_ }) }
+${client.atomicDisconnect ? "$DisconnectedKinds = @()" : ""}
 $ActiveRemotes = @($Remotes | Where-Object { $DisconnectedKinds -notcontains $_.Kind })
 
-function Add-ArchDisconnected([string]$Kind) { try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
+function Add-ArchDisconnected([string]$Kind) { ${client.atomicDisconnect ? "return;" : ""} try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
 
 # Set once the guard has removed itself, so later steps (e.g. the version-update
 # notice) don't advertise re-connecting to refresh a startup check that no
@@ -145,6 +153,7 @@ $Script:GuardUninstalled = $false
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
 function Remove-ArchGuard {
+  ${client.atomicDisconnect ? "$Script:GuardUninstalled = $true; return" : ""}
   ${
     client.clientId === "codex"
       ? `if (Test-Path ($GuardPath + '.handoff.cjs')) {
@@ -267,6 +276,7 @@ function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
 $Script:HealthBody = ''
 $Script:HealthState = ''  # 'ok' | 'down' | '' (no health URL)
 function Invoke-ArchHealthFetch {
+  ${client.healthProbe ? client.healthProbe.powershell : ""}
   try {
     $resp = Invoke-WebRequest -Uri $HealthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
     # normalize whitespace so the down markers match regardless of how the
@@ -475,6 +485,11 @@ ${client.windows.skillsDisconnect}
 # missing server exits 0 — so the check reads the config back instead. Clients
 # that ship no verifier keep the previous assume-success behaviour.
 function Test-ArchDisconnected([string]$Kind) {${
+    ctx.proxy && client.windows.proxyDisconnectVerify
+      ? `
+  if ($Kind -eq 'proxy') { ${client.windows.proxyDisconnectVerify} }`
+      : ""
+  }${
     ctx.mcp && client.windows.mcpDisconnectVerify
       ? `
   if ($Kind -eq 'mcp') {
@@ -667,6 +682,7 @@ function Invoke-ArchReconfigureMenu {
       if ($done.ContainsKey($r.Kind)) { continue }
       if (-not (Disconnect-ArchMenuRow ($d - 1) $count $baseTop)) { continue }
       $done[$r.Kind] = $true
+      ${client.atomicDisconnect ? "foreach ($remote in $ActiveRemotes) { $done[$remote.Kind] = $true }" : ""}
       if ($done.Count -ge $count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard; break }
     }
   }
@@ -918,6 +934,7 @@ function Show-ArchGuardScreen {
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
 else { try { Clear-Host } catch { } }
 ${guardHeader(ctx)}
+${client.disconnectNote ? `Write-Host ${psq(client.disconnectNote)}` : ""}
 # Every row is on screen from the start: probed rows keep their glyph, the
 # probing row is bright, and everything still waiting sits dim below it.
 # (Legacy consoles without VT keep the one-row-at-a-time rendering.)

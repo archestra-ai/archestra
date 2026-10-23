@@ -86,7 +86,7 @@ describe("CostsLayout", () => {
     render(<CostsLayout>content</CostsLayout>);
 
     expect(screen.getByTestId("description")).toHaveTextContent(
-      /across teams, agents, and models/i,
+      /track spend, token usage and requests across your organization/i,
     );
   });
 });

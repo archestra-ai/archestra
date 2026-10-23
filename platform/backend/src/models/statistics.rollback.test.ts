@@ -53,6 +53,108 @@ describe("StatisticsModel", () => {
     expect(stats.totals.billedCost).toBe(5);
     expect(stats.totals.inputTokens).toBe(30);
   });
+
+  test("reports disjoint cache tokens once and drops only estimated input", async ({
+    makeOrganization,
+    makeAgent,
+    makeInteraction,
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const team = await makeTeam(org.id, user.id, { name: "Reported" });
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: user.id,
+      access: { teams: [team.id] },
+    });
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "claude",
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 300,
+    });
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "claude",
+      inputTokens: 500,
+      inputTokensEstimated: true,
+      outputTokens: 7,
+      billingMode: "subscription",
+      cost: "4.0000000000",
+    });
+
+    const [teams, agents, models, users, mine, overview] = await Promise.all([
+      StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      }),
+      StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      }),
+      StatisticsModel.getModelStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      }),
+      StatisticsModel.getUserStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+        pagination: { limit: 10, offset: 0 },
+        sortBy: "totalTokens",
+        sortDirection: "desc",
+        includeTimeSeries: true,
+        includeModels: true,
+        requestingUserId: user.id,
+        canReadAllUsers: true,
+      }),
+      StatisticsModel.getMyStatistics({
+        timeframe: "24h",
+        userId: user.id,
+        organizationId: org.id,
+      }),
+      StatisticsModel.getOverviewStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      }),
+    ]);
+
+    // 100 uncached input + 20 output + 200 cache read + 300 cache write.
+    // The 500 estimated input is absent; the measured 7 output remains.
+    // The 1h write is not stored separately and must not be added again.
+    for (const row of [teams[0], agents[0], models[0], users.data[0], mine]) {
+      expect(row.inputTokens).toBe(600);
+      expect(row.cacheReadTokens).toBe(200);
+      expect(row.cacheWriteTokens).toBe(300);
+      expect(row.totalTokens).toBe(627);
+    }
+    expect(users.data[0].models?.[0].totalTokens).toBe(627);
+    expect(users.data[0].timeSeries?.[0].totalTokens).toBe(627);
+    expect(teams[0].timeSeries[0].totalTokens).toBe(627);
+    expect(overview.totalTokens).toBe(627);
+    expect(users.data[0].billedCost).toBe(0);
+    expect(users.data[0].subscriptionCost).toBeCloseTo(4, 5);
+    const breakdown = await StatisticsModel.getMyUsageBreakdown({
+      timeframe: "24h",
+      userId: user.id,
+      organizationId: org.id,
+      sessionLimit: 10,
+    });
+    expect(breakdown.tokenMix.freshInputTokens).toBe(100);
+    expect(
+      breakdown.tokenMix.freshInputTokens +
+        breakdown.tokenMix.outputTokens +
+        breakdown.tokenMix.cacheReadTokens +
+        breakdown.tokenMix.cacheWriteTokens,
+    ).toBe(mine.totalTokens);
+  });
   describe("getTeamStatistics", () => {
     test("counts team members per team instead of per organization", async ({
       makeAgent,
@@ -649,6 +751,8 @@ describe("StatisticsModel", () => {
           inputTokens: 1000,
           outputTokens: 500,
           cacheReadTokens: 100,
+          cacheWriteTokens: 10,
+          totalTokens: 1610,
           cost: 0.05,
         },
         {
@@ -658,6 +762,8 @@ describe("StatisticsModel", () => {
           inputTokens: 500,
           outputTokens: 250,
           cacheReadTokens: 8448,
+          cacheWriteTokens: 20,
+          totalTokens: 9218,
           cost: 0.025,
         },
       ];
@@ -677,6 +783,10 @@ describe("StatisticsModel", () => {
       expect((result[0] as { cacheReadTokens: number }).cacheReadTokens).toBe(
         8548,
       );
+      expect((result[0] as { cacheWriteTokens: number }).cacheWriteTokens).toBe(
+        30,
+      );
+      expect((result[0] as { totalTokens: number }).totalTokens).toBe(10828);
     });
 
     test("should preserve separate entries for different teams in same time bucket", () => {

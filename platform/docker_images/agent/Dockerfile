@@ -191,3 +191,35 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py openclaw
+
+# The npm package's postinstall only unpacks the platform binary into
+# ~/.grok/bin, under the persisted HOME, and writes ~/.grok/config.toml. Unpack
+# the pinned, checksummed binary into the image instead; the launcher writes
+# Grok's configuration at run time.
+FROM agent-base AS agent-grok
+ARG TARGETARCH
+# Set before the version check below so no Grok process looks for updates.
+ENV GROK_DISABLE_AUTOUPDATER=1
+USER root
+RUN case "$TARGETARCH" in \
+      amd64) grok_arch=x64; checksum=297c002381f4d80246343aef5837c89fd69a759fccc15e549c9adeddd2b0aa52 ;; \
+      arm64) grok_arch=arm64; checksum=05f62db666c802eea7f5aba1c1b3112a28bf345677ff36cb6f69a91ff9e1d02a ;; \
+      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && mkdir -p /tmp/grok /opt/grok/bin \
+ && cd /tmp/grok \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.67" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.67.tgz" \
+ && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
+ && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
+ && chmod 0755 /opt/grok/bin/grok \
+ && ln -s /opt/grok/bin/grok /usr/local/bin/grok \
+ && cd / && rm -rf /tmp/grok /root/.npm \
+ && HOME=/tmp/grok-version grok --version \
+ && rm -rf /tmp/grok-version \
+ && chown -R 1000:1000 /home/node
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py grok

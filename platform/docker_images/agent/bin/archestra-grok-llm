@@ -37,6 +37,9 @@ DISPATCHER_TOOLS = {"search_tool", "use_tool"}
 UPSTREAM_TIMEOUT_SECONDS = 600
 # Headers that describe one hop, never the message.
 HOP_HEADERS = {"host", "content-length", "accept-encoding", "connection", "transfer-encoding", "content-encoding", "keep-alive"}
+# Grok reads a response's media type and a 429's Retry-After. The adapter
+# writes these two under its own names and relays no other response header.
+FORWARDED_RESPONSE_HEADERS = ("Content-Type", "Retry-After")
 
 catalog_lock = threading.Lock()
 catalog_state: dict = {"mtime": None, "catalog": None}
@@ -317,8 +320,9 @@ class Handler(BaseHTTPRequestHandler):
             content_type = response.getheader("Content-Type") or "application/octet-stream"
             streaming = rewriter is not None and "text/event-stream" in content_type
             self.send_response(response.status)
-            for name, value in response.getheaders():
-                if name.lower() not in HOP_HEADERS:
+            for name in FORWARDED_RESPONSE_HEADERS:
+                value = response.getheader(name)
+                if value is not None:
                     # A header value never starts a line of its own.
                     self.send_header(name, value.replace("\r", "").replace("\n", ""))
             self.end_headers()

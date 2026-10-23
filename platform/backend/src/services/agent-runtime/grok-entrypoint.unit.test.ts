@@ -493,7 +493,7 @@ describe("Grok Build LLM wire adapter", () => {
       expect(response.headers.get("content-type")).toContain(
         "text/event-stream",
       );
-      expect(response.headers.get("x-request-id")).toBe("req-1");
+      expect(response.headers.get("x-request-id")).toBeNull();
       const events = (await response.text())
         .split("\n\n")
         .filter((event) => event.startsWith("data: "))
@@ -885,6 +885,46 @@ describe("Grok Build LLM wire adapter", () => {
     }
   });
 
+  test("relays the proxy's status and the headers Grok reads, no other", async () => {
+    const upstream = await fakeUpstream(() => ({
+      status: 429,
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({ error: { message: "quota", type: "rate_limit" } }),
+      headers: {
+        "retry-after": "7",
+        "x-request-id": "req-1",
+        "x-ratelimit-remaining-requests": "0",
+      },
+    }));
+    const adapter = await startAdapter(upstream.url, GATEWAY_TOOLS);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adapter.port}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "grok-4.7",
+            messages: [{ role: "user", content: "Hi" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("7");
+      expect(response.headers.get("content-type")).toBe(
+        "application/json; charset=utf-8",
+      );
+      expect(response.headers.get("x-request-id")).toBeNull();
+      expect(response.headers.get("x-ratelimit-remaining-requests")).toBeNull();
+      expect(await response.json()).toEqual({
+        error: { message: "quota", type: "rate_limit" },
+      });
+    } finally {
+      await adapter.stop();
+      upstream.close();
+    }
+  });
+
   test("exits with the launcher that started it", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
     try {
@@ -929,6 +969,7 @@ describe("Grok Build LLM wire adapter", () => {
 
 async function fakeUpstream(
   reply: (body: Record<string, unknown>) => {
+    status?: number;
     contentType: string;
     body: string;
     headers?: Record<string, string>;
@@ -948,7 +989,7 @@ async function fakeUpstream(
       const body = JSON.parse(data);
       requests.push({ url: request.url ?? "", body, headers: request.headers });
       const answer = reply(body);
-      response.writeHead(200, {
+      response.writeHead(answer.status ?? 200, {
         "Content-Type": answer.contentType,
         ...answer.headers,
       });

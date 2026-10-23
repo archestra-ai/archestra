@@ -488,6 +488,68 @@ describe("Grok Build turn hooks", () => {
     }
   });
 
+  test("publishes a placeholder answer when a delegated turn ends without a closing message", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+    try {
+      const runtime = path.join(root, "runtime");
+      const session = path.join(runtime, "grok", "sessions", "%2Fwork", "s-1");
+      await mkdir(session, { recursive: true });
+      await writeFile(path.join(runtime, "grok-main-session"), "s-1\n");
+      const update = (value: Record<string, unknown>, index: number) =>
+        JSON.stringify({
+          timestamp: 1_790_000_000 + index,
+          method: "session/update",
+          params: { sessionId: "s-1", update: value },
+        });
+      await writeFile(
+        path.join(session, "updates.jsonl"),
+        [
+          update(
+            {
+              sessionUpdate: "user_message_chunk",
+              content: { type: "text", text: "Run the tests." },
+            },
+            0,
+          ),
+          update(
+            {
+              sessionUpdate: "tool_call",
+              toolCallId: "call-1",
+              title: "use_tool",
+              rawInput: {
+                tool_name: "archestra__archestra--yell",
+                tool_input: {},
+              },
+            },
+            1,
+          ),
+          update(
+            {
+              sessionUpdate: "tool_call_update",
+              toolCallId: "call-1",
+              status: "completed",
+              rawOutput: { type: "MCP", output: { OkayOutput: "ok" } },
+            },
+            2,
+          ),
+        ].join("\n"),
+      );
+      await runHook(root, "Stop", { sessionId: "s-1", reason: "end_turn" });
+
+      expect(
+        await readFile(path.join(runtime, "final-answer.txt"), "utf8"),
+      ).toBe("The session ended without producing a final message.\n");
+      await expect(
+        stat(path.join(runtime, "turn-complete")),
+      ).resolves.toBeTruthy();
+      await expect(
+        stat(path.join(runtime, "turn-complete.failed")),
+      ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("stops asking for attention once a permission is denied", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
     try {

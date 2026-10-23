@@ -39,7 +39,9 @@ def main() -> int:
         # The turn's answer is its closing assistant message, if it has one.
         last = entries[-1] if entries else {}
         answer = last["text"].strip() if last.get("role") == "assistant" else ""
-        Path(arguments[2]).write_text(f"{answer}\n" if answer else "", encoding="utf-8")
+        # The plain-run driver publishes the same placeholder for this case.
+        answer = answer or "The session ended without producing a final message."
+        Path(arguments[2]).write_text(f"{answer}\n", encoding="utf-8")
     return 0
 
 

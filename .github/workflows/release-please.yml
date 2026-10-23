@@ -11,7 +11,7 @@ permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
-  # Do not interrupt a release waiting for qualification and approval.
+  # Do not interrupt a release while its artifacts are being built and published.
   cancel-in-progress: false
 
 jobs:
@@ -64,7 +64,7 @@ jobs:
           OVERRIDE=$(jq -r '.packages.platform["release-as"] // empty' "$CONFIG")
           NEXT=${OVERRIDE:-$VERSION}
           jq -e '.packages.platform.draft == true' "$CONFIG" \
-            || { echo "::error::Config must keep draft=true; releases are published by the approval job"; exit 1; }
+            || { echo "::error::Config must keep draft=true; releases are published after all builds succeed"; exit 1; }
           if [ "$BRANCH" = main ]; then
             [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-rc\.[1-9][0-9]*$ ]] \
               || { echo "::error::Main must release X.Y.0-rc.N"; exit 1; }
@@ -102,8 +102,8 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # All releases start as drafts. Prereleases publish after artifacts are ready;
-      # stable releases additionally require approval of the publication job.
+      # All releases start as drafts. Both channels publish automatically after
+      # all artifacts are ready.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -347,7 +347,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
-      # Stable charts remain workflow artifacts until explicit qualification/publication.
+      # Stable charts remain workflow artifacts until the publication job.
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
@@ -356,12 +356,11 @@ jobs:
 
   publish-github-release:
     name: Publish release
-    # No skipped build is acceptable. Stable approval happens after all builds.
+    # No failed or skipped build is acceptable. Publish automatically after all builds.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
     concurrency:
-      # Keep the existing prerelease environment and concurrency group names.
+      # Serialize publication within each release channel.
       group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
     needs:
@@ -432,7 +431,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Publish approved stable artifacts without rebuilding
+      - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}
         shell: bash
         run: |
@@ -441,7 +440,7 @@ jobs:
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")
-            # supply-chain-policy: allow-latest approved stable release channel
+            # supply-chain-policy: allow-latest stable release channel
             docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
           done
 

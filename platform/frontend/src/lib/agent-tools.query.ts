@@ -631,7 +631,10 @@ type UpdateAgentServerToolsParams = {
   agentId: string;
   add: string[];
   remove: string[];
-  /** Built-in tools take no credential. */
+  /**
+   * The catalog's `serverType` is `"builtin"`: its tools take no credential.
+   * Not `isBuiltInCatalogId`, which also covers the local Playwright server.
+   */
   builtIn: boolean;
   credential?: { mode: "dynamic" } | { mode: "static"; mcpServerId: string };
   undoToast?: { agentName: string; serverName: string };

@@ -3,7 +3,7 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-20
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -77,7 +77,7 @@ Open a report and click **Investigate in chat**. The agent compares the report w
 What to know:
 
 - With **Break the glass** on in **Settings → Guardrails** (the default), a yell also turns Guardrails off for that session, so the agent is no longer stuck. The list marks these yells.
-- Reports stay in your deployment. With analytics on, they also go to the shared [OpenAPPA reporting service](https://www.openappa.com/yell). To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
+- Reports stay in your deployment unless you [enable external diagnostic forwarding](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED) to the shared OpenAPPA reporting service. To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
 
 Required permissions:
 

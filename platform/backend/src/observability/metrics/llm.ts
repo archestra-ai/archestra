@@ -516,7 +516,8 @@ export function reportLLMCost({
     logger.warn("LLM metrics not initialized, skipping cost reporting");
     return;
   } else if (!cost) {
-    logger.warn("Cost not specified when reporting");
+    // Zero is a valid settled cost (for example a free model or no tokens).
+    if (cost !== 0) logger.warn("Cost not specified when reporting");
     return;
   }
   llmCostTotal.inc({

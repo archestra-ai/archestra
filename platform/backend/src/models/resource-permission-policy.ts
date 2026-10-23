@@ -952,19 +952,12 @@ export default class ResourcePermissionPolicyModel {
     );
     if (params.scopes.length === 0 || params.resources.length === 0)
       return recipients;
-    const table = schema.resourcePermissionPoliciesTable;
     const scopes = new Set(params.scopes);
     const policies =
       params.policies === undefined
-        ? await db
-            .select({ scope: table.scope, grants: table.grants })
-            .from(table)
-            .where(
-              and(
-                inArray(table.resource, params.resources),
-                idArrayCondition(table.scope, params.scopes),
-              ),
-            )
+        ? await ResourcePermissionPolicyModel.readRecipientsByScopes
+            .get()
+            .execute({ resources: params.resources, scopes: params.scopes })
         : params.policies.filter(
             (policy) =>
               params.resources.includes(policy.resource) &&
@@ -1285,6 +1278,21 @@ export default class ResourcePermissionPolicyModel {
       )
       .prepare("archestra_applicable_resource_policies");
   });
+  private static readonly readRecipientsByScopes = new PreparedQuery(
+    (database) => {
+      const table = schema.resourcePermissionPoliciesTable;
+      return database
+        .select({ scope: table.scope, grants: table.grants })
+        .from(table)
+        .where(
+          and(
+            sql`${table.resource} = ANY(${sql.placeholder("resources")}::text[])`,
+            sql`${table.scope} = ANY(${sql.placeholder("scopes")}::text[])`,
+          ),
+        )
+        .prepare("archestra_read_recipients_by_scopes");
+    },
+  );
 }
 
 type ReadRecipients = {

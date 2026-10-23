@@ -27,7 +27,9 @@ vi.mock("prom-client", () => {
     },
   };
 });
+vi.mock("@/logging");
 
+import logger from "@/logging";
 import {
   getObservableFetch,
   getObservableGenAI,
@@ -807,6 +809,24 @@ describe("reportLLMCost", () => {
     vi.clearAllMocks();
     testAgent = await makeAgent();
     initializeMetrics([]);
+  });
+
+  test("zero settled cost is quiet while missing cost still warns", () => {
+    const params = {
+      provider: "openai" as const,
+      profile: testAgent,
+      model: "gpt-4",
+      source: "api" as const,
+      billingMode: "metered" as const,
+    };
+    reportLLMCost({ ...params, cost: 0 });
+    expect(counterInc).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+    reportLLMCost({ ...params, cost: undefined });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Cost not specified when reporting",
+    );
+    expect(counterInc).not.toHaveBeenCalled();
   });
 
   test("records cost with model and metered billing mode", () => {

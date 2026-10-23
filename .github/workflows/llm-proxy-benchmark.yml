@@ -12,6 +12,12 @@ on:
       - .github/scripts/proxy-benchmark-baseline*
       - .github/scripts/update-proxy-benchmark-docs*
   workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: Optional full baseline commit SHA for a paired comparison on this runner
+        required: false
+        default: ''
+        type: string
 
 permissions: {}
 
@@ -92,11 +98,19 @@ jobs:
       - name: Run mock inference benchmark
         # A repeatable shared-runner measurement, not an absolute latency gate.
         run: bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+      - name: Compare pinned revisions on the same runner
+        if: github.event_name == 'workflow_dispatch' && inputs.baseline_sha != ''
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: bash benchmarks/compare.sh "$BASELINE_SHA"
       - name: Publish summary
         if: always()
         run: |
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/comparison/summary.md ]; then
+            cat benchmarks/results/comparison/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload measurements and diagnostics
         if: always()

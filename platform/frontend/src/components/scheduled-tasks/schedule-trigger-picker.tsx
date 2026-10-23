@@ -2,7 +2,7 @@
 
 import { Cron } from "croner";
 import { Clock3 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import {
   buildScheduleCron,
   isValidCronExpression,
@@ -214,53 +214,74 @@ export function ScheduleTriggerPicker({
 
       {frequency === "daily" && (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">At</span>
-            <Input
-              type="time"
-              aria-label="Time"
-              value={formatTime(hour, minute)}
-              onChange={(event) => handleTimeChange(event.target.value)}
-              className="w-auto"
-            />
-            <span className="text-sm">in</span>
-            <TimezonePicker
-              value={value.timezone}
-              onValueChange={(timezone) => onChange({ ...value, timezone })}
-              ariaLabel="Timezone"
-              className="min-w-[200px] flex-1"
-            />
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-end gap-2">
+            <div className="space-y-1">
+              <Label
+                htmlFor="schedule-time"
+                className="text-xs text-muted-foreground"
+              >
+                Time
+              </Label>
+              <Input
+                id="schedule-time"
+                type="time"
+                aria-label="Time"
+                value={formatTime(hour, minute)}
+                onChange={(event) => handleTimeChange(event.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <span className="text-xs text-muted-foreground">Timezone</span>
+              <TimezonePicker
+                value={value.timezone}
+                onValueChange={(timezone) => onChange({ ...value, timezone })}
+                ariaLabel="Timezone"
+                className="w-full min-w-0"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
+          <div className="flex items-center gap-1.5">
             <fieldset
               aria-label="Days of week"
-              className="flex flex-wrap gap-1.5"
+              className="grid min-w-0 flex-1 grid-cols-7 gap-1 sm:max-w-72"
             >
               {DAY_OPTIONS.map((day) => (
                 <Toggle
                   key={day.value}
                   type="button"
                   variant="outline"
+                  size="sm"
                   aria-label={day.fullLabel}
                   pressed={days.includes(day.value)}
                   onPressedChange={(pressed) =>
                     handleDayToggle(day.value, pressed)
                   }
-                  className="data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="min-w-0 px-0 text-[11px] sm:text-xs data-[state=on]:border-primary/40 data-[state=on]:bg-primary/10 data-[state=on]:text-foreground"
                 >
                   {day.label}
                 </Toggle>
               ))}
             </fieldset>
-            <div className="flex gap-1">
-              <ButtonLink onClick={() => handleDayShortcut(WEEKDAYS)}>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                onClick={() => handleDayShortcut(WEEKDAYS)}
+                className="h-8 px-0 text-[10px] font-normal text-muted-foreground hover:text-foreground sm:text-[11px]"
+              >
                 Weekdays
-              </ButtonLink>
-              <ButtonLink
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
                 onClick={() => handleDayShortcut([0, 1, 2, 3, 4, 5, 6])}
+                className="h-8 px-0 text-[10px] font-normal text-muted-foreground hover:text-foreground sm:text-[11px]"
               >
                 Every day
-              </ButtonLink>
+              </Button>
             </div>
           </div>
         </>
@@ -366,20 +387,6 @@ export function ScheduleTriggerPicker({
     setDays(nextDays);
     emitStructured("daily", hour, minute, nextDays);
   }
-}
-
-function ButtonLink({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <Button type="button" variant="link" size="sm" onClick={onClick}>
-      {children}
-    </Button>
-  );
 }
 
 function ScheduleSummary({

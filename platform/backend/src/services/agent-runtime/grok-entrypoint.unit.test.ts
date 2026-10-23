@@ -788,17 +788,17 @@ describe("Grok Build LLM wire adapter", () => {
     try {
       const portFile = path.join(root, "port");
       const pidFile = path.join(root, "pid");
-      // The launcher backgrounds the adapter and later ends; the adapter
+      // A launcher that backgrounds the adapter and then ends; the adapter
       // notices its parent is gone.
+      const launcher = path.join(root, "launcher");
+      await writeFile(
+        launcher,
+        '#!/bin/sh\n"$1" & echo $! > "$2"\nfor _ in $(seq 50); do [ -s "$3" ] && exit 0; sleep 0.1; done\nexit 1\n',
+      );
+      await chmod(launcher, 0o755);
       await exec(
-        "bash",
-        [
-          "-c",
-          `"$0" & echo $! > "$1"; for _ in $(seq 50); do [ -s "$2" ] && exit 0; sleep 0.1; done; exit 1`,
-          path.join(IMAGE_BIN, "archestra-grok-llm"),
-          pidFile,
-          portFile,
-        ],
+        launcher,
+        [path.join(IMAGE_BIN, "archestra-grok-llm"), pidFile, portFile],
         {
           env: {
             PATH: process.env.PATH,

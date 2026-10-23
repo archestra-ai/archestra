@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -228,7 +228,7 @@ jobs:
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    uses: $/.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -247,7 +247,7 @@ jobs:
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-agent-catalog-images.yml
+    uses: $/.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
     permissions:
@@ -268,7 +268,7 @@ jobs:
     # The backend defaults the Perforce permission-sync shim pod to
     # p4-shim:<appVersion>, so the image ships with every platform release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-p4-shim-docker-image.yml
+    uses: $/.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -289,7 +289,7 @@ jobs:
     # The sandbox base ships with every platform release: the engine pulls it as
     # the pre-baked code-runtime base, so it is published whenever the platform is.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-sandbox-base-docker-image.yml
+    uses: $/.github/workflows/build-sandbox-base-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -313,7 +313,7 @@ jobs:
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-dockerhub-image.yml
+    uses: $/.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
     permissions:
@@ -339,7 +339,7 @@ jobs:
     # in parallel with Docker image builds. The publish-github-release job ensures all
     # artifacts are ready before the release is made visible.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/publish-platform-helm-chart.yml
+    uses: $/.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
     permissions:
@@ -407,12 +407,12 @@ jobs:
           fi
 
       - name: Download saved chart
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: release-helm-chart
 
       - name: Download saved image references
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           pattern: release-image-*
           path: release-images
@@ -420,13 +420,13 @@ jobs:
 
       - name: Authenticate to artifact registry
         if: ${{ github.ref_name != 'main' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}

@@ -1,5 +1,6 @@
 import { STARTUP_GUARD_INSTALL } from "./consts";
 import {
+  DEFAULT_MODELS,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   type SupportedProvider,
 } from "./model-constants";
@@ -15,11 +16,36 @@ export {
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   codex: "Codex",
+  pi: "Pi",
   opencode: OPENCODE_FAMILY.opencode.label,
   kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
 
 export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
+
+/** Connection defaults must be served by the selected provider's catalog. */
+export function defaultConnectionModel({
+  provider,
+  modelIds,
+}: {
+  provider: SupportedProvider;
+  modelIds: readonly string[];
+}): string | null {
+  if (provider === "openai") {
+    // Compatible routers can return provider-qualified IDs. Keep the original
+    // ID for requests; only strip the qualifier when comparing model families.
+    const name = (id: string) => id.replace(/^openai[:/]/, "");
+    const preferred =
+      modelIds.find((id) => /^gpt-6\.1(?:-|$)/.test(name(id))) ??
+      modelIds.find((id) => /^gpt-6(?:[.-]|$)/.test(name(id)));
+    if (preferred) return preferred;
+  }
+  return (
+    modelIds.find((id) => id === DEFAULT_MODELS[provider]) ??
+    modelIds[0] ??
+    null
+  );
+}
 
 export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
 
@@ -66,6 +92,7 @@ export const INSTALLER_CLIENT_IDS = [
   "copilot-cli",
   "opencode",
   "kilo",
+  "pi",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
@@ -75,6 +102,7 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
   codex: "Codex",
+  pi: "Pi",
   "copilot-cli": "Copilot CLI",
   ...openCodeFamilyRecord((client) => client.label),
 };
@@ -93,6 +121,7 @@ export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   codex: ["openai"],
+  pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   "copilot-cli": [
     "openai",
     "azure",
@@ -127,6 +156,8 @@ export function isPlainMcpClientServerName(name: string): boolean {
  * Claude Desktop).
  */
 export function startupGuardStem(id: string): string | undefined {
+  // Pi invokes the guard from its native launcher, not a shell-profile wrapper.
+  if (id === "pi") return undefined;
   const guard = STARTUP_GUARD_INSTALL[id as keyof typeof STARTUP_GUARD_INSTALL];
   return guard?.scriptRelpath
     .replace(/^\.archestra\//, "")
@@ -150,6 +181,14 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "~/.codex/config.toml (gateway, model provider, skills marketplace)",
     "Plugins from the skills marketplace",
     "Startup check in your shell profile",
+  ],
+  pi: [
+    "arcpi launcher and connection checks on your user PATH",
+    "Private restoration snapshot (arcpi --disconnect)",
+    "Shared skills association (shared marketplace files are preserved)",
+    "~/.pi/agent/extensions/archestra-pi.js (native guardrails and model routing)",
+    "~/.pi/agent/mcp.json (gateway)",
+    "~/.archestra/pi/connection.json (model settings and access key)",
   ],
   "claude-desktop": ["A dedicated Claude Desktop profile"],
   "copilot-cli": [

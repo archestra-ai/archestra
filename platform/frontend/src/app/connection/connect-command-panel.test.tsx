@@ -253,7 +253,10 @@ beforeEach(() => {
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
   createKeyMock.mockResolvedValue({ id: "key-1" });
-  modelsByProviderMock.mockReturnValue({});
+  modelsByProviderMock.mockReturnValue({
+    openai: [{ id: "gpt-5.5" }],
+    "github-copilot": [{ id: "gpt-4o" }],
+  });
   skillNamesMock.mockReturnValue(
     skillNames([
       { id: "s1", name: "warehouse-postgres" },
@@ -1879,6 +1882,58 @@ describe("ConnectCommandPanel", () => {
   });
 
   describe("script client model choice", () => {
+    it.each([
+      "pi",
+      "copilot-cli",
+    ])("defaults %s to available GPT-6.1 and preserves an explicit older choice", async (clientId) => {
+      modelsByProviderMock.mockReturnValue({
+        openai: [
+          { id: "gpt-5.5" },
+          { id: "openai:gpt-6-sol" },
+          { id: "openai:gpt-6.1-sol" },
+        ],
+      });
+      if (clientId === "pi")
+        availableKeysMock.mockReturnValue({
+          data: [{ provider: "openai", isPrimary: true }],
+        });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient(clientId) });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "openai:gpt-6.1-sol" }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-model"));
+      await user.click(screen.getByRole("combobox", { name: "Model" }));
+      await user.click(screen.getByRole("option", { name: "gpt-5.5" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "gpt-5.5" }),
+        ),
+      );
+    });
+
+    it("waits for a catalog or an explicit model rather than generating an unavailable default", async () => {
+      modelsByProviderMock.mockReturnValue({});
+      availableKeysMock.mockReturnValue({
+        data: [{ provider: "openai", isPrimary: true }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("pi") });
+      expect(screen.getByTestId("connect-command-status")).toBeInTheDocument();
+      expect(createSetupMock).not.toHaveBeenCalled();
+      await user.click(screen.getByTestId("connect-change-model"));
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "explicit-model" },
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "explicit-model" }),
+        ),
+      );
+    });
+
     it("surfaces the model in the review step and sends it with the setup", async () => {
       renderPanel({ client: findClient("copilot-cli") });
 
@@ -1975,8 +2030,13 @@ describe("ConnectCommandPanel", () => {
       await user.click(screen.getByTestId("connect-change-model"));
       const picker = screen.getByRole("combobox", { name: "Model" });
       await user.click(picker);
-      // Keep the default reachable even when it isn't in the synced catalog.
-      expect(screen.getByRole("option", { name: "gpt-5.5" })).toBeVisible();
+      // Never inject an unavailable default into the synced catalog.
+      expect(
+        screen.queryByRole("option", { name: "gpt-5.5" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "synced-model-0" }),
+      ).toBeVisible();
       const search = screen.getByPlaceholderText("Search models...");
       await user.type(search, "missing-model");
       expect(screen.getByText("No models found.")).toBeVisible();
@@ -2382,7 +2442,7 @@ describe("first approval setup, as the server seed prepares it", () => {
   ] as const;
 
   it.each(
-    (["opencode", "claude-code"] as const).flatMap((clientId) =>
+    (["opencode", "claude-code", "pi"] as const).flatMap((clientId) =>
       (["admin", "member"] as const).flatMap((role) =>
         [false, true].map((configuredBaseUrls) => ({
           clientId,
@@ -2458,6 +2518,8 @@ describe("first approval setup, as the server seed prepares it", () => {
     });
     expect(serverBaseUrl).toBe(browserBaseUrl);
 
+    const models = [{ provider: "openai" as const, id: "openai:gpt-6.1-sol" }];
+    modelsByProviderMock.mockReturnValue({ openai: models });
     const client = findClient(clientId);
     const serverInputs = firstConnectionSetupInputs({
       client,
@@ -2476,6 +2538,7 @@ describe("first approval setup, as the server seed prepares it", () => {
       skillNames: { data: skills, total: skills.length },
       plugins: plugins as never,
       availableKeys: keys,
+      models,
     });
     expect(serverInputs).not.toBeNull();
 
@@ -2487,6 +2550,8 @@ describe("first approval setup, as the server seed prepares it", () => {
       llmProxyId: "p1",
       shownProviders: getConnectableProviders(organization),
       baseUrl: browserBaseUrl,
+      skillsEnabled: true,
+      pluginsEnabled: clientId !== "pi",
     });
 
     await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));

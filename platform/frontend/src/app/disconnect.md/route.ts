@@ -113,6 +113,19 @@ interface GuardClient {
 }
 
 const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
+  pi: {
+    binary: "arcpi",
+    inventory: `- Inspect the presence of ~/.archestra/pi/install-state.json without printing its contents: it can contain private recovery data.
+- The Pi connection owns one MCP registration and OAuth record, its extension, arcpi launcher, and the PATH blocks it added.
+- Models and unrelated user settings, skills, sessions, and shared marketplace checkouts must remain.`,
+    manual: `- Run arcpi --disconnect. Pi's proxy, gateway and shared-skills association are restored together.
+- If arcpi is not on PATH, run node ~/.archestra/pi/lifecycle.cjs disconnect (use the home-directory equivalent on Windows).
+- If the helper reports edited files, preserve those edits and resolve the reported conflict before retrying.
+- If the original snapshot is missing or predates this installer, stop. Do not infer original settings or delete configuration. Review existing .archestra-backup files with the user.
+- Do not revoke shared keys or remove shared marketplace files.`,
+    finish:
+      "Open a new terminal and run pi. The disconnected arcpi launcher is removed; other clients remain configured.",
+  },
   "claude-code": {
     binary: "claude",
     inventory: `- MCP: claude mcp list. The gateway is the server whose URL starts with {{BASE}}/mcp/.
@@ -186,6 +199,14 @@ function focusedInstructions(
 ): string | null {
   if (!isInstallerClientId(client)) return null;
   const details = GUARD_CLIENTS[client];
+  if (client === "pi" && details)
+    return instructions({
+      target,
+      label: INSTALLER_CLIENT_LABELS.pi,
+      inventory: details.inventory,
+      remove: details.manual,
+      finish: details.finish,
+    });
   const guard = startupGuardStem(client);
   if (!details || !guard) {
     return client === "cursor" ? cursorInstructions(target) : null;

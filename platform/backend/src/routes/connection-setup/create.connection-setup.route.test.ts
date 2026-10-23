@@ -62,6 +62,231 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("at least one");
   });
 
+  test.each([
+    { provider: "openai" },
+    { mcpGatewayId: "00000000-0000-4000-8000-000000000001" },
+    {
+      provider: "anthropic",
+      mcpGatewayId: "00000000-0000-4000-8000-000000000001",
+    },
+    {
+      provider: "openai",
+      mcpGatewayId: "00000000-0000-4000-8000-000000000001",
+      pluginIds: ["00000000-0000-4000-8000-000000000002"],
+    },
+  ])("rejects incomplete or unsupported Pi configuration: %j", async (selection) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        ...selection,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("Pi requires");
+  });
+
+  test("Pi refuses unattributed passthrough instead of silently omitting its platform key", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const payload = {
+      clientId: "pi",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      provider: "openai",
+      proxyAuth: "provider-key",
+    };
+    const optedOut = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: { ...payload, attributePassthrough: false },
+    });
+    expect(optedOut.statusCode).toBe(400);
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload,
+    });
+    expect(forbidden.statusCode, forbidden.body).toBe(403);
+  });
+
+  test.for([
+    "linux",
+    "windows",
+  ] as const)("Pi %s passthrough creates a platform key and renders the guarded setup", async (platform, {
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "provider-key",
+        model: "test-model",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    const payload =
+      platform === "windows"
+        ? Buffer.from(
+            script.body.match(
+              /^\$archNodeScript = '([A-Za-z0-9+/=]+)'/m,
+            )?.[1] ?? "",
+            "base64",
+          ).toString("utf8")
+        : script.body;
+    expect(payload).toContain("attributionKey");
+    expect(payload).toContain("--extension");
+    if (platform === "windows") {
+      expect(script.body).toContain("& node $archNodePath");
+      expect(script.body).not.toContain("node -e");
+    } else {
+      expect(script.body).toContain("arcpi");
+    }
+  });
+
+  test.for([
+    undefined,
+    "gpt-5.5",
+  ])("Pi resolves an omitted model from its bound key catalog and preserves explicit %s", async (selectedModel, {
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      isPrimary: true,
+    });
+    for (const modelId of [
+      "gpt-5.5",
+      "openai:gpt-6-sol",
+      "openai:gpt-6.1-sol",
+    ]) {
+      const model = await ModelModel.create({
+        provider: "openai",
+        modelId,
+        externalId: modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "virtual-key",
+        model: selectedModel,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.model).toBe(selectedModel ?? "openai:gpt-6.1-sol");
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("arcpi");
+    expect(script.body).toContain(selectedModel ?? "openai:gpt-6.1-sol");
+  });
+
+  test("Pi primary setup exposes both authorized provider catalogs through the model router", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    for (const provider of ["openai", "anthropic"] as const) {
+      const secret = await makeSecret();
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider,
+        isPrimary: true,
+      });
+      const model = await ModelModel.create({
+        provider,
+        modelId: `${provider}-test-model`,
+        externalId: `${provider}-test-model`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        proxyAuth: "primary-providers",
+        model: "openai-test-model",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.model).toBe("openai-test-model");
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("/model-router");
+    expect(script.body).toContain("anthropic-test-model");
+    expect(script.body).toContain("openai-test-model");
+    expect(script.body).toContain("arcpi");
+  });
+
   test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({
     makeLlmProviderApiKey,
     makeSecret,
@@ -229,7 +454,7 @@ describe("POST /api/connection-setups", () => {
     ).toEqual([]);
   });
 
-  test("primary routing is OpenCode-, Kilo Code- and Cursor-only and requires virtual-key creation permission", async () => {
+  test("primary routing is limited to supported clients and requires virtual-key creation permission", async () => {
     const request = {
       baseUrl: "http://localhost:9000/v1",
       proxyAuth: "primary-providers",
@@ -247,7 +472,7 @@ describe("POST /api/connection-setups", () => {
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "only supported for OpenCode, Kilo Code and Cursor",
+        "only supported for OpenCode, Kilo Code, Cursor and Pi",
       );
     }
     mockUserHasPermission.mockImplementation(

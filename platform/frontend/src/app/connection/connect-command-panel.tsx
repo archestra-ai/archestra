@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
@@ -12,6 +11,7 @@ import {
 import {
   CONNECTION_SETUP_MAX_SKILLS,
   type ConnectSetupPart,
+  defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
   isOpenCodeFamilyClient,
@@ -277,7 +277,8 @@ export function ConnectCommandPanel({
 
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({ plugin: ["read", "update"] }, "*");
-  const pluginsQueryEnabled = pluginsEnabled && canAdminPlugins === true;
+  const pluginsQueryEnabled =
+    client.id !== "pi" && pluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
@@ -316,13 +317,13 @@ export function ConnectCommandPanel({
   // clients get a virtual key when an admin mapped keys for them, and
   // otherwise keep the user's own provider key or subscription.
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || openCodeFamily
+    client.id === "cursor" || client.id === "pi" || openCodeFamily
       ? "primary-providers"
       : adminMappedProviders.size > 0 && canAttribute === true
         ? "virtual-key"
         : "provider-key";
   const allPrimaryProviders =
-    (openCodeFamily || client.id === "cursor") &&
+    (openCodeFamily || client.id === "cursor" || client.id === "pi") &&
     proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
@@ -513,7 +514,9 @@ export function ConnectCommandPanel({
   // leaks onto another. Options come from the org's synced model list; with
   // none synced for the provider, a free-text field takes any model id.
   const supportsModelChoice =
-    client.id === "copilot-cli" || client.id === "claude-desktop";
+    client.id === "copilot-cli" ||
+    client.id === "claude-desktop" ||
+    client.id === "pi";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
@@ -523,7 +526,12 @@ export function ConnectCommandPanel({
       ? (modelChoice ??
         (client.id === "claude-desktop"
           ? "claude-haiku-4-5-20251001"
-          : DEFAULT_MODELS[provider]))
+          : defaultConnectionModel({
+              provider,
+              modelIds: (modelsByProvider[provider] ?? []).map(
+                (model) => model.id,
+              ),
+            })))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
@@ -612,6 +620,12 @@ export function ConnectCommandPanel({
   const optionsPlace = connectRequest ? " in Setup options" : "";
   const selectionProblem =
     [
+      supportsModelChoice && proxyActive && !effectiveModel
+        ? "Choose a model served by your provider, or sync its model catalog before connecting."
+        : null,
+      client.id === "pi" && (!gateway || !proxyActive)
+        ? "Pi requires both an MCP gateway and an LLM proxy. Keep tools and model routing enabled."
+        : null,
       pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT
         ? `${formatCount(selectedPlugins.length)} plugins are selected, but one setup can install at most ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)}. Choose ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)} or fewer${optionsPlace}, or turn plugins off.`
         : null,
@@ -667,7 +681,8 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      (client.id === "codex" && provider === "openai") ||
+      ((client.id === "codex" || client.id === "pi") &&
+        provider === "openai") ||
       openCodeFamily);
 
   // The backend's reason for refusing the latest setup request, read once the
@@ -1052,7 +1067,9 @@ export function ConnectCommandPanel({
           <span>
             {client.id === "claude-desktop"
               ? "Selected by default in Claude Desktop after setup"
-              : "Applied as COPILOT_MODEL by the setup script"}
+              : client.id === "pi"
+                ? "Selected by the printed Pi launch command"
+                : "Applied as COPILOT_MODEL by the setup script"}
             {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
           </span>
         </p>
@@ -1335,7 +1352,7 @@ export function ConnectCommandPanel({
               >
                 Run <span>{client.label}</span> with{" "}
                 <span className="font-medium text-foreground">
-                  {effectiveModel}
+                  {effectiveModel ?? "a model you choose"}
                 </span>
               </SetupSummaryRow>
             )}

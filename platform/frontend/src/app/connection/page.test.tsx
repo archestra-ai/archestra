@@ -807,6 +807,55 @@ describe("ConnectPage (no connect request)", () => {
     expect(screen.getByText("Not active")).toBeVisible();
   });
 
+  it("Pi keeps model routing required and includes shared skills while excluding plugins", async () => {
+    window.localStorage.clear();
+    saveConnectChoices("pi", {
+      tools: true,
+      proxy: false,
+      skills: true,
+      plugins: true,
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=pi") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["pi"],
+        connectionLlmProxyEnabled: true,
+        connectionSkillsEnabled: true,
+        connectionPluginsEnabled: true,
+      },
+    });
+    vi.mocked(archestraApiSdk.getSkills).mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: "native-checks",
+            name: "native-checks",
+            description: "Check arithmetic",
+            usageCount: 0,
+          },
+        ],
+        pagination: { total: 1, limit: 10, offset: 0 },
+      },
+    } as unknown as Awaited<ReturnType<typeof archestraApiSdk.getSkills>>);
+    render(<ConnectionPage />);
+    expect(screen.getByText(/--client pi --exclude plugins$/)).toBeVisible();
+    expect(screen.getByText(/Open a new terminal and run arcpi/)).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Choose what to include/ }),
+    );
+    expect(screen.getByRole("switch", { name: /LLM proxy/ })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: /LLM proxy/ })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: /Skills/ })).toBeChecked();
+  });
+
   it("lets any agent leave the LLM proxy out", async () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({

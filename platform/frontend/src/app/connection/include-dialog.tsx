@@ -148,13 +148,16 @@ export function IncludeDialog({
               title="LLM proxy"
               htmlFor="include-proxy"
               sub={
-                choices.proxy
-                  ? "Model requests go through the LLM proxy"
-                  : `Off. ${client.label} calls its model provider directly.`
+                client.id === "pi"
+                  ? "Required for Pi native tool and result checks"
+                  : choices.proxy
+                    ? "Model requests go through the LLM proxy"
+                    : `Off. ${client.label} calls its model provider directly.`
               }
               control={
                 <Switch
                   id="include-proxy"
+                  disabled={client.id === "pi"}
                   checked={choices.proxy}
                   onCheckedChange={(v) => onChange({ choices: { proxy: v } })}
                 />

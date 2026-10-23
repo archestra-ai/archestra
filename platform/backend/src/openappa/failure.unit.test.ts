@@ -5,9 +5,25 @@ import {
   OpenappaRootOnlyError,
   openappaFailure,
   unansweredAnnotationNotice,
+  undeclaredToolNotice,
 } from "./failure";
 
 vi.mock("@/logging");
+
+describe("undeclaredToolNotice", () => {
+  test("classifies only the typed native refusal and never exposes its diagnostic", () => {
+    const cause = runtimeFailure("undeclared_tool", "private diagnostic");
+    expect(undeclaredToolNotice(cause)).toContain("No remedy plan");
+    expect(undeclaredToolNotice(openappaFailure(cause))).toContain(
+      "No remedy plan",
+    );
+    expect(undeclaredToolNotice(cause)).not.toContain("private diagnostic");
+    expect(undeclaredToolNotice(new Error("undeclared_tool"))).toBeNull();
+    expect(
+      undeclaredToolNotice(runtimeFailure("storage", "failure")),
+    ).toBeNull();
+  });
+});
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {

@@ -15,6 +15,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
+  defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
   isOpenCodeFamilyClient,
@@ -121,6 +122,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
+  pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   // Cursor routes every model through the Model Router with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
@@ -149,6 +151,7 @@ const MULTI_PROVIDER_KEY_CLIENTS: Partial<
   Record<ConnectionSetupClientId, { keyName: string }>
 > = {
   cursor: { keyName: "Cursor model router" },
+  pi: { keyName: "Pi model router" },
   ...openCodeFamilyRecord((client) => ({
     keyName: `${client.label} primary providers`,
   })),
@@ -481,17 +484,40 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: requestedProvider,
         proxyAuth,
         attributePassthrough,
-        model,
+        model: requestedModel,
         skills,
         pluginIds: requestedPluginIds,
       } = body;
       let provider = requestedProvider;
+      let model = requestedModel;
+      if (
+        clientId === "pi" &&
+        (!mcpGatewayId ||
+          (!requestedProvider && proxyAuth !== "primary-providers") ||
+          (proxyAuth === "provider-key" && requestedProvider !== "openai") ||
+          requestedPluginIds?.length)
+      ) {
+        throw new ApiError(
+          400,
+          "Pi requires an LLM proxy and an MCP gateway. Third-party plugins are not supported by this setup.",
+        );
+      }
+      if (
+        clientId === "pi" &&
+        proxyAuth === "provider-key" &&
+        !attributePassthrough
+      ) {
+        throw new ApiError(
+          400,
+          "Pi requires a personal platform key for native guardrails.",
+        );
+      }
       const allPrimary = proxyAuth === "primary-providers";
       const multiProviderKey = MULTI_PROVIDER_KEY_CLIENTS[clientId];
       if (allPrimary && !multiProviderKey) {
         throw new ApiError(
           400,
-          "All primary providers is only supported for OpenCode, Kilo Code and Cursor setups",
+          "All primary providers is only supported for OpenCode, Kilo Code, Cursor and Pi setups",
         );
       }
       if (clientId === "cursor" && provider && !allPrimary) {
@@ -532,11 +558,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         model &&
         clientId !== "copilot-cli" &&
-        clientId !== "claude-desktop"
+        clientId !== "claude-desktop" &&
+        clientId !== "pi"
       ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli and claude-desktop setups",
+          "model is only supported for copilot-cli, claude-desktop and pi setups",
         );
       }
 
@@ -624,9 +651,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           // Fail here, where the Connect page shows the message, rather than
           // when the installer downloads its script.
-          if (isOpenCodeFamilyClient(clientId) && virtualApiKeyId && provider) {
+          if (
+            (isOpenCodeFamilyClient(clientId) || clientId === "pi") &&
+            virtualApiKeyId &&
+            provider
+          ) {
             await getVirtualKeyProviderCatalog({
-              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              supportedProviders: INSTALLER_CLIENT_KEY_PROVIDERS[clientId],
               clientLabel: INSTALLER_CLIENT_LABELS[clientId],
               provider: allPrimary ? undefined : provider,
               mappedKeys,
@@ -648,7 +679,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           attributePassthrough &&
           (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            (clientId === "codex" && provider === "openai") ||
+            ((clientId === "codex" || clientId === "pi") &&
+              provider === "openai") ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
             isOpenCodeFamilyClient(clientId))
         ) {
@@ -658,6 +690,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "llmVirtualKey",
             "create",
           );
+          if (clientId === "pi" && !canCreateVirtualKey) {
+            throw new ApiError(
+              403,
+              "Pi native guardrails require permission to create a personal platform key.",
+            );
+          }
           if (canCreateVirtualKey) {
             virtualApiKeyId = await ensureConnectionPassthroughKey({
               organizationId,
@@ -666,6 +704,37 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
           }
         }
+      }
+
+      if (clientId === "pi" && !model) {
+        if (
+          (proxyAuth === "virtual-key" || proxyAuth === "primary-providers") &&
+          virtualApiKeyId &&
+          provider
+        ) {
+          const catalog = await getVirtualKeyProviderCatalog({
+            supportedProviders: [provider],
+            provider,
+            clientLabel: "Pi",
+            mappedKeys: organization.connectionClientProviderKeys?.pi ?? null,
+            organizationId,
+            userId: user.id,
+            userTeamIds: await TeamModel.getUserTeamIds(user.id),
+            virtualApiKeyId,
+          });
+          model =
+            defaultConnectionModel({
+              provider,
+              modelIds: catalog.flatMap((entry) =>
+                entry.models.map((item) => item.id),
+              ),
+            }) ?? undefined;
+        }
+        if (!model)
+          throw new ApiError(
+            400,
+            "Choose a model served by your OpenAI provider before connecting Pi.",
+          );
       }
 
       if (skills) {
@@ -728,6 +797,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         !isOpenCodeFamilyClient(clientId) &&
+        clientId !== "pi" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1043,10 +1113,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // script register two marketplaces.
           // Desktop rejects URL userinfo and requires a pinned revision for
           // automatic installation, so it uses the snapshot branch below.
+          // Pi uses the scoped link too: the static credential exposes every
+          // readable skill and would ignore its approved skill selection.
           if (
             marketplaceRender &&
             marketplaceRender.pluginIds.length === 0 &&
-            setup.clientId !== "claude-desktop"
+            setup.clientId !== "claude-desktop" &&
+            setup.clientId !== "pi"
           ) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
@@ -1156,7 +1229,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId
+    OpenCodeFamilyClientId | "pi"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1250,6 +1323,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       // since the subscription credential still passes through unattributed.
       passthroughVirtualKey = await readVirtualKeyValue(setup.virtualApiKeyId);
     }
+    if (setup.clientId === "pi" && !virtualKeyValue && !passthroughVirtualKey)
+      throw GONE();
 
     // The approved installer can change settings in a running conversation.
     // Carry server-authorized setup scope on the URL, independent of client
@@ -1283,11 +1358,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
             })
           : undefined,
       primaryProviders:
-        isOpenCodeFamilyClient(setup.clientId) &&
+        (isOpenCodeFamilyClient(setup.clientId) || setup.clientId === "pi") &&
         setup.proxyAuth !== "provider-key" &&
         setup.virtualApiKeyId
           ? await getVirtualKeyProviderCatalog({
-              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              supportedProviders:
+                INSTALLER_CLIENT_KEY_PROVIDERS[setup.clientId],
               clientLabel: INSTALLER_CLIENT_LABELS[setup.clientId],
               provider:
                 setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
@@ -1323,7 +1399,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       url:
         setup.clientId === "cursor"
           ? `${proxyApiPrefix}/model-router`
-          : `${proxyBaseUrl}/${setup.provider}`,
+          : setup.clientId === "pi" && setup.proxyAuth !== "provider-key"
+            ? `${proxyBaseUrl}/model-router`
+            : `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
@@ -1420,7 +1498,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginIds,
       pluginNames,
       pluginClientType:
-        pluginIds.length > 0 && !isOpenCodeFamilyClient(setup.clientId)
+        pluginIds.length > 0 &&
+        !isOpenCodeFamilyClient(setup.clientId) &&
+        setup.clientId !== "pi"
           ? setup.clientId
           : null,
       pluginPlatform:

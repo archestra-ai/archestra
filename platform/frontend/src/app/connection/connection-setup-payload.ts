@@ -1,5 +1,4 @@
 import {
-  DEFAULT_MODELS,
   ManagedResourceSchema,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
@@ -10,6 +9,7 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_MAX_SKILLS,
+  defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   type InstallerClientId,
   isInstallerClientId,
@@ -167,6 +167,7 @@ export function firstConnectionSetupInputs(params: {
   llmProxyId: string | null;
   skillNames: { data: { id: string }[]; total: number } | null;
   plugins: PluginListItem[] | null;
+  models?: readonly { id: string; provider: SupportedProvider }[];
   availableKeys:
     | {
         id: string;
@@ -231,7 +232,8 @@ export function firstConnectionSetupInputs(params: {
   const includeSkills = skillsEligible && allSkills.length > 0;
 
   // Plugins: every deliverable one compatible with the platform.
-  const pluginsEnabled = organization.connectionPluginsEnabled === true;
+  const pluginsEnabled =
+    client.id !== "pi" && organization.connectionPluginsEnabled === true;
   const pluginsQueryEnabled =
     pluginsEnabled &&
     canAnywhere("plugin", "read") &&
@@ -263,13 +265,13 @@ export function firstConnectionSetupInputs(params: {
   );
   const openCodeFamily = isOpenCodeFamilyClient(client.id);
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || openCodeFamily
+    client.id === "cursor" || client.id === "pi" || openCodeFamily
       ? "primary-providers"
       : adminMappedProviders.size > 0 && canAttribute
         ? "virtual-key"
         : "provider-key";
   const allPrimaryProviders =
-    (openCodeFamily || client.id === "cursor") &&
+    (openCodeFamily || client.id === "cursor" || client.id === "pi") &&
     proxyAuth === "primary-providers";
   const usableOpenCodeKeys = availableKeys.filter(
     (key) =>
@@ -329,12 +331,19 @@ export function firstConnectionSetupInputs(params: {
     providerIsPerUser &&
     !configuredProviders.has(provider);
   const supportsModelChoice =
-    client.id === "copilot-cli" || client.id === "claude-desktop";
+    client.id === "copilot-cli" ||
+    client.id === "claude-desktop" ||
+    client.id === "pi";
   const effectiveModel =
     supportsModelChoice && provider
       ? client.id === "claude-desktop"
         ? "claude-haiku-4-5-20251001"
-        : DEFAULT_MODELS[provider]
+        : defaultConnectionModel({
+            provider,
+            modelIds: (params.models ?? [])
+              .filter((model) => model.provider === provider)
+              .map((model) => model.id),
+          })
       : null;
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
@@ -359,7 +368,13 @@ export function firstConnectionSetupInputs(params: {
   const selectionProblem =
     (pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT) ||
     (includeSkills && skillsTotal > CONNECTION_SETUP_MAX_SKILLS);
-  if (!hasRunnableAnything || needsPerUserConnect || selectionProblem) {
+  if (
+    (supportsModelChoice && proxyActive && !effectiveModel) ||
+    (client.id === "pi" && (!gateway || !proxyActive)) ||
+    !hasRunnableAnything ||
+    needsPerUserConnect ||
+    selectionProblem
+  ) {
     return null;
   }
 

@@ -633,6 +633,52 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
 
+  test.for([
+    "one",
+    "all",
+    "none",
+  ] as const)("Pi delivers exactly the selected shared skills: %s", async (selection, {
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const first = await seedSkill({ organizationId, name: "native-checks" });
+    const second = await seedSkill({ organizationId, name: "native-format" });
+    const ids =
+      selection === "all"
+        ? [first.id, second.id]
+        : selection === "one"
+          ? [first.id]
+          : [];
+    const { rawToken } = await createSetup({
+      clientId: "pi",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      provider: "openai",
+      proxyAuth: "provider-key",
+      attributePassthrough: true,
+      model: "openai:gpt-6.1-sol",
+      ...(ids.length ? { skills: { skillIds: ids, ttlDays: 30 } } : {}),
+    });
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode, response.body).toBe(200);
+    const links = await SkillShareLinkModel.listByOrganization({
+      organizationId,
+    });
+    expect(links).toHaveLength(ids.length ? 1 : 0);
+    if (ids.length) {
+      expect(links[0].skills.map((item) => item.id).sort()).toEqual(
+        [...ids].sort(),
+      );
+      expect(response.body).toContain("archestra_skl_");
+    } else {
+      expect(response.body).not.toContain("archestra_skl_");
+    }
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+  });
+
   test("404s an unknown token", async () => {
     const response = await fetchScript("archestra_con_does-not-exist-at-all");
     expect(response.statusCode).toBe(404);

@@ -160713,7 +160713,8 @@
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "pi"
                     ]
                   },
                   "platform": {
@@ -161370,7 +161371,8 @@
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "pi"
                       ]
                     },
                     "platform": {
@@ -161757,7 +161759,8 @@
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "pi"
                       ]
                     },
                     "platform": {
@@ -166411,7 +166414,8 @@
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "pi"
                     ]
                   },
                   "platform": {
@@ -166600,7 +166604,8 @@
                               "claude-desktop",
                               "copilot-cli",
                               "opencode",
-                              "kilo"
+                              "kilo",
+                              "pi"
                             ]
                           }
                         },
@@ -230912,7 +230917,8 @@
                 "copilot-cli",
                 "cursor",
                 "opencode",
-                "kilo"
+                "kilo",
+                "pi"
               ]
             },
             "in": "query",
@@ -467579,7 +467585,8 @@
                 "copilot-cli",
                 "cursor",
                 "opencode",
-                "kilo"
+                "kilo",
+                "pi"
               ]
             },
             "in": "query",

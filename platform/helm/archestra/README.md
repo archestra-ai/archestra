@@ -38,6 +38,9 @@ on a tainted node; the node selector constrains placement. Tier `affinity` accep
 standard Kubernetes node affinity and pod (anti-)affinity rules. A node selector
 and required node affinity must both be satisfied.
 
+`archestra.topologySpreadConstraints` remains shared; constraints without an
+explicit label selector are scoped to each Deployment separately.
+
 With `archestra.worker.enabled: false`, the main platform Deployment runs web
 and background jobs together and uses `archestra.web` scheduling. Worker
 scheduling values are unused. Migration Jobs and network policy probes continue

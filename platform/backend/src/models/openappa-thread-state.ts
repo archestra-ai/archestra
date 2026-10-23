@@ -5,6 +5,7 @@ import {
   encryptEncryptedChatValue,
 } from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
+import { openPlainJson, sealPlainJson } from "@/openappa/plaintext-envelope";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
 import { isContentEnvelope } from "@/utils/crypto";
 
@@ -45,13 +46,16 @@ class OpenAppaThreadStateModel {
                   ...params.encryptedChat,
                   context: "openappa_thread_states.tools",
                 }) as ThreadTool[])
-              : (params.tools ?? null),
+              : params.tools
+                ? (sealPlainJson(params.tools) as ThreadTool[])
+                : null,
           calls: params.encryptedChat
             ? (encryptEncryptedChatValue(params.calls, {
                 ...params.encryptedChat,
                 context: "openappa_thread_states.calls",
               }) as ThreadCall[])
-            : params.calls,
+            : // A tool input holding a NUL cannot be stored in jsonb as it is.
+              (sealPlainJson(params.calls) as ThreadCall[]),
           diverged: params.diverged,
         })
         .onConflictDoNothing();
@@ -111,7 +115,10 @@ class OpenAppaThreadStateModel {
     ) {
       throw new Error("Encrypted thread state requires its conversation key");
     }
-    if (params.encryptedChat) {
+    if (!params.encryptedChat) {
+      tools = openPlainJson(tools) as ThreadTool[] | null;
+      row.calls = openPlainJson(row.calls) as ThreadCall[] | null;
+    } else {
       tools =
         tools === null
           ? null

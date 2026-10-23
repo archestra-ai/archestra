@@ -70,6 +70,8 @@ type ProviderApiKeyInfo = ProviderApiKeyInput & {
   providerApiKeyName: string;
 };
 type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
+  organizationId: string;
+  providerApiKeyProvider: SupportedProvider;
   secretId: string | null;
   baseUrl: string | null;
   scope: ResourceVisibilityScope;
@@ -1065,6 +1067,8 @@ class VirtualApiKeyModel {
         providerApiKeyId:
           schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
         providerApiKeyName: schema.llmProviderApiKeysTable.name,
+        organizationId: schema.llmProviderApiKeysTable.organizationId,
+        providerApiKeyProvider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,

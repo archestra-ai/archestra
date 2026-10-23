@@ -35,9 +35,9 @@ import {
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import {
-  decryptInteractionContent,
   encryptInteractionContent,
   readInteractionRow,
+  restoreWrittenInteractionContent,
 } from "@/content-encryption/audit-rows";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -81,6 +81,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
+import { hasUnavailableMediaCost } from "@/utils/media-usage";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -554,6 +555,9 @@ class InteractionModel {
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
+   *
+   * Do not mutate the returned row: for a delta-encoded request its
+   * `request.messages` entries are shared with the reconstruction cache.
    */
   static async create(
     data: InsertInteraction,
@@ -610,14 +614,12 @@ class InteractionModel {
         : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const interactionId = values.id ?? uuidv7();
+    const plaintext = {
+      ...values,
+      sessionPreview: buildSessionPreview(sanitized, values.request),
+    };
     const insertValues = {
-      ...encryptInteractionContent(
-        {
-          ...values,
-          sessionPreview: buildSessionPreview(sanitized, values.request),
-        },
-        audit,
-      ),
+      ...encryptInteractionContent({ ...plaintext }, audit),
       id: interactionId,
     };
     const insert = async (tx?: Transaction) => {
@@ -719,10 +721,14 @@ class InteractionModel {
               ),
           })
         : await write();
-    // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for encrypted-chat rows too: this caller
-    // supplied the very key that just encrypted them.
-    decryptInteractionContent(interaction, audit);
+    // The RETURNING row is this method's public return value, so callers never
+    // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
+    // very key that just encrypted them.
+    restoreWrittenInteractionContent(interaction, {
+      written: insertValues,
+      plaintext,
+      audit,
+    });
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);
@@ -1541,6 +1547,9 @@ class InteractionModel {
         );
         return;
       }
+
+      // Audio/image counts cannot be repriced using generic text-token tariffs.
+      if (hasUnavailableMediaCost(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;

@@ -53,7 +53,7 @@ jobs:
 
       - name: Install pinned Rust toolchain
         if: steps.changes.outputs.run == 'true'
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: platform/archestra-rs
           cache: "false"

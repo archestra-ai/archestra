@@ -117,7 +117,7 @@ concurrency:
 jobs:
   reuse-image:
     name: Reuse unchanged ${{ inputs.image_name }} image
-    if: ${{ inputs.push_image && inputs.auth_provider == 'gar' && inputs.reuse_from_version != '' }}
+    if: ${{ inputs.push_image && inputs.auth_provider == 'gar' && inputs.reuse_from_version != '' && !startsWith(inputs.checkout_ref, 'platform-v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to compare the image's source and build recipe.
@@ -133,7 +133,7 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -173,14 +173,14 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
         if: ${{ inputs.push_image && inputs.auth_provider == 'dockerhub' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -211,7 +211,7 @@ jobs:
 
       - name: Build Docker image
         id: build
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ inputs.image_directory }}
           dockerfile: ${{ inputs.dockerfile }}
@@ -232,13 +232,14 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           digest="${DIGEST}"
-          touch "/tmp/digests/${digest#sha256:}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          git rev-parse HEAD > "/tmp/digests/${digest#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
 
       - name: Upload digest
         if: ${{ inputs.push_image }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ inputs.image_name }}-digests-${{ strategy.job-index }}
           path: /tmp/digests/*
@@ -262,9 +263,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           path: /tmp/digests
           pattern: ${{ inputs.image_name }}-digests-*
@@ -274,17 +276,48 @@ jobs:
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
         if: ${{ inputs.auth_provider == 'dockerhub' }}
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Every per-arch digest comes from this run's successful build matrix,
+      # checked out at checkout_ref. Validate the complete set before scanning
+      # or assigning a public version tag; never substitute a previous scan.
+      - name: Resolve release scan inputs
+        id: release-scan
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          AMD64_ONLY: ${{ inputs.amd64_only }}
+        run: bash .github/scripts/release-scan-inputs.sh /tmp/digests
+
+      - name: Scan release amd64 bytes before tagging
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: $/.github/actions/scan-docker-image
+        with:
+          image: ${{ steps.release-scan.outputs.amd64 }}
+          platform: linux/amd64
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
+
+      - name: Scan release arm64 bytes before tagging
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && !inputs.amd64_only }}
+        uses: $/.github/actions/scan-docker-image
+        with:
+          image: ${{ steps.release-scan.outputs.arm64 }}
+          platform: linux/arm64
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
@@ -328,7 +361,7 @@ jobs:
 
       - name: Upload release image reference
         if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-image-${{ inputs.image_name }}
           path: ${{ runner.temp }}/release-image/*

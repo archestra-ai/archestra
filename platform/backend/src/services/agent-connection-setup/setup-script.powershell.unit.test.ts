@@ -1160,6 +1160,7 @@ describe.skipIf(!powershellAvailable)(
 & (Join-Path $env:ARCHESTRA_TEST_ROOT 'setup.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/opencode.json') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected.json')
+Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/plugins/archestra-llm-proxy.js') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected-plugin.js')
 $env:ARCHESTRA_GUARD_ACTION = 'disconnect'
 & (Join-Path $env:USERPROFILE '.archestra/opencode-startup-guard.ps1')
 exit $LASTEXITCODE
@@ -1184,9 +1185,16 @@ exit $LASTEXITCODE
         const connected = JSON.parse(
           await readFile(path.join(root, "connected.json"), "utf8"),
         );
+        // Connect adds no provider to the client's config; the plugin carries
+        // the served models and the key file carries the credential.
         expect(
-          connected.provider["archestra-anthropic"].models["claude-test"].limit,
-        ).toEqual({ context: 200000, output: 0 });
+          Object.keys(connected.provider ?? {}).some((id) =>
+            id.startsWith("archestra-"),
+          ),
+        ).toBe(false);
+        expect(
+          await readFile(path.join(root, "connected-plugin.js"), "utf8"),
+        ).toContain('"anthropic":["claude-test"]');
         expect(
           JSON.parse(await readFile(siblingPath, "utf8")).mcp.my_gateway
             .enabled,

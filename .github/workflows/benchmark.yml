@@ -49,10 +49,10 @@ jobs:
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
-        uses: ./.github/actions/setup-docker-builder
+        uses: $/.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

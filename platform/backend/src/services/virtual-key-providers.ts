@@ -46,6 +46,8 @@ export async function resolveVirtualKeyProviderMappings(
       provider: primary.provider,
       providerApiKeyId: primary.id,
       providerApiKeyName: primary.name,
+      organizationId: primary.organizationId,
+      providerApiKeyProvider: primary.provider,
       secretId: primary.secretId,
       scope: primary.scope,
       userId: primary.userId,

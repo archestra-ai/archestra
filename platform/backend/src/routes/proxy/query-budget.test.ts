@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import { LimitModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -36,6 +37,7 @@ describe("LLM proxy query budget", () => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient({}) as never,
     );
+    await app.register(authPlugin);
     await app.register(openAiProxyRoutes);
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -166,8 +168,9 @@ describe("LLM proxy query budget", () => {
     const { result: response, statements } = await recordQueries(call);
     expect(response.statusCode, response.body).toBe(200);
     // Was 54 before the per-request lookups, set-based usage recording and
-    // single-read rate-limit check.
-    expect(statements.length).toBeLessThanOrEqual(45);
+    // single-read rate-limit check; sharing caller lookups across the proxy
+    // call saves 4 more.
+    expect(statements.length).toBeLessThanOrEqual(37);
   });
 
   test("rejected virtual key under the rate limiter", async ({

@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import { describe, expect, test } from "vitest";
+import type { ClusterIpFamily } from "@/k8s/cluster-ip-families";
 import { sanitizeMetadataLabels } from "@/k8s/shared";
 import type { EffectiveNetworkPolicy } from "@/types";
 import {
@@ -753,6 +754,63 @@ describe("MCP egress floor and default-deny baseline builders", () => {
       bare.spec?.egress?.find((r) => r.to?.[0]?.ipBlock?.cidr === "0.0.0.0/0")
         ?.to?.[0]?.ipBlock?.except ?? [];
     expect(bareExcept).not.toContain("100.68.0.0/16");
+  });
+
+  describe("public egress follows the cluster's IP families", () => {
+    const publicCidrs = (clusterIpFamilies?: ClusterIpFamily[]) => {
+      const plain = buildUnrestrictedFloorPolicy({
+        name: "mcp-egress-test",
+        podSelectorLabels,
+        labels: MANAGED_LABELS,
+        clusterIpFamilies,
+      });
+      const aws = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+        name: "mcp-egress-test",
+        podSelectorLabels,
+        labels: MANAGED_LABELS,
+        clusterDnsIps: ["10.100.0.10"],
+        clusterIpFamilies,
+      });
+      const cidrsOf = (egress: k8s.V1NetworkPolicyEgressRule[]) =>
+        egress
+          .filter((rule) => rule.ports === undefined)
+          .map((rule) => rule.to?.[0]?.ipBlock?.cidr);
+      return {
+        plain: cidrsOf(plain.spec?.egress ?? []),
+        aws: cidrsOf(
+          (aws.spec as { egress: k8s.V1NetworkPolicyEgressRule[] }).egress,
+        ),
+      };
+    };
+
+    test("IPv4-only cluster: no ::/0 rule, so no orphaned IPv6 excepts", () => {
+      expect(publicCidrs(["IPv4"])).toEqual({
+        plain: ["0.0.0.0/0"],
+        aws: ["0.0.0.0/0"],
+      });
+    });
+
+    test("IPv6-only cluster: keeps ::/0 and the IPv4 rule pods reach IPv4 hosts through", () => {
+      expect(publicCidrs(["IPv6"])).toEqual({
+        plain: ["0.0.0.0/0", "::/0"],
+        aws: ["0.0.0.0/0", "::/0"],
+      });
+    });
+
+    test("dual-stack cluster: both families", () => {
+      expect(publicCidrs(["IPv4", "IPv6"])).toEqual({
+        plain: ["0.0.0.0/0", "::/0"],
+        aws: ["0.0.0.0/0", "::/0"],
+      });
+    });
+
+    test("unknown families keep both rules", () => {
+      expect(publicCidrs(undefined)).toEqual({
+        plain: ["0.0.0.0/0", "::/0"],
+        aws: ["0.0.0.0/0", "::/0"],
+      });
+      expect(publicCidrs([])).toEqual(publicCidrs(undefined));
+    });
   });
 
   test("AWS ANP floor falls back to any-IP :53 when the resolver is unknown", () => {

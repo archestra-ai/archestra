@@ -49,7 +49,10 @@ import { assertSubscriptionCredentialForProvider } from "@/services/subscription
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
+import {
+  type ProviderKeySelection,
+  selectMappedProviderKey,
+} from "@/utils/provider-key-mappings";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -180,6 +183,7 @@ export async function validateVirtualApiKey(params: {
    * serves the model. Without it the key's preferred endpoint answers.
    */
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -210,6 +214,7 @@ export async function validateVirtualApiKey(params: {
         ),
         provider: expectedProvider,
         modelId: params.requestedModel,
+        selection: params.providerKeySelection,
       })
     : undefined;
   if (!mappedProviderKey) {
@@ -218,6 +223,14 @@ export async function validateVirtualApiKey(params: {
       `Virtual API key is not mapped to provider "${expectedProvider}".`,
     );
   }
+  if (
+    mappedProviderKey.organizationId !== resolved.virtualKey.organizationId ||
+    mappedProviderKey.providerApiKeyProvider !== expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "Virtual API key references an unavailable provider account.",
+    );
 
   // Resolve the real provider API key from the secret first — the per-user
   // check below needs it to recognize a ChatGPT-subscription (Codex) credential.
@@ -369,6 +382,7 @@ export async function validatePassthroughVirtualKey(params: {
     const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
       userId: virtualKey.authorId,
       agentId: agent.id,
+      agentAccessContext: agent,
       isAgentAdmin: ownerIsAgentAdmin,
       action: "use",
     });
@@ -431,6 +445,7 @@ export async function validateLlmOAuthAccessToken(params: {
    * that hosts this model rather than an arbitrary sibling.
    */
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
@@ -466,6 +481,7 @@ export async function validateLlmOAuthAccessToken(params: {
       expectedProvider: params.expectedProvider,
       agent: params.agent,
       requestedModel: params.requestedModel,
+      providerKeySelection: params.providerKeySelection,
     });
   }
 
@@ -474,6 +490,7 @@ export async function validateLlmOAuthAccessToken(params: {
     expectedProvider: params.expectedProvider,
     agent: params.agent,
     requestedModel: params.requestedModel,
+    providerKeySelection: params.providerKeySelection,
   });
 }
 
@@ -500,6 +517,7 @@ export async function attemptJwksAuth(
   request: FastifyRequest,
   resolvedAgent: GatewayAgent,
   providerName: string,
+  providerKeySelection?: ProviderKeySelection,
 ): Promise<JwksAuthResult | null> {
   if (!resolvedAgent.identityProviderId) return null;
 
@@ -564,6 +582,7 @@ export async function attemptJwksAuth(
       userId: jwksResult.userId,
       provider: providerName,
       modelName: requestedModelFromBody(request),
+      selection: providerKeySelection,
     });
     apiKey = resolved.apiKey;
     baseUrl = resolved.baseUrl ?? undefined;
@@ -924,6 +943,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   expectedProvider: string;
   agent: GatewayAgent;
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -947,6 +967,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     !(await AgentTeamModel.userHasAgentAccess({
       userId: serviceAccountUserId(account.id),
       agentId: params.agent.id,
+      agentAccessContext: params.agent,
       action: "use",
       isAgentAdmin: await ResourcePermissions.allows({
         userId: serviceAccountUserId(account.id),
@@ -963,6 +984,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
         mappings: await resolveOauthClientProviderMappings(oauthClient),
         provider: params.expectedProvider,
         modelId: params.requestedModel,
+        selection: params.providerKeySelection,
       })
     : undefined;
   if (!mappedProviderKey) {
@@ -981,6 +1003,14 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       "LLM OAuth client references a missing provider API key.",
     );
   }
+  if (
+    providerApiKey.organizationId !== oauthClient.organizationId ||
+    providerApiKey.provider !== params.expectedProvider
+  )
+    throw new ApiError(
+      403,
+      "LLM OAuth client references an unavailable provider account.",
+    );
   const oauthMappedSecret = providerApiKey.secretId
     ? ((await getSecretValueForLlmProviderApiKey(providerApiKey.secretId)) as
         | string
@@ -1031,6 +1061,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   expectedProvider: string;
   agent: GatewayAgent;
   requestedModel?: string | null;
+  providerKeySelection?: ProviderKeySelection;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const member = await MemberModel.getByUserId(
     params.userId,
@@ -1043,6 +1074,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
     userId: params.userId,
     agentId: params.agent.id,
+    agentAccessContext: params.agent,
     isAgentAdmin: false,
     action: "use",
   });
@@ -1061,6 +1093,7 @@ async function validateUserLlmOAuthAccessToken(params: {
     userId: params.userId,
     provider: params.expectedProvider,
     modelName: params.requestedModel,
+    selection: params.providerKeySelection,
   });
   const oauthClient = await OAuthClientModel.findByClientId(params.clientId);
 

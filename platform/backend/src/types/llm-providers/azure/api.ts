@@ -28,6 +28,10 @@ export {
 };
 
 export const ChatCompletionsHeadersSchema = z.object({
+  "api-key": z
+    .string()
+    .optional()
+    .describe("Virtual API key for native Azure SDK clients"),
   "user-agent": z.string().optional().describe("The user agent of the client"),
   authorization: z
     .string()
@@ -42,19 +46,10 @@ export const ChatCompletionResponseSchema =
   OpenAIChatCompletionResponseSchema.passthrough();
 
 /** Native image generation. Chat streams the completed artifact to the UI. */
-export const ImageGenerationRequestSchema = z.object({
-  model: z.string().min(1),
-  prompt: z.string().min(1),
-  n: z.number().int().min(1).max(10).optional(),
-  size: z.enum(["auto", "1024x1024", "1536x1024", "1024x1536"]).optional(),
-  quality: z.enum(["auto", "low", "medium", "high"]).optional(),
-  background: z.enum(["auto", "transparent", "opaque"]).optional(),
-  output_format: z.enum(["png", "jpeg", "webp"]).optional(),
-  output_compression: z.number().int().min(0).max(100).optional(),
-  moderation: z.enum(["auto", "low"]).optional(),
-  user: z.string().optional(),
-  stream: z.literal(false).optional(),
-});
+export {
+  ImageEditFieldsSchema,
+  ImageGenerationRequestSchema,
+} from "./image-parameters";
 
 export const ImageGenerationResponseSchema = z
   .object({

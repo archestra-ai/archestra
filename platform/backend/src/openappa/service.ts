@@ -425,7 +425,7 @@ export async function executeYell(params: {
           }),
         ),
     });
-    if (config.analytics.enabled) {
+    if (config.openappa.yellForwardingEnabled && !encryptedChat) {
       await OpenAppaYellModel.recordDelivery({
         id: record.id,
         organizationId: record.organizationId,

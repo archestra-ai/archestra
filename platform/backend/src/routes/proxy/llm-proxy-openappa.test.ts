@@ -1726,9 +1726,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     const response = await post(payload(false));
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["x-should-retry"]).toBe("false");
     expect(response.body).not.toContain("private native database error");
-    expect(response.body).toContain("OpenAPPA could not safely complete");
+    expect(response.body).toContain("Guardrails failed unexpectedly");
   });
 
   test("a refused policy names what to fix and is not a retryable outage", async () => {
@@ -1744,7 +1745,26 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.json().error.message).toContain(
-      'the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+      'Guardrails refused the organization\'s policy (unsupported policy: tool "grain__*" has an invalid qualified identity)',
+    );
+  });
+
+  test("a conversation whose content the policy runtime cannot store fails once, with what to do", async () => {
+    fail = true;
+    failure = Object.assign(
+      new Error(
+        "OpenAPPA processing interrupted: storage failure: receipt storage failed: PostgreSQL ERROR (SQLSTATE 22P05)",
+      ),
+      { code: "storage" },
+    );
+
+    const response = await post(payload(false));
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-should-retry"]).toBe("false");
+    expect(response.headers["retry-after"]).toBeUndefined();
+    expect(response.json().error.message).toMatch(
+      /^Guardrails cannot store this conversation because it contains a NUL character \(U\+0000\), usually from a tool that printed binary data\. Every retry sends the same conversation and fails the same way\. Rewind the conversation to before that tool output, or start a new conversation\./,
     );
   });
 
@@ -3008,9 +3028,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
       expect(answered.statusCode, answered.body).toBe(200);
       const sent = providerRequests.at(-1) as {
+        system?: unknown;
         messages: { role: string; content: unknown }[];
       };
-      // The model receives the user's answer as the result of its question.
+      // Preserve the answer and put turn-specific guidance after it, not in system.
       expect(sent.messages.at(-1)).toEqual({
         role: "user",
         content: [
@@ -3019,8 +3040,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             tool_use_id: question.id,
             content: answer,
           }),
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "Question tools collect the user's decisions.",
+            ),
+          },
         ],
       });
+      expect(JSON.stringify(sent.system ?? "")).not.toContain(
+        "Question tools collect the user's decisions.",
+      );
     });
 
     test.each([
@@ -8090,9 +8120,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(providerRequests).toHaveLength(0);
         const { message } = response.json().error;
         expect(message).toContain(
-          "this subagent did not start through a checked spawn",
+          "this subagent because it did not start through a checked spawn",
         );
-        expect(message).toContain("start a new subagent");
+        expect(message).toContain("Start a new subagent");
       });
     });
 

@@ -11,7 +11,7 @@ permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
-  # Do not interrupt a release waiting for qualification and approval.
+  # Do not interrupt a release while its artifacts are being built and published.
   cancel-in-progress: false
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -64,7 +64,7 @@ jobs:
           OVERRIDE=$(jq -r '.packages.platform["release-as"] // empty' "$CONFIG")
           NEXT=${OVERRIDE:-$VERSION}
           jq -e '.packages.platform.draft == true' "$CONFIG" \
-            || { echo "::error::Config must keep draft=true; releases are published by the approval job"; exit 1; }
+            || { echo "::error::Config must keep draft=true; releases are published after all builds succeed"; exit 1; }
           if [ "$BRANCH" = main ]; then
             [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-rc\.[1-9][0-9]*$ ]] \
               || { echo "::error::Main must release X.Y.0-rc.N"; exit 1; }
@@ -102,8 +102,8 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # All releases start as drafts. Prereleases publish after artifacts are ready;
-      # stable releases additionally require approval of the publication job.
+      # All releases start as drafts. Both channels publish automatically after
+      # all artifacts are ready.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -228,7 +228,7 @@ jobs:
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    uses: $/.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -238,15 +238,16 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-      reuse_from_version: ${{ github.ref == 'refs/heads/main' && github.event.before || '' }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-agent-catalog-images.yml
+    uses: $/.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
     permissions:
@@ -256,8 +257,9 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-      reuse_from_version: ${{ github.ref == 'refs/heads/main' && github.event.before || '' }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -266,7 +268,7 @@ jobs:
     # The backend defaults the Perforce permission-sync shim pod to
     # p4-shim:<appVersion>, so the image ships with every platform release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-p4-shim-docker-image.yml
+    uses: $/.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -276,8 +278,9 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-      reuse_from_version: ${{ github.ref == 'refs/heads/main' && github.event.before || '' }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -286,7 +289,7 @@ jobs:
     # The sandbox base ships with every platform release: the engine pulls it as
     # the pre-baked code-runtime base, so it is published whenever the platform is.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-sandbox-base-docker-image.yml
+    uses: $/.github/workflows/build-sandbox-base-docker-image.yml
     needs:
       - release-please
     permissions:
@@ -296,8 +299,9 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-      reuse_from_version: ${{ github.ref == 'refs/heads/main' && github.event.before || '' }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -309,7 +313,7 @@ jobs:
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/build-dockerhub-image.yml
+    uses: $/.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
     permissions:
@@ -335,7 +339,7 @@ jobs:
     # in parallel with Docker image builds. The publish-github-release job ensures all
     # artifacts are ready before the release is made visible.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: ./.github/workflows/publish-platform-helm-chart.yml
+    uses: $/.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
     permissions:
@@ -343,7 +347,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
-      # Stable charts remain workflow artifacts until explicit qualification/publication.
+      # Stable charts remain workflow artifacts until the publication job.
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
@@ -352,12 +356,11 @@ jobs:
 
   publish-github-release:
     name: Publish release
-    # No skipped build is acceptable. Stable approval happens after all builds.
+    # No failed or skipped build is acceptable. Publish automatically after all builds.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
     concurrency:
-      # Keep the existing prerelease environment and concurrency group names.
+      # Serialize publication within each release channel.
       group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false
     needs:
@@ -404,12 +407,12 @@ jobs:
           fi
 
       - name: Download saved chart
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           name: release-helm-chart
 
       - name: Download saved image references
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           pattern: release-image-*
           path: release-images
@@ -417,18 +420,18 @@ jobs:
 
       - name: Authenticate to artifact registry
         if: ${{ github.ref_name != 'main' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
-        uses: ./.github/actions/docker-login
+        uses: $/.github/actions/docker-login
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Publish approved stable artifacts without rebuilding
+      - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}
         shell: bash
         run: |
@@ -437,7 +440,7 @@ jobs:
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")
-            # supply-chain-policy: allow-latest approved stable release channel
+            # supply-chain-policy: allow-latest stable release channel
             docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
           done
 

@@ -209,6 +209,7 @@ describe("instanceAnalyticsService", () => {
   });
 
   test("does nothing when analytics is disabled", async () => {
+    config.openappa.yellForwardingEnabled = true;
     config.analytics = {
       ...analyticsConfig,
       enabled: false,

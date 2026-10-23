@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { KILO_CLIENT } from "../opencode-family";
+import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -18,40 +19,25 @@ let originalFetch: typeof fetch;
 let originalGuard: unknown;
 let originalDirect: unknown;
 let originalDataHome: string | undefined;
-let originalCacheHome: string | undefined;
 let originalHome: string | undefined;
 beforeEach(() => {
   originalFetch = globalThis.fetch;
   originalGuard = globals[fetchGuard];
   originalDirect = globals[directFetch];
   originalDataHome = process.env.XDG_DATA_HOME;
-  originalCacheHome = process.env.XDG_CACHE_HOME;
   originalHome = process.env.HOME;
   delete globals[fetchGuard];
   delete globals[directFetch];
 });
-const managedRoute = "https://deployment.example/v1/model-router/agent";
+// The organization's credential serves "vendor" on the proxy's vendor route;
+// the user's own OpenAI sign-in goes through the proxy's OpenAI route.
+const managedRoute = "https://deployment.example/v1/vendor/agent";
 const nativeRoute = "https://deployment.example/v1/openai/agent";
-const catalog = {
-  providers: {
-    "archestra-vendor": {
-      name: "Vendor",
-      npm: "@ai-sdk/openai" as const,
-      options: { baseURL: managedRoute },
-      models: {
-        "fixture/model": {
-          name: "Fixture",
-          id: "vendor:fixture/model",
-          limit: { context: 1000, output: 100 },
-        },
-      },
-    },
-  },
-  routes: {
-    "archestra-vendor": managedRoute,
-    openai: nativeRoute,
-  },
-  twins: { vendor: "archestra-vendor" },
+const catalog: ManagedRuntimeCatalog = {
+  routes: { vendor: managedRoute, openai: nativeRoute },
+  managed: { vendor: ["fixture/model"] },
+  passthrough: ["openai"],
+  legacy: { "archestra-vendor": "vendor" },
 };
 
 afterEach(async () => {
@@ -62,8 +48,6 @@ afterEach(async () => {
   else globals[directFetch] = originalDirect;
   if (originalDataHome === undefined) delete process.env.XDG_DATA_HOME;
   else process.env.XDG_DATA_HOME = originalDataHome;
-  if (originalCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
-  else process.env.XDG_CACHE_HOME = originalCacheHome;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
   await Promise.all(
@@ -72,7 +56,15 @@ afterEach(async () => {
 });
 
 describe("managed catalog plugin", () => {
-  test("keeps native credentials and strips managed-alias headers across repeated config", async () => {
+  test("keeps the client's providers, filters their models and sends them to the proxy with the managed key", async () => {
+    const calls: Request[] = [];
+    globals[directFetch] = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      calls.push(new Request(input, init));
+      return new Response("ok");
+    };
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-"));
     roots.push(root);
     process.env.XDG_DATA_HOME = path.join(root, "data");
@@ -93,7 +85,6 @@ describe("managed catalog plugin", () => {
             Authorization: "Bearer passthrough-secret",
           },
         },
-        providerTwins: {},
         clientId: "opencode",
         origin: "https://deployment.example",
         skipRelpath: ".archestra/skip",
@@ -114,18 +105,33 @@ describe("managed catalog plugin", () => {
     const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
     const hooks = await module.ArchestraLlmProxy();
     const config = () => ({
-      model: "vendor/fixture/model",
+      // Pins from an earlier setup: one on the proxy's own provider id, one
+      // on a model the credential no longer serves.
+      model: "archestra-vendor/fixture/model",
       small_model: "vendor/retired",
+      enabled_providers: ["archestra-vendor"],
+      disabled_providers: ["vendor", "local"],
       provider: {
+        "archestra-vendor": {
+          name: "Vendor (Archestra)",
+          options: {
+            baseURL: "https://deployment.example/v1/model-router/agent",
+            apiKey: "{file:~/.archestra/opencode-primary.key}",
+          },
+          models: { "fixture/model": { id: "vendor:fixture/model" } },
+        },
         vendor: {
+          name: "My vendor",
           options: {
             apiKey: "stale-native",
             headers: {
               Authorization: "Bearer stale-native",
               "ChatGPT-Account-Id": "acct",
+              "X-Local": "kept",
             },
           },
-          models: { retired: { id: "retired" } },
+          whitelist: ["fixture/model", "retired"],
+          models: { retired: { name: "Retired" } },
         },
         openai: {
           npm: "@ai-sdk/openai",
@@ -140,36 +146,77 @@ describe("managed catalog plugin", () => {
     second.provider.vendor.options.apiKey =
       first.provider.vendor.options.apiKey;
     await hooks.config(second);
+    // The pin on the proxy's old provider id moves to the client's provider;
+    // the one on an unserved model goes.
     expect(first.model).toBe("vendor/fixture/model");
     expect(first).not.toHaveProperty("small_model");
-    expect(first.provider.vendor).toMatchObject({
+    expect(first.enabled_providers).toEqual(["vendor", "openai"]);
+    expect(first.disabled_providers).toEqual(["local"]);
+    expect(first.provider).not.toHaveProperty("archestra-vendor");
+    // Name, npm and model data stay the client's; the credential, the base
+    // URL and the model list are the connection's.
+    expect(first.provider.vendor).toEqual({
+      name: "My vendor",
       whitelist: ["fixture/model"],
-      options: { apiKey: "managed-secret", baseURL: managedRoute, headers: {} },
-      models: {
-        "fixture/model": { id: "vendor:fixture/model" },
+      options: {
+        apiKey: "managed-secret",
+        baseURL: managedRoute,
+        headers: { "X-Local": "kept", "X-Archestra-Agent-Id": "opencode" },
       },
+      models: { retired: { name: "Retired" } },
     });
     expect(JSON.stringify(first.provider.vendor)).not.toContain(
       "passthrough-secret",
     );
-    expect(JSON.stringify(first.provider.vendor)).not.toContain(
-      "ChatGPT-Account-Id",
-    );
-    expect(first.provider.openai).toMatchObject({
+    expect(JSON.stringify(first)).not.toContain(" via ");
+    // The user's own OpenAI sign-in keeps its key and gets the passthrough key.
+    expect(first.provider.openai).toEqual({
       npm: "@ai-sdk/openai",
-      options: { apiKey: "user-openai-key" },
+      options: {
+        apiKey: "user-openai-key",
+        baseURL: nativeRoute,
+        headers: {
+          "X-Archestra-Agent-Id": "opencode",
+          "X-Archestra-Virtual-Key": "passthrough-secret",
+          Authorization: "Bearer passthrough-secret",
+        },
+      },
       models: { "user-inventory": { name: "kept" } },
     });
-    expect(second.provider.vendor.options.apiKey).toBe("managed-secret");
-    expect(second.provider.vendor.models).not.toHaveProperty("retired");
+    expect(second.provider.vendor).toEqual(first.provider.vendor);
     expect(second.provider.openai.options.apiKey).toBe("user-openai-key");
+
+    // The client's own sign-in transport for a managed provider still sends
+    // the managed key, and never its own token.
+    const output: { headers: Record<string, string> } = { headers: {} };
+    await hooks["chat.headers"](
+      {
+        sessionID: "ses_1",
+        agent: "build",
+        provider: { id: "vendor", options: { baseURL: managedRoute } },
+      },
+      output,
+    );
+    expect(output.headers).not.toHaveProperty("X-Archestra-Virtual-Key");
+    await globalThis.fetch(`${managedRoute}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...output.headers,
+        Authorization: "Bearer native-vendor-token",
+        "x-api-key": "managed-secret",
+      },
+      body: "{}",
+    });
+    expect(calls[0].headers.get("authorization")).toBe("Bearer managed-secret");
+    expect(calls[0].headers.get("x-api-key")).toBe("managed-secret");
+    expect(calls[0].headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
-  test("V2 sets the wire id on the SDK model and does not copy the passthrough key onto an alias", async () => {
+  test("V2 filters a stock provider's models in place and adds or renames nothing", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-"));
     roots.push(root);
     const revision = path.join(root, "revision");
-    await writeFakeOpenCodePluginSdk(revision);
+    await mkdir(revision);
     const keyPath = path.join(root, "managed.key");
     await writeFile(keyPath, "managed-secret\n", { mode: 0o600 });
     await writeFile(
@@ -192,20 +239,30 @@ describe("managed catalog plugin", () => {
         runtime: true,
         routes: {},
         headers: {},
-        catalog,
+        catalog: {
+          ...catalog,
+          // A provider the client does not have is not created for it.
+          managed: { ...catalog.managed, absent: ["x"] },
+          routes: {
+            ...catalog.routes,
+            absent: "https://deployment.example/v1/absent/agent",
+          },
+        },
       }),
     );
     const result = await run(path.join(revision, "routing.mjs"));
-    expect(result.vendor.provider.settings).toMatchObject({
-      apiKey: "managed-secret",
-      baseURL: managedRoute,
+    expect(result.vendor.provider).toMatchObject({
+      name: "Vendor",
+      activation: "enabled",
+      settings: { apiKey: "managed-secret", baseURL: managedRoute },
     });
-    expect(result.vendor.provider.headers).not.toHaveProperty(
-      "X-Archestra-Virtual-Key",
-    );
-    expect(result.vendor.models["fixture/model"]).toMatchObject({
-      id: "fixture/model",
-      modelID: "vendor:fixture/model",
+    // The user's own headers stay, minus any credential.
+    expect(result.vendor.provider.headers).toEqual({
+      "X-Local": "kept",
+      "X-Archestra-Agent-Id": "opencode",
+    });
+    expect(result.vendor.models).toEqual({
+      "fixture/model": { id: "fixture/model", modelID: "fixture/model" },
     });
     expect(result.openai.provider.settings).toEqual({
       apiKey: "user-openai-key",
@@ -213,12 +270,13 @@ describe("managed catalog plugin", () => {
     expect(result.openai.models).toEqual({
       "user-inventory": { id: "user-inventory" },
     });
+    expect(result.calls.filter((call) => call.startsWith("add:"))).toEqual([]);
     expect(result.calls.filter((call) => call === "models.set:vendor")).toEqual(
       ["models.set:vendor", "models.set:vendor"],
     );
   });
 
-  test("refuses Gemini generateContent on a managed alias and sends OpenAI transport to the model router", async () => {
+  test("managed Google sends generateContent to the Gemini route with the managed key", async () => {
     const calls: string[] = [];
     globals[directFetch] = async (
       input: RequestInfo | URL,
@@ -262,6 +320,7 @@ describe("managed catalog plugin", () => {
         source: { token: "cru1_test" },
       }),
     );
+    const geminiRoute = "https://deployment.example/v1/gemini/agent/v1beta";
     const file = path.join(revision, "routing.mjs");
     await writeFile(
       file,
@@ -270,45 +329,47 @@ describe("managed catalog plugin", () => {
         routes: {},
         headers: {},
         catalog: {
-          providers: {
-            "archestra-gemini": {
-              name: "Gemini",
-              npm: "@ai-sdk/openai",
-              options: { baseURL: managedRoute },
-              models: {
-                "gem-x": { name: "Gem", id: "gemini:gem-x" },
-              },
-            },
-          },
-          routes: { "archestra-gemini": managedRoute },
-          twins: { google: "archestra-gemini" },
+          routes: { google: geminiRoute },
+          managed: { google: ["gem-x"] },
+          // The admin turned the user's own Gemini sign-in off, so the
+          // organization's credential serves Google even though the user
+          // is signed in.
+          passthrough: [],
+          legacy: { "archestra-gemini": "google" },
         },
       }),
     );
     const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
     const hooks = await module.ArchestraLlmProxy();
-    await hooks.config({
+    const config = {
       provider: { google: { npm: "@ai-sdk/google", options: {} } },
+    };
+    await hooks.config(config);
+    expect(config.provider.google).toEqual({
+      npm: "@ai-sdk/google",
+      whitelist: ["gem-x"],
+      options: {
+        apiKey: "managed-secret",
+        baseURL: geminiRoute,
+        headers: { "X-Archestra-Agent-Id": "opencode" },
+      },
     });
     const auth = await hooks.auth.loader(async () => ({
       type: "oauth",
       access: "native-google-token",
     }));
+    expect(auth).toMatchObject({
+      apiKey: "managed-secret",
+      baseURL: geminiRoute,
+    });
     await expect(
       auth.fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/foo:generateContent",
-        {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer native-google-token",
-            "x-goog-api-key": "native-google-token",
-          },
-          body: "{}",
-        },
+        "https://generativelanguage.googleapis.com/v1beta/models/gem-x:generateContent",
+        { method: "POST", body: "{}" },
       ),
-    ).rejects.toThrow("does not accept Gemini generateContent");
+    ).rejects.toThrow("Unsupported managed authentication request");
     expect(calls).toEqual([]);
-    await auth.fetch(`${managedRoute}/chat/completions`, {
+    await auth.fetch(`${geminiRoute}/models/gem-x:streamGenerateContent`, {
       method: "POST",
       headers: {
         Authorization: "Bearer native-google-token",
@@ -317,11 +378,11 @@ describe("managed catalog plugin", () => {
       body: "{}",
     });
     expect(calls).toEqual([
-      `${managedRoute}/chat/completions auth=Bearer managed-secret goog=null`,
+      `${geminiRoute}/models/gem-x:streamGenerateContent auth=Bearer managed-secret goog=null`,
     ]);
   });
 
-  test("sends the managed key when the client's own sign-in for an alias replaces it", async () => {
+  test("sends the managed key when the client's own sign-in for a managed provider replaces it", async () => {
     const calls: Request[] = [];
     globals[directFetch] = async (
       input: RequestInfo | URL,
@@ -334,8 +395,8 @@ describe("managed catalog plugin", () => {
     roots.push(root);
     process.env.XDG_DATA_HOME = path.join(root, "data");
     process.env.HOME = root;
-    // Kilo Code keeps its own xAI sign-in here; the connection routes xAI only
-    // through its catalog twin.
+    // Kilo Code keeps its own vendor sign-in here; the connection serves
+    // vendor only with the organization's credential.
     await mkdir(path.join(root, "data", "kilo"), { recursive: true });
     await writeFile(
       path.join(root, "data", "kilo", "auth.json"),
@@ -412,16 +473,16 @@ describe("managed catalog plugin", () => {
         body: "{}",
       });
     };
-    await signedIn("vendor", `${managedRoute}/responses`);
+    await signedIn("vendor", `${managedRoute}/chat/completions`);
     await signedIn("openai", `${nativeRoute}/responses`);
 
-    const [alias, native] = calls;
-    expect(alias.url).toBe(`${managedRoute}/responses`);
-    expect(alias.headers.get("authorization")).toBe("Bearer managed-secret");
-    expect(alias.headers.get("chatgpt-account-id")).toBeNull();
-    expect(alias.headers.get("x-api-key")).toBeNull();
-    expect(alias.headers.get("x-opencode-session")).toBe("ses_child");
-    expect(alias.headers.get("x-archestra-managed-alias")).toBeNull();
+    const [managed, native] = calls;
+    expect(managed.url).toBe(`${managedRoute}/chat/completions`);
+    expect(managed.headers.get("authorization")).toBe("Bearer managed-secret");
+    expect(managed.headers.get("chatgpt-account-id")).toBeNull();
+    expect(managed.headers.get("x-api-key")).toBeNull();
+    expect(managed.headers.get("x-opencode-session")).toBe("ses_child");
+    expect(managed.headers.get("x-archestra-managed-alias")).toBeNull();
     // A provider on its own native route keeps the user's credential.
     expect(native.headers.get("authorization")).toBe(
       "Bearer native-openai-token",
@@ -433,12 +494,307 @@ describe("managed catalog plugin", () => {
     expect(native.headers.get("x-archestra-managed-alias")).toBeNull();
   });
 
+  test.each([
+    {
+      setup: "an older setup that stored the key beside OpenAI only",
+      installed: {
+        routeHeaders: {
+          openai: {
+            "X-Archestra-Virtual-Key": "passthrough-secret",
+            "X-Route-Only": "openai",
+          },
+        },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup that knew no passthrough route",
+      installed: {
+        routeHeaders: {},
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "an older setup with an empty passthrough field",
+      installed: {
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        passthroughHeaders: {},
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup that left an empty entry for the route",
+      installed: {
+        routeHeaders: { xai: {} },
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+      key: "passthrough-secret",
+    },
+    {
+      setup: "a setup without a passthrough key",
+      installed: { routeHeaders: {} },
+      key: undefined,
+    },
+  ])("a passthrough route the catalog adds later gets the passthrough key from $setup", async ({
+    installed,
+    key,
+  }) => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-new-route-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    // The user's own xAI sign-in. The deployment routed xAI after setup.
+    await mkdir(path.join(root, "data", "kilo"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "kilo", "auth.json"),
+      JSON.stringify({
+        xai: { type: "oauth", access: "native-xai-token", refresh: "r" },
+      }),
+    );
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        // A setup without any route leaves the proxy out, and the plugin
+        // does not load at all.
+        routes: { vendor: managedRoute },
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        ...installed,
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const xaiRoute = "https://deployment.example/v1/xai/agent";
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          ...catalog,
+          routes: { ...catalog.routes, xai: xaiRoute },
+          managed: { ...catalog.managed, xai: ["grok-x"] },
+          // Vendor allows the user's own sign-in too, but this user has none.
+          passthrough: ["openai", "xai", "vendor"],
+        },
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: { vendor: { options: {} }, xai: { options: {} } },
+    };
+    await hooks.config(config);
+    expect(config.provider.xai.options).toEqual({
+      baseURL: xaiRoute,
+      headers: {
+        "X-Archestra-Agent-Id": "kilo",
+        ...(key ? { "X-Archestra-Virtual-Key": key } : {}),
+      },
+    });
+    // A request the organization's credential authenticates never carries it.
+    expect(config.provider.vendor.options).toMatchObject({
+      apiKey: "managed-secret",
+    });
+    expect(JSON.stringify(config.provider.vendor)).not.toContain(
+      "passthrough-secret",
+    );
+  });
+
+  test("keeps the client's provider names and ids and adds no provider of its own", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-names-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "kilo-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "kilo" },
+        clientId: "kilo",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const kimiRoute = "https://deployment.example/v1/kimi/agent";
+    const xaiRoute = "https://deployment.example/v1/xai/agent";
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          routes: { moonshotai: kimiRoute, xai: xaiRoute },
+          managed: { moonshotai: ["kimi-k3"], xai: ["grok-4.7"] },
+          passthrough: ["xai"],
+          legacy: { "archestra-kimi": "moonshotai", "archestra-xai": "xai" },
+        },
+        client: KILO_CLIENT,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config: {
+      model?: string;
+      agent: Record<string, { model?: string }>;
+      provider: Record<string, { name?: string }>;
+    } = {
+      model: "archestra-kimi/kimi-k3",
+      agent: { compaction: { model: "kimi-code-plan-cn/kimi-k3" } },
+      provider: {
+        moonshotai: { name: "Moonshot AI" },
+        "kimi-code-plan-cn": { name: "Kimi For Coding (kimi.com)" },
+      },
+    };
+    await hooks.config(config);
+    expect(config.model).toBe("moonshotai/kimi-k3");
+    expect(config.agent).toEqual({ compaction: {} });
+    expect(Object.keys(config.provider).sort()).toEqual([
+      "kimi-code-plan-cn",
+      "moonshotai",
+      "xai",
+    ]);
+    expect(config.provider.moonshotai.name).toBe("Moonshot AI");
+    // The client's own catalog names a provider the config does not.
+    expect(config.provider.xai).not.toHaveProperty("name");
+    expect(config.provider["kimi-code-plan-cn"]).toEqual({
+      name: "Kimi For Coding (kimi.com)",
+    });
+    expect(JSON.stringify(config)).not.toContain(" via ");
+    expect(JSON.stringify(config)).not.toContain("archestra-");
+  });
+
+  test("a managed-only provider is not listed while the key file is unreadable", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-nokey-"));
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: path.join(root, "missing.key"),
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = {
+      provider: { vendor: { options: { apiKey: "user-vendor-key" } } },
+    };
+    await hooks.config(config);
+    // vendor is served only by the organization's key, which is missing:
+    // it stays out of the picker instead of loading against its stock URL.
+    // openai is the user's own sign-in, listed so they can sign in.
+    expect(config).toMatchObject({ enabled_providers: ["openai"] });
+    expect(config.provider.vendor).toEqual({
+      options: { apiKey: "user-vendor-key" },
+    });
+  });
+
+  test("V2 keeps every provider's own name and disables the ones the connection does not serve", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-names-"));
+    roots.push(root);
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    const keyPath = path.join(root, "managed.key");
+    await writeFile(keyPath, "managed-secret\n");
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: keyPath,
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPluginV2({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          routes: { moonshotai: "https://deployment.example/v1/kimi/agent" },
+          managed: { moonshotai: ["kimi-k3"] },
+          passthrough: [],
+          legacy: { "archestra-kimi": "moonshotai" },
+        },
+      }),
+    );
+    expect(
+      await runProviderNames(file, {
+        moonshotai: "Moonshot AI",
+        "kimi-code-plan-cn": "Kimi For Coding (kimi.com)",
+        opencode: "OpenCode Zen",
+      }),
+    ).toEqual({
+      moonshotai: { name: "Moonshot AI", activation: "enabled" },
+      "kimi-code-plan-cn": {
+        name: "Kimi For Coding (kimi.com)",
+        activation: "disabled",
+      },
+      opencode: { name: "OpenCode Zen", activation: "disabled" },
+    });
+  });
+
   test("a supplied empty catalog is authoritative and an omitted catalog is not", async () => {
+    const empty: ManagedRuntimeCatalog = {
+      routes: {},
+      managed: {},
+      passthrough: [],
+      legacy: {},
+    };
     expect(
       renderOpenCodeRoutingPlugin({
         routes: { openai: "https://old.example/v1/openai/stale-agent" },
         headers: {},
-        catalog: { providers: {}, routes: {}, twins: {} },
+        catalog: empty,
       }),
     ).toContain("const hasCatalog = true");
     expect(renderOpenCodeRoutingPlugin({ routes: {}, headers: {} })).toContain(
@@ -466,7 +822,7 @@ describe("managed catalog plugin", () => {
         runtime: true,
         routes: {},
         headers: {},
-        catalog: { providers: {}, routes: {}, twins: {} },
+        catalog: empty,
       }),
     );
     const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
@@ -479,28 +835,28 @@ describe("managed catalog plugin", () => {
     expect(JSON.stringify(config)).not.toContain("stale-agent");
   });
 
-  test("V2 strips native OAuth after the request hook when the alias has no native route", async () => {
-    const result = await runAlias(false);
+  test("V2 strips native OAuth after the request hook when the organization's credential serves the provider", async () => {
+    const result = await runManagedOpenAi(false);
     expect(result.hook).toMatchObject({
-      baseURL: managedRoute,
+      baseURL: openAiRoute,
       Authorization: "Bearer managed-secret",
     });
     expect(result.hook).not.toHaveProperty("ChatGPT-Account-Id");
     expect(result.hook).not.toHaveProperty("x-goog-api-key");
     expect(result.hook).not.toHaveProperty("x-archestra-opencode-oauth-bridge");
     expect(result.sourceConnection).toEqual({ id: "oauth" });
-    expect(result.finalUrl).toBe(`${managedRoute}/responses`);
+    expect(result.finalUrl).toBe(`${openAiRoute}/responses`);
     expect(result.finalAuth).toBe("Bearer managed-secret");
     expect(result.finalAccount).toBeNull();
     expect(result.finalBridge).toBeNull();
     expect(result.finalGoog).toBeNull();
-    expect(result.keptUrl).toBe(`${managedRoute}/chat/completions`);
+    expect(result.keptUrl).toBe(`${openAiRoute}/chat/completions`);
     expect(result.keptAuth).toBe("Bearer managed-secret");
     expect(result.redirect).toBe("error");
   });
 
-  test("V2 keeps a real native route credential ahead of the managed alias", async () => {
-    const result = await runAlias(true);
+  test("V2 keeps the user's own sign-in ahead of the organization's credential where the connection allows it", async () => {
+    const result = await runManagedOpenAi(true);
     expect(result.hook.Authorization).toBe("Bearer native-openai-token");
     expect(result.hook["x-archestra-opencode-oauth-bridge"]).toBe("true");
     expect(result.hook.Authorization).not.toBe("Bearer managed-secret");
@@ -511,169 +867,36 @@ describe("managed catalog plugin", () => {
     expect(result.finalAccount).toBe("acct");
   });
 
-  test("a managed alias keeps the client's provider label and names the catalog provider that serves it", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-labels-"));
-    roots.push(root);
-    process.env.HOME = root;
-    process.env.XDG_DATA_HOME = path.join(root, "data");
-    process.env.XDG_CACHE_HOME = path.join(root, "cache");
-    const modelsCache = path.join(root, "cache", "opencode", "models.json");
-    await mkdir(path.dirname(modelsCache), { recursive: true });
-    // The client may still be writing its catalog when the plugin loads.
-    await writeFile(modelsCache, '{"moonshotai": {"name": "Moon');
-    await mkdir(path.join(root, ".archestra"));
-    await writeFile(
-      path.join(root, ".archestra", "opencode-primary.key"),
-      "managed-secret\n",
-    );
-    const revision = path.join(root, "revision");
-    await mkdir(revision);
-    await writeFile(
-      path.join(root, "params.json"),
-      JSON.stringify({
-        routes: {},
-        headers: {},
-        clientId: "opencode",
-        origin: "https://deployment.example",
-        source: { token: "cru1_test" },
-      }),
-    );
-    const file = path.join(revision, "routing.mjs");
-    await writeFile(
-      file,
-      renderOpenCodeRoutingPlugin({
-        runtime: true,
-        routes: {},
-        headers: {},
-        catalog: kimiCatalog,
-      }),
-    );
-    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
-    const hooks = await module.ArchestraLlmProxy();
-    const config = () => ({
-      provider: {
-        "kimi-code-plan-cn": { name: "My Kimi plan" },
-      } as Record<string, { name?: string }>,
-    });
-    const names = (cfg: ReturnType<typeof config>) =>
-      Object.fromEntries(
-        Object.entries(cfg.provider).map(([id, entry]) => [id, entry.name]),
-      );
-    const first = config();
-    await hooks.config(first);
-    expect(names(first)).toEqual({
-      ...kimiLabels,
-      moonshotai: "moonshotai via Moonshot (Kimi)",
-      "kimi-code-plan-global": "kimi-code-plan-global via Moonshot (Kimi)",
-    });
-    await writeFile(
-      modelsCache,
-      JSON.stringify({
-        moonshotai: { id: "moonshotai", name: "Moonshot AI", models: {} },
-        "kimi-code-plan-global": {
-          id: "kimi-code-plan-global",
-          name: "Kimi For Coding (kimi.ai)",
-          models: {},
+  test.each([
+    {
+      setup: "an older setup that stored the key beside Google only",
+      installed: {
+        routeHeaders: {
+          google: { "X-Archestra-Virtual-Key": "passthrough-secret" },
         },
-      }),
-    );
-    const second = config();
-    await hooks.config(second);
-    expect(names(second)).toEqual(kimiLabels);
-    const third = config();
-    await hooks.config(third);
-    expect(names(third)).toEqual(kimiLabels);
-  });
-
-  test("V2 gives a managed alias the client's provider label and the catalog provider that serves it", async () => {
-    const root = await mkdtemp(
-      path.join(tmpdir(), "catalog-plugin-v2-labels-"),
-    );
-    roots.push(root);
-    const revision = path.join(root, "revision");
-    await writeFakeOpenCodePluginSdk(revision);
-    const keyPath = path.join(root, "managed.key");
-    await writeFile(keyPath, "managed-secret\n", { mode: 0o600 });
-    await writeFile(
-      path.join(root, "params.json"),
-      JSON.stringify({
-        routes: {},
-        headers: {},
-        managedKeyPath: keyPath,
-        clientId: "opencode",
-        origin: "https://deployment.example",
-        source: { token: "cru1_test" },
-      }),
-    );
-    const file = path.join(revision, "routing.mjs");
-    await writeFile(
-      file,
-      renderOpenCodeRoutingPluginV2({
-        runtime: true,
-        routes: {},
-        headers: {},
-        catalog: kimiCatalog,
-      }),
-    );
-    expect(
-      await runProviderNames(file, {
-        moonshotai: "Moonshot AI",
-        "kimi-code-plan-global": "Kimi For Coding (kimi.ai)",
-        "kimi-code-plan-cn": "My Kimi plan",
-      }),
-    ).toEqual(kimiLabels);
+      },
+    },
+    {
+      setup: "a setup that knew no passthrough route",
+      installed: {
+        routeHeaders: {},
+        passthroughHeaders: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+      },
+    },
+  ])("V2 gives a passthrough route the catalog adds later the passthrough key from $setup", async ({
+    installed,
+  }) => {
+    const result = await runManagedOpenAi(true, installed);
+    expect(result.hook.Authorization).toBe("Bearer native-openai-token");
+    expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
   });
 });
-
-const kimiRoute = "https://deployment.example/v1/kimi/agent";
-const kimiCatalog = {
-  providers: {
-    "archestra-kimi": {
-      name: "Moonshot (Kimi)",
-      npm: "@ai-sdk/openai-compatible" as const,
-      options: { baseURL: kimiRoute },
-      models: { "kimi-k3": { name: "kimi-k3", id: "kimi-k3" } },
-    },
-  },
-  routes: { "archestra-kimi": kimiRoute },
-  twins: {
-    kimi: "archestra-kimi",
-    moonshotai: "archestra-kimi",
-    "kimi-code-plan-global": "archestra-kimi",
-    "kimi-code-plan-cn": "archestra-kimi",
-  },
-};
-// Every row serves the same Archestra models, so only the label tells them
-// apart: the client's own name for the provider (its models.dev entry, else a
-// name the user configured, else the id) and the catalog provider behind it.
-const kimiLabels = {
-  "archestra-kimi": "Moonshot (Kimi)",
-  kimi: "kimi via Moonshot (Kimi)",
-  moonshotai: "Moonshot AI via Moonshot (Kimi)",
-  "kimi-code-plan-global": "Kimi For Coding (kimi.ai) via Moonshot (Kimi)",
-  "kimi-code-plan-cn": "My Kimi plan via Moonshot (Kimi)",
-};
-
-/** The two `@opencode/plugin` SDK constructors the V2 plugin calls. */
-async function writeFakeOpenCodePluginSdk(revision: string) {
-  const sdk = path.join(revision, "node_modules", "@opencode", "plugin");
-  await mkdir(sdk, { recursive: true });
-  await writeFile(
-    path.join(sdk, "package.json"),
-    JSON.stringify({ type: "module", exports: "./index.js" }),
-  );
-  await writeFile(
-    path.join(sdk, "index.js"),
-    `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
-  );
-}
 
 /** Runs the V2 transform twice over providers the client already lists. */
 function runProviderNames(
   file: string,
   names: Record<string, string>,
-): Promise<Record<string, string>> {
+): Promise<Record<string, { name: string; activation: string }>> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -681,7 +904,7 @@ function runProviderNames(
         "--input-type=module",
         "-e",
         `const plugin = (await import(${JSON.stringify(pathToFileURL(file).href)})).default;
-const providers = new Map(Object.entries(${JSON.stringify(names)}).map(([id, name]) => [id, { provider: { id, name, settings: {}, headers: {} }, models: new Map() }]));
+const providers = new Map(Object.entries(${JSON.stringify(names)}).map(([id, name]) => [id, { provider: { id, name, activation: "auto", settings: {}, headers: {} }, models: new Map([["kimi-k3", { id: "kimi-k3" }], ["other", { id: "other" }]]) }]));
 const editor = {
   list: () => [...providers.values()],
   get: (id) => providers.get(id),
@@ -690,7 +913,7 @@ const editor = {
   models: { set: (id, models) => { providers.get(id).models = new Map(models.map((model) => [model.id, model])); } },
 };
 for (let pass = 0; pass < 2; pass++) await plugin.setup({ provider: { transform: async (callback) => callback(editor) }, session: { hook: async () => {} } });
-console.log(JSON.stringify(Object.fromEntries([...providers].map(([id, record]) => [id, record.provider.name]))));`,
+console.log(JSON.stringify(Object.fromEntries([...providers].map(([id, record]) => [id, { name: record.provider.name, activation: record.provider.activation }]))));`,
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -712,6 +935,8 @@ console.log(JSON.stringify(Object.fromEntries([...providers].map(([id, record]) 
 function run(file: string): Promise<{
   vendor: {
     provider: {
+      name: string;
+      activation: string;
       settings: Record<string, string>;
       headers: Record<string, string>;
     };
@@ -733,7 +958,7 @@ function run(file: string): Promise<{
 const calls = [];
 const providers = new Map([
   ["openai", { provider: { id: "openai", settings: { apiKey: "user-openai-key" }, headers: {} }, models: new Map([["user-inventory", { id: "user-inventory" }]]) }],
-  ["vendor", { provider: { id: "vendor", settings: { apiKey: "stale" }, headers: { Authorization: "Bearer stale", "ChatGPT-Account-Id": "acct" } }, models: new Map([["retired", { id: "retired" }]]) }],
+  ["vendor", { provider: { id: "vendor", name: "Vendor", activation: "auto", settings: { apiKey: "stale" }, headers: { Authorization: "Bearer stale", "ChatGPT-Account-Id": "acct", "X-Local": "kept" } }, models: new Map([["retired", { id: "retired", modelID: "retired" }], ["fixture/model", { id: "fixture/model", modelID: "fixture/model" }]]) }],
 ]);
 const editor = {
   list: () => [...providers.values()],
@@ -764,11 +989,20 @@ console.log(JSON.stringify({ vendor: pack("vendor"), openai: pack("openai"), cal
   });
 }
 
-async function prepareAlias(nativeRouteAllowed: boolean): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-alias-"));
+const openAiRoute = "https://deployment.example/v1/openai/agent";
+
+async function prepareManagedOpenAi(
+  nativeAllowed: boolean,
+  installed: Record<string, unknown> = {
+    routeHeaders: {
+      openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+    },
+  },
+): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-openai-"));
   roots.push(root);
   const revision = path.join(root, "revision");
-  await writeFakeOpenCodePluginSdk(revision);
+  await mkdir(revision);
   const keyPath = path.join(root, "managed.key");
   await writeFile(keyPath, "managed-secret\n");
   await writeFile(
@@ -776,19 +1010,13 @@ async function prepareAlias(nativeRouteAllowed: boolean): Promise<string> {
     JSON.stringify({
       routes: {},
       headers: { "X-Archestra-Agent-Id": "opencode" },
-      routeHeaders: {
-        openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
-      },
+      ...installed,
       managedKeyPath: keyPath,
       clientId: "opencode",
       origin: "https://deployment.example",
       source: { token: "cru1_test" },
     }),
   );
-  const routes: Record<string, string> = {
-    "archestra-openai": managedRoute,
-  };
-  if (nativeRouteAllowed) routes.openai = nativeRoute;
   await writeFile(
     path.join(revision, "routing.mjs"),
     renderOpenCodeRoutingPluginV2({
@@ -796,23 +1024,20 @@ async function prepareAlias(nativeRouteAllowed: boolean): Promise<string> {
       routes: {},
       headers: {},
       catalog: {
-        providers: {
-          "archestra-openai": {
-            name: "OpenAI",
-            npm: "@ai-sdk/openai",
-            options: { baseURL: managedRoute },
-            models: { "gpt-x": { name: "GPT", id: "openai:gpt-x" } },
-          },
-        },
-        routes,
-        twins: { openai: "archestra-openai" },
+        routes: { openai: openAiRoute },
+        managed: { openai: ["gpt-x"] },
+        passthrough: nativeAllowed ? ["openai"] : [],
+        legacy: { "archestra-openai": "openai" },
       },
     }),
   );
   return path.join(revision, "routing.mjs");
 }
 
-function runAlias(nativeRouteAllowed: boolean): Promise<{
+function runManagedOpenAi(
+  nativeAllowed: boolean,
+  installed?: Record<string, unknown>,
+): Promise<{
   hook: Record<string, string>;
   sourceConnection: { id: string } | null;
   finalUrl: string;
@@ -824,7 +1049,7 @@ function runAlias(nativeRouteAllowed: boolean): Promise<{
   keptAuth: string | null;
   redirect: string;
 }> {
-  return prepareAlias(nativeRouteAllowed).then(
+  return prepareManagedOpenAi(nativeAllowed, installed).then(
     (file) =>
       new Promise((resolve, reject) => {
         const child = spawn(
@@ -834,7 +1059,7 @@ function runAlias(nativeRouteAllowed: boolean): Promise<{
             "-e",
             `const plugin = (await import(${JSON.stringify(pathToFileURL(file).href)})).default;
 const providers = new Map([
-  ["openai", { provider: { id: "openai", activation: "disabled", settings: { apiKey: "native-user-key" }, headers: { Authorization: "Bearer native-user-key" } }, models: new Map(), sourceConnection: { id: "oauth" } }],
+  ["openai", { provider: { id: "openai", activation: "disabled", settings: { apiKey: "native-user-key" }, headers: { Authorization: "Bearer native-user-key" } }, models: new Map([["gpt-x", { id: "gpt-x" }], ["gpt-y", { id: "gpt-y" }]]), sourceConnection: { id: "oauth" } }],
 ]);
 const editor = {
   list: () => [...providers.values()],
@@ -849,16 +1074,17 @@ await plugin.setup({
   provider: { transform: async (callback) => callback(editor) },
   session: { hook: async (name, callback) => { if (name === "model.request") modelRequest = callback; if (name === "http.request") httpRequest = callback; } },
 }, () => ({ "x-archestra-client-runtime-token": "session-proof", "x-archestra-mcp-aliases": "scoped-aliases" }));
-const event = { model: { providerID: "openai" }, baseURL: "https://chatgpt.com/backend-api/codex", headers: { Authorization: "Bearer native-openai-token", "ChatGPT-Account-Id": "acct", "x-archestra-opencode-oauth-bridge": "true", "x-goog-api-key": "goog" }, agent: "build" };
+const event = { model: { providerID: "openai" }, baseURL: "https://chatgpt.com/backend-api/codex", headers: { Authorization: "Bearer native-openai-token", "ChatGPT-Account-Id": "acct", "x-goog-api-key": "stale" }, agent: "build" };
 modelRequest(event);
-const rerouted = { request: new Request("https://chatgpt.com/backend-api/codex/responses", { method: "POST", headers: { Authorization: "Bearer native-openai-token", "ChatGPT-Account-Id": "acct", "x-archestra-opencode-oauth-bridge": "true", "x-goog-api-key": "goog" }, body: "{}" }) };
+const rerouted = { request: new Request("https://chatgpt.com/backend-api/codex/responses", { method: "POST", headers: { Authorization: "Bearer native-openai-token", "ChatGPT-Account-Id": "acct", "x-archestra-opencode-oauth-bridge": "true", "x-goog-api-key": "stale" }, body: "{}" }) };
 await httpRequest(rerouted);
-const kept = { request: new Request(${JSON.stringify(`${managedRoute}/chat/completions`)}, { method: "POST", headers: { Authorization: "Bearer native-openai-token", "x-goog-api-key": "goog" }, body: "{}" }) };
+const kept = { request: new Request(${JSON.stringify(`${openAiRoute}/chat/completions`)}, { method: "POST", headers: { Authorization: "Bearer native-openai-token", "x-goog-api-key": "stale" }, body: "{}" }) };
 await httpRequest(kept);
 console.log(JSON.stringify({
   hook: event.headers,
   hookBase: event.baseURL,
   sourceConnection: providers.get("openai").sourceConnection ?? null,
+  models: [...providers.get("openai").models.keys()],
   finalUrl: rerouted.request.url,
   finalAuth: rerouted.request.headers.get("authorization"),
   finalAccount: rerouted.request.headers.get("chatgpt-account-id"),

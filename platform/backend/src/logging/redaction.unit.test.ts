@@ -22,6 +22,25 @@ function createCapturingLogger() {
 }
 
 describe("log redaction", () => {
+  test("censors native Azure and platform credentials in raw and parsed headers", () => {
+    const { logger, records } = createCapturingLogger();
+    for (const name of [
+      "api-key",
+      "Api-Key",
+      "API-Key",
+      "x-api-key",
+      "x-archestra-virtual-key",
+    ]) {
+      logger.info({
+        [name]: "sensitive-credential",
+        headers: { [name]: "sensitive-credential" },
+        request: { headers: { [name]: "sensitive-credential" } },
+      });
+    }
+    expect(records).toHaveLength(5);
+    expect(JSON.stringify(records)).not.toContain("sensitive-credential");
+    expect(JSON.stringify(records)).toContain("[Redacted]");
+  });
   test("censors runtime bindings in request headers and launch secrets", () => {
     const { logger, records } = createCapturingLogger();
     logger.info({

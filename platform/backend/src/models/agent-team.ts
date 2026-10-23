@@ -70,8 +70,9 @@ class AgentTeamModel {
   }
 
   /**
-   * Check if a user has access to a specific agent: a grant decides for an
-   * agent or MCP gateway; see the end of the method for an LLM proxy.
+   * Check if a user has access to a specific agent: an LLM proxy serves its
+   * organization's members (any proxy for an admin); a grant decides for an
+   * agent or MCP gateway.
    */
   static async userHasAgentAccess(params: {
     userId: string;
@@ -99,6 +100,14 @@ class AgentTeamModel {
     if (!agent) {
       return false;
     }
+    // Agents and MCP gateways are reached through grants alone. An LLM proxy
+    // has no grant namespace of its own: the organization's proxy serves every
+    // member, and an administrator reaches any proxy row.
+    if (agent.agentType === "llm_proxy")
+      return (
+        isAgentAdmin ||
+        AgentModel.isOrganizationLlmProxyFor({ agentId, userId })
+      );
 
     const table = schema.agentsTable;
     const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
@@ -134,13 +143,7 @@ class AgentTeamModel {
         ),
       )
       .limit(1);
-    if (granted) return true;
-    // Agents and MCP gateways are reached through grants alone. An LLM proxy
-    // has no grant namespace of its own: the organization's proxy serves every
-    // member, and an administrator reaches any proxy row.
-    if ((await AgentModel.getAgentType(agentId)) !== "llm_proxy") return false;
-    if (isAgentAdmin) return true;
-    return AgentModel.isOrganizationLlmProxyFor({ agentId, userId });
+    return granted !== undefined;
   }
 
   /**

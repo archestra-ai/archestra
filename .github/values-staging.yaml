@@ -103,10 +103,13 @@ archestra:
     heapSnapshotsNearHeapLimit: 0
 
   # Pre-installed read-only Kubernetes MCP server and the SRE agent using it.
-  # No apiServerCidrs yet: the server's egress to the API server works only
-  # while the cluster does not enforce MCP egress policies.
+  # apiServerCidrs: the private control-plane endpoint of archestra-staging
+  # (`kubectl get endpoints kubernetes -n default`), which the MCP egress
+  # floor blocks otherwise.
   sre:
     enabled: true
+    apiServerCidrs:
+      - 10.0.0.2/32
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:

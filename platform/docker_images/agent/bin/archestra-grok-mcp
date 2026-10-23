@@ -16,6 +16,7 @@ import os
 import sys
 import threading
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 
 GATEWAY_URL = os.environ["ARCHESTRA_MCP_GATEWAY_URL"]
@@ -39,15 +40,17 @@ mcp_session: list[str] = []
 
 
 def main() -> None:
-    for line in sys.stdin.buffer:
-        try:
-            message = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(message, dict):
-            continue
-        # Tool calls can run for a long time; answer each request on its own.
-        threading.Thread(target=relay, args=(message,), daemon=True).start()
+    # Tool calls can run for a long time; answer each request on its own, but
+    # cap the concurrency so a burst of messages cannot exhaust the runtime.
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="relay") as pool:
+        for line in sys.stdin.buffer:
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(message, dict):
+                continue
+            pool.submit(relay, message)
 
 
 def relay(message: dict) -> None:

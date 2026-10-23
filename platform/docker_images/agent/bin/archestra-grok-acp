@@ -129,6 +129,7 @@ def main() -> int:
         (runtime_dir / marker).unlink(missing_ok=True)
 
     since = time.time() - 1
+    session_id = ""
     try:
         agent = Agent(runtime_dir / "grok-agent.log")
     except OSError:

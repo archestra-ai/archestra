@@ -4,9 +4,10 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@archestra/shared";
-import { count, eq, getTableColumns, inArray } from "drizzle-orm";
+import { count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
@@ -96,20 +97,7 @@ class UserModel {
    */
   static async getById(id: string) {
     logger.trace("UserModel.getById: fetching user");
-    const [row] = await db
-      .select({
-        ...getTableColumns(schema.usersTable),
-        organizationId: schema.membersTable.organizationId,
-        membership: getTableColumns(schema.membersTable),
-      })
-      .from(schema.usersTable)
-      .innerJoin(
-        schema.membersTable,
-        eq(schema.usersTable.id, schema.membersTable.userId),
-      )
-      .where(eq(schema.usersTable.id, id))
-      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
-      .limit(1);
+    const [row] = await UserModel.byId.get().execute({ id });
     logger.trace({ found: !!row }, "UserModel.getById: completed");
     if (!row) return row;
     const { membership, ...user } = row;
@@ -308,6 +296,23 @@ class UserModel {
     logger.debug({ deleted }, "UserModel.delete: completed");
     return deleted;
   }
+  private static readonly byId = new PreparedQuery((database) =>
+    database
+      .select({
+        ...getTableColumns(schema.usersTable),
+        organizationId: schema.membersTable.organizationId,
+        membership: getTableColumns(schema.membersTable),
+      })
+      .from(schema.usersTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
+      .where(eq(schema.usersTable.id, sql.placeholder("id")))
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
+      .limit(1)
+      .prepare("archestra_user_by_id_with_membership"),
+  );
 }
 
 export default UserModel;

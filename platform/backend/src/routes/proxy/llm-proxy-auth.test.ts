@@ -11,6 +11,7 @@ import {
   AgentLabelModel,
   AgentModel,
   LlmProviderApiKeyModelLinkModel,
+  MemberModel,
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -1321,6 +1322,30 @@ describe("VirtualKeyRateLimiter", () => {
       limiter.recordSuccess({ credential: KEY_A }),
     ).resolves.toBeUndefined();
   });
+
+  test("coalesces successful bursts, refreshes the shared mark, and retries failures", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_000_000);
+    const burstLimiter = new VirtualKeyRateLimiter(cacheManager);
+    const writes = vi.spyOn(cacheManager, "set");
+    await Promise.all(
+      Array.from({ length: 50 }, () =>
+        burstLimiter.recordSuccess({ credential: KEY_A }),
+      ),
+    );
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    expect(writes).toHaveBeenCalledTimes(1);
+    const [first] = await storedEntries();
+    expect(first.value.expires).toBe(1_300_000);
+
+    vi.setSystemTime(1_001_001);
+    writes.mockRejectedValueOnce(new Error("cache unavailable"));
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    expect(writes).toHaveBeenCalledTimes(3);
+    const [refreshed] = await storedEntries();
+    expect(refreshed.value.expires).toBe(1_301_001);
+  });
 });
 
 async function storedEntries(): Promise<
@@ -1371,6 +1396,63 @@ async function mustRead(
 // =========================================================================
 
 describe("validatePassthroughVirtualKey", () => {
+  test("default proxy access observes membership removal and key deletion on the next request", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "revocable proxy credential",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const validate = () =>
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy });
+    await expect(validate()).resolves.toMatchObject({ userId: owner.id });
+    await MemberModel.deleteAllByUserId(owner.id);
+    await expect(validate()).rejects.toMatchObject({ statusCode: 403 });
+    await makeMember(owner.id, org.id, { role: "member" });
+    await expect(validate()).resolves.toMatchObject({ userId: owner.id });
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    await expect(validate()).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("a default proxy rejects a valid key issued by another organization", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    await makeMember(owner.id, other.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: other.id,
+      name: "foreign proxy credential",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
   test("returns owner + key id when the owner can access the proxy", async ({
     makeOrganization,
     makeUser,

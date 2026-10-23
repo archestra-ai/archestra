@@ -1,7 +1,9 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { ModelModel } from "@/models";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import type { Model } from "@/types/model";
 
 export type ModelTeamAccessResult =
   | { allowed: true }
@@ -23,10 +25,16 @@ export async function checkModelTeamAccess(params: {
   modelId: string;
   organizationId: string;
   authenticatedUserId: string | undefined;
+  /** The catalog row read by this request; grants are always read below. */
+  catalogModel?: Pick<Model, "id" | "provider" | "modelId">;
 }): Promise<ModelTeamAccessResult> {
   const { provider, modelId, organizationId, authenticatedUserId } = params;
 
-  const model = await ModelModel.findByProviderAndModelId(provider, modelId);
+  const model =
+    params.catalogModel?.provider === provider &&
+    params.catalogModel.modelId === modelId
+      ? params.catalogModel
+      : await ModelModel.findByProviderAndModelId(provider, modelId);
   if (!model) {
     // Unknown models cannot carry a restriction (nothing to reference), and
     // grants are per model, so there is no policy to read either. Demanding
@@ -46,21 +54,41 @@ export async function checkModelTeamAccess(params: {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const allowed = authenticatedUserId
-    ? await ResourcePermissions.allows({
-        ...key,
-        userId: authenticatedUserId,
-        action: "use",
-      })
-    : (await ResourcePermissionPolicyModel.findApplicable(key)).some(
-        (entry) =>
-          (entry.scope === "*" || entry.scope === model.id) &&
-          ResourcePermissionPolicyModel.isOrganizationWide({
+  // An organization-wide use grant needs only current membership, not the
+  // member's full team/role graph. Restricted models and service accounts
+  // still resolve their complete grant subjects below. No result is cached
+  // across requests, so membership and grant revocations take effect next call.
+  const organizationWide = (
+    await ResourcePermissionPolicyModel.findApplicable(key)
+  ).some(
+    (entry) =>
+      (entry.scope === "*" || entry.scope === model.id) &&
+      (authenticatedUserId
+        ? entry.grants.some(
+            (grant) =>
+              grant.subject.type === "organization" &&
+              grant.subject.id === "*" &&
+              grant.actions.includes("use"),
+          )
+        : ResourcePermissionPolicyModel.isOrganizationWide({
             policy: entry,
             scope: model.id,
             action: "use",
-          }),
-      );
+          })),
+  );
+  const member =
+    organizationWide && authenticatedUserId
+      ? await MemberModel.getByUserId(authenticatedUserId, organizationId)
+      : undefined;
+  const allowed =
+    (organizationWide && (!authenticatedUserId || Boolean(member))) ||
+    (authenticatedUserId
+      ? await ResourcePermissions.allows({
+          ...key,
+          userId: authenticatedUserId,
+          action: "use",
+        })
+      : false);
   // SPDX-SnippetEnd
   return allowed
     ? { allowed: true }

@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { runBlock } from "./measure.mjs";
 import { MOCK_CONTENT } from "./mock-upstream.mjs";
+import { createSummary, renderSummary } from "./report.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const options = Object.fromEntries(
@@ -80,6 +81,9 @@ if (
   throw new Error("Direct upstream is not the benchmark mock");
 const headers = {
   authorization: `Bearer ${process.env.ARCHESTRA_BENCHMARK_API_KEY ?? "benchmark-no-inference"}`,
+  ...(process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY
+    ? { "x-archestra-virtual-key": process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY }
+    : {}),
 };
 const getGit = (args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -87,6 +91,7 @@ const report = {
   schemaVersion: 1,
   startedAt: new Date().toISOString(),
   metadata: {
+    workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),
     platformTree: getGit(["rev-parse", "HEAD:platform"]),
     node: process.version,
@@ -98,9 +103,12 @@ const report = {
     totalMemoryBytes: os.totalmem(),
     proxyUrl,
     mockUrl,
-    auth: process.env.ARCHESTRA_BENCHMARK_API_KEY
-      ? "supplied-key"
-      : "synthetic-provider-key",
+    auth: process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY
+      ? "passthrough-virtual-key"
+      : process.env.ARCHESTRA_BENCHMARK_API_KEY
+        ? "supplied-key"
+        : "synthetic-provider-key",
+    workspaceDirty: getGit(["status", "--porcelain"]).length > 0,
     count,
     streamCount,
     warmup,
@@ -109,7 +117,7 @@ const report = {
     scenarios,
     mock: mockHealth,
     methodology:
-      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Median difference is an estimate, not a per-request overhead distribution. Streaming first content excludes non-content SSE events.",
+      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Non-streaming gateway latency is server request receipt through response serialization; overhead excludes timed upstream SDK calls, per request. Client latency includes complete body delivery. Streaming first content excludes non-content SSE events; streaming server timing is not collected.",
   },
   blocks: [],
 };
@@ -154,7 +162,8 @@ try {
           const result = await runBlock({
             url: target === "direct" ? mockUrl : proxyUrl,
             body,
-            headers,
+            headers: target === "proxy" ? headers : {},
+            requireGatewayTiming: target === "proxy" && scenario !== "stream",
             expectedContent,
             count: scenario === "stream" ? streamCount : count,
             concurrency,
@@ -243,7 +252,13 @@ try {
     );
   }
   if (report.error) lines.push("", `Run incomplete: ${report.error}`);
-  await writeFile(path.join(output, "summary.md"), `${lines.join("\n")}\n`);
+  await writeFile(path.join(output, "details.md"), `${lines.join("\n")}\n`);
+  const summary = createSummary(report);
+  await writeFile(
+    path.join(output, "report.json"),
+    JSON.stringify(summary, null, 2),
+  );
+  await writeFile(path.join(output, "summary.md"), renderSummary(summary));
   console.info(`Results: ${output}`);
 }
 if (failed) process.exitCode = 1;

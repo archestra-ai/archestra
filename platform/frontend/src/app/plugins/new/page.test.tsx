@@ -77,21 +77,19 @@ const permissionServer = setupServer(
         { subject: { type: "role", id: "member" }, name: "Member" },
       ]),
   ),
-  http.get(
-    /^http:\/\/localhost:9000\/api\/resource-permissions\/plugin\/\*$/,
-    () =>
-      HttpResponse.json({
-        resource: "plugin",
-        scope: "*",
-        name: "Plugins",
-        ownerId: null,
-        revision: 1,
-        grants: [],
-        inheritedGrants: [],
-        effectiveActions: ["read", "update", "manage-permissions"],
-        canShareOrganizationWide: true,
-        actorSubjects: [],
-      }),
+  http.get("http://localhost:9000/api/resource-permissions/plugin/:scope", () =>
+    HttpResponse.json({
+      resource: "plugin",
+      scope: "*",
+      name: "Plugins",
+      ownerId: null,
+      revision: 1,
+      grants: [],
+      inheritedGrants: [],
+      effectiveActions: ["read", "update", "manage-permissions"],
+      canShareOrganizationWide: true,
+      actorSubjects: [],
+    }),
   ),
 );
 beforeAll(() => {

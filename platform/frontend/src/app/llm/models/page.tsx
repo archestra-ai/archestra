@@ -307,7 +307,7 @@ export default function ModelsPage() {
         accessorKey: "modelId",
         header: "Model ID",
         cell: ({ row }) => {
-          const { modelId, provider, isFree } = row.original;
+          const { modelId, provider, isFree, description } = row.original;
           const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
           // The provider icon sits inline before the model ID (as the knowledge
           // connectors table does) rather than in its own column, saving the
@@ -329,6 +329,11 @@ export default function ModelsPage() {
                   <span className="truncate">{modelId}</span>
                   <LabelTags labels={row.original.labels} />
                 </span>
+                {description && description !== modelId && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {description}
+                  </p>
+                )}
                 <div className="mt-0.5 flex flex-wrap items-center gap-2">
                   {isFree && <FreeModelBadge />}
                   {isLatestAlias && <LatestModelBadge />}
@@ -639,7 +644,7 @@ export default function ModelsPage() {
               search={
                 <SearchInput
                   objectNamePlural="models"
-                  searchFields={["model ID"]}
+                  searchFields={["model ID", "name"]}
                   paramName="search"
                   className={filterSearchClass}
                 />

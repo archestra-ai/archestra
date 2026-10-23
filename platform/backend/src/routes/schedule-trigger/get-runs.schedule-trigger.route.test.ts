@@ -219,4 +219,55 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
       ).statusCode,
     ).toBe(403);
   });
+  test("manual filtering paginates and counts only the matching runs", async ({
+    makeAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: actingUser.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: actingUser.id,
+      agentId: agent.id,
+    });
+    await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "due",
+    });
+    const first = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "manual",
+    });
+    const second = await makeScheduleTriggerRun(trigger.id, {
+      organizationId,
+      runKind: "manual",
+    });
+    const page1 = await app.inject({
+      method: "GET",
+      url: `/api/schedule-triggers/${trigger.id}/runs?runKind=manual&limit=1&offset=0`,
+    });
+    const page2 = await app.inject({
+      method: "GET",
+      url: `/api/schedule-triggers/${trigger.id}/runs?runKind=manual&limit=1&offset=1`,
+    });
+    expect(page1.statusCode).toBe(200);
+    expect(page2.statusCode).toBe(200);
+    expect(page1.json().pagination).toMatchObject({ total: 2, hasNext: true });
+    expect(page2.json().pagination).toMatchObject({ total: 2, hasNext: false });
+    expect(
+      new Set(
+        [...page1.json().data, ...page2.json().data].map(
+          (run: { id: string }) => run.id,
+        ),
+      ),
+    ).toEqual(new Set([first.id, second.id]));
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/schedule-triggers/${trigger.id}/runs?runKind=unsupported`,
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
 });

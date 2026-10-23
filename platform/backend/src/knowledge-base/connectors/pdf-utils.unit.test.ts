@@ -72,7 +72,7 @@ describe("parsePdfBuffer", () => {
       pages: [{ pageNumber: 1, status: "text", text: "Hello contract" }],
     });
     expect(mockGetDocument).toHaveBeenCalledWith({
-      data: expect.any(Buffer),
+      data: expect.any(Uint8Array),
       stopAtErrors: true,
     });
     expect(page.cleanup).toHaveBeenCalledOnce();

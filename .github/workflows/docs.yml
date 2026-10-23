@@ -128,7 +128,7 @@ jobs:
           persist-credentials: false
           # Standalone validation checks the selected manual ref.
           fetch-depth: 1
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         # No filter: every queue commit must exercise the entire manifest.
 
   docs-screenshots:
@@ -156,7 +156,7 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: $/.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -169,7 +169,7 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 2
 
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         with:
           only: ${{ inputs.only }}
 

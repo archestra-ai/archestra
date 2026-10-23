@@ -69,7 +69,7 @@ jobs:
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform
       dockerfile: ./platform/docker_images/agent/Dockerfile
@@ -116,7 +116,7 @@ jobs:
           fetch-depth: 1
 
       - name: Build agent catalog image
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ./platform
           dockerfile: ./platform/docker_images/agent/Dockerfile

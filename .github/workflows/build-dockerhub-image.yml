@@ -54,7 +54,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ${{ inputs.image_directory }}
       image_name: ${{ inputs.image_name }}

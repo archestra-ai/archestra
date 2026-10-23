@@ -13,7 +13,7 @@ jobs:
     name: Publish Docs to archestra.ai
     permissions:
       contents: read
-    uses: ./.github/workflows/trigger-website-deploy.yml
+    uses: $/.github/workflows/trigger-website-deploy.yml
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}

@@ -33,6 +33,28 @@ describe("gemini model fetchers", () => {
   });
 
   describe("fetchGeminiModels", () => {
+    test("keeps the named Nano Banana release returned by the Gemini API", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          models: [
+            {
+              name: "models/gemini-nano-banana-2.1",
+              displayName: "Nano Banana 2.1",
+              supportedGenerationMethods: ["generateContent"],
+            },
+          ],
+        }),
+      });
+
+      expect(await fetchGeminiModels("test-api-key")).toEqual([
+        {
+          id: "gemini-nano-banana-2.1",
+          displayName: "Nano Banana 2.1",
+          provider: "gemini",
+        },
+      ]);
+    });
     test("keeps usable Gemini-family chat + embedding models and drops the rest", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -687,7 +709,7 @@ describe("gemini model fetchers", () => {
         config.llm.gemini.vertexAi.location = "us-central1";
       });
 
-      test("drops Gemini 3+ models when the global endpoint is not allowed", async () => {
+      test("drops global-only models when the global endpoint is not allowed", async () => {
         config.llm.gemini.vertexAi.allowGlobalEndpoint = false;
 
         // The regional Model Garden catalog lists the newer generations even
@@ -695,6 +717,7 @@ describe("gemini model fetchers", () => {
         const client = vertexClientListing([
           "gemini-2.5-pro",
           "gemini-3-flash-preview",
+          "gemini-nano-banana-2.1",
           "gemini-3.5-flash",
           "gemini-embedding-001",
           "gemini-embedding-2",
@@ -714,6 +737,11 @@ describe("gemini model fetchers", () => {
             ([location]) => location,
           ),
         ).not.toContain("global");
+        expect(
+          vi
+            .mocked(client.models.countTokens)
+            .mock.calls.map(([params]) => params.model),
+        ).not.toContain("gemini-nano-banana-2.1");
       });
 
       test("serves each model from the location that has it when global is allowed", async () => {
@@ -730,6 +758,7 @@ describe("gemini model fetchers", () => {
           "gemini-2.5-pro",
           "gemini-3.5-flash",
           "gemini-embedding-2",
+          "gemini-nano-banana-2.1",
         ]);
         mockCreateVertexClientForLocation.mockImplementation((location) =>
           location === "global" ? globalClient : regionalClient,
@@ -742,6 +771,7 @@ describe("gemini model fetchers", () => {
           "gemini-3.5-flash",
           "gemini-embedding-001",
           "gemini-embedding-2",
+          "gemini-nano-banana-2.1",
           "gemma-4-26b-a4b-it-maas",
         ]);
 
@@ -756,6 +786,7 @@ describe("gemini model fetchers", () => {
         expect(probedAt(globalClient)).toEqual([
           "gemini-3.5-flash",
           "gemini-embedding-2",
+          "gemini-nano-banana-2.1",
         ]);
         expect(probedAt(regionalClient)).toEqual([
           "gemini-2.5-pro",

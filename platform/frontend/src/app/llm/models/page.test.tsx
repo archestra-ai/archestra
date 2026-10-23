@@ -540,6 +540,40 @@ describe("ModelsPage", () => {
     expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["gemini-2.5-flash-image", "Nano Banana", "nano banana"],
+    ["gemini-2.5-flash-image", "Nano Banana", "nanobanana"],
+    ["gemini-2.5-flash-image", "Nano Banana", "nano-banana"],
+    ["gemini-nano-banana-2.1", "Nano Banana 2.1", "banana 2.1"],
+    ["gemini-2.5-flash-image", "Nano Banana", "2.5-flash-image"],
+  ])("finds %s by its visible name or API id", async (modelId, description, search) => {
+    keyCreated = true;
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({ search }) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            id: "image-model",
+            provider: "gemini",
+            modelId,
+            description,
+          },
+          model,
+        ]),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText(modelId)).toBeVisible();
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+  });
+
   it("syncs the search filter to the URL query params", async () => {
     keyCreated = true;
     const user = userEvent.setup();

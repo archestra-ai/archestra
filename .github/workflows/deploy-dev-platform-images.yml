@@ -72,9 +72,15 @@ jobs:
 
       - name: Configure kubectl
         if: ${{ steps.previous-main-image.outputs.previous-image == '' }}
+        env:
+          GKE_USE_DNS_ENDPOINT: ${{ vars.GKE_USE_DNS_ENDPOINT }}
         run: |
+          endpoint_args=()
+          if [[ "$GKE_USE_DNS_ENDPOINT" == "true" ]]; then
+            endpoint_args+=(--dns-endpoint)
+          fi
           gcloud container clusters get-credentials archestra-staging \
-            --zone us-central1-a --project friendly-path-465518-r6
+            --zone us-central1-a --project friendly-path-465518-r6 "${endpoint_args[@]}"
 
       - name: Resolve deployed platform image
         id: deployed-platform-image

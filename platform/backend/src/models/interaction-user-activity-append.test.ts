@@ -30,8 +30,12 @@ test("concurrent same-user appends persist and count both interactions", async (
     },
   };
   const rows = await Promise.all([
-    InteractionModel.create(values),
-    InteractionModel.create(values),
+    InteractionModel.create({ ...values, model: "concurrent-first" }),
+    InteractionModel.create({ ...values, model: "concurrent-second" }),
+  ]);
+  expect(rows.map((row) => row.model)).toEqual([
+    "concurrent-first",
+    "concurrent-second",
   ]);
   expect(new Set(rows.map((row) => row.id)).size).toBe(2);
   expect(await db.select().from(schema.interactionsTable)).toHaveLength(2);

@@ -151,6 +151,9 @@ RUN apk add --no-cache \
    # Copy the same Go 1.26.9 toolchain used by the platform builders for the
    # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
    apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
+   # Require the fixed Node.js package and invalidate cached runtime layers.
+   # CVE-2026-106069, CVE-2026-105483 and CVE-2026-105482 affect older builds.
+   apk add --no-cache --upgrade "nodejs>=24.22.1-r0" && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
    # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
    # CVE-2026-96888 and CVE-2026-19630 in addition to the earlier fixes.

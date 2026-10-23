@@ -48,6 +48,7 @@ import { z } from "zod";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
@@ -3589,11 +3590,7 @@ class AgentModel {
    * so this must stay at two index lookups.
    */
   static async findGatewayAgentById(id: string): Promise<GatewayAgent | null> {
-    const [agent] = await db
-      .select()
-      .from(schema.agentsTable)
-      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
-      .limit(1);
+    const [agent] = await AgentModel.gatewayById.get().execute({ id });
 
     if (!agent) {
       return null;
@@ -3683,18 +3680,9 @@ class AgentModel {
   }
 
   private static async findOrgLlmProxyRow(organizationId: string) {
-    const [row] = await db
-      .select()
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "llm_proxy"),
-          eq(schema.agentsTable.isDefault, true),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
+    const [row] = await AgentModel.organizationProxy
+      .get()
+      .execute({ organizationId });
     return row ?? null;
   }
 
@@ -3704,13 +3692,7 @@ class AgentModel {
    * when no organization exists yet.
    */
   static async getDeploymentLlmProxy(): Promise<GatewayAgent | null> {
-    const [firstOrg] = await db
-      .select({ id: schema.organizationsTable.id })
-      .from(schema.organizationsTable)
-      // Deterministic "first organization": the oldest one. Without an order
-      // the planner may return different rows across calls.
-      .orderBy(asc(schema.organizationsTable.createdAt))
-      .limit(1);
+    const [firstOrg] = await AgentModel.firstOrganization.get().execute();
     if (!firstOrg) {
       return null;
     }
@@ -6129,6 +6111,48 @@ class AgentModel {
     // SPDX-SnippetEnd
     return agents;
   }
+
+  private static readonly gatewayById = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, sql.placeholder("id")),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_gateway_agent_by_id"),
+  );
+
+  private static readonly organizationProxy = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(
+            schema.agentsTable.organizationId,
+            sql.placeholder("organizationId"),
+          ),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_organization_llm_proxy"),
+  );
+
+  private static readonly firstOrganization = new PreparedQuery((database) =>
+    database
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .orderBy(asc(schema.organizationsTable.createdAt))
+      .limit(1)
+      .prepare("archestra_first_organization"),
+  );
 }
 
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =

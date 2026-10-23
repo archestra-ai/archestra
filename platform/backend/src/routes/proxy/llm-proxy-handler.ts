@@ -112,6 +112,7 @@ import {
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
@@ -1254,9 +1255,15 @@ export async function handleLLMProxy<
     );
 
     // Ensure a model entry exists for cost tracking
-    const discovered = [
-      await ModelModel.ensureModelExists(actualModel, providerName),
-    ].filter((model) => model !== null);
+    const catalogModel = await ModelModel.findByProviderAndModelId(
+      providerName,
+      actualModel,
+    );
+    const discovered = catalogModel
+      ? []
+      : [await ModelModel.ensureModelExists(actualModel, providerName)].filter(
+          (model) => model !== null,
+        );
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
     // update stay off the per-request path. Enrichment is best-effort: a model
@@ -1324,6 +1331,7 @@ export async function handleLLMProxy<
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
       authenticatedUserId,
+      catalogModel: catalogModel ?? undefined,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
@@ -1469,7 +1477,7 @@ export async function handleLLMProxy<
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
 
-    logger.info(
+    logger.debug(
       {
         resolvedAgentId,
         toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
@@ -1531,7 +1539,7 @@ export async function handleLLMProxy<
         );
       }
     } else {
-      logger.info(
+      logger.debug(
         `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
       );
     }
@@ -3131,7 +3139,10 @@ async function handleNonStreaming<
           throw new ApiError(499, "Client disconnected before inference");
         }
         result = await openUpstreamWithRetry({
-          open: () => provider.execute(client, request),
+          open: () =>
+            llmProxyTiming.upstream(reply, () =>
+              provider.execute(client, request),
+            ),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&

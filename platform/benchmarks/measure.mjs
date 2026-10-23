@@ -18,6 +18,37 @@ export function summarize(values) {
   };
 }
 
+export function readGatewayTiming(header) {
+  const names = {
+    archestra_gateway: "gatewayMs",
+    archestra_upstream: "upstreamMs",
+    archestra_overhead: "overheadMs",
+  };
+  const result = {};
+  for (const entry of (header ?? "").split(",")) {
+    const [name, ...parameters] = entry.trim().split(";");
+    if (!Object.hasOwn(names, name)) continue;
+    const duration = parameters
+      .find((p) => p.trim().startsWith("dur="))
+      ?.trim()
+      .slice(4);
+    if (
+      Object.hasOwn(result, names[name]) ||
+      !/^\d+(?:\.\d+)?$/.test(duration ?? "") ||
+      !Number.isFinite(Number(duration))
+    )
+      throw new Error("Invalid gateway timing");
+    result[names[name]] = Number(duration);
+  }
+  if (!Object.keys(result).length) return null;
+  if (
+    Object.keys(result).length !== 3 ||
+    Math.abs(result.gatewayMs - result.upstreamMs - result.overheadMs) > 0.01
+  )
+    throw new Error("Incomplete or inconsistent gateway timing");
+  return result;
+}
+
 // TCP chunks and SSE events are different boundaries. Decode UTF-8 before
 // splitting frames; one read can contain many events or part of one event.
 export class CompletionReader {
@@ -78,10 +109,12 @@ export async function measureRequest({
   headers,
   expectedContent,
   timeoutMs = 10000,
+  requireGatewayTiming = false,
 }) {
   const target = new URL(url);
   const start = performance.now();
   let firstByteMs;
+  let gatewayTiming = null;
   const contentTimes = [];
   const gapsMs = [];
   const reader = new CompletionReader({
@@ -109,6 +142,7 @@ export async function measureRequest({
         firstContentMs: contentTimes[0] ?? null,
         contentEvents: contentTimes.length,
         gapsMs,
+        gatewayTiming,
       });
     };
     const req = (target.protocol === "https:" ? https : http).request(target, {
@@ -128,6 +162,14 @@ export async function measureRequest({
     req.on("error", finish);
     req.on("response", (res) => {
       status = res.statusCode;
+      try {
+        if (!body.stream)
+          gatewayTiming = readGatewayTiming(res.headers["server-timing"]);
+      } catch (error) {
+        finish(error);
+        res.destroy();
+        return;
+      }
       res.on("error", finish);
       res.on("aborted", () => finish(new Error("Response aborted")));
       res.on("data", (bytes) => {
@@ -142,6 +184,8 @@ export async function measureRequest({
       res.on("end", () => {
         try {
           if (status !== 200) throw new Error(`HTTP ${status}`);
+          if (requireGatewayTiming && !gatewayTiming)
+            throw new Error("Missing per-request gateway timing");
           if (reader.finish() !== expectedContent)
             throw new Error("Unexpected mock response content");
           finish();

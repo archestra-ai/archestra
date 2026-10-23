@@ -3,10 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/navigation";
 import { describe, expect, it, vi } from "vitest";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
+import {
+  useInfiniteScheduleTriggerRuns,
   useRunScheduleTriggerNow,
   useScheduleTrigger,
+  useScheduleTriggerRuns,
 } from "@/lib/schedule-trigger.query";
 import { RightSidePanel } from "./right-side-panel";
 
@@ -16,9 +22,6 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
   useResolveRunChat: vi.fn(() => ({ resolve: vi.fn(), isResolving: false })),
 }));
 vi.mock("@/lib/schedule-trigger.query");
-vi.mock("@/components/scheduled-tasks/schedule-runs-list", () => ({
-  ScheduleRunsList: () => <div>Runs list</div>,
-}));
 
 // Stub the heavy children / context so the test exercises the panel's own
 // content selection in isolation (the tab strip now lives in the header).
@@ -71,8 +74,26 @@ describe("RightSidePanel — content only", () => {
       options.onSuccess({ id: "new-run" }),
     );
     vi.mocked(useScheduleTrigger).mockReturnValue({
-      data: { name: "Report", actorUserId: "owner" },
+      data: {
+        id: "schedule-1",
+        name: "Report",
+        actorUserId: "owner",
+        agentId: "agent-1",
+        enabled: true,
+        cronExpression: "0 9 * * *",
+        timezone: "UTC",
+      },
     } as ReturnType<typeof useScheduleTrigger>);
+    vi.mocked(useInfiniteScheduleTriggerRuns).mockReturnValue({
+      data: { pages: [] },
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useInfiniteScheduleTriggerRuns>);
+    vi.mocked(useScheduleTriggerRuns).mockReturnValue({
+      data: { data: [] },
+    } as unknown as ReturnType<typeof useScheduleTriggerRuns>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "owner" } },
     } as ReturnType<typeof useSession>);
@@ -94,7 +115,7 @@ describe("RightSidePanel — content only", () => {
     };
     const { rerender } = render(<RightSidePanel {...props} />);
     await userEvent.click(
-      screen.getByRole("button", { name: "Start New Run" }),
+      screen.getByRole("button", { name: "Start new run" }),
     );
     expect(mutate).toHaveBeenCalledWith("schedule-1", expect.any(Object));
     expect(push).not.toHaveBeenCalled();
@@ -105,14 +126,14 @@ describe("RightSidePanel — content only", () => {
     } as unknown as ReturnType<typeof useRunScheduleTriggerNow>);
     rerender(<RightSidePanel {...props} />);
     expect(
-      screen.getByRole("button", { name: "Start New Run" }),
+      screen.getByRole("button", { name: "Start new run" }),
     ).toBeDisabled();
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
       typeof useHasPermissions
     >);
     rerender(<RightSidePanel {...props} />);
     expect(
-      screen.queryByRole("button", { name: "Start New Run" }),
+      screen.queryByRole("button", { name: "Start new run" }),
     ).not.toBeInTheDocument();
   });
 

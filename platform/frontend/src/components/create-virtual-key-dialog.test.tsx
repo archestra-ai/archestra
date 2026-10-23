@@ -419,6 +419,9 @@ describe("CreateVirtualKeyDialog", () => {
     await createFromAnyStep(user);
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(dialog).not.toHaveTextContent("/model-router/images");
+    expect(dialog).toHaveTextContent(
+      "Choose the native provider API for image generation examples.",
+    );
     await user.click(within(dialog).getByText("Native provider API"));
     expect(dialog).toHaveTextContent(
       "https://proxy.example.com/azure/images/generations",

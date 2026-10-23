@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   geminiThinkingConfigForEffort,
+  isGeminiImageGenerationModel,
   isLegacyGeminiModel,
   isUsableGeminiCatalogModel,
   requiresGlobalVertexEndpoint,
@@ -39,6 +40,8 @@ describe("isUsableGeminiCatalogModel", () => {
     // Image generation is supported in Chat; other media transports are not.
     ["gemini-2.5-flash-image", true],
     ["gemini-3.1-flash-image-preview", true],
+    ["gemini-nano-banana-2.1", true],
+    ["gemini-nano-banana-unknown", false],
     ["gemini-2.0-flash-exp-image-generation", false],
     ["gemini-2.5-flash-preview-tts", false],
     ["gemini-2.0-flash-live-001", false],
@@ -79,6 +82,7 @@ describe("supportsGeminiThoughtSummaries", () => {
     ["gemini-1.5-pro", false],
     // Non-text output and embedding variants.
     ["gemini-2.5-flash-image", false],
+    ["gemini-nano-banana-2.1", false],
     ["gemini-2.5-flash-preview-tts", false],
     ["gemini-embedding-001", false],
     // Unversioned ids.
@@ -109,6 +113,7 @@ describe("supportsGeminiThinkingEffort", () => {
     ["gemini-2.5-pro", false],
     // Non-text variants and non-Gemini families.
     ["gemini-3.1-flash-image-preview", false],
+    ["gemini-nano-banana-2.1", false],
     ["gemini-3.5-flash-preview-tts", false],
     ["gemma-4-31b-it", false],
     ["gemini-embedding-001", false],
@@ -179,6 +184,7 @@ describe("isLegacyGeminiModel", () => {
     ["gemini-embedding-001", false],
     ["gemini-embedding-2-preview", false],
     // Unparsable / unbranded ids are not badged.
+    ["gemini-nano-banana-2.1", false],
     ["gemini-pro", false],
     ["aqa", false],
   ])("%s -> legacy=%s", (modelId, expected) => {
@@ -196,6 +202,9 @@ describe("requiresGlobalVertexEndpoint", () => {
     ["gemini-3.5-flash", true],
     ["gemini-3.7-flash", true],
     ["gemini-4-argon", true],
+    // Nano Banana's version is independent of the numeric Gemini generation.
+    ["gemini-nano-banana-2.1", true],
+    ["gemini-nano-banana-unknown", false],
     // Anything above the threshold is covered without touching the constant.
     ["gemini-4-pro", true],
     // The 2.5 family answers regionally as well, so it keeps the configured
@@ -222,5 +231,19 @@ describe("requiresGlobalVertexEndpoint", () => {
 
   test("is case-insensitive", () => {
     expect(requiresGlobalVertexEndpoint("Gemini-3.5-Flash")).toBe(true);
+  });
+});
+
+describe("isGeminiImageGenerationModel", () => {
+  test.each([
+    ["gemini-nano-banana-2.1", true],
+    ["Gemini-Nano-Banana-2.1", true],
+    ["gemini-2.5-flash-image", true],
+    ["gemini-3.1-flash-image-preview", true],
+    ["gemini-3.5-flash", false],
+    ["gemini-nano-banana-unknown", false],
+    ["gpt-image-1", false],
+  ])("%s -> image output=%s", (modelId, expected) => {
+    expect(isGeminiImageGenerationModel(modelId)).toBe(expected);
   });
 });

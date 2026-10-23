@@ -20,6 +20,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -32,6 +33,7 @@ import type {
   VirtualApiKeyType,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
@@ -1013,10 +1015,9 @@ class VirtualApiKeyModel {
     virtualKey: SelectVirtualApiKey;
   } | null> {
     const tokenStart = getTokenStart(tokenValue);
-    const candidates = await db
-      .select()
-      .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.tokenStart, tokenStart));
+    const candidates = await VirtualApiKeyModel.byTokenStart
+      .get()
+      .execute({ tokenStart });
 
     for (const virtualKey of candidates) {
       const secret = await secretManager().getSecret(virtualKey.secretId);
@@ -1033,12 +1034,22 @@ class VirtualApiKeyModel {
 
       const storedToken = (secret.secret as { token?: string })?.token;
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
-        VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
-          logger.warn(
-            { virtualKeyId: virtualKey.id, error: String(error) },
-            "Failed to update virtual key lastUsedAt",
+        // The row we just read already tells us when the conditional UPDATE
+        // would be a no-op. Avoid occupying a pool connection for that no-op.
+        if (
+          !virtualKey.lastUsedAt ||
+          virtualKey.lastUsedAt.getTime() <
+            Date.now() - LAST_USED_REFRESH_INTERVAL_MS
+        ) {
+          trackBackgroundWork(
+            VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
+              logger.warn(
+                { virtualKeyId: virtualKey.id, error: String(error) },
+                "Failed to update virtual key lastUsedAt",
+              );
+            }),
           );
-        });
+        }
 
         return { virtualKey };
       }
@@ -1331,6 +1342,19 @@ class VirtualApiKeyModel {
       authorName: authorNameByVirtualApiKeyId,
     };
   }
+
+  private static readonly byTokenStart = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(
+        eq(
+          schema.virtualApiKeysTable.tokenStart,
+          sql.placeholder("tokenStart"),
+        ),
+      )
+      .prepare("archestra_virtual_key_by_token_start"),
+  );
 }
 
 export default VirtualApiKeyModel;

@@ -115175,6 +115175,7 @@ export type GetScheduleTriggerRunsData = {
         limit?: number;
         offset?: number;
         status?: 'running' | 'success' | 'failed' | 'cancelled';
+        runKind?: 'due' | 'manual';
     };
     url: '/api/schedule-triggers/{id}/runs';
 };

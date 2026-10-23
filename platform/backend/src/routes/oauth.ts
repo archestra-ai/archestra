@@ -101,9 +101,28 @@ async function discoverOAuthResourceMetadata(
         );
       }
 
-      return await response.json();
+      const metadata = await response.json();
+      // The root fallback describes the origin, while a path-aware document
+      // describes the resource used to construct it. An explicit metadata URL
+      // still describes the configured MCP endpoint.
+      const expectedResource =
+        !overrides?.resourceMetadataUrl &&
+        wellKnownUrl === rootWellKnownUrl &&
+        pathname !== ""
+          ? url.origin
+          : serverUrl;
+      if (metadata?.resource !== expectedResource) {
+        throw new OAuthMetadataValidationError(
+          "Protected resource metadata resource does not match the requested resource",
+        );
+      }
+      return metadata;
     } catch (error) {
-      if (error instanceof McpOAuthOutboundError) throw error;
+      if (
+        error instanceof McpOAuthOutboundError ||
+        error instanceof OAuthMetadataValidationError
+      )
+        throw error;
       lastError = error;
     }
   }
@@ -123,6 +142,7 @@ export async function discoverScopes(
   defaultScopes: string[],
   overrides?: OAuthDiscoveryOverrides,
 ): Promise<string[]> {
+  let authServerUrl = overrides?.authServerUrl;
   // Try resource metadata discovery first if supported
   const shouldDiscoverResourceMetadata =
     supportsResourceMetadata &&
@@ -141,8 +161,19 @@ export async function discoverScopes(
       ) {
         return resourceMetadata.scopes_supported;
       }
+      if (
+        !authServerUrl &&
+        Array.isArray(resourceMetadata.authorization_servers) &&
+        typeof resourceMetadata.authorization_servers[0] === "string"
+      ) {
+        authServerUrl = resourceMetadata.authorization_servers[0];
+      }
     } catch (error) {
-      if (error instanceof McpOAuthOutboundError) throw error;
+      if (
+        error instanceof McpOAuthOutboundError ||
+        error instanceof OAuthMetadataValidationError
+      )
+        throw error;
       logger.error(error);
     }
   }
@@ -151,7 +182,7 @@ export async function discoverScopes(
   try {
     const metadata = await discoverAuthorizationServerMetadataWithOverrides(
       serverUrl,
-      overrides,
+      { ...overrides, authServerUrl },
     );
     if (
       metadata.scopes_supported &&
@@ -161,7 +192,11 @@ export async function discoverScopes(
       return metadata.scopes_supported;
     }
   } catch (error) {
-    if (error instanceof McpOAuthOutboundError) throw error;
+    if (
+      error instanceof McpOAuthOutboundError ||
+      error instanceof OAuthMetadataValidationError
+    )
+      throw error;
     logger.error(error);
   }
 
@@ -277,11 +312,9 @@ export function buildDiscoveryUrls(
  * Discover OAuth authorization server metadata with fallback support
  * Tries multiple discovery URLs like the MCP SDK does.
  *
- * The candidate URLs can resolve to documents for different issuers (e.g. the
- * RFC 8414 root fallback answering for the host's root issuer), so the first
- * document whose `issuer` matches the discovery URL wins (RFC 8414 §3.3). When
- * none matches — the discovery URL is not always an issuer, e.g. a legacy MCP
- * server URL — the first valid document is used as before.
+ * Validate each document against the expected issuer before using any of its
+ * fields. Legacy discovery from an MCP URL may still use the host's root
+ * issuer, but an explicitly configured or advertised issuer must match exactly.
  */
 async function discoverAuthorizationServerMetadataWithOverrides(
   serverUrl: string,
@@ -289,8 +322,8 @@ async function discoverAuthorizationServerMetadataWithOverrides(
 ): Promise<AuthorizationServerMetadata> {
   const discoveryUrl = overrides?.authServerUrl || serverUrl;
   const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
-  let fallback: { url: string; metadata: AuthorizationServerMetadata } | null =
-    null;
+  const discoveryOrigin = new URL(discoveryUrl).origin;
+  let validationError: OAuthMetadataValidationError | undefined;
   let lastUrlError: unknown;
 
   for (const url of urls) {
@@ -321,29 +354,34 @@ async function discoverAuthorizationServerMetadataWithOverrides(
       if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
         continue;
       }
-      if (issuerMatchesDiscoveryUrl(metadata.issuer, discoveryUrl)) {
+      // A known issuer must survive every discovery fallback. Only legacy
+      // discovery from the MCP URL itself may discover the host's root issuer.
+      const expectedIssuer =
+        !overrides?.authServerUrl &&
+        !overrides?.wellKnownUrl &&
+        url === `${discoveryOrigin}/.well-known/oauth-authorization-server` &&
+        new URL(discoveryUrl).pathname !== "/"
+          ? discoveryOrigin
+          : discoveryUrl;
+      if (metadata.issuer === expectedIssuer) {
         return metadata;
       }
-      fallback ??= { url, metadata };
+      validationError ??= new OAuthMetadataValidationError(
+        "Authorization server metadata issuer does not match the expected issuer",
+      );
     } catch (error) {
-      if (error instanceof McpOAuthOutboundError) throw error;
+      if (
+        error instanceof McpOAuthOutboundError ||
+        error instanceof OAuthMetadataValidationError
+      )
+        throw error;
       if (url === urls[urls.length - 1]) {
         lastUrlError = error;
       }
     }
   }
 
-  if (fallback) {
-    logger.warn(
-      {
-        discoveryUrl,
-        metadataUrl: fallback.url,
-        issuer: fallback.metadata.issuer,
-      },
-      "No authorization server metadata matched the discovery URL issuer; using the first valid document",
-    );
-    return fallback.metadata;
-  }
+  if (validationError) throw validationError;
 
   if (lastUrlError) {
     throw new Error(
@@ -368,20 +406,10 @@ interface AuthorizationServerMetadata {
   authorization_response_iss_parameter_supported?: boolean;
 }
 
-/**
- * RFC 8414 §3.3 issuer check, tolerating a single trailing-slash difference
- * that some providers introduce between their advertised and actual issuer.
- */
-function issuerMatchesDiscoveryUrl(
-  issuer: unknown,
-  discoveryUrl: string,
-): boolean {
-  if (typeof issuer !== "string" || issuer === "") {
-    return false;
+class OAuthMetadataValidationError extends ApiError {
+  constructor(message: string) {
+    super(502, message);
   }
-  const stripTrailingSlash = (value: string) =>
-    value.endsWith("/") ? value.slice(0, -1) : value;
-  return stripTrailingSlash(issuer) === stripTrailingSlash(discoveryUrl);
 }
 
 interface DiscoveredEndpoints {
@@ -428,6 +456,7 @@ export async function discoverOAuthEndpoints(
   const explicitEndpoints = getExplicitOAuthEndpoints(oauthConfig);
   let discoveryServerUrl =
     oauthConfig.auth_server_url || oauthConfig.server_url;
+  let expectedIssuer = oauthConfig.auth_server_url;
   const shouldDiscoverResourceMetadata =
     oauthConfig.supports_resource_metadata &&
     (!oauthConfig.auth_server_url || !!oauthConfig.resource_metadata_url);
@@ -449,16 +478,21 @@ export async function discoverOAuthEndpoints(
         !oauthConfig.auth_server_url &&
         resourceMetadata.authorization_servers &&
         Array.isArray(resourceMetadata.authorization_servers) &&
-        resourceMetadata.authorization_servers.length > 0
+        typeof resourceMetadata.authorization_servers[0] === "string"
       ) {
         discoveryServerUrl = resourceMetadata.authorization_servers[0];
+        expectedIssuer = discoveryServerUrl;
         log?.info(
           { authServerUrl: discoveryServerUrl },
           "Using authorization server URL from resource metadata",
         );
       }
     } catch (error) {
-      if (error instanceof McpOAuthOutboundError) throw error;
+      if (
+        error instanceof McpOAuthOutboundError ||
+        error instanceof OAuthMetadataValidationError
+      )
+        throw error;
       log?.warn(
         { error },
         "Resource metadata discovery failed; continuing with standard discovery",
@@ -471,7 +505,7 @@ export async function discoverOAuthEndpoints(
       discoveryServerUrl,
       {
         fetchFn: options?.fetchFn,
-        authServerUrl: oauthConfig.auth_server_url,
+        authServerUrl: expectedIssuer,
         resourceMetadataUrl: oauthConfig.resource_metadata_url,
         wellKnownUrl: oauthConfig.well_known_url,
       },
@@ -520,7 +554,11 @@ export async function discoverOAuthEndpoints(
         metadata.authorization_response_iss_parameter_supported === true,
     };
   } catch (error) {
-    if (error instanceof McpOAuthOutboundError) throw error;
+    if (
+      error instanceof McpOAuthOutboundError ||
+      error instanceof OAuthMetadataValidationError
+    )
+      throw error;
     if (
       explicitEndpoints.authorizationEndpoint &&
       explicitEndpoints.tokenEndpoint

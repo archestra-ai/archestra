@@ -171,9 +171,11 @@ def rename_tools(response: dict, fresh: bool = True) -> None:
     response["result"]["tools"] = listed
     # A paginated catalog arrives over several calls; keep every page's names.
     with state_lock:
-        gateway_names.update(names)
         if fresh:
+            # A tool the gateway dropped is neither called nor declared.
+            gateway_names.clear()
             gateway_tools.clear()
+        gateway_names.update(names)
         for tool in tools:
             if isinstance(tool, dict) and tool.get("name") in names.values():
                 gateway_tools[tool["name"]] = tool

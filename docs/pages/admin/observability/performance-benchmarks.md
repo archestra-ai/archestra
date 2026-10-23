@@ -8,7 +8,7 @@ lastUpdated: 2026-10-23
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json.
 Release benchmark CI updates only the marked results table. Do not hand-edit
 its numbers or add run dates to this page's prose. Tested revisions, dates,
-host settings and raw measurements belong in the release PR comment/artifact.
+host settings and raw measurements belong in the benchmark artifacts.
 -->
 
 Measure time inside Archestra separately from upstream model calls and client delivery. These results use the production backend, virtual-key authentication and request persistence against a local mock model.
@@ -19,7 +19,7 @@ Measure time inside Archestra separately from upstream model calls and client de
 
 ## Results
 
-Release Please PRs regenerate this table from successful CI measurements. Each workload runs separately; its row pools measured requests at the highest tested concurrency.
+Each workload runs separately; its row pools measured requests at the highest tested concurrency.
 
 <!-- proxy-benchmark-results:start -->
 | Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |
@@ -40,11 +40,9 @@ The benchmark uses one production web process, PostgreSQL and a deterministic Op
 
 Response caching, configured key budgets and real inference are absent. Shared-runner results track release changes; compare only matching hardware, workloads, concurrency and enabled features. They are not a production capacity guarantee.
 
-## Release Benchmarks
+## Automatic Updates
 
-Each platform release PR runs the benchmark and updates one comment with every measured value's percentage change against the last published release on the same track. First runs, missing or failed release data, changed setups and unmeasured values are labeled explicitly.
-
-A successful current-head run commits only the table above to the release PR. Failed, partial or superseded runs preserve the existing docs table. The comment retains compact metrics for future comparisons; detailed measurements and diagnostics remain in workflow artifacts for 14 days.
+Archestra automatically reruns these benchmarks and updates the results with every new release.
 
 ## Reproduction
 

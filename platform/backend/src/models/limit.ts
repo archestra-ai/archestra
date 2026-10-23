@@ -39,9 +39,11 @@ import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import ModelModel from "./model";
 
 type LimitsCleanupOptionsEntities = {
-  [K in Exclude<LimitEntityType, "team">]?: string;
+  [K in Exclude<LimitEntityType, "team" | "virtual_key">]?: string;
 } & {
   [K in Extract<LimitEntityType, "team">]?: string[];
+} & {
+  virtual_key?: string | string[];
 };
 
 type LimitsCleanupOptions = {
@@ -804,7 +806,7 @@ class LimitModel {
     options: LimitsCleanupOptions,
   ): Promise<void> {
     try {
-      logger.info({ options }, `[LimitsCleanup] Starting cleanup check`);
+      logger.debug({ options }, `[LimitsCleanup] Starting cleanup check`);
 
       const limitIdsToReset = await LimitModel.findLimitIdsToReset(options);
       await LimitModel.resetLimitsUsage(limitIdsToReset);
@@ -815,7 +817,7 @@ class LimitModel {
           `[LimitsCleanup] Completed cleanup of ${limitIdsToReset.length} limits`,
         );
       } else {
-        logger.info({ options }, `[LimitsCleanup] No limits need cleanup`);
+        logger.debug({ options }, `[LimitsCleanup] No limits need cleanup`);
       }
     } catch (error) {
       logger.error(
@@ -1252,7 +1254,7 @@ export class LimitValidationService {
     virtualKeyId?: string;
     passthroughVirtualKeyId?: string;
     /** The agent row this request already read. */
-    agent?: { environmentId: string | null };
+    agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
@@ -1295,7 +1297,9 @@ export class LimitValidationService {
           organizationId = agentTeams[0].organizationId;
         }
       } else {
-        organizationId = await AgentModel.findOrganizationId(agentId);
+        organizationId =
+          params.agent?.organizationId ??
+          (await AgentModel.findOrganizationId(agentId));
       }
 
       // Resolve the agent's environment (nullable). Used for environment-scoped
@@ -1307,8 +1311,11 @@ export class LimitValidationService {
       const entities: LimitsCleanupOptionsEntities = {
         agent: agentId,
       };
-      if (virtualKeyId) {
-        entities.virtual_key = virtualKeyId;
+      const virtualKeyIds = [virtualKeyId, passthroughVirtualKeyId].filter(
+        (id): id is string => Boolean(id),
+      );
+      if (virtualKeyIds.length > 0) {
+        entities.virtual_key = virtualKeyIds;
       }
       if (llmOauthClientId) {
         entities.llm_oauth_client = llmOauthClientId;
@@ -1328,13 +1335,6 @@ export class LimitValidationService {
 
       logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
       await LimitModel.cleanupLimitsIfNeeded({ entities });
-      if (passthroughVirtualKeyId) {
-        // Cleanup expired windows for the passthrough key too (the cleanup
-        // entities map holds a single virtual_key slot).
-        await LimitModel.cleanupLimitsIfNeeded({
-          entities: { virtual_key: passthroughVirtualKeyId },
-        });
-      }
 
       // Prefetch every limit, per-model usage row, and model price the priority
       // checks below may need, in a fixed set of batched queries. Each entity
@@ -1459,6 +1459,8 @@ export class LimitValidationService {
               organizationId,
               userId,
               environmentId,
+              customUserLimits:
+                prefetch.limitsByEntity.get(`user:${userId}`) ?? [],
             });
           if (defaultUserLimitViolation) {
             logger.info(
@@ -1561,7 +1563,7 @@ export class LimitValidationService {
         );
       }
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
       return null; // No limits exceeded
@@ -1705,7 +1707,7 @@ export class LimitValidationService {
       );
     }
 
-    logger.info(
+    logger.debug(
       `[LimitValidation] All ${limits.length} limits OK for ${entityType} ${entityId}`,
     );
     return null; // No limits exceeded for this entity
@@ -1715,17 +1717,20 @@ export class LimitValidationService {
     organizationId: string;
     userId: string;
     environmentId?: string | null;
+    customUserLimits?: Limit[];
   }): Promise<null | LimitViolationResponse> {
     try {
       // A custom per-user limit always wins and disables every default
       // (org-wide and per-environment) for that user.
-      const customUserLimits = await LimitModel.findLimitsForValidation(
-        "user",
-        params.userId,
-        "token_cost",
-      );
+      const customUserLimits =
+        params.customUserLimits ??
+        (await LimitModel.findLimitsForValidation(
+          "user",
+          params.userId,
+          "token_cost",
+        ));
       if (customUserLimits.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
         );
         return null;

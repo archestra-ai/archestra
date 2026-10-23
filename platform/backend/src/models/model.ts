@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm";
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
@@ -303,15 +304,9 @@ class ModelModel {
     provider: SupportedProvider,
     modelId: string,
   ): Promise<Model | null> {
-    const [result] = await db
-      .select()
-      .from(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    const [result] = await ModelModel.byProviderAndModel
+      .get()
+      .execute({ provider, modelId });
 
     return result || null;
   }
@@ -794,6 +789,10 @@ class ModelModel {
     modelId: string,
     provider: SupportedProvider,
   ): Promise<Model | null> {
+    // Most calls refer to a catalogued model. Read it without opening a
+    // transaction or attempting a conflicting INSERT on every request.
+    if (await ModelModel.findByProviderAndModelId(provider, modelId))
+      return null;
     return withDbTransaction(async (tx) => {
       // RETURNING yields a row only when this call did the insert, which is what
       // tells the caller a model was seen for the first time and still needs its
@@ -1379,6 +1378,19 @@ class ModelModel {
   > {
     return { llmModelRowCount: await ModelModel.countAll() };
   }
+
+  private static readonly byProviderAndModel = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.provider, sql.placeholder("provider")),
+          eq(schema.modelsTable.modelId, sql.placeholder("modelId")),
+        ),
+      )
+      .prepare("archestra_model_by_provider_and_model"),
+  );
 }
 
 export default ModelModel;

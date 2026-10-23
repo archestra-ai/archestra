@@ -17,7 +17,12 @@ import {
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import { internalCallProvenance } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,6 +38,7 @@ import {
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -349,22 +355,26 @@ export async function validatePassthroughVirtualKey(params: {
     throw noAccessError;
   }
 
-  // Proxy access follows the owner's own agent access.
-  const ownerIsAgentAdmin = await ResourcePermissions.allows({
-    userId: virtualKey.authorId,
-    organizationId: agent.organizationId,
-    resource: "agent",
-    scope: "*",
-    action: "update",
-  });
-  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
-    userId: virtualKey.authorId,
-    agentId: agent.id,
-    isAgentAdmin: ownerIsAgentAdmin,
-    action: "use",
-  });
-  if (!hasProxyAccess) {
-    throw noAccessError;
+  // The default organization proxy serves every current member and has no
+  // scoped grant namespace. The fresh membership and organization checks above
+  // already prove access; other agent kinds still need their scoped grants.
+  if (agent.agentType !== "llm_proxy" || !agent.isDefault) {
+    const ownerIsAgentAdmin = await ResourcePermissions.allows({
+      userId: virtualKey.authorId,
+      organizationId: agent.organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
+    const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: virtualKey.authorId,
+      agentId: agent.id,
+      isAgentAdmin: ownerIsAgentAdmin,
+      action: "use",
+    });
+    if (!hasProxyAccess) {
+      throw noAccessError;
+    }
   }
 
   return {
@@ -691,6 +701,10 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
  * promptly, long enough to cover a client's ordinary request cadence.
  */
 const RECENTLY_VALIDATED_TTL_MS = 5 * 60_000;
+// Coalesce bookkeeping only: every request still reads the distributed failure
+// buckets and validates its credential. A busy credential's exemption is
+// refreshed at most once per second per process (up to one second less TTL).
+const VALIDATION_MARK_REFRESH_MS = 1_000;
 
 interface RateLimitEntry {
   count: number;
@@ -746,6 +760,12 @@ interface RateLimitEntry {
  */
 export class VirtualKeyRateLimiter {
   private cache: RateLimitCache;
+  private readonly successWrites = registerProcessLocalCache(
+    new LRUCacheManager<Promise<void>>({
+      maxSize: 10_000,
+      defaultTtl: VALIDATION_MARK_REFRESH_MS,
+    }),
+  );
 
   constructor(cache: RateLimitCache) {
     this.cache = cache;
@@ -810,13 +830,19 @@ export class VirtualKeyRateLimiter {
   async recordSuccess(params: { credential?: string }): Promise<void> {
     const { credential } = params;
     if (!credential) return;
+    const key = this.validatedKey(credential);
+    const pending = this.successWrites.get(key);
+    if (pending) return pending;
+    const write = this.writeSuccess(key);
+    this.successWrites.set(key, write);
+    return write;
+  }
+
+  private async writeSuccess(key: AllowedCacheKey): Promise<void> {
     try {
-      await this.cache.set(
-        this.validatedKey(credential),
-        true,
-        RECENTLY_VALIDATED_TTL_MS,
-      );
+      await this.cache.set(key, true, RECENTLY_VALIDATED_TTL_MS);
     } catch (error) {
+      this.successWrites.delete(key);
       // Best-effort: losing the mark only costs this credential its exemption
       // from a backstop that is not currently rejecting anything. Failing the
       // request over it would turn a cache blip into an outage.

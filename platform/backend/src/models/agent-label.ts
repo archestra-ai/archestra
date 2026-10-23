@@ -1,5 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import {
   getOrCreateLabelKey,
@@ -13,24 +14,7 @@ class AgentLabelModel {
    * Get all labels for a specific agent with key and value details
    */
   static async getLabelsForAgent(agentId: string): Promise<LabelGetResponse[]> {
-    const rows = await db
-      .select({
-        keyId: schema.agentLabelsTable.keyId,
-        valueId: schema.agentLabelsTable.valueId,
-        key: schema.labelKeysTable.key,
-        value: schema.labelValuesTable.value,
-      })
-      .from(schema.agentLabelsTable)
-      .leftJoin(
-        schema.labelKeysTable,
-        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
-      )
-      .leftJoin(
-        schema.labelValuesTable,
-        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
-      )
-      .where(eq(schema.agentLabelsTable.agentId, agentId))
-      .orderBy(asc(schema.labelKeysTable.key));
+    const rows = await AgentLabelModel.byAgent.get().execute({ agentId });
 
     return rows.map((row) => ({
       keyId: row.keyId,
@@ -213,6 +197,28 @@ class AgentLabelModel {
 
     return values.map((v) => v.value);
   }
+
+  private static readonly byAgent = new PreparedQuery((database) => {
+    return database
+      .select({
+        keyId: schema.agentLabelsTable.keyId,
+        valueId: schema.agentLabelsTable.valueId,
+        key: schema.labelKeysTable.key,
+        value: schema.labelValuesTable.value,
+      })
+      .from(schema.agentLabelsTable)
+      .leftJoin(
+        schema.labelKeysTable,
+        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+      )
+      .leftJoin(
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+      )
+      .where(eq(schema.agentLabelsTable.agentId, sql.placeholder("agentId")))
+      .orderBy(asc(schema.labelKeysTable.key))
+      .prepare("archestra_agent_labels");
+  });
 }
 
 export default AgentLabelModel;

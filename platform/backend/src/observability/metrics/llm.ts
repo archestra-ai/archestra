@@ -726,7 +726,7 @@ export function getObservableFetch(
     const dispatchedInit = dispatcher
       ? ({ ...init, dispatcher } as RequestInit)
       : init;
-    logger.info(
+    logger.debug(
       {
         url: typeof url === "string" ? url : url.toString(),
         headers: extractHeaderNames(init?.headers),

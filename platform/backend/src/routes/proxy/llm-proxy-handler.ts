@@ -1451,7 +1451,7 @@ export async function handleLLMProxy<
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
 
-    logger.info(
+    logger.debug(
       {
         resolvedAgentId,
         toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
@@ -1513,7 +1513,7 @@ export async function handleLLMProxy<
         );
       }
     } else {
-      logger.info(
+      logger.debug(
         `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
       );
     }

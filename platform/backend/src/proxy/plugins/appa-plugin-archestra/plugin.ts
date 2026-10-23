@@ -124,7 +124,11 @@ import {
   startedUnenforced,
   type UnenforcedCalls,
 } from "@/openappa/unenforced";
-import { appaTurnBoundaries, appaWireFamily } from "@/openappa/wire";
+import {
+  type AppaWireFamily,
+  appaTurnBoundaries,
+  appaWireFamily,
+} from "@/openappa/wire";
 import {
   isReportingToolCall,
   rememberYellSession,
@@ -6230,20 +6234,91 @@ function deliverReturnContract(params: {
   interactionType: string;
   contract: string;
 }): void {
-  appendQuestionContinuation({
-    request: params.request,
-    interactionType: params.interactionType,
-    guidance: params.contract,
-    scope: "request",
-  });
-  if (
-    !requestCarriesInstruction({
-      request: params.request,
-      interactionType: params.interactionType,
-      text: params.contract,
-    })
-  ) {
+  const { request, contract } = params;
+  const family = appaWireFamily(params.interactionType);
+  switch (family) {
+    case "openai:chatCompletions":
+      mergeLeadingSystemMessage(request, contract);
+      break;
+    case "openai:responses":
+    case "anthropic:messages":
+      appendQuestionContinuation({
+        request,
+        interactionType: family,
+        guidance: contract,
+        scope: "request",
+      });
+      break;
+  }
+  if (!family || !requestCarriesContract({ request, family, contract })) {
     throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
+  }
+}
+
+/**
+ * Chat Completions templates of many providers (vLLM, Mistral, Ollama, …)
+ * accept a single system message only, and only first.
+ */
+function mergeLeadingSystemMessage(request: unknown, contract: string): void {
+  if (!isRecord(request) || !Array.isArray(request.messages)) return;
+  if (leadingSystemCarries(request.messages, contract)) return;
+  const first = leadingSystemMessage(request.messages);
+  if (!first) {
+    request.messages.unshift({ role: "system", content: contract });
+    return;
+  }
+  if (typeof first.content === "string" && first.content.length > 0) {
+    first.content = `${first.content}\n\n${contract}`;
+  } else if (Array.isArray(first.content)) {
+    first.content.push({ type: "text", text: contract });
+  } else {
+    first.content = contract;
+  }
+}
+
+function leadingSystemMessage(
+  messages: unknown[],
+): Record<string, unknown> | undefined {
+  const [first] = messages;
+  return isRecord(first) &&
+    (first.role === "system" || first.role === "developer")
+    ? first
+    : undefined;
+}
+
+function leadingSystemCarries(messages: unknown[], contract: string): boolean {
+  const first = leadingSystemMessage(messages);
+  if (typeof first?.content === "string")
+    return first.content.includes(contract);
+  return (
+    Array.isArray(first?.content) &&
+    first.content.some(
+      (part) =>
+        isRecord(part) && part.type === "text" && part.text === contract,
+    )
+  );
+}
+
+function requestCarriesContract(params: {
+  request: unknown;
+  family: AppaWireFamily;
+  contract: string;
+}): boolean {
+  const { request, family, contract } = params;
+  switch (family) {
+    case "openai:chatCompletions":
+      return (
+        isRecord(request) &&
+        Array.isArray(request.messages) &&
+        leadingSystemCarries(request.messages, contract)
+      );
+    case "openai:responses":
+    case "anthropic:messages":
+      return requestCarriesInstruction({
+        request,
+        interactionType: family,
+        text: contract,
+      });
   }
 }
 
@@ -6268,17 +6343,6 @@ function requestCarriesInstruction(params: {
               block.type === "input_text" &&
               block.text === text,
           ),
-      )
-    );
-  }
-  if (interactionType === "openai:chatCompletions") {
-    return (
-      Array.isArray(request.messages) &&
-      request.messages.some(
-        (message) =>
-          isRecord(message) &&
-          message.role === "developer" &&
-          message.content === text,
       )
     );
   }

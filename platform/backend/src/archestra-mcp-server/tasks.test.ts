@@ -61,6 +61,7 @@ describe("run tools", () => {
       seedAndAssignArchestraTools,
     }) => {
       vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+      vi.spyOn(backend, "assertReady").mockResolvedValue();
       const organization = await makeOrganization();
       const actor = await makeUser();
       await makeMember(actor.id, organization.id, { role: "member" });

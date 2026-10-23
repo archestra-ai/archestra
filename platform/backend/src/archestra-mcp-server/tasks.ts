@@ -35,7 +35,10 @@ import {
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
-import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
+import {
+  prepareAgentRuntimeBackendDriver,
+  resolveAgentRuntimeBackendDriver,
+} from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import {
   pendingExports,
@@ -138,7 +141,7 @@ async function launchDelegatedTask(params: {
     }
 
     const runtime = resolveAgentRuntime(agent);
-    if (runtime) resolveAgentRuntimeBackendDriver(runtime.backend);
+    if (runtime) await prepareAgentRuntimeBackendDriver(runtime.backend);
     const crossing = await runtimeCrossingForStart(context, Boolean(runtime));
     if (typeof crossing === "string") {
       return failedLaunch("refused", errorResult(crossing));

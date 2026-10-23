@@ -259,7 +259,7 @@ describe("GET /api/statistics/users", () => {
           outputTokens: 120,
           cacheReadTokens: 180,
           cacheWriteTokens: 0,
-          totalTokens: 900,
+          totalTokens: 720,
           subscriptionCost: 5,
         })),
       );
@@ -274,7 +274,7 @@ describe("GET /api/statistics/users", () => {
             outputTokens: 60,
             cacheReadTokens: 90,
             cacheWriteTokens: 0,
-            totalTokens: 450,
+            totalTokens: 360,
             subscriptionCost: 2.5,
           })),
         );
@@ -444,7 +444,7 @@ describe("GET /api/statistics/users", () => {
           outputTokens: 80,
           cacheReadTokens: 120,
           cacheWriteTokens: 0,
-          totalTokens: 600 * multiplier + 200,
+          totalTokens: 600 * multiplier + 80,
           subscriptionCost: 5,
         },
       ]);
@@ -461,7 +461,7 @@ describe("GET /api/statistics/users", () => {
             cacheReadTokens: 60,
             cacheWriteTokens: 0,
             totalTokens:
-              (model.model === "model-a" ? 200 : 400) * multiplier + 100,
+              (model.model === "model-a" ? 200 : 400) * multiplier + 40,
             subscriptionCost: 2.5,
           },
         ]);
@@ -1014,7 +1014,7 @@ describe("GET /api/statistics/me", () => {
       outputTokens: 120,
       cacheReadTokens: 10,
       cacheWriteTokens: 0,
-      totalTokens: 610,
+      totalTokens: 600,
       activeDays: 1,
     });
     // Subscription traffic is not spend: it is reported at list price, apart
@@ -1029,11 +1029,11 @@ describe("GET /api/statistics/me", () => {
     ]);
     expect(body.models[0]).toMatchObject({
       totalTokens: 500,
-      percentage: expect.closeTo((500 / 610) * 100, 5),
+      percentage: expect.closeTo((500 / 600) * 100, 5),
     });
     expect(body.models[1]).toMatchObject({
-      totalTokens: 110,
-      percentage: expect.closeTo((110 / 610) * 100, 5),
+      totalTokens: 100,
+      percentage: expect.closeTo((100 / 600) * 100, 5),
     });
     expect(body.timeSeries.length).toBeGreaterThan(0);
   });

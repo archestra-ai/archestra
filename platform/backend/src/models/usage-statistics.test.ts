@@ -308,7 +308,7 @@ describe("UsageStatisticsModel.getAppUsage", () => {
         outputTokens: 15,
         cacheReadTokens: 40,
         cacheWriteTokens: 15,
-        totalTokens: 170,
+        totalTokens: 130,
         billedCost: 0.25,
         subscriptionCost: 0,
       }),
@@ -327,7 +327,7 @@ describe("UsageStatisticsModel.getAppUsage", () => {
       runs: 2,
       toolCalls: 1,
       llmRequests: 2,
-      totalTokens: 170,
+      totalTokens: 130,
       billedCost: 0.25,
     });
   });

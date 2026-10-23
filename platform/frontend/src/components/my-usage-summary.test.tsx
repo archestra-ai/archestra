@@ -44,8 +44,8 @@ const baseStats: MyStatistics = {
   outputTokens: 200,
   cacheReadTokens: 50,
   cacheWriteTokens: 20,
-  // Unestimated input + output + cache read + cache write.
-  totalTokens: 1070,
+  // Uncached input + output + cache write. Cache reads stay out of the total.
+  totalTokens: 1020,
   billedCost: 1.5,
   subscriptionCost: 0,
   activeDays: 3,

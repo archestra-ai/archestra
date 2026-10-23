@@ -109,7 +109,8 @@ export function UsageContent(props: UsageViewProps) {
       id: "tokens",
       label: "Tokens",
       value: statistics.totalTokens,
-      caption: "Reported input, output and cache usage",
+      caption:
+        "Newly processed input and output. Reused cached input is separate.",
     },
   ] as const;
   return (

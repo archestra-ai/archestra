@@ -50,7 +50,7 @@ describe("usage exploration", () => {
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
     await user.click(screen.getByRole("button", { name: "Copy as CSV" }));
     expect(write).toHaveBeenCalledWith(
-      "Model,Input,Output,Cache reads,Cache writes,total\nexample-model,80,20,1000,10,1110",
+      "Model,Input,Output,Cache reads,Cache writes,total\nexample-model,80,20,1000,10,110",
     );
   });
   it("clears a row comparison through the shared toolbar", async () => {

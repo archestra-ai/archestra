@@ -113,13 +113,13 @@ export class LlmThroughput {
     if (!this.reservation || !usage) return;
     // This provider exposes only locally synthesized token metrics.
     if (this.scope.provider === "microsoft-365-copilot") return;
+    // Cache reads do not consume token allowance; cache creation is new work.
     // Cache-write 1h is a subset, never an additional charge. Gemini reports
     // thoughts separately from candidate output; OpenAI includes them already.
     const count = (item: UsageView) => {
       const values = [
         item.inputTokensEstimated ? 0 : item.inputTokens,
         item.outputTokensEstimated ? 0 : item.outputTokens,
-        item.cacheReadTokens ?? 0,
         item.cacheWriteTokens ?? 0,
         this.scope.provider === "gemini" ? (item.reasoningTokens ?? 0) : 0,
       ];

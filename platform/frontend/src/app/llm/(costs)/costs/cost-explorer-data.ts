@@ -93,7 +93,7 @@ export const METRICS: Record<
   tokens: {
     label: "Tokens",
     money: false,
-    note: "Counts recorded token usage, including cache reads and writes. Requests in flight may not appear yet.",
+    note: "Counts newly processed input and output. Reused cached input is shown separately and is not included. Requests in flight may not appear yet.",
   },
   toolCalls: {
     label: "Tool calls",

@@ -166,7 +166,7 @@ it("distinguishes app opens from inference and includes all groups", async () =>
   });
 });
 
-it("uses the reported app token total including cache instead of adding raw input and output", async () => {
+it("uses the reported app token total without cache reads instead of adding raw input and output", async () => {
   server.use(
     http.get(`${origin}/api/statistics/app-usage`, () =>
       HttpResponse.json({
@@ -285,7 +285,7 @@ it.each([
   expect(result.current.isLoading).toBe(false);
 });
 
-it("aligns reported token totals including cache writes without recounting estimated input", async () => {
+it("aligns reported token totals with cache writes and without cache reads or estimated input", async () => {
   server.use(
     http.get(`${origin}/api/statistics/costs`, () =>
       HttpResponse.json({
@@ -303,19 +303,19 @@ it("aligns reported token totals including cache writes without recounting estim
             outputTokens: 9,
             cacheReadTokens: 20,
             cacheWriteTokens: 5,
-            totalTokens: 124,
+            totalTokens: 104,
             timeSeries: [
               {
                 timestamp: "2026-01-01T00:00:00Z",
                 requests: 4,
                 inputTokens: 40,
-                totalTokens: 56,
+                totalTokens: 36,
               },
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 5,
                 inputTokens: 50,
-                totalTokens: 68,
+                totalTokens: 48,
               },
             ],
           },
@@ -326,13 +326,13 @@ it("aligns reported token totals including cache writes without recounting estim
             outputTokens: 3,
             cacheReadTokens: 7,
             cacheWriteTokens: 11,
-            totalTokens: 21,
+            totalTokens: 14,
             timeSeries: [
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 3,
                 inputTokens: 100,
-                totalTokens: 21,
+                totalTokens: 14,
               },
             ],
           },
@@ -347,7 +347,7 @@ it("aligns reported token totals including cache writes without recounting estim
   await waitFor(() => expect(result.current.isUsagePending).toBe(false));
   expect(result.current.people.value).toBe(53);
   expect(result.current.requests).toEqual({ value: 12, series: [4, 8] });
-  expect(result.current.tokens).toEqual({ value: 145, series: [56, 89] });
+  expect(result.current.tokens).toEqual({ value: 118, series: [36, 62] });
 });
 
 it("deduplicates overview and model chart requests without eagerly fetching user details", async () => {

@@ -49,7 +49,7 @@ jobs:
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
-        uses: ./.github/actions/setup-docker-builder
+        uses: $/.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
         uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0

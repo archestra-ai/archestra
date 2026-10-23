@@ -30,7 +30,7 @@ runs:
         docker tag "$slim_ref" "archestra-platform-slim:${IMAGE_SHA}"
 
     - name: Scan exact full and slim image bytes for CVEs
-      uses: ./.github/actions/scan-docker-image
+      uses: $/.github/actions/scan-docker-image
       with:
         image: local://archestra-platform:${{ inputs.image-sha }}
         additional-images: local://archestra-platform-slim:${{ inputs.image-sha }}

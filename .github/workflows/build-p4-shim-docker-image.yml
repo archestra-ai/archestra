@@ -57,7 +57,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform/docker_images/p4_shim
       dockerfile: ./platform/docker_images/p4_shim/Dockerfile
@@ -94,7 +94,7 @@ jobs:
           fetch-depth: 1
 
       - name: Build p4 shim image
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ./platform/docker_images/p4_shim
           dockerfile: ./platform/docker_images/p4_shim/Dockerfile

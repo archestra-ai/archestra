@@ -63,7 +63,7 @@ jobs:
           helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
 
       - name: Preserve chart for qualification and publication
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: release-helm-chart
           path: platform/helm/archestra/archestra-platform-${{ inputs.version }}.tgz

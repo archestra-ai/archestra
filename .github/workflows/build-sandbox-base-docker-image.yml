@@ -55,7 +55,7 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Setup uv
-        uses: ./.github/actions/setup-uv
+        uses: $/.github/actions/setup-uv
         with:
           version: "0.9.26"
 
@@ -75,7 +75,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform/docker_images/sandbox_base
       dockerfile: ./platform/docker_images/sandbox_base/Dockerfile

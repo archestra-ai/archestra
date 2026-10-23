@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
 
       # Each client resolves on its own, so one unreachable source does not
       # hold back the other. The last step fails the job for any miss.

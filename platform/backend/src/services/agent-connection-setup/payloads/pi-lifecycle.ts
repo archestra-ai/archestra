@@ -41,7 +41,11 @@ const PiInstallation = (() => {
     begin({ server, gateway, providers }) {
       if (this.state) {
         if (this.state.format !== 1 || this.state.server !== server || this.state.gateway !== gateway) throw new Error("Disconnect the previous Pi connection before changing its gateway.");
-        this.validate(); return;
+        this.validate();
+        // Keep every provider introduced by this connection across reconnects.
+        // A persisted /model choice may still reference an earlier catalog.
+        this.state.providers = [...new Set([...this.state.providers, ...providers])];
+        this.persist(); return;
       }
       const agent = path.join(this.home, ".pi/agent"), auth = this.readJson(path.join(agent, "mcp-auth.json")) || {};
       this.state = { format: 1, legacy: fs.existsSync(path.join(this.root, "connection.json")), files: {}, server, gateway, providers,

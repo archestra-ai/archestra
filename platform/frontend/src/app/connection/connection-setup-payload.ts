@@ -113,7 +113,7 @@ export function connectionSetupBody(
     mcpGatewayId: inputs.gatewayId ?? undefined,
     llmProxyId: inputs.proxyId ?? undefined,
     provider:
-      inputs.proxyAuth === "primary-providers"
+      inputs.proxyAuth === "primary-providers" && inputs.clientId !== "pi"
         ? undefined
         : (inputs.provider ?? undefined),
     proxyAuth: inputs.proxyAuth ?? undefined,
@@ -180,6 +180,9 @@ export function firstConnectionSetupInputs(params: {
 }): ConnectionSetupInputs | null {
   const { client, organization, request } = params;
   if (!isInstallerClientId(client.id)) return null;
+  // Pi must first load the selected connection key's catalog in the browser.
+  // The server seed contains all visible keys' models, which can overstate it.
+  if (client.id === "pi") return null;
   // Choices the installer's request carries change the selection after the
   // first render; the browser prepares those itself.
   if (
@@ -232,8 +235,7 @@ export function firstConnectionSetupInputs(params: {
   const includeSkills = skillsEligible && allSkills.length > 0;
 
   // Plugins: every deliverable one compatible with the platform.
-  const pluginsEnabled =
-    client.id !== "pi" && organization.connectionPluginsEnabled === true;
+  const pluginsEnabled = organization.connectionPluginsEnabled === true;
   const pluginsQueryEnabled =
     pluginsEnabled &&
     canAnywhere("plugin", "read") &&
@@ -265,13 +267,13 @@ export function firstConnectionSetupInputs(params: {
   );
   const openCodeFamily = isOpenCodeFamilyClient(client.id);
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || client.id === "pi" || openCodeFamily
+    client.id === "cursor" || openCodeFamily
       ? "primary-providers"
       : adminMappedProviders.size > 0 && canAttribute
         ? "virtual-key"
         : "provider-key";
   const allPrimaryProviders =
-    (openCodeFamily || client.id === "cursor" || client.id === "pi") &&
+    (openCodeFamily || client.id === "cursor") &&
     proxyAuth === "primary-providers";
   const usableOpenCodeKeys = availableKeys.filter(
     (key) =>
@@ -331,9 +333,7 @@ export function firstConnectionSetupInputs(params: {
     providerIsPerUser &&
     !configuredProviders.has(provider);
   const supportsModelChoice =
-    client.id === "copilot-cli" ||
-    client.id === "claude-desktop" ||
-    client.id === "pi";
+    client.id === "copilot-cli" || client.id === "claude-desktop";
   const effectiveModel =
     supportsModelChoice && provider
       ? client.id === "claude-desktop"
@@ -370,7 +370,6 @@ export function firstConnectionSetupInputs(params: {
     (includeSkills && skillsTotal > CONNECTION_SETUP_MAX_SKILLS);
   if (
     (supportsModelChoice && proxyActive && !effectiveModel) ||
-    (client.id === "pi" && (!gateway || !proxyActive)) ||
     !hasRunnableAnything ||
     needsPerUserConnect ||
     selectionProblem

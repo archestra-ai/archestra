@@ -520,7 +520,24 @@ export function ConnectCommandPanel({
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
-  const { modelsByProvider } = useLlmModelsByProvider();
+  const piModelKeyId =
+    client.id === "pi" && provider
+      ? (organization?.connectionClientProviderKeys?.pi?.find(
+          (key) => key.provider === provider,
+        )?.providerApiKeyId ??
+        usableOpenCodeKeys.find(
+          (key) => key.provider === provider && key.isPrimary,
+        )?.id)
+      : undefined;
+  const modelCatalog = useLlmModelsByProvider({
+    apiKeyId: piModelKeyId,
+    enabled: client.id !== "pi" || !!piModelKeyId,
+  });
+  // Never seed Pi from another key's models, including previous-key placeholder data.
+  const modelsByProvider: Partial<typeof modelCatalog.modelsByProvider> =
+    client.id === "pi" && (!piModelKeyId || modelCatalog.isPlaceholderData)
+      ? {}
+      : modelCatalog.modelsByProvider;
   const effectiveModel =
     supportsModelChoice && provider
       ? (modelChoice ??
@@ -620,7 +637,14 @@ export function ConnectCommandPanel({
   const optionsPlace = connectRequest ? " in Setup options" : "";
   const selectionProblem =
     [
-      supportsModelChoice && proxyActive && !effectiveModel
+      supportsModelChoice &&
+      proxyActive &&
+      (!effectiveModel ||
+        (client.id === "pi" &&
+          (!provider ||
+            !(modelsByProvider[provider] ?? []).some(
+              (item) => item.id === effectiveModel,
+            ))))
         ? "Choose a model served by your provider, or sync its model catalog before connecting."
         : null,
       client.id === "pi" && (!gateway || !proxyActive)

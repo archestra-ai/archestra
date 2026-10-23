@@ -197,3 +197,55 @@ test("retries interrupted restoration after restoring a distinct prior OAuth cli
   expect(fs.existsSync(retry.stateFile)).toBe(false);
   expect(() => retry.disconnect()).not.toThrow();
 });
+
+test.each([
+  "archestra-openai",
+  "archestra-anthropic",
+  "unrelated",
+])("disconnect after catalog-changing reconnect preserves ownership for %s", (selected) => {
+  const home = fs.mkdtempSync(path.join(tmpdir(), "Pi reconnect "));
+  homes.push(home);
+  const settingsFile = path.join(home, ".pi/agent/settings.json");
+  fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+  const original = {
+    defaultProvider: "original",
+    defaultModel: "original-model",
+    theme: "light",
+  };
+  fs.writeFileSync(settingsFile, JSON.stringify(original));
+  const Installation = new Function(
+    "require",
+    `${PI_INSTALLATION}; return PiInstallation;`,
+  )((id: string) => (id === "node:os" ? { homedir: () => home } : require(id)));
+  const install = new Installation();
+  const connection = { server: "gateway", gateway: "https://example.test/mcp" };
+  install.begin({ ...connection, providers: ["archestra-openai"] });
+  const extension = path.join(home, ".pi/agent/extensions/archestra-pi.js");
+  install.write(extension, "first");
+  install.begin({ ...connection, providers: ["archestra-anthropic"] });
+  install.write(extension, "second");
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify({
+      ...original,
+      defaultProvider: selected,
+      defaultModel: "selected-model",
+      theme: "dark",
+    }),
+  );
+  const reloaded = new Installation();
+  expect(reloaded.state.providers).toEqual([
+    "archestra-openai",
+    "archestra-anthropic",
+  ]);
+  reloaded.disconnect();
+  expect(JSON.parse(fs.readFileSync(settingsFile, "utf8"))).toEqual({
+    ...original,
+    theme: "dark",
+    ...(selected === "unrelated"
+      ? { defaultProvider: selected, defaultModel: "selected-model" }
+      : {}),
+  });
+  expect(fs.existsSync(extension)).toBe(false);
+  expect(fs.existsSync(reloaded.stateFile)).toBe(false);
+});

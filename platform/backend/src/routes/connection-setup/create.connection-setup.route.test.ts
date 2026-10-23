@@ -232,7 +232,10 @@ describe("POST /api/connection-setups", () => {
     expect(script.body).toContain(selectedModel ?? "openai:gpt-6.1-sol");
   });
 
-  test("Pi primary setup exposes both authorized provider catalogs through the model router", async ({
+  test.for([
+    undefined,
+    "openai-test-model",
+  ])("Pi primary setup resolves provider and model from its authorized catalogs: %s", async (selectedModel, {
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -266,7 +269,7 @@ describe("POST /api/connection-setups", () => {
         baseUrl: "http://localhost:9000/v1",
         mcpGatewayId: gateway.id,
         proxyAuth: "primary-providers",
-        model: "openai-test-model",
+        model: selectedModel,
       },
     });
     expect(response.statusCode, response.body).toBe(200);
@@ -275,6 +278,7 @@ describe("POST /api/connection-setups", () => {
       .command.match(/script\/([^']+)'/)?.[1] as string;
     const setup = await ConnectionSetupModel.findByToken(token);
     expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.provider).toBe("openai");
     expect(setup?.model).toBe("openai-test-model");
     const script = await app.inject({
       method: "GET",
@@ -285,6 +289,51 @@ describe("POST /api/connection-setups", () => {
     expect(script.body).toContain("anthropic-test-model");
     expect(script.body).toContain("openai-test-model");
     expect(script.body).toContain("arcpi");
+  });
+
+  test("Pi rejects a model served only by another visible key", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    for (const [isPrimary, modelId] of [
+      [true, "gpt-4o"],
+      [false, "gpt-6.1-sol"],
+    ] as const) {
+      const secret = await makeSecret();
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+        isPrimary,
+      });
+      const model = await ModelModel.create({
+        provider: "openai",
+        modelId,
+        externalId: modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "pi",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        provider: "openai",
+        proxyAuth: "primary-providers",
+        model: "gpt-6.1-sol",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain("configured provider key");
   });
 
   test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({

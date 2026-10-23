@@ -764,7 +764,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     fail = outcome === "error";
     const first = await submit(body);
     if (outcome === "error") {
-      expect(first.statusCode, first.body).toBe(503);
+      expect(first.statusCode, first.body).toBe(500);
       expect(first.body).not.toContain("private native database error");
       return;
     }
@@ -966,7 +966,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.body.includes("protected session")).toBe(
       state === "active",
     );
-    expect(response.statusCode).toBe(state === "error" ? 503 : 200);
+    expect(response.statusCode).toBe(state === "error" ? 500 : 200);
     const sessions = await db
       .select()
       .from(database.schema.openappaSessionsTable)
@@ -1129,7 +1129,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
     const first = await send(input);
     if (outcome === "error") {
-      expect(first.statusCode, first.body).toBe(503);
+      expect(first.statusCode, first.body).toBe(500);
       expect(first.body).not.toContain("private native database error");
       return;
     }

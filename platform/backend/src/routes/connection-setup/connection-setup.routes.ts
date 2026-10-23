@@ -706,15 +706,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (clientId === "pi" && !model) {
+      if (clientId === "pi") {
         if (
           (proxyAuth === "virtual-key" || proxyAuth === "primary-providers") &&
-          virtualApiKeyId &&
-          provider
+          virtualApiKeyId
         ) {
           const catalog = await getVirtualKeyProviderCatalog({
-            supportedProviders: [provider],
-            provider,
+            supportedProviders: allPrimary
+              ? INSTALLER_CLIENT_KEY_PROVIDERS.pi
+              : provider
+                ? [provider]
+                : [],
+            provider: allPrimary ? undefined : provider,
             clientLabel: "Pi",
             mappedKeys: organization.connectionClientProviderKeys?.pi ?? null,
             organizationId,
@@ -722,18 +725,33 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userTeamIds: await TeamModel.getUserTeamIds(user.id),
             virtualApiKeyId,
           });
-          model =
-            defaultConnectionModel({
-              provider,
-              modelIds: catalog.flatMap((entry) =>
-                entry.models.map((item) => item.id),
-              ),
-            }) ?? undefined;
+          const selected = provider
+            ? catalog.find((entry) => entry.provider === provider)
+            : ((model
+                ? catalog.find((entry) =>
+                    entry.models.some((item) => item.id === model),
+                  )
+                : catalog.find((entry) => entry.provider === "openai")) ??
+              catalog[0]);
+          provider = selected?.provider;
+          model ??=
+            provider && selected
+              ? (defaultConnectionModel({
+                  provider,
+                  modelIds: selected.models.map((item) => item.id),
+                }) ?? undefined)
+              : undefined;
+          if (!selected?.models.some((item) => item.id === model)) {
+            throw new ApiError(
+              400,
+              "Choose a model served by Pi's configured provider key before connecting.",
+            );
+          }
         }
         if (!model)
           throw new ApiError(
             400,
-            "Choose a model served by your OpenAI provider before connecting Pi.",
+            "Choose a model served by your configured provider before connecting Pi.",
           );
       }
 

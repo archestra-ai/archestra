@@ -116,8 +116,8 @@ const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
 
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: () => ({ data: [] }),
-  useLlmModelsByProvider: () => ({
-    modelsByProvider: modelsByProviderMock(),
+  useLlmModelsByProvider: (params: unknown) => ({
+    modelsByProvider: modelsByProviderMock(params),
   }),
 }));
 
@@ -1895,7 +1895,7 @@ describe("ConnectCommandPanel", () => {
       });
       if (clientId === "pi")
         availableKeysMock.mockReturnValue({
-          data: [{ provider: "openai", isPrimary: true }],
+          data: [{ id: "primary-openai", provider: "openai", isPrimary: true }],
         });
       const user = userEvent.setup();
       renderPanel({ client: findClient(clientId) });
@@ -1914,10 +1914,10 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("waits for a catalog or an explicit model rather than generating an unavailable default", async () => {
+    it("waits for the bound catalog and rejects an unavailable explicit model", async () => {
       modelsByProviderMock.mockReturnValue({});
       availableKeysMock.mockReturnValue({
-        data: [{ provider: "openai", isPrimary: true }],
+        data: [{ id: "primary-openai", provider: "openai", isPrimary: true }],
       });
       const user = userEvent.setup();
       renderPanel({ client: findClient("pi") });
@@ -1927,11 +1927,35 @@ describe("ConnectCommandPanel", () => {
       fireEvent.change(screen.getByPlaceholderText("Model id"), {
         target: { value: "explicit-model" },
       });
+      expect(createSetupMock).not.toHaveBeenCalled();
+      expect(
+        screen.getAllByText(/Choose a model served by your provider/)[0],
+      ).toBeVisible();
+    });
+
+    it("selects only models of Pi's mapped key rather than another visible key", async () => {
+      mapClientProviderKeys({ pi: ["openai"] });
+      availableKeysMock.mockReturnValue({
+        data: [
+          { id: "other-key", provider: "openai", isPrimary: true },
+          { id: "openai-org-key", provider: "openai", isPrimary: false },
+        ],
+      });
+      modelsByProviderMock.mockImplementation(
+        (params: { apiKeyId?: string }) => ({
+          openai:
+            params.apiKeyId === "openai-org-key"
+              ? [{ id: "gpt-4o" }]
+              : [{ id: "gpt-6.1-sol" }],
+        }),
+      );
+      renderPanel({ client: findClient("pi") });
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ model: "explicit-model" }),
+          expect.objectContaining({ provider: "openai", model: "gpt-4o" }),
         ),
       );
+      expect(screen.queryByText("gpt-6.1-sol")).not.toBeInTheDocument();
     });
 
     it("surfaces the model in the review step and sends it with the setup", async () => {
@@ -2454,7 +2478,7 @@ describe("first approval setup, as the server seed prepares it", () => {
         })),
       ),
     ),
-  )("sends the same payload: $clientId, $role, configured base URLs $configuredBaseUrls", async ({
+  )("prepares a valid first payload: $clientId, $role, configured base URLs $configuredBaseUrls", async ({
     clientId,
     role,
     configuredBaseUrls,
@@ -2543,7 +2567,8 @@ describe("first approval setup, as the server seed prepares it", () => {
       availableKeys: keys,
       models,
     });
-    expect(serverInputs).not.toBeNull();
+    if (clientId === "pi") expect(serverInputs).toBeNull();
+    else expect(serverInputs).not.toBeNull();
 
     renderPanel({
       client,
@@ -2558,6 +2583,15 @@ describe("first approval setup, as the server seed prepares it", () => {
     });
 
     await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    if (clientId === "pi") {
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          model: "openai:gpt-6.1-sol",
+        }),
+      );
+      return;
+    }
     const serverKey = connectionSetupInputsKey(
       serverInputs as ConnectionSetupInputs,
     );

@@ -55,6 +55,8 @@ def relay(message: dict) -> None:
     if message.get("method") == "tools/call":
         params = dict(message.get("params") or {})
         with state_lock:
+            # A local name maps back to the gateway tool rename_tools kept for
+            # it; a name hidden by a collision therefore reaches the kept tool.
             params["name"] = gateway_names.get(params.get("name"), params.get("name"))
         message = {**message, "params": params}
     try:

@@ -30,6 +30,7 @@ class Agent:
     """A `grok agent stdio` child speaking newline-delimited JSON-RPC."""
 
     def __init__(self, log_path: Path):
+        # os.open sets the permissions atomically; open() wraps the fd for buffered binary appends.
         log = open(os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab")
         self.process = subprocess.Popen(
             ["grok", "agent", "--always-approve", "stdio"],
@@ -152,7 +153,9 @@ def main() -> int:
                 timeout=120,
             )
             session_id = response["result"]["sessionId"]
-            session_file.write_text(f"{session_id}\n")
+            # Private like the launcher's files, although the id is no secret.
+            with open(os.open(session_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+                file.write(f"{session_id}\n")
         tool_count = wait_for_gateway(agent, session_id)
         if tool_count is None or (tool_count == 0 and gateway_failed(script_dir, since, session_id)):
             agent.stop()
@@ -167,10 +170,15 @@ def main() -> int:
             {"sessionId": session_id, "prompt": [{"type": "text", "text": task}]},
         )
         stop_reason = response.get("result", {}).get("stopReason")
-    except (OSError, RuntimeError, TimeoutError, KeyError, ValueError) as error:
+    except (OSError, RuntimeError, TimeoutError) as error:
         print(f"archestra: Grok Build session failed: {type(error).__name__}", file=sys.stderr)
-        # The driver, not the model, ended the turn; the platform may retry.
+        # The CLI or its transport failed, not the model; the platform may retry.
         stop_reason = "unavailable"
+        session_id = session_file.read_text().strip() if session_file.exists() else ""
+    except (KeyError, ValueError) as error:
+        print(f"archestra: Grok Build sent an unexpected reply: {type(error).__name__}", file=sys.stderr)
+        # A malformed reply is not transient; do not ask the platform to retry.
+        stop_reason = "protocol_error"
         session_id = session_file.read_text().strip() if session_file.exists() else ""
     finally:
         agent.stop()

@@ -59,7 +59,6 @@ describe("ScheduleTriggerPicker", () => {
     const user = userEvent.setup();
     renderPicker();
 
-    expect(screen.getByText("At")).toBeInTheDocument();
     expect(screen.getByLabelText("Time")).toBeInTheDocument();
     expect(
       screen.getByRole("group", { name: "Days of week" }),

@@ -242,6 +242,60 @@ describe("shared LLM throughput admission", () => {
     expectUsage(usage.get(model.id)?.currentUsage, 1, 1);
   });
 
+  test("rejects counter overflow without consuming the reporting receipt", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const rule = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "tokens",
+      cleanupInterval: "calendar_day",
+      limitValue: 1000,
+    });
+    const entities = [
+      { entityType: "organization" as const, entityId: org.id },
+    ];
+    const first = await LlmThroughputModel.admit({
+      entities,
+      model: "model-a",
+    });
+    const next = await LlmThroughputModel.admit({ entities, model: "model-a" });
+    if (
+      !("reservation" in first) ||
+      !first.reservation ||
+      !("reservation" in next) ||
+      !next.reservation
+    )
+      throw new Error("Expected reporting receipts");
+    await LlmThroughputModel.reconcile({
+      reservation: first.reservation,
+      tokens: Number.MAX_SAFE_INTEGER,
+    });
+    await expect(
+      LlmThroughputModel.reconcile({
+        reservation: next.reservation,
+        tokens: 1,
+      }),
+    ).rejects.toThrow("Shared quota counter overflow");
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(Number.MAX_SAFE_INTEGER);
+    await expect(
+      LlmThroughputModel.reconcile({
+        reservation: next.reservation,
+        tokens: 1,
+      }),
+    ).rejects.toThrow("Shared quota counter overflow");
+    await LlmThroughputModel.reconcile({
+      reservation: next.reservation,
+      tokens: 0,
+    });
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   test("admits concurrent calls before reports, adds actual debt once, then blocks", async ({
     makeOrganization,
   }) => {

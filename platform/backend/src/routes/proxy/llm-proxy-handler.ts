@@ -4173,8 +4173,10 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
-  if (record.billingMode !== "subscription")
-    await throughput?.settleSpend(record.cost, "metered");
+  await throughput?.settleSpend(
+    record.cost,
+    record.billingMode === "subscription" ? "subscription" : "metered",
+  );
 }
 
 /**

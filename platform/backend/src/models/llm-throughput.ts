@@ -230,6 +230,8 @@ class LlmThroughputModel {
           } else {
             // Keep reported usage above the cap as debt. Concurrent calls can
             // finish after the allowance is exhausted; no tokens are forecast.
+            if (delta > Number.MAX_SAFE_INTEGER - counter.count)
+              throw new Error("Shared quota counter overflow");
             counter.count += delta;
           }
           if (
@@ -313,6 +315,7 @@ class LlmThroughputModel {
   }
 
   static async deleteExpired(): Promise<void> {
+    // The periodic reaper drains bounded batches without blocking admission.
     await db.execute(sql`
       WITH expired AS (
         SELECT key FROM keyv_cache
@@ -403,6 +406,7 @@ function period(rule: Limit) {
     interval: rule.cleanupInterval,
     // Legacy minute buckets have no epoch until their first interval edit.
     epoch: rule.lastCleanup?.toISOString(),
+    // New rolling periods start at creation until the first interval reset.
     anchor: (rule.lastCleanup ?? rule.createdAt).getTime(),
   };
 }

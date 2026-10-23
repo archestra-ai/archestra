@@ -478,103 +478,134 @@ describe("native proxy throughput", () => {
     });
   }
 
-  test("counts subscription throughput against the credential's billing team and key, ignoring caller-supplied team attribution", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeTeam,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id);
-    const owner = await makeTeam(org.id, user.id, { name: "Billing team" });
-    const other = await makeTeam(org.id, user.id, { name: "Other team" });
-    const agent = await makeAgent({ organizationId: org.id });
-    const { virtualKey, value } = await VirtualApiKeyModel.create({
-      organizationId: org.id,
-      name: "Subscription test",
-      keyType: "passthrough",
-      scope: "personal",
-      authorId: user.id,
-      billingTeamId: owner.id,
-    });
-    const rules = await Promise.all(
-      [
-        { entityType: "team" as const, entityId: owner.id },
-        { entityType: "team" as const, entityId: other.id },
-        { entityType: "virtual_key" as const, entityId: virtualKey.id },
-      ].map((scope) =>
-        LimitModel.create({
-          ...scope,
-          limitType: "requests_per_minute",
-          limitValue: 1,
-        }),
-      ),
-    );
-    const model = "claude-haiku-4-5-20251001";
-    await ModelModel.create({
-      externalId: `anthropic/${model}`,
-      provider: "anthropic",
-      modelId: model,
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-    });
-    let calls = 0;
-    respond = (url) => {
-      expect(url).toBe("/v1/messages");
-      calls++;
-      return Response.json({
-        id: "msg_subscription",
-        type: "message",
-        role: "assistant",
-        model,
-        content: [{ type: "text", text: "Hello" }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 2 },
+  for (const finalBillingMode of ["subscription", "metered"] as const) {
+    test(`counts subscription throughput against its billing team and key with final ${finalBillingMode} billing`, async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const owner = await makeTeam(org.id, user.id, { name: "Billing team" });
+      const other = await makeTeam(org.id, user.id, { name: "Other team" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const { virtualKey, value } = await VirtualApiKeyModel.create({
+        organizationId: org.id,
+        name: "Subscription test",
+        keyType: "passthrough",
+        scope: "personal",
+        authorId: user.id,
+        billingTeamId: owner.id,
       });
-    };
-    const request = {
-      method: "POST" as const,
-      url: `/v1/anthropic/${agent.id}/v1/messages`,
-      headers: {
-        authorization: "Bearer sk-ant-oat-test-subscription",
-        "x-archestra-virtual-key": value,
-        "x-archestra-team-id": other.id,
-        "anthropic-version": "2023-06-01",
-      },
-      payload: {
-        model,
-        max_tokens: 50,
-        messages: [{ role: "user", content: "Hello" }],
-      },
-    };
-    // Subscription auth deliberately pins Anthropic's host instead of using
-    // the configured metered-key base URL. Intercept that external boundary.
-    const subscriptionProvider = setupServer(
-      http.post("https://api.anthropic.com/v1/messages", () =>
-        respond("/v1/messages"),
-      ),
-    );
-    subscriptionProvider.listen({ onUnhandledRequest: "error" });
-    try {
-      const first = await app.inject(request);
-      expect(first.statusCode, first.body).toBe(200);
-      const second = await app.inject(request);
-      expect(second.statusCode, second.body).toBe(429);
-    } finally {
-      subscriptionProvider.close();
-    }
-    expect(calls).toBe(1);
-    const usage = await LlmThroughputModel.usage(rules);
-    for (const [index, rule] of rules.entries())
-      expectUsage(
-        usage.get(rule.id)?.currentUsage,
-        index === 1 ? 0 : 1,
-        rule.limitValue,
+      const rules = await Promise.all(
+        [
+          { entityType: "team" as const, entityId: owner.id },
+          { entityType: "team" as const, entityId: other.id },
+          { entityType: "virtual_key" as const, entityId: virtualKey.id },
+        ].map((scope) =>
+          LimitModel.create({
+            ...scope,
+            limitType: "requests_per_minute",
+            limitValue: 1,
+          }),
+        ),
       );
-  });
+      const model = "claude-haiku-4-5-20251001";
+      const spend = await LimitModel.create({
+        entityType: "organization",
+        entityId: org.id,
+        limitType: "token_cost",
+        cleanupInterval: "minute",
+        limitValue: 1,
+      });
+      await ModelModel.create({
+        externalId: `anthropic/${model}`,
+        provider: "anthropic",
+        modelId: model,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.01",
+        completionPricePerToken: "0.01",
+      });
+      let calls = 0;
+      respond = (url) => {
+        expect(url).toBe("/v1/messages");
+        calls++;
+        return Response.json(
+          {
+            id: "msg_subscription",
+            type: "message",
+            role: "assistant",
+            model,
+            content: [{ type: "text", text: "Hello" }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 2 },
+          },
+          {
+            headers:
+              finalBillingMode === "metered"
+                ? {
+                    "anthropic-ratelimit-unified-status": "rejected",
+                    "anthropic-ratelimit-unified-overage-status": "allowed",
+                  }
+                : {},
+          },
+        );
+      };
+      const request = {
+        method: "POST" as const,
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          authorization: "Bearer sk-ant-oat-test-subscription",
+          "x-archestra-virtual-key": value,
+          "x-archestra-team-id": other.id,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model,
+          max_tokens: 50,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      };
+      // Subscription auth deliberately pins Anthropic's host instead of using
+      // the configured metered-key base URL. Intercept that external boundary.
+      const subscriptionProvider = setupServer(
+        http.post("https://api.anthropic.com/v1/messages", () =>
+          respond("/v1/messages"),
+        ),
+      );
+      subscriptionProvider.listen({ onUnhandledRequest: "error" });
+      try {
+        const first = await app.inject(request);
+        expect(first.statusCode, first.body).toBe(200);
+        const second = await app.inject(request);
+        expect(second.statusCode, second.body).toBe(429);
+      } finally {
+        subscriptionProvider.close();
+      }
+      expect(calls).toBe(1);
+      const [interaction] = await db
+        .select({ billingMode: schema.interactionsTable.billingMode })
+        .from(schema.interactionsTable);
+      expect(interaction?.billingMode).toBe(finalBillingMode);
+      expectUsage(
+        (await LlmThroughputModel.usage([spend])).get(spend.id)?.currentUsage,
+        finalBillingMode === "metered" ? 0.12 : 0,
+        spend.limitValue,
+      );
+      const usage = await LlmThroughputModel.usage(rules);
+      for (const [index, rule] of rules.entries())
+        expectUsage(
+          usage.get(rule.id)?.currentUsage,
+          index === 1 ? 0 : 1,
+          rule.limitValue,
+        );
+    });
+  }
 
   test("rejects quota with a distinct 429 and Retry-After before calling the real SDK's HTTP boundary", async ({
     makeOrganization,

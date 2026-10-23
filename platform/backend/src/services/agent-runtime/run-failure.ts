@@ -145,6 +145,6 @@ const RETRIABLE_IMAGE_ENVELOPE_CODES = new Set([
   "proxy_unavailable",
   // The MCP gateway tools did not load at startup.
   "mcp_startup",
-  // The task did not reach the Claude Code terminal.
+  // The task did not reach the Agent's terminal.
   "task_submission",
 ]);

@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Grok Build lifecycle hooks: report input waits to Agent Runtime, remember the
+# main session for follow-ups, and export the readable transcript at turn end.
+# Hooks are best-effort; Grok runs the turn whatever this script returns.
+set -uo pipefail
+
+event="${1:-}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+attention="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-${script_dir}/archestra-agent-attention}"
+payload="$(cat)"
+session_id="$(jq -r '.sessionId // empty' <<<"${payload}" 2>/dev/null)"
+session_file="${runtime_dir}/grok-main-session"
+interactive=false
+[[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "interactive" ]] && interactive=true
+
+# Subagents and side sessions report their own events. Only the session this
+# runtime started speaks for the run.
+main_session() {
+  [[ -n "${session_id}" && -s "${session_file}" && "${session_id}" == "$(cat "${session_file}")" ]]
+}
+
+case "${event}" in
+  SessionStart)
+    if [[ -n "${session_id}" && ! -s "${session_file}" ]]; then
+      printf '%s\n' "${session_id}" > "${session_file}"
+    fi
+    "${attention}" clear
+    ;;
+  UserPromptSubmit|PostToolUse|PermissionDenied)
+    "${attention}" clear
+    ;;
+  PreToolUse)
+    "${attention}" set "Input requested"
+    ;;
+  Notification)
+    "${attention}" set "Permission needed"
+    ;;
+  Stop|StopFailure|StopCancelled)
+    reason="$(jq -r '.reason // "end_turn"' <<<"${payload}" 2>/dev/null)"
+    # Grok also sends Stop when the session itself ends; there is no turn
+    # left to report then.
+    if [[ "${event}" == "Stop" && ( "${reason}" == "shutdown" || "${reason}" == "channel_closed" ) ]]; then
+      exit 0
+    fi
+    main_session || exit 0
+    if [[ "${interactive}" == true ]]; then
+      "${script_dir}/archestra-grok-transcript" "${session_id}" || true
+      "${attention}" set "Waiting for input"
+      exit 0
+    fi
+    "${attention}" clear
+    # Without a terminal the ACP driver exports and settles the turn itself.
+    [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]] && exit 0
+    if [[ "${event}" == "Stop" && "${reason}" == "end_turn" ]]; then
+      "${script_dir}/archestra-grok-transcript" "${session_id}" --answer "${runtime_dir}/final-answer.txt" || true
+      rm -f "${runtime_dir}/turn-complete.failed"
+      # archestra-tui-run publishes the turn when this marker changes.
+      touch "${runtime_dir}/turn-complete"
+      exit 0
+    fi
+    # Every other turn end fails the delegated turn.
+    "${script_dir}/archestra-grok-transcript" "${session_id}" || true
+    case "${event}:${reason}:$(jq -r '.error // empty' <<<"${payload}" 2>/dev/null)" in
+      StopFailure:*:max_output_tokens|*:max_tokens:*) failure=max_tokens ;;
+      *:max_turns:*|*:max_turn_requests:*) failure=max_turn_requests ;;
+      *:refusal:*) failure=refusal ;;
+      StopCancelled:*) failure=cancelled ;;
+      *) failure=error ;;
+    esac
+    "${script_dir}/archestra-grok-turn-failure" "${failure}" 2>/dev/null
+    ;;
+esac
+exit 0

@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Export a Grok Build session as the readable transcript (version 1).
+
+Grok records each session's ACP `session/update` stream in `updates.jsonl`, the
+same log `/resume` restores from. Messages and tool activity are kept; thinking,
+plans and usage are not. With --answer, the last assistant message is also
+written to FILE as the turn's final answer.
+
+Usage: archestra-grok-transcript <session-id> [--answer FILE]
+"""
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def main() -> int:
+    arguments = sys.argv[1:]
+    if not (len(arguments) == 1 or (len(arguments) == 3 and arguments[1] == "--answer")) or not arguments[0]:
+        print("usage: archestra-grok-transcript <session-id> [--answer FILE]", file=sys.stderr)
+        return 64
+    session_id = arguments[0]
+    grok_home = Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    updates = next((grok_home / "sessions").glob(f"*/{session_id}/updates.jsonl"), None)
+    if updates is None:
+        return 0
+    entries = transcript_entries(updates)
+    output = runtime_dir / "readable-transcript.json"
+    temporary = output.with_name(f"{output.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps({"version": 1, "provider": "grok", "entries": entries}) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, output)
+    if len(arguments) == 3:
+        # The turn's answer is its closing assistant message, if it has one.
+        last = entries[-1] if entries else {}
+        answer = last["text"].strip() if last.get("role") == "assistant" else ""
+        Path(arguments[2]).write_text(f"{answer}\n" if answer else "", encoding="utf-8")
+    return 0
+
+
+def transcript_entries(updates: Path) -> list[dict]:
+    entries: list[dict] = []
+    calls: dict[str, dict] = {}
+    results: dict[str, int] = {}
+    for line in updates.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        params = record.get("params") if isinstance(record, dict) else None
+        update = params.get("update") if isinstance(params, dict) else None
+        if record.get("method") != "session/update" or not isinstance(update, dict):
+            continue
+        kind = update.get("sessionUpdate")
+        timed = timestamp(record, params)
+        if kind in ("user_message_chunk", "agent_message_chunk"):
+            text = content_text(update.get("content"))
+            if not text:
+                continue
+            role = "user" if kind == "user_message_chunk" else "assistant"
+            last = entries[-1] if entries else None
+            # Streaming splits one message into chunks; a tool call ends it.
+            if last and last["type"] == "message" and last["role"] == role:
+                last["text"] += text
+            else:
+                entries.append({"type": "message", "role": role, "text": text, **timed})
+        elif kind == "tool_call":
+            call_id = update.get("toolCallId")
+            entry = {"type": "tool_call", "name": tool_name(update), **timed}
+            if isinstance(call_id, str):
+                entry["toolCallId"] = call_id
+                calls[call_id] = entry
+            arguments = tool_input(update.get("rawInput"))
+            if arguments is not None:
+                entry["input"] = arguments
+            entries.append(entry)
+        elif kind == "tool_call_update":
+            call_id = update.get("toolCallId")
+            call = calls.get(call_id) if isinstance(call_id, str) else None
+            if call is not None and "input" not in call:
+                arguments = tool_input(update.get("rawInput"))
+                if arguments is not None:
+                    call["input"] = arguments
+            status = update.get("status")
+            if status not in ("completed", "failed"):
+                continue
+            text, failed = tool_output(update)
+            entry = {"type": "tool_result", "text": text or "[Non-text result omitted]", **timed}
+            if isinstance(call_id, str):
+                entry["toolCallId"] = call_id
+            if status == "failed" or failed:
+                entry["isError"] = True
+            if isinstance(call_id, str) and call_id in results:
+                # A later terminal update for the same call replaces the result.
+                entries[results[call_id]] = entry
+                continue
+            if isinstance(call_id, str):
+                results[call_id] = len(entries)
+            entries.append(entry)
+    return entries
+
+
+def tool_name(update: dict) -> str:
+    raw = update.get("rawInput")
+    dispatched = raw.get("tool_name") if isinstance(raw, dict) else None
+    if isinstance(dispatched, str) and dispatched:
+        # MCP calls go through Grok's use_tool dispatcher as
+        # `<server>__<tool>`; the gateway bridge spells `__` as `--`. Show
+        # the gateway's own tool name.
+        return dispatched.split("__", 1)[-1].replace("--", "__")
+    for candidate in (update.get("title"), update.get("kind")):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return "tool"
+
+
+def tool_input(raw: object) -> str | None:
+    if raw is None:
+        return None
+    if isinstance(raw, dict) and "tool_name" in raw and "tool_input" in raw:
+        raw = raw["tool_input"]
+    return serialized(raw)
+
+
+def tool_output(update: dict) -> tuple[str, bool]:
+    parts = []
+    for item in update.get("content") or []:
+        if isinstance(item, dict):
+            parts.append(content_text(item.get("content")) or content_text(item))
+    text = "".join(part for part in parts if part)
+    if text:
+        return text, False
+    raw = update.get("rawOutput")
+    output = raw.get("output") if isinstance(raw, dict) and raw.get("type") == "MCP" else None
+    if isinstance(output, dict) and len(output) == 1:
+        # Grok wraps an MCP result as {"OkayOutput": ...} or an error variant.
+        (variant, value), = output.items()
+        return serialized(value), "Okay" not in variant
+    return (serialized(raw) if raw is not None else ""), False
+
+
+def content_text(content: object) -> str:
+    if isinstance(content, dict) and content.get("type") == "text":
+        text = content.get("text")
+        return text if isinstance(text, str) else ""
+    return ""
+
+
+def serialized(value: object) -> str:
+    return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+
+
+def timestamp(record: dict, params: dict) -> dict:
+    meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
+    milliseconds = meta.get("agentTimestampMs")
+    seconds = milliseconds / 1000 if isinstance(milliseconds, (int, float)) else record.get("timestamp")
+    if not isinstance(seconds, (int, float)):
+        return {}
+    # Grok's record timestamp is in seconds; agentTimestampMs in milliseconds.
+    # A value out of range drops the timestamp, not the transcript.
+    try:
+        moment = datetime.fromtimestamp(seconds, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return {}
+    return {"timestamp": moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

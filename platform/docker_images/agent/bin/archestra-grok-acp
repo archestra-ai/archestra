@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Run one delegated Grok Build turn over the Agent Client Protocol.
+
+Used for plain runs, which have no terminal; other delegated runs use the TUI.
+`grok -p` and the TUI both send the first prompt about two seconds after
+start, whether or not the gateway's tools have loaded. Over ACP the session
+itself reports `_x.ai/mcp_initialized` once its MCP catalog is loaded, so the
+task is submitted only after Grok's own catalog holds the gateway tools. No
+separate connection or sleep establishes readiness.
+
+Grok reports a gateway whose tools/list failed as initialized with no tools.
+A run governed by OpenAPPA always lists the recovery tools, so an empty catalog
+fails it. Otherwise the session's own MCP record tells an empty catalog from a
+failed one (archestra-grok-gateway-state).
+"""
+
+import json
+import os
+import queue
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+DISCOVERY_TIMEOUT_SECONDS = 35
+
+
+class Agent:
+    """A `grok agent stdio` child speaking newline-delimited JSON-RPC."""
+
+    def __init__(self, log_path: Path):
+        log = open(os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab")
+        self.process = subprocess.Popen(
+            ["grok", "agent", "--always-approve", "stdio"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=log,
+        )
+        self.next_id = 0
+        self.responses: dict[int, dict] = {}
+        self.notifications: "queue.Queue[dict | None]" = queue.Queue()
+        self.condition = threading.Condition()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def request(self, method: str, params: dict, timeout: float | None = None) -> dict:
+        with self.condition:
+            self.next_id += 1
+            request_id = self.next_id
+        self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self.condition:
+            while request_id not in self.responses:
+                if self.process.poll() is not None:
+                    raise RuntimeError(f"Grok Build exited during {method}")
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise TimeoutError(method)
+                self.condition.wait(1 if remaining is None else min(1, remaining))
+            return self.responses.pop(request_id)
+
+    def stop(self) -> None:
+        # Closing stdin ends the ACP connection; Grok then exits and flushes
+        # its session record. Only a client that ignores it is terminated.
+        if self.process.poll() is None and self.process.stdin and not self.process.stdin.closed:
+            try:
+                self.process.stdin.close()
+            except OSError:
+                pass
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
+    def _send(self, message: dict) -> None:
+        assert self.process.stdin is not None
+        self.process.stdin.write(json.dumps(message).encode() + b"\n")
+        self.process.stdin.flush()
+
+    def _read(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "method" in message and "id" in message:
+                self._answer(message)
+            elif "id" in message:
+                with self.condition:
+                    self.responses[message["id"]] = message
+                    self.condition.notify_all()
+            else:
+                self.notifications.put(message)
+        self.notifications.put(None)
+        with self.condition:
+            self.condition.notify_all()
+
+    def _answer(self, message: dict) -> None:
+        # Always-approve leaves no permission prompts; approve any that a hook
+        # raises, since nobody can answer one during delegated work.
+        if message["method"] == "session/request_permission":
+            options = message.get("params", {}).get("options") or []
+            allow = next((o for o in options if str(o.get("kind", "")).startswith("allow")), None)
+            if allow:
+                result = {"outcome": {"outcome": "selected", "optionId": allow["optionId"]}}
+            else:
+                result = {"outcome": {"outcome": "cancelled"}}
+            self._send({"jsonrpc": "2.0", "id": message["id"], "result": result})
+        else:
+            self._send({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32601, "message": "Method not found"}})
+
+
+def main() -> int:
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    script_dir = Path(__file__).resolve().parent
+    session_file = runtime_dir / "grok-main-session"
+    resume = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CONTINUE") == "1"
+    task = os.environ["ARCHESTRA_AGENT_RUNTIME_TASK"]
+    for marker in ("turn-complete", "turn-complete.failed", "final-answer.txt"):
+        (runtime_dir / marker).unlink(missing_ok=True)
+
+    since = time.time() - 1
+    try:
+        agent = Agent(runtime_dir / "grok-agent.log")
+    except OSError:
+        subprocess.run([str(script_dir / "archestra-grok-turn-failure"), "missing"], check=False)
+        return 1
+    try:
+        agent.request("initialize", {"protocolVersion": 1, "clientCapabilities": {}}, timeout=60)
+        if resume:
+            session_id = session_file.read_text().strip()
+            agent.request(
+                "session/load",
+                {"sessionId": session_id, "cwd": os.getcwd(), "mcpServers": []},
+                timeout=120,
+            )
+        else:
+            response = agent.request(
+                "session/new",
+                {"cwd": os.getcwd(), "mcpServers": [], "_meta": {"yoloMode": True}},
+                timeout=120,
+            )
+            session_id = response["result"]["sessionId"]
+            session_file.write_text(f"{session_id}\n")
+        tool_count = wait_for_gateway(agent, session_id)
+        if tool_count is None or (tool_count == 0 and gateway_failed(script_dir, since, session_id)):
+            agent.stop()
+            subprocess.run([str(script_dir / "archestra-mcp-startup-failure")], check=False)
+            return 1
+        print(f"archestra: Grok Build loaded {tool_count} gateway tools", flush=True)
+
+        printer = threading.Thread(target=print_progress, args=(agent, session_id), daemon=True)
+        printer.start()
+        response = agent.request(
+            "session/prompt",
+            {"sessionId": session_id, "prompt": [{"type": "text", "text": task}]},
+        )
+        stop_reason = response.get("result", {}).get("stopReason")
+    except (OSError, RuntimeError, TimeoutError, KeyError, ValueError) as error:
+        print(f"archestra: Grok Build session failed: {type(error).__name__}", file=sys.stderr)
+        stop_reason = None
+        session_id = session_file.read_text().strip() if session_file.exists() else ""
+    finally:
+        agent.stop()
+
+    if session_id:
+        subprocess.run([str(script_dir / "archestra-grok-transcript"), session_id], check=False)
+    answer = last_answer(runtime_dir / "readable-transcript.json")
+    if stop_reason != "end_turn":
+        # ACP stop reasons share the failure messages of the TUI hooks.
+        subprocess.run([str(script_dir / "archestra-grok-turn-failure"), stop_reason or "error"], check=False)
+        return 1
+    answer = answer or "The session ended without producing a final message."
+    # The same completion markers the maintained TUI runner leaves.
+    (runtime_dir / "final-answer.txt").write_text(f"{answer}\n", encoding="utf-8")
+    (runtime_dir / "turn-complete").touch()
+    print("\n===ARCHESTRA-FINAL-ANSWER===")
+    print(answer)
+    print("===ARCHESTRA-FINAL-ANSWER-END===", flush=True)
+    return 0
+
+
+def wait_for_gateway(agent: Agent, session_id: str) -> int | None:
+    """Gateway tool count once this session's catalog loads, or None."""
+    deadline = time.monotonic() + DISCOVERY_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            message = agent.notifications.get(timeout=max(0.1, deadline - time.monotonic()))
+        except queue.Empty:
+            break
+        if message is None:
+            return None
+        params = message.get("params") or {}
+        # A server status may name no session; a failure is final either way.
+        if (
+            message.get("method") == "_x.ai/mcp/server_status"
+            and params.get("sessionId") in (None, session_id)
+            and params.get("status") in ("failed", "error", "needs-auth")
+        ):
+            return None
+        if params.get("sessionId") != session_id:
+            continue
+        if message.get("method") == "_x.ai/mcp_initialized":
+            count = params.get("mcpToolCount")
+            return count if isinstance(count, int) else None
+    return None
+
+
+def gateway_failed(script_dir: Path, since: float, session_id: str) -> bool:
+    if os.environ.get("ARCHESTRA_AGENT_RUNTIME_OPENAPPA") == "1":
+        return True
+    # The record is written with the initialized event; allow it a moment.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        state = subprocess.run(
+            [str(script_dir / "archestra-grok-gateway-state"), str(since), session_id],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if state != "pending":
+            return not state.startswith("ready ")
+        time.sleep(0.2)
+    return True
+
+
+def print_progress(agent: Agent, session_id: str) -> None:
+    # The run log shows the conversation as it happens; the transcript and
+    # final answer are written from Grok's own session record afterwards.
+    streaming = False
+    while True:
+        message = agent.notifications.get()
+        if message is None:
+            return
+        params = message.get("params") or {}
+        update = params.get("update") or {}
+        if message.get("method") != "session/update" or params.get("sessionId") != session_id:
+            continue
+        kind = update.get("sessionUpdate")
+        if kind == "agent_message_chunk":
+            text = (update.get("content") or {}).get("text")
+            if isinstance(text, str):
+                sys.stdout.write(text)
+                streaming = True
+        elif kind == "tool_call":
+            raw = update.get("rawInput") if isinstance(update.get("rawInput"), dict) else {}
+            dispatched = raw.get("tool_name")
+            if isinstance(dispatched, str) and dispatched:
+                # The gateway tool behind Grok's use_tool dispatcher.
+                name = dispatched.split("__", 1)[-1].replace("--", "__")
+            else:
+                name = update.get("title") or update.get("kind") or "tool"
+            sys.stdout.write(("\n" if streaming else "") + f"[tool] {name}\n")
+            streaming = False
+        sys.stdout.flush()
+
+
+def last_answer(transcript: Path) -> str:
+    try:
+        entries = json.loads(transcript.read_text())["entries"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+    for entry in reversed(entries):
+        if entry.get("type") == "message":
+            return entry["text"].strip() if entry.get("role") == "assistant" else ""
+    return ""
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

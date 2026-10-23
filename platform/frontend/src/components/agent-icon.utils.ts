@@ -22,6 +22,7 @@ export const CATALOG_AGENT_ICONS: Record<AgentCatalogId, string> = {
   opencode: "/agent-logos/opencode.svg",
   hermes: "/agent-logos/hermes.png",
   openclaw: "/agent-logos/openclaw.svg",
+  grok: "/model-logos/grok.svg",
 };
 
 const CATALOG_AGENT_ID_BY_ICON = new Map(

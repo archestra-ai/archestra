@@ -1,10 +1,90 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { makeUsageData } from "./usage.test-data";
 import { UsageContent } from "./usage-content";
 
+vi.mock("recharts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("recharts")>();
+  const { createContext, useContext } = await import("react");
+  type Row = Record<string, string | number>;
+  const Data = createContext<Row[]>([]);
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactNode }) => children,
+    BarChart: ({ data, children }: { data: Row[]; children: ReactNode }) => (
+      <Data.Provider value={data}>
+        <output data-testid="chart-data">{JSON.stringify(data)}</output>
+        {children}
+      </Data.Provider>
+    ),
+    Bar: () => null,
+    CartesianGrid: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+    Tooltip: ({
+      content,
+    }: {
+      content: (props: {
+        active: boolean;
+        label: string;
+        payload: { dataKey: string; value: number }[];
+      }) => ReactNode;
+    }) => {
+      const [row] = useContext(Data);
+      if (!row) return null;
+      return (
+        <div role="tooltip">
+          {content({
+            active: true,
+            label: String(row.name),
+            payload: Object.entries(row)
+              .filter(([key]) => key !== "name")
+              .map(([dataKey, value]) => ({ dataKey, value: Number(value) })),
+          })}
+        </div>
+      );
+    },
+  };
+});
+
 describe("usage exploration", () => {
+  for (const group of ["Model", "Client"] as const) {
+    it(`keeps ${group} token stacks, tooltips and expanded shares consistent`, async () => {
+      const user = userEvent.setup();
+      render(<UsageContent {...makeUsageData()} />);
+      if (group === "Client") await view(user, "Usage by client");
+      await user.click(screen.getByRole("button", { name: /^Show / }));
+      await user.click(screen.getByRole("menuitem", { name: "Tokens" }));
+      await user.click(screen.getByRole("button", { name: "split by None" }));
+      await user.click(screen.getByRole("menuitem", { name: "Token type" }));
+      const [data] = JSON.parse(
+        screen.getByTestId("chart-data").textContent ?? "[]",
+      ) as Record<string, string | number>[];
+      const chartTotal = Object.entries(data)
+        .filter(([key]) => key !== "name")
+        .reduce((sum, [, value]) => sum + Number(value), 0);
+      expect(chartTotal).toBe(110);
+      const tooltip = screen.getByRole("tooltip");
+      expect(within(tooltip).getByText("80")).toBeInTheDocument();
+      expect(within(tooltip).getByText("20")).toBeInTheDocument();
+      expect(within(tooltip).getByText("10")).toBeInTheDocument();
+      expect(
+        within(tooltip).queryByText("Cache reads"),
+      ).not.toBeInTheDocument();
+      const table = screen.getByRole("table");
+      expect(within(table).getByText("1,000")).toBeInTheDocument();
+      await user.click(
+        within(table).getByRole("button", { name: "Expand by Token type" }),
+      );
+      const shares = within(table)
+        .getAllByText(/% of /)
+        .map((node) => Number.parseFloat(node.textContent ?? "0"));
+      expect(shares).toEqual([73, 18, 9]);
+      expect(shares.reduce((sum, share) => sum + share, 0)).toBe(100);
+    });
+  }
   it("changes from model totals to a real time pivot and falls back when switching to clients", async () => {
     const user = userEvent.setup();
     render(<UsageContent {...makeUsageData()} />);
@@ -50,7 +130,7 @@ describe("usage exploration", () => {
     await user.click(screen.getByRole("button", { name: /^pivot$/i }));
     await user.click(screen.getByRole("button", { name: "Copy as CSV" }));
     expect(write).toHaveBeenCalledWith(
-      "Model,Input,Output,Cache reads,Cache writes,total\nexample-model,80,20,1000,10,110",
+      "Model,Input,Output,Cache writes,total\nexample-model,80,20,10,110",
     );
   });
   it("clears a row comparison through the shared toolbar", async () => {

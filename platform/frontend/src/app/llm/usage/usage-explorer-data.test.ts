@@ -10,14 +10,13 @@ describe("personal usage explorer", () => {
     for (const group of ["model", "client"] as const) {
       const cube = usageCube(props, "tokens", group, true);
       expect(cube.total).toBe(110);
-      expect(cube.rows[0].children.map((c) => c.total)).toEqual([
-        80, 20, 1000, 10,
-      ]);
+      expect(cube.rows[0].children.map((c) => c.total)).toEqual([80, 20, 10]);
+      expect(cube.splitKeys.reduce((sum, item) => sum + item.total, 0)).toBe(
+        cube.total,
+      );
       expect(
-        cube.splitKeys
-          .filter((item) => item.key !== "cacheRead")
-          .reduce((sum, item) => sum + item.total, 0),
-      ).toBe(cube.total);
+        cube.rows[0].children.reduce((sum, item) => sum + item.total, 0),
+      ).toBe(cube.rows[0].total);
       expect(cube.rows[0].extras.cache).toBe(1000);
       expect(cube.rows[0].hasSeries).toBe(false);
       expect(cube.buckets).toEqual([]);

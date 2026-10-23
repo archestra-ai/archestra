@@ -123,12 +123,6 @@ export function usageCube(
               series: [],
             },
             {
-              key: "cacheRead",
-              label: "Cache reads",
-              total: item.cacheReadTokens,
-              series: [],
-            },
-            {
               key: "cacheWrite",
               label: "Cache writes",
               total: item.cacheWriteTokens,
@@ -228,14 +222,9 @@ export function usageCube(
             total: rows.reduce((n, r) => n + (r.children[1]?.total ?? 0), 0),
           },
           {
-            key: "cacheRead",
-            label: "Cache reads",
-            total: rows.reduce((n, r) => n + (r.children[2]?.total ?? 0), 0),
-          },
-          {
             key: "cacheWrite",
             label: "Cache writes",
-            total: rows.reduce((n, r) => n + (r.children[3]?.total ?? 0), 0),
+            total: rows.reduce((n, r) => n + (r.children[2]?.total ?? 0), 0),
           },
         ]
       : [],

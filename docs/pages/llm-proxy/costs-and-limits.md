@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-24
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

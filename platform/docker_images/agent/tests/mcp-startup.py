@@ -41,7 +41,7 @@ class Gateway(ThreadingHTTPServer):
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
-        # Grok side calls (no use_tool) that carry the task text.
+        # Grok side calls (no gateway tools) that carry the task text.
         self.aux_task_requests = []
 
     def inference(self):
@@ -122,8 +122,8 @@ class Handler(BaseHTTPRequestHandler):
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:
                 names.append(tool.get("name") or tool.get("function", {}).get("name", ""))
-        if CLIENT == "grok" and "use_tool" not in names:
-            # Session summaries and other side calls declare no gateway route.
+        if CLIENT == "grok" and not any(name.endswith(TOOLS[0].removeprefix("archestra__")) for name in names):
+            # Session summaries and other side calls declare no gateway tool.
             # One that carries the task still counts as inference for the
             # barrier: it must not run before the catalog is loaded.
             if "recovery tool" in json.dumps(request.get("messages") or ""):
@@ -141,9 +141,6 @@ class Handler(BaseHTTPRequestHandler):
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
-        if CLIENT == "grok":
-            # Grok reaches MCP tools only through its use_tool dispatcher.
-            tool = "use_tool" if len(self.server.calls) < len(TOOLS) else None
         if self.path.split("?", 1)[0].endswith("/messages"):
             self.anthropic(tool)
         elif self.path.endswith("/chat/completions"):
@@ -174,9 +171,7 @@ class Handler(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            # The bridge spells gateway `__` as `--`; Grok prefixes its server name.
-            arguments = json.dumps({"tool_name": "archestra__" + TOOLS[len(self.server.calls)].replace("__", "--"), "tool_input": {}}) if CLIENT == "grok" else "{}"
-            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": arguments}}]}
+            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
             finish = "tool_calls"
         response = {"id": "chatcmpl-test", "object": "chat.completion", "created": 1, "model": "gpt-4.1", "choices": [{"index": 0, "message": message, "finish_reason": finish}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
         if request.get("stream"):
@@ -420,9 +415,9 @@ class StartupTest(unittest.TestCase):
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")
                 if CLIENT == "grok":
-                    # Grok declares its MCP dispatcher, not each gateway tool.
-                    self.assertTrue({"search_tool", "use_tool"} <= set(request["names"]), request)
-                    continue
+                    # The wire adapter shows the model the gateway tools, never
+                    # Grok's own dispatcher pair.
+                    self.assertFalse({"search_tool", "use_tool"} & set(request["names"]), request)
                 for tool in TOOLS:
                     self.assertTrue(any(name.endswith(tool.removeprefix("archestra__")) for name in request["names"]), (tool, request))
             if not plain:

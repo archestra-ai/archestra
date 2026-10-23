@@ -9,6 +9,11 @@ names. Discovery still waits on the gateway's own tools/list.
 
 The gateway URL, bearer token and run headers come from the environment, so no
 credential is written to Grok's configuration.
+
+Every listed tool is also published, as the gateway sent it, to the catalog file
+`archestra-grok-llm` reads: that adapter declares the gateway tools to the model
+on Grok's behalf, because Grok itself offers the model only `search_tool` and
+`use_tool`.
 """
 
 import json
@@ -34,9 +39,14 @@ HEADERS = {
 if os.environ.get("ARCHESTRA_AGENT_RUNTIME_BINDING"):
     HEADERS["X-Archestra-Runtime-Binding"] = os.environ["ARCHESTRA_AGENT_RUNTIME_BINDING"]
 
+CATALOG_FILE = os.environ.get("ARCHESTRA_GROK_GATEWAY_CATALOG") or os.path.join(
+    os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"), "grok-gateway-tools.json"
+)
+
 output_lock = threading.Lock()
 state_lock = threading.Lock()
 gateway_names: dict[str, str] = {}
+gateway_tools: dict[str, dict] = {}
 mcp_session: list[str] = []
 
 
@@ -75,7 +85,8 @@ def relay(message: dict) -> None:
     # stream on GET, so nothing arrives outside a request exchange.
     for response in responses:
         if message.get("method") == "tools/list" and response.get("id") == request_id:
-            rename_tools(response)
+            # A list without a cursor starts over; a later page extends it.
+            rename_tools(response, fresh=not (message.get("params") or {}).get("cursor"))
         write(response)
 
 
@@ -136,7 +147,7 @@ def event_data(body: str) -> list[str]:
     return events
 
 
-def rename_tools(response: dict) -> None:
+def rename_tools(response: dict, fresh: bool = True) -> None:
     tools = (response.get("result") or {}).get("tools")
     if not isinstance(tools, list):
         return
@@ -161,6 +172,29 @@ def rename_tools(response: dict) -> None:
     # A paginated catalog arrives over several calls; keep every page's names.
     with state_lock:
         gateway_names.update(names)
+        if fresh:
+            gateway_tools.clear()
+        for tool in tools:
+            if isinstance(tool, dict) and tool.get("name") in names.values():
+                gateway_tools[tool["name"]] = tool
+        catalog = {
+            "server": "archestra",
+            "tools": list(gateway_tools.values()),
+            "names": {local: gateway for local, gateway in gateway_names.items() if gateway in gateway_tools},
+        }
+    # Published before Grok hears of the tools, so a model request that follows
+    # Grok's own "connected" record finds the catalog in place.
+    try:
+        publish_catalog(catalog)
+    except OSError as error:
+        print(f"archestra: could not publish the gateway catalog: {error}", file=sys.stderr, flush=True)
+
+
+def publish_catalog(catalog: dict) -> None:
+    temporary = f"{CATALOG_FILE}.tmp"
+    with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+        json.dump(catalog, file)
+    os.replace(temporary, CATALOG_FILE)
 
 
 def write(message: dict) -> None:

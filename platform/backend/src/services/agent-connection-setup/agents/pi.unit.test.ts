@@ -749,16 +749,21 @@ test.each([
     ),
   ).toBe(true);
   // Run the real restoration helper, replacing only the Windows PATH process.
-  const restore = `const { PiInstallation } = require(${JSON.stringify(path.join(privateRoot, "lifecycle.cjs"))}); const install = new PiInstallation(); install.disconnect();`;
   const restoreFile = path.join(f.home, "restore.cjs");
   writeFileSync(
     restoreFile,
-    `require("node:child_process").execFileSync = () => ""; ${restore}`,
+    `require("node:child_process").execFileSync = () => "";
+const { PiInstallation } = require(process.argv[2]);
+new PiInstallation().disconnect();`,
   );
-  const restored = spawnSync(process.execPath, [restoreFile], {
-    env: { ...process.env, HOME: f.home },
-    encoding: "utf8",
-  });
+  const restored = spawnSync(
+    process.execPath,
+    [restoreFile, path.join(privateRoot, "lifecycle.cjs")],
+    {
+      env: { ...process.env, HOME: f.home },
+      encoding: "utf8",
+    },
+  );
   expect(restored.status, restored.stderr).toBe(0);
   for (const name of ["startup.ps1", "path.ps1"])
     expect(readFileSync(path.join(privateRoot, name))).toEqual(original);

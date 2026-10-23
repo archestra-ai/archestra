@@ -78,7 +78,7 @@ export function usageCube(
   });
   let rows: CubeRow[] = [];
   let notice =
-    "Personal activity only. Token totals include reported input, output, cache reads and cache writes.";
+    "Personal activity only. Token totals count newly processed input and output. Reused cached input is listed separately.";
   let extraCols: Cube["extraCols"] = [];
   const buckets =
     group === "time" ? statistics.timeSeries.map((p) => p.timestamp) : [];
@@ -97,10 +97,7 @@ export function usageCube(
         requests: item.requests,
         input: Math.max(
           0,
-          item.totalTokens -
-            item.outputTokens -
-            item.cacheReadTokens -
-            item.cacheWriteTokens,
+          item.totalTokens - item.outputTokens - item.cacheWriteTokens,
         ),
         output: item.outputTokens,
         cache: item.cacheReadTokens,
@@ -115,10 +112,7 @@ export function usageCube(
               label: "Input",
               total: Math.max(
                 0,
-                item.totalTokens -
-                  item.outputTokens -
-                  item.cacheReadTokens -
-                  item.cacheWriteTokens,
+                item.totalTokens - item.outputTokens - item.cacheWriteTokens,
               ),
               series: [],
             },
@@ -126,12 +120,6 @@ export function usageCube(
               key: "output",
               label: "Output",
               total: item.outputTokens,
-              series: [],
-            },
-            {
-              key: "cacheRead",
-              label: "Cache reads",
-              total: item.cacheReadTokens,
               series: [],
             },
             {
@@ -175,7 +163,7 @@ export function usageCube(
       ] as const
     ).map(([key, label]) => base(key, label, breakdown.tokenMix[key]));
     notice =
-      "Recorded token mix includes cache reads and writes. Cache savings are an estimate against full input pricing, not a bill credit.";
+      "The mix lists cache reads and writes separately. Cache reads are not part of the token total. Cache savings are an estimate against full input pricing, not a bill credit.";
   } else if (group === "context") {
     const labels = {
       under32k: "Under 32K",
@@ -234,14 +222,9 @@ export function usageCube(
             total: rows.reduce((n, r) => n + (r.children[1]?.total ?? 0), 0),
           },
           {
-            key: "cacheRead",
-            label: "Cache reads",
-            total: rows.reduce((n, r) => n + (r.children[2]?.total ?? 0), 0),
-          },
-          {
             key: "cacheWrite",
             label: "Cache writes",
-            total: rows.reduce((n, r) => n + (r.children[3]?.total ?? 0), 0),
+            total: rows.reduce((n, r) => n + (r.children[2]?.total ?? 0), 0),
           },
         ]
       : [],

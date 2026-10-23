@@ -2725,8 +2725,8 @@ function tokenSum(column: AnyColumn): SQL<number> {
 }
 
 /**
- * Provider-reported tokens that do not overlap: uncached input, output, cache
- * reads, and cache writes. A 1-hour cache write is a subset of cache writes,
+ * Provider-reported processed tokens: uncached input, fresh cache writes,
+ * and output. Cache reads remain separate. A 1-hour cache write is a subset,
  * and reasoning already included in stored output is not added again. Estimated
  * input is excluded. Estimated output cannot be excluded: the row does not
  * record which output counts were synthesized. Separate Gemini thoughts are
@@ -2738,7 +2738,6 @@ function reportedTokens(
   return sql<number>`CAST(
     COALESCE(SUM(${table.inputTokens}) FILTER (WHERE NOT ${table.inputTokensEstimated}), 0)
     + COALESCE(SUM(${table.outputTokens}), 0)
-    + COALESCE(SUM(${table.cacheReadTokens}), 0)
     + COALESCE(SUM(${table.cacheWriteTokens}), 0)
     AS DOUBLE PRECISION)`;
 }
@@ -2947,7 +2946,6 @@ const modelCacheWrite = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cac
 const modelReportedTokens = sql<number>`CAST(
   COALESCE(SUM(COALESCE(billing_model.input_tokens, CASE WHEN NOT ${schema.interactionsTable.inputTokensEstimated} THEN ${schema.interactionsTable.inputTokens} ELSE 0 END)), 0)
   + COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0)
-  + COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0)
   + COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0)
   AS BIGINT)`;
 const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;

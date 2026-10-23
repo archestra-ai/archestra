@@ -1,3 +1,4 @@
+import { fromResponsesUsage } from "@/routes/proxy/adapters/responses-usage";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { describe, expect, test } from "@/test";
 import { normalizeAnthropicUsage } from "@/utils/billable-usage";
@@ -428,7 +429,7 @@ describe("shared LLM throughput admission", () => {
     expectUsage(usage.get(tpm.id)?.currentUsage, 6, 10000);
   });
 
-  test("counts disjoint normalized cache usage once, including the 1h write subset", async ({
+  test("excludes cache reads while counting fresh cache creation once", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -466,7 +467,7 @@ describe("shared LLM throughput admission", () => {
     await call.reconcile(usage);
     expectUsage(
       (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
-      620,
+      420,
       10000,
     );
   });
@@ -495,7 +496,7 @@ describe("shared LLM throughput admission", () => {
     });
     expectUsage(
       (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
-      100,
+      60,
       10000,
     );
     const anthropic = new LlmThroughput({ ...scope, provider: "anthropic" });
@@ -520,9 +521,68 @@ describe("shared LLM throughput admission", () => {
     );
     expectUsage(
       (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
-      450,
+      410,
       10000,
     );
+  });
+
+  test("Responses cached prompt reads do not consume token allowance", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const rule = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "tokens",
+      cleanupInterval: "calendar_day",
+      limitValue: 200,
+    });
+    const scope = {
+      entities: [{ entityType: "organization" as const, entityId: org.id }],
+      model: "example-model",
+      provider: "openai" as const,
+    };
+    const call = new LlmThroughput(scope);
+    await call.admit();
+    await call.reconcile(
+      fromResponsesUsage({
+        input_tokens: 1000,
+        input_tokens_details: { cached_tokens: 900 },
+        output_tokens: 10,
+      }),
+    );
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(110);
+    await expect(new LlmThroughput(scope).admit()).resolves.toBeUndefined();
+  });
+
+  test("cache-only reports leave token allowance available", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const rule = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "tokens",
+      cleanupInterval: "calendar_month",
+      limitValue: 1,
+    });
+    const scope = {
+      entities: [{ entityType: "organization" as const, entityId: org.id }],
+      model: "example-model",
+    };
+    const call = new LlmThroughput(scope);
+    await call.admit();
+    await call.reconcile({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 1000000,
+    });
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(0);
+    await expect(new LlmThroughput(scope).admit()).resolves.toBeUndefined();
   });
 
   test("excludes estimated dimensions and fails closed on malformed shared state", async ({

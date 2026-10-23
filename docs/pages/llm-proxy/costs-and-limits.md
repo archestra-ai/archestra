@@ -29,7 +29,9 @@ Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read
 3. Use **Copy as CSV** to export the result. The API call below the table identifies the source endpoint.
 4. To inspect a model, team or virtual key's limits, select one row and use the limits action beside the chart controls. Its label names the kind and selection, such as **Show token limits for example-model**. The Limits tab keeps that context selected; **Clear** removes it. Viewing limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read).
 
-Token totals use recorded usage, including cache reads and writes. Requests in flight may not appear yet. The skill token view measures injected context instead of model consumption.
+Token totals count newly processed input and output. Reused cached input stays visible separately and does not add to those totals.
+
+Requests in flight may not appear yet. The skill token view measures injected context instead of model consumption.
 
 - Subscription estimates value usage at equivalent API rates. They exclude subscription fees and are not a bill.
 - App opens and tool calls measure activity. The app spend view includes build and runtime costs, marks shared build sessions, and compares runtime usage with the chat-equivalent estimate. Opening an app does not itself imply inference.
@@ -68,7 +70,7 @@ Click your name in the sidebar, then **My Usage**, to compare your model and cli
 2. Choose **Time → Pivot** to compare time buckets. For model or client tokens, choose **split by → Token type**, then **Pivot**.
 3. Use **Token mix**, **Context size**, or **Costliest sessions** to inspect those breakdowns. **Copy as CSV** exports the selected table.
 
-- The **Tokens** summary includes reported input, output, cache reads and cache writes. **Token mix** separates those categories.
+- The **Tokens** summary includes newly processed input and output. **Token mix** also shows reused cached input separately.
 - Subscription estimates and context list-price values are not additional bills. Sessions show only the costliest returned sessions; elapsed minutes are not active working time.
 - Model and client totals are independent breakdowns. A model-by-client pivot is unavailable.
 
@@ -121,7 +123,7 @@ Requests count once per admitted logical call, including upstream errors. Intern
 
 Token limits count only usage reported by the provider. Before sending a request, Archestra checks the usage already recorded; it does not forecast the incoming request's tokens. Requests already in flight can exceed the allowance, and later requests are blocked until usage recovers or resets.
 
-Archestra does not add or change output bounds. Reported input, cache-read, cache-write, and output tokens count once, including Gemini's separately reported reasoning. Complete provider iteration breakdowns replace the primary totals; the logical call's routed-model rules apply to the whole breakdown.
+Archestra does not add or change output bounds. Token limits count newly processed input and output, including Gemini's separately reported reasoning. Reused cached input does not consume token allowance. Complete provider iteration breakdowns replace the primary totals; the logical call's routed-model rules apply to the whole breakdown.
 
 - Reported usage counts once when a call finishes, including known partial usage after an interrupted stream. Missing usage is not charged; locally estimated metrics do not count. Pair token limits with request limits when you also need to bound call volume.
 - Tokens count in the interval active when usage is recorded, including calls that cross a reset or interval edit. Reporting is available for 24 hours after admission; calls that outlive that accounting receipt are not charged.
@@ -167,6 +169,8 @@ Archestra tells the two apart from the credential on each request. You configure
 A cost uses the model's price. Archestra syncs input, output, and cache prices for known models. OpenRouter is the exception: Archestra records the cost OpenRouter reports for each request, so the price of the provider it routed to is what counts. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
 
 Prompt caching lowers the cost of a prompt that starts the same way each time. Costs and logs show the cache reads and writes the provider reports. Archestra adds cache points to its own chat and agent requests. Proxy requests keep the caller's own cache markers.
+
+Some providers split newly processed input into ordinary input and cache creation, also called cache writes. Both count once toward token limits and the **Tokens** summary; a cache write is not an extra copy of the prompt. Reusing previously saved input, called a cache read, is excluded from those counts.
 
 ## What to Know
 

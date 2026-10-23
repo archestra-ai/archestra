@@ -56,7 +56,6 @@ export function AgentScheduleCreateDialog({
       initialValues={{
         enabled: true,
         cronExpression: "0 9 * * *",
-        timezone: "America/Toronto",
       }}
       resolveProjectId={resolveProjectId}
       onSaved={onCreated}

@@ -81,7 +81,7 @@ jobs:
           run_install: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24.22.1'
+          node-version: '24.11.1'
           cache: pnpm
           cache-dependency-path: platform/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts

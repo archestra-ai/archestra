@@ -233,9 +233,21 @@ describe("POST /api/connection-setups", () => {
   });
 
   test.for([
-    undefined,
-    "openai-test-model",
-  ])("Pi primary setup resolves provider and model from its authorized catalogs: %s", async (selectedModel, {
+    { provider: undefined, model: undefined, expected: "openai" },
+    { provider: undefined, model: "openai-test-model", expected: "openai" },
+    {
+      provider: "anthropic",
+      model: "anthropic-test-model",
+      expected: "anthropic",
+    },
+    {
+      provider: undefined,
+      model: "anthropic-test-model",
+      expected: "anthropic",
+    },
+    { provider: "anthropic", model: undefined, expected: "anthropic" },
+    { provider: "anthropic", model: "openai-test-model", expected: null },
+  ] as const)("Pi primary setup preserves its authorized selection: %j", async (selection, {
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -269,17 +281,25 @@ describe("POST /api/connection-setups", () => {
         baseUrl: "http://localhost:9000/v1",
         mcpGatewayId: gateway.id,
         proxyAuth: "primary-providers",
-        model: selectedModel,
+        provider: selection.provider,
+        model: selection.model,
       },
     });
+    if (!selection.expected) {
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Choose a model served by Pi",
+      );
+      return;
+    }
     expect(response.statusCode, response.body).toBe(200);
     const token = response
       .json()
       .command.match(/script\/([^']+)'/)?.[1] as string;
     const setup = await ConnectionSetupModel.findByToken(token);
     expect(setup?.proxyAuth).toBe("primary-providers");
-    expect(setup?.provider).toBe("openai");
-    expect(setup?.model).toBe("openai-test-model");
+    expect(setup?.provider).toBe(selection.expected);
+    expect(setup?.model).toBe(`${selection.expected}-test-model`);
     const script = await app.inject({
       method: "GET",
       url: `/api/connection-setups/script/${token}`,

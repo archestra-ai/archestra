@@ -80,8 +80,6 @@ test.each([
       ...(scenario.existing ? { [key]: old } : {}),
     }),
   );
-  install.state.authClient = scenario.existing ? "old-client" : null;
-  install.persist();
   const actions: string[] = [];
   let prompts = 0;
   let browserFlows = 0;
@@ -197,5 +195,21 @@ test.each([
   } else if (scenario.existing) {
     expect(browserFlows).toBe(0);
     expect(auth[key]).toEqual(old);
+    expect(new Installation().state.authClient).toBe("old-client");
+    // KEEP must establish ownership even before arcpi has ever launched.
+    // A later login from another client must not be removed on disconnect.
+    auth[key] = {
+      ...old,
+      clientInformation: { client_id: "replacement-client" },
+    };
+    fs.writeFileSync(authFile, JSON.stringify(auth));
+    expect(() => new Installation().disconnect()).toThrow();
+    expect(JSON.parse(fs.readFileSync(authFile, "utf8"))).toEqual(auth);
+    auth[key] = old;
+    fs.writeFileSync(authFile, JSON.stringify(auth));
+    new Installation().disconnect();
+    expect(JSON.parse(fs.readFileSync(authFile, "utf8")).other).toEqual(
+      unrelated,
+    );
   }
 });

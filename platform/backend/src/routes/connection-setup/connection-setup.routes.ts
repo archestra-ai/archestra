@@ -621,7 +621,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const mappedKeys =
             organization.connectionClientProviderKeys?.[clientId] ?? null;
           if (allPrimary && multiProviderKey) {
-            ({ virtualApiKeyId, provider } = await ensurePrimaryProviderKey({
+            const primary = await ensurePrimaryProviderKey({
               keyName: multiProviderKey.keyName,
               supportedProviders: INSTALLER_CLIENT_KEY_PROVIDERS[clientId],
               mappedKeys,
@@ -631,7 +631,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               organizationId,
               userId: user.id,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
-            }));
+            });
+            virtualApiKeyId = primary.virtualApiKeyId;
+            // Pi resolves the requested provider/model from the full key catalog.
+            // The first primary mapping is not necessarily that selection.
+            if (clientId !== "pi") provider = primary.provider;
           } else if (provider) {
             ({ virtualApiKeyId, creditWarning } =
               await ensureConnectionVirtualKey({

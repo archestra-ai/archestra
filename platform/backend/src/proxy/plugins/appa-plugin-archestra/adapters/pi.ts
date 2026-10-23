@@ -32,10 +32,7 @@ export class AppaPiAdapter implements AppaClientAdapter {
   };
 
   matches(context: AppaMatchContext): boolean {
-    return (
-      readHeader(context.headers, "x-archestra-agent-id") === "pi" ||
-      readHeader(context.headers, "x-pi-session-id") !== undefined
-    );
+    return readHeader(context.headers, "x-archestra-agent-id") === "pi";
   }
 
   classifyToolName(name: string, namespace?: string): "gateway" | "local" {

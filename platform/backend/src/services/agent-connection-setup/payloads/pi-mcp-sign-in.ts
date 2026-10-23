@@ -35,7 +35,10 @@ async function signInPiGateway({ config, root, lifecycle }) {
   // documented cached response; missing/expired auth takes the browser flow.
   const initial = await run("login", true);
   if (!initial.ok) throw new Error("Pi MCP sign-in did not finish. Run arcpi --reconnect to retry.");
-  if (!initial.cached) { recordClient(); return; }
+  // Track the authorization we validated even when KEEP (or cancel) follows.
+  // Disconnect must not later remove a replacement from another Pi client.
+  recordClient();
+  if (!initial.cached) return;
   const readline = require("node:readline/promises").createInterface({ input: process.stdin, output: process.stdout });
   let answer;
   try {

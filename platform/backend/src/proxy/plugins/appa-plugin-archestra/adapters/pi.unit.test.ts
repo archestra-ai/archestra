@@ -47,6 +47,14 @@ describe("Pi session identity", () => {
   });
 });
 
+test.each([
+  { "x-pi-session-id": "session-one" },
+  { "x-archestra-agent-id": "opencode", "x-pi-session-id": "session-one" },
+  { "x-archestra-agent-id": "kilo", "x-pi-session-id": "session-one" },
+])("does not override another client's adapter using a Pi session header: %j", (headers) => {
+  expect(adapter.matches({ headers, requestBody: {} })).toBe(false);
+});
+
 describe("Pi native tool identity", () => {
   test("keeps native tools local and recognizes Pi's MCP namespace", () => {
     for (const name of [

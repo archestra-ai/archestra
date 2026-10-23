@@ -18,13 +18,6 @@ export interface OpenCodeProviderRoute {
   provider: SupportedProvider;
   openCodeProviderId: string;
   pathSuffix: string;
-  /**
-   * Other native provider ids (models.dev) that serve the same models as the
-   * Archestra provider. A model pinned under one of them moves to the
-   * Archestra twin on connect and back on disconnect; they never get a
-   * passthrough route of their own.
-   */
-  pinAliases?: readonly string[];
 }
 
 /**
@@ -32,6 +25,12 @@ export interface OpenCodeProviderRoute {
  * Archestra provider endpoint. These overrides preserve provider and model IDs
  * and local credentials. They only replace the upstream base URL. Each mapped
  * Archestra route forwards native chat model IDs to the proxy.
+ *
+ * The same routes carry the organization's credential: a connection with
+ * primary providers keeps the client's stock provider, filters its models to
+ * the ones the organization's key serves, and sends them here with the
+ * connection's virtual key. A provider without a row here cannot be shown in
+ * the client without an Archestra-specific provider, so it is left out.
  */
 export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
   {
@@ -53,18 +52,11 @@ export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
     openCodeProviderId: "openrouter",
     pathSuffix: "",
   },
+  { provider: "xai", openCodeProviderId: "xai", pathSuffix: "" },
   { provider: "deepseek", openCodeProviderId: "deepseek", pathSuffix: "" },
   { provider: "zhipuai", openCodeProviderId: "zhipuai", pathSuffix: "" },
   { provider: "minimax", openCodeProviderId: "minimax", pathSuffix: "" },
-  {
-    provider: "kimi",
-    openCodeProviderId: "moonshotai",
-    pathSuffix: "",
-    // The Kimi Code plan providers (kimi.ai and kimi.com) carry the same k3
-    // family as the Kimi provider here; Kilo Code pins its compaction agent
-    // to one of them.
-    pinAliases: ["kimi-code-plan-global", "kimi-code-plan-cn"],
-  },
+  { provider: "kimi", openCodeProviderId: "moonshotai", pathSuffix: "" },
 ] as const satisfies readonly OpenCodeProviderRoute[];
 
 export function openCodePassthroughBaseUrl(

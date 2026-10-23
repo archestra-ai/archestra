@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -17,6 +18,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRootOnlyError } from "./failure";
 import { toolEntries } from "./policy-text";
 import {
@@ -140,6 +142,7 @@ beforeEach(async ({ makeOrganization }) => {
   config.openappa = {
     enabled: true,
     yellEnabled: false,
+    yellForwardingEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
     postgresMaxConnections: 10,
   };
@@ -175,6 +178,7 @@ beforeEach(async ({ makeOrganization }) => {
   });
 });
 afterEach(() => {
+  enterOpenappaEncryptedChat(null);
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -334,7 +338,11 @@ describe("APPA feature boundary", () => {
     ).toBe(true);
   });
 
-  test("disabled reporting returns a tool refusal without saving or dispatching a report", async () => {
+  test.for([
+    false,
+    true,
+  ])("disabled reporting refuses execution even with forwarding set to %s", async (forwarding) => {
+    config.openappa.yellForwardingEnabled = forwarding;
     const result = await executeYell({
       session,
       toolCallId: "disabled-report",
@@ -459,9 +467,18 @@ describe("APPA feature boundary", () => {
     });
   });
 
-  test("reports through the authenticated native session after policy checking", async () => {
+  test.for([
+    { analytics: false, forwarding: false },
+    { analytics: false, forwarding: true },
+    { analytics: true, forwarding: false },
+    { analytics: true, forwarding: true },
+  ])("records delivery independently of analytics after policy checking ($analytics, $forwarding)", async ({
+    analytics,
+    forwarding,
+  }) => {
     config.openappa.yellEnabled = true;
-    config.analytics.enabled = true;
+    config.openappa.yellForwardingEnabled = forwarding;
+    config.analytics.enabled = analytics;
     await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: true };
     native.dispatchHook
@@ -506,7 +523,7 @@ describe("APPA feature boundary", () => {
       callerId: session.caller_id,
       sessionId: session.session_id,
       reportFailed: false,
-      reportedAt: expect.any(Date),
+      reportedAt: forwarding ? expect.any(Date) : null,
       resolvedAt: null,
     });
     expect(
@@ -538,9 +555,43 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
+  test("encrypted reports are not marked as externally delivered even with forwarding enabled", async () => {
+    config.openappa.yellEnabled = true;
+    config.openappa.yellForwardingEnabled = true;
+    config.analytics.enabled = false;
+    enterOpenappaEncryptedChat({
+      organizationId,
+      userId: "alice",
+      audit: { conversationId: session.session_id, dek: randomBytes(32) },
+    });
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Local receipt" }] },
+      }),
+    );
+    const result = await executeYell({
+      session,
+      toolCallId: "encrypted-report",
+      args: { message: "A confusing block", with_trajectory: false },
+    });
+    expect(result.isError).not.toBe(true);
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(1);
+    expect(saved.data[0]).toMatchObject({
+      reportedAt: null,
+      reportFailed: false,
+    });
+  });
+
   test("keeps a report when external delivery fails and deduplicates a retry", async () => {
     config.openappa.yellEnabled = true;
-    config.analytics.enabled = true;
+    config.openappa.yellForwardingEnabled = true;
+    config.analytics.enabled = false;
     const params = {
       session,
       toolCallId: "retry-report",
@@ -591,7 +642,8 @@ describe("APPA feature boundary", () => {
 
   test("records a native reporting refusal as failed delivery without resolving the yell", async () => {
     config.openappa.yellEnabled = true;
-    config.analytics.enabled = true;
+    config.openappa.yellForwardingEnabled = true;
+    config.analytics.enabled = false;
     native.dispatchHook.mockResolvedValueOnce(
       JSON.stringify({
         decision: "mcp_result",
@@ -657,7 +709,8 @@ describe("APPA feature boundary", () => {
 
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
     config.openappa.yellEnabled = true;
-    config.analytics.enabled = true;
+    config.openappa.yellForwardingEnabled = true;
+    config.analytics.enabled = false;
     await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: false };
     native.dispatchHook.mockResolvedValue(

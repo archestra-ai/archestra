@@ -35,6 +35,7 @@ for (const enabled of [false, true]) {
       ...config.openappa,
       enabled,
       yellEnabled: false,
+      yellForwardingEnabled: false,
       offerSigningSecret: "",
     };
     const agent = await makeAgent();

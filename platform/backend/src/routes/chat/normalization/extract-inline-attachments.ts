@@ -7,6 +7,7 @@ import {
   chatUploadRejectionReason,
   INLINE_TEXT_MAX_BYTES,
 } from "@archestra/shared";
+import { toPdfJsBytes } from "@/knowledge-base/connectors/pdf-utils";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type {
@@ -482,7 +483,10 @@ let pdfParserCache: PdfParser | null = null;
 export function loadPdfParser(): PdfParser {
   if (!pdfParserCache) {
     const require = createRequire(import.meta.url);
-    pdfParserCache = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
+    const parse = require("pdf-parse/lib/pdf-parse.js") as (
+      data: Uint8Array,
+    ) => Promise<{ text: string }>;
+    pdfParserCache = (buffer) => parse(toPdfJsBytes(buffer));
   }
   return pdfParserCache;
 }

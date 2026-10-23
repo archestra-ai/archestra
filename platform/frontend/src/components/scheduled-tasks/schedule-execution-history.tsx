@@ -82,7 +82,6 @@ export function ScheduleExecutionHistory({
     group.push(run);
     byYear.set(year, group);
   }
-  const visibleRuns = runs;
   const timezone = scheduleTimezone(schedule.timezone);
   const agentName = schedule.agent?.name ?? "Default agent";
   const cadence = formatCronSchedule(schedule.cronExpression);
@@ -258,7 +257,7 @@ export function ScheduleExecutionHistory({
               onRetry={onRetry}
               className="py-8"
             />
-          ) : visibleRuns.length === 0 ? (
+          ) : runs.length === 0 ? (
             <div className="py-6 text-center">
               <p className="text-sm font-medium">
                 {filter === "all" ? "No runs yet" : "No matching executions"}

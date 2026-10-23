@@ -121,14 +121,22 @@ describe("managed runtime trust boundary", () => {
   test("stores the passthrough key apart from any route", async () => {
     // A setup that knew no passthrough route still keeps the key, so a route
     // the deployment's catalog lists later can carry it.
-    const files = await fixture(KILO_CLIENT, 1, {
+    const proxy: SetupScriptProxySection = {
+      authMode: "primary-providers",
+      provider: "anthropic",
+      providerLabel: "Anthropic",
       baseUrl: "https://deployment.example.com/v1/proxy",
+      url: "https://deployment.example.com/v1/proxy/anthropic",
+      proxyName: "proxy",
       routingAgentId: "agent",
       primaryProviders: [],
       passthroughProviders: [],
       virtualKey: null,
+      virtualKeyName: null,
       passthroughVirtualKey: "passthrough-secret",
-    } as unknown as SetupScriptProxySection);
+      model: null,
+    };
+    const files = await fixture(KILO_CLIENT, 1, proxy);
     const parameters = JSON.parse(
       await readFile(path.join(files.root, "params.json"), "utf8"),
     );

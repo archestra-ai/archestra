@@ -13,13 +13,21 @@ import {
   ChatCompletionUsageSchema,
   FinishReasonSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
+  ResponsesRequestSchema,
+  ResponsesResponseSchema,
 } from "../openai/api";
 
+// The Responses surface shares OpenAI's request and response schemas and the
+// same bearer header as chat completions; the proxy serves it over xAI's chat
+// completions.
 export {
   ChatCompletionRequestSchema,
   ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
+  ResponsesRequestSchema,
+  ResponsesResponseSchema,
+  ChatCompletionsHeadersSchema as ResponsesHeadersSchema,
 };
 
 export const ChatCompletionResponseSchema =

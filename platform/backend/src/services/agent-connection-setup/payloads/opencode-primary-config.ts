@@ -1,9 +1,5 @@
-import type { ModelInputModality } from "@archestra/shared/chat";
 import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
-import {
-  MODEL_ROUTER_SUPPORTED_PROVIDERS,
-  type SupportedProvider,
-} from "@archestra/shared/model-constants";
+import type { SupportedProvider } from "@archestra/shared/model-constants";
 import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeProviderRoute,
@@ -12,88 +8,117 @@ import {
 import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 
-/** Custom providers keep the platform's catalog separate from local accounts. */
+/**
+ * What the connection serves in an OpenCode-family client, keyed by the
+ * client's own provider ids (models.dev). The routing plugin filters the
+ * client's stock catalog to these providers and models and sends their
+ * requests to the proxy. The client shows no Archestra-specific provider and
+ * no renamed one; the mapping between its ids and the proxy's stays inside the
+ * plugin.
+ */
+export interface ManagedRuntimeCatalog {
+  /** Stock provider id → proxy base URL for that provider's native wire. */
+  routes: Record<string, string>;
+  /**
+   * Stock provider id → the model ids the organization's credential serves
+   * there, in catalog order. Absent for a provider only the user's own
+   * sign-in can serve.
+   */
+  managed: Record<string, string[]>;
+  /**
+   * Stock provider ids the user may sign in to from the client. Their own
+   * credential goes through the proxy with the passthrough key.
+   */
+  passthrough: string[];
+  /**
+   * `archestra-<provider>` ids that earlier setups wrote into the client's
+   * config → the stock id that now serves the same models, so a pin on one
+   * keeps working.
+   */
+  legacy: Record<string, string>;
+}
+
+type PrimaryProviders = NonNullable<
+  SetupScriptProxySection["primaryProviders"]
+>;
+
+/**
+ * The catalog over the client's stock providers. A primary provider without a
+ * row in the route table has no stock provider in the client and is left out;
+ * `unsupportedPrimaryProviders` names those for the installer's notice.
+ */
+function openCodeCatalog(params: {
+  primaryProviders?: PrimaryProviders;
+  passthroughProviders?: SupportedProvider[];
+  routeUrl: (route: OpenCodeProviderRoute) => string;
+}): ManagedRuntimeCatalog {
+  const catalog: ManagedRuntimeCatalog = {
+    routes: {},
+    managed: {},
+    passthrough: [],
+    legacy: {},
+  };
+  for (const route of OPENCODE_PASSTHROUGH_PROVIDER_ROUTES) {
+    const id = route.openCodeProviderId;
+    const entry = params.primaryProviders?.find(
+      (candidate) => candidate.provider === route.provider,
+    );
+    const passthrough =
+      params.passthroughProviders?.includes(route.provider) ?? false;
+    if (!entry && !passthrough) continue;
+    catalog.routes[id] = params.routeUrl(route);
+    if (entry) {
+      catalog.managed[id] = entry.models.map((model) => model.id);
+      catalog.legacy[`archestra-${route.provider}`] = id;
+    }
+    if (passthrough) catalog.passthrough.push(id);
+  }
+  return catalog;
+}
+
+/** Primary providers the client cannot show: no stock provider speaks their wire. */
+function unsupportedPrimaryProviders(
+  primaryProviders: PrimaryProviders | undefined,
+): string[] {
+  return (primaryProviders ?? [])
+    .filter(
+      (entry) =>
+        !OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.some(
+          (route) => route.provider === entry.provider,
+        ),
+    )
+    .map((entry) => entry.name);
+}
+
+/**
+ * Setup-time catalog and routes under the setup context's base URL. The
+ * routing plugin applies them while connected; the installer writes no
+ * provider into the client's config.
+ */
 export function openCodePrimaryConfig(
   proxy: SetupScriptProxySection,
   appName: string,
 ) {
-  const routes: Record<string, string> = {};
-  const providers = Object.fromEntries(
-    (proxy.primaryProviders ?? []).map((entry) => {
-      const id = `archestra-${entry.provider}`;
-      const routed = (
-        MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly SupportedProvider[]
-      ).includes(entry.provider);
-      const baseURL = `${proxy.baseUrl}/${routed ? "model-router" : entry.provider}`;
-      routes[id] = baseURL;
-      return [
-        id,
-        {
-          name: entry.name,
-          responses: routed,
-          baseURL,
-          models: entry.models.map((model) => ({
-            ...model,
-            wireId: routed ? `${entry.provider}:${model.id}` : model.id,
-            ...openCodeModelCapabilities(model.inputModalities),
-          })),
-        },
-      ];
-    }),
-  );
-  // Lets the script and the plugin carry a pinned native model over to its
-  // Archestra twin instead of dropping the pin. Twins follow the catalog, not
-  // only the passthrough route list.
-  const nativeProviders = openCodeProviderTwins(providers);
-  // The user's own sign-ins route through the proxy too, with their own
-  // credential; the passthrough key attributes those requests to the user.
-  const passthroughRoutes = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.filter(
-    (route) => proxy.passthroughProviders?.includes(route.provider),
-  );
+  const catalog = openCodeCatalog({
+    primaryProviders: proxy.primaryProviders,
+    passthroughProviders: proxy.passthroughProviders,
+    routeUrl: (route) => openCodePassthroughBaseUrl(proxy.baseUrl, route),
+  });
+  // The passthrough key attributes the user's own sign-ins to the user. It
+  // never goes on a request the connection's own key authenticates.
   const routeHeaders: Record<string, Record<string, string>> = {};
-  for (const route of passthroughRoutes) {
-    routes[route.openCodeProviderId] = openCodePassthroughBaseUrl(
-      proxy.baseUrl,
-      route,
-    );
-    if (proxy.passthroughVirtualKey) {
-      routeHeaders[route.openCodeProviderId] = {
-        [VIRTUAL_KEY_HEADER]: proxy.passthroughVirtualKey,
-      };
+  if (proxy.passthroughVirtualKey) {
+    for (const id of catalog.passthrough) {
+      routeHeaders[id] = { [VIRTUAL_KEY_HEADER]: proxy.passthroughVirtualKey };
     }
   }
-  const nativeRoutes = passthroughRoutes.map(
-    (route) => route.openCodeProviderId,
-  );
   return {
-    routes,
+    routes: catalog.routes,
     routeHeaders,
-    providers,
-    nativeProviders,
-    nativeRoutes,
+    catalog,
+    unsupported: unsupportedPrimaryProviders(proxy.primaryProviders),
     appName,
   };
-}
-
-export interface ManagedRuntimeCatalog {
-  providers: Record<
-    string,
-    {
-      name: string;
-      npm: "@ai-sdk/openai" | "@ai-sdk/openai-compatible";
-      options: { baseURL: string };
-      models: Record<
-        string,
-        {
-          name: string;
-          id: string;
-          limit?: { context: number; output: number };
-        } & OpenCodeModelCapabilities
-      >;
-    }
-  >;
-  routes: Record<string, string>;
-  twins: Record<string, string>;
 }
 
 /**
@@ -102,117 +127,30 @@ export interface ManagedRuntimeCatalog {
  * and never the deployment default.
  */
 export function publicManagedCatalog(params: {
-  primaryProviders?: SetupScriptProxySection["primaryProviders"];
+  primaryProviders?: PrimaryProviders;
   passthroughProviders?: SupportedProvider[];
   ordinaryBaseUrl: string;
   routingAgentId: string;
 }): ManagedRuntimeCatalog {
   const base = params.ordinaryBaseUrl.replace(/\/$/, "");
-  const agentId = params.routingAgentId;
-  const routes: Record<string, string> = {};
-  const providers = Object.fromEntries(
-    (params.primaryProviders ?? []).map((entry) => {
-      const id = `archestra-${entry.provider}`;
-      const routed = (
-        MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly SupportedProvider[]
-      ).includes(entry.provider);
-      const baseURL = `${base}/${routed ? "model-router" : entry.provider}/${agentId}`;
-      routes[id] = baseURL;
-      return [
-        id,
-        {
-          name: entry.name,
-          npm: routed
-            ? ("@ai-sdk/openai" as const)
-            : ("@ai-sdk/openai-compatible" as const),
-          options: { baseURL },
-          models: Object.fromEntries(
-            entry.models.map((model) => {
-              const context = positiveLimit(model.context);
-              const output = positiveLimit(model.output);
-              return [
-                model.id,
-                {
-                  name: model.name,
-                  id: routed ? `${entry.provider}:${model.id}` : model.id,
-                  ...(context || output ? { limit: { context, output } } : {}),
-                  ...openCodeModelCapabilities(model.inputModalities),
-                },
-              ];
-            }),
-          ),
-        },
-      ];
-    }),
-  );
-  for (const route of OPENCODE_PASSTHROUGH_PROVIDER_ROUTES) {
-    if (!params.passthroughProviders?.includes(route.provider)) continue;
-    routes[route.openCodeProviderId] = openCodePassthroughBaseUrl(base, {
-      ...route,
-      pathSuffix: `/${agentId}${route.pathSuffix}`,
-    });
-  }
-  return {
-    providers,
-    routes,
-    twins: openCodeProviderTwins(providers),
-  };
+  return openCodeCatalog({
+    primaryProviders: params.primaryProviders,
+    passthroughProviders: params.passthroughProviders,
+    routeUrl: (route) =>
+      openCodePassthroughBaseUrl(base, {
+        ...route,
+        pathSuffix: `/${params.routingAgentId}${route.pathSuffix}`,
+      }),
+  });
 }
 
 /**
- * Native provider id → the Archestra catalog provider that serves the same
- * models. Catalog providers are independent of native passthrough support;
- * add OpenCode's differing vendor ids and plan aliases on top.
+ * Runs in Node on both platforms. Connect leaves the client's providers,
+ * allowlists and pins alone: the routing plugin filters the client's own
+ * catalog while connected, so there is nothing to restore later. The state
+ * file marks the connection, and disconnect still restores what an older
+ * installer changed.
  */
-function openCodeProviderTwins(
-  providers: Record<string, unknown>,
-): Record<string, string> {
-  const routes: readonly OpenCodeProviderRoute[] =
-    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES;
-  return Object.fromEntries([
-    ...Object.keys(providers).map(
-      (id) => [id.slice("archestra-".length), id] as const,
-    ),
-    ...routes.flatMap((route) => {
-      const twin = `archestra-${route.provider}`;
-      if (!(twin in providers)) return [];
-      return [route.openCodeProviderId, ...(route.pinAliases ?? [])].map(
-        (id) => [id, twin] as const,
-      );
-    }),
-  ]);
-}
-
-function positiveLimit(value: number | null | undefined): number {
-  return typeof value === "number" && value > 0 ? value : 0;
-}
-
-/**
- * What a model reads, in OpenCode V1's model fields; V2 takes
- * `capabilities.input` from `modalities.input`. OpenCode copies these from
- * models.dev only when the config model's id matches a models.dev key, and the
- * catalog's ids never do, so without them V1 treats every model as text-only
- * and replaces each image with an error. Unknown modalities stay unset, so
- * each client applies its own default.
- */
-function openCodeModelCapabilities(
-  inputModalities: ModelInputModality[] | null | undefined,
-): OpenCodeModelCapabilities {
-  if (!inputModalities?.length) return {};
-  return {
-    // V1 needs both lists once `modalities` is set. The catalog lists only
-    // text chat models, so the output list is always text.
-    modalities: { input: [...inputModalities], output: ["text"] },
-    attachment: inputModalities.some((modality) => modality !== "text"),
-  };
-}
-
-type OpenCodeModelCapabilities = {
-  modalities?: { input: ModelInputModality[]; output: ["text"] };
-  attachment?: boolean;
-};
-
-/** Runs in Node on both platforms; restores only the fields this mode owns. */
 export const openCodePrimaryConfigScript = (client: OpenCodeFamilyClient) =>
   String.raw`
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
@@ -222,17 +160,18 @@ const statePath = path.join(home, ".archestra", ${JSON.stringify(`${client.state
 const keyPath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-primary.key`)});
 const input = JSON.parse(process.env.ARCHESTRA_OC_PRIMARY === "stdin" ? fs.readFileSync(0, "utf8") : process.env.ARCHESTRA_OC_PRIMARY || "null");
 if (!input && !fs.existsSync(statePath)) process.exit(0);
-const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
+const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
+const config = original ? JSON.parse(original) : {};
 if (fs.existsSync(statePath)) {
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
-  for (const [section, entries] of Object.entries(state.sections)) {
+  for (const [section, entries] of Object.entries(state.sections ?? {})) {
     config[section] ??= {};
     for (const [id, previous] of Object.entries(entries)) {
       if (previous === null) delete config[section][id]; else config[section][id] = previous;
     }
     if (!Object.keys(config[section]).length) delete config[section];
   }
-  for (const [field, previous] of Object.entries(state.fields)) {
+  for (const [field, previous] of Object.entries(state.fields ?? {})) {
     if (previous === null) delete config[field]; else config[field] = previous;
   }
   for (const [name, previous] of Object.entries(state.agents ?? {})) {
@@ -242,7 +181,7 @@ if (fs.existsSync(statePath)) {
 }
 if (input) {
   // A previous single-provider setup owns native provider overrides. Restore
-  // its original values before taking this mode's snapshot.
+  // its original values before this connection takes over.
   const legacyStatePath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-connection-state.json`)});
   if (fs.existsSync(legacyStatePath)) {
     const legacy = JSON.parse(fs.readFileSync(legacyStatePath, "utf8"));
@@ -258,82 +197,43 @@ if (input) {
     else delete config.disabled_providers;
     fs.rmSync(legacyStatePath, { force: true });
   }
-  const v2 = Number(process.env.ARCHESTRA_OC_MAJOR) >= 2;
-  const section = v2 ? "providers" : "provider";
-  const state = { sections: { [section]: {} }, fields: {} };
-  config[section] ??= {};
-  for (const field of ["enabled_providers", "disabled_providers", "model", "small_model"]) {
-    state.fields[field] = config[field] ?? null;
-  }
-  const ids = Object.keys(input.providers);
-  const inCatalog = (providerId, modelId) => Boolean(input.providers[providerId]?.models.some(model => model.id === modelId));
-  // Never add a pin. Keep one that is already served here or on a native
-  // provider the user signs in to, move a native one to the catalog provider
-  // with the same model id, and drop the rest so OpenCode falls back to the
-  // first provider below instead of an account it cannot use.
-  const notices = [];
-  const nativeRoutes = Array.isArray(input.nativeRoutes) ? input.nativeRoutes : [];
-  // The pin to keep: unchanged when served here or on a native route, moved
-  // to the catalog twin that serves the same model, or null when nothing
-  // here serves it.
-  const remap = (pin, label, removed) => {
+  // A pin the connection cannot serve is left in place and ignored while
+  // connected; the plugin drops it in memory and the client falls back to
+  // its first provider. Say so once, here.
+  const routes = input.routes ?? {};
+  const managed = input.catalog?.managed ?? {};
+  const passthrough = Array.isArray(input.catalog?.passthrough) ? input.catalog.passthrough : [];
+  const served = (pin) => {
     const slash = pin.indexOf("/");
+    if (slash <= 0) return false;
     const providerId = pin.slice(0, slash), modelId = pin.slice(slash + 1);
-    if (slash > 0 && (inCatalog(providerId, modelId) || nativeRoutes.includes(providerId))) return pin;
-    const twin = slash > 0 ? input.nativeProviders?.[providerId] : undefined;
-    if (twin && inCatalog(twin, modelId)) {
-      const moved = twin + "/" + modelId;
-      notices.push(${JSON.stringify(`info:${client.label} `)} + label + " " + pin + " now uses " + moved + " from " + input.appName + ". Disconnect restores " + pin + ".");
-      return moved;
-    }
-    notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} `)} + label + " " + pin + ", so setup removed it. " + removed + " Disconnect restores " + pin + ".");
-    return null;
+    if (!routes[providerId]) return false;
+    return passthrough.includes(providerId) || (managed[providerId] ?? []).includes(modelId);
   };
+  const notices = [];
   for (const field of ["model", "small_model"]) {
     const pin = config[field];
-    if (typeof pin !== "string") continue;
-    const kept = remap(pin, field, ${JSON.stringify(`Choose a model in ${client.label} with /models.`)});
-    if (kept === null) delete config[field]; else config[field] = kept;
+    if (typeof pin !== "string" || served(pin)) continue;
+    notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} `)} + field + " " + pin + ${JSON.stringify(`. ${client.label} ignores it while connected. Choose a model in ${client.label} with /models.`)});
   }
-  // An agent pinned to a model nothing here serves would fail its turn with
-  // "Model not found" (Kilo Code pins its compaction agent to a plan model).
-  // Only the pins setup changes are snapshotted; disconnect puts them back.
-  state.agents = {};
   for (const [name, agent] of Object.entries(config.agent ?? {})) {
-    if (!agent || typeof agent !== "object" || typeof agent.model !== "string") continue;
-    const kept = remap(agent.model, "agent." + name + ".model", "The agent uses the session's model.");
-    if (kept === agent.model) continue;
-    state.agents[name] = agent.model;
-    if (kept === null) delete agent.model; else agent.model = kept;
+    if (!agent || typeof agent !== "object" || typeof agent.model !== "string" || served(agent.model)) continue;
+    notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} agent.`)} + name + ".model " + agent.model + ". The agent uses the session's model while connected.");
   }
-  config.enabled_providers = ids;
-  if (Array.isArray(config.disabled_providers)) config.disabled_providers = config.disabled_providers.filter(id => !ids.includes(id));
-  for (const [id, provider] of Object.entries(input.providers)) {
-    state.sections[section][id] = config[section][id] ?? null;
-    // Re-insert so OpenCode sees the providers in catalog order on every run.
-    delete config[section][id];
-    const models = Object.fromEntries(provider.models.map(model => {
-      // OpenCode requires both limit fields once limit is set; 0 is its value for unknown.
-      const context = model.context > 0 ? model.context : 0, output = model.output > 0 ? model.output : 0;
-      // Without its modalities the client treats a model as text-only and drops attached images.
-      const capabilities = !model.modalities ? {} : v2 ? { capabilities: { input: model.modalities.input } }
-        : { modalities: model.modalities, attachment: model.attachment };
-      return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
-        ...(context || output ? { limit: { context, output } } : {}), ...capabilities }];
-    }));
-    const settings = { baseURL: provider.baseURL, apiKey: ${JSON.stringify(`{file:~/.archestra/${client.stateName}-primary.key}`)} };
-    config[section][id] = v2
-      ? { name: provider.name, package: provider.responses ? "@opencode/ai/providers/openai-compatible/responses" : "@opencode/ai/providers/openai-compatible", settings, models }
-      : { name: provider.name, npm: provider.responses ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", options: settings, models };
+  for (const name of input.unsupported ?? []) {
+    notices.push("info:" + name + ${JSON.stringify(` has no ${client.label} provider, so ${client.label} does not list its models.`)});
   }
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+  fs.writeFileSync(statePath, JSON.stringify({ sections: {}, fields: {}, agents: {} }), { mode: 0o600 });
   fs.writeFileSync(keyPath, process.env.ARCHESTRA_OC_KEY, { mode: 0o600 });
   for (const notice of notices) console.log(notice);
 } else {
   fs.rmSync(statePath, { force: true });
   fs.rmSync(keyPath, { force: true });
 }
-fs.mkdirSync(path.dirname(configPath), { recursive: true });
-fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+const updated = JSON.stringify(config, null, 2) + "\n";
+if (original !== null ? original !== updated : Object.keys(config).length > 0) {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, updated);
+}
 `;

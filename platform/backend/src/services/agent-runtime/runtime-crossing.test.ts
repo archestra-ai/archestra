@@ -74,6 +74,7 @@ describe("runtime crossing", () => {
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(backend, "assertReady").mockResolvedValue();
     vi.spyOn(backend, "teardown").mockResolvedValue();
     vi.spyOn(backend, "releaseRun").mockResolvedValue();
     vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
@@ -270,6 +271,7 @@ describe("runtime crossing", () => {
 describe("model-facing runtime tools", () => {
   beforeEach(async () => {
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(backend, "assertReady").mockResolvedValue();
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
   });
@@ -1573,6 +1575,7 @@ async function seededRun(params: {
 }) {
   // This fixture fakes execution I/O; availability must not depend on a host kubeconfig.
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
   const actor = await params.makeUser();
   const org = await params.makeOrganization();
   await params.makeMember(actor.id, org.id, { role: "member" });

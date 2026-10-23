@@ -111,6 +111,42 @@ describe("Grok Build image entrypoint", () => {
     }
   });
 
+  test("writes non-ASCII config values as literal TOML text", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
+    try {
+      const { bin, state } = await prepare(root);
+      const model = "grök 🚀";
+      await exec("bash", [path.join(bin, "archestra-grok")], {
+        cwd: root,
+        env: runtimeEnv({
+          root,
+          mode: "one_shot",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: state,
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: model,
+        }),
+      });
+      const configPath = path.join(state, "grok", "config.toml");
+      // JSON would write the emoji as a UTF-16 surrogate pair, which TOML
+      // rejects; the value must survive a TOML parser unchanged.
+      expect(await readFile(configPath, "utf8")).toContain(
+        `model = "${model}"`,
+      );
+      const { stdout } = await exec("python3", [
+        "-c",
+        [
+          "import json, sys, tomllib",
+          "with open(sys.argv[1], 'rb') as file:",
+          "    config = tomllib.load(file)",
+          "print(json.dumps(config['model']['archestra']['model']))",
+        ].join("\n"),
+        configPath,
+      ]);
+      expect(JSON.parse(stdout)).toBe(model);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("drives plain delegated work over ACP, without a terminal", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-grok-"));
     try {

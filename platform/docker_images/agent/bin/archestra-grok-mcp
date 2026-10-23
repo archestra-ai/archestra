@@ -70,6 +70,9 @@ def relay(message: dict) -> None:
             reason = error.reason if isinstance(error, urllib.error.URLError) else str(error)
             write({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": f"MCP gateway request failed: {reason}"}})
         return
+    # Every message the gateway puts in the response reaches Grok, including a
+    # notification sent alongside the answer. The gateway opens no standalone
+    # stream on GET, so nothing arrives outside a request exchange.
     for response in responses:
         if message.get("method") == "tools/list" and response.get("id") == request_id:
             rename_tools(response)

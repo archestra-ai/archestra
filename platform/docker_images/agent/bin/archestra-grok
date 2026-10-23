@@ -61,8 +61,11 @@ tracing = {
 
 
 def string(value):
-    # A JSON string with ASCII escapes is a valid TOML basic string.
-    return json.dumps(str(value))
+    # A JSON string is a valid TOML basic string: both escape the quote, the
+    # backslash and control characters the same way. Non-ASCII text stays
+    # literal because TOML rejects the UTF-16 surrogate pairs JSON would write
+    # for it.
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 def table(values):

@@ -744,10 +744,7 @@ describe("Grok Build LLM wire adapter", () => {
     {
       case: "a value that is not an object is wrapped as it is",
       arguments: "null",
-      wrapped: JSON.stringify({
-        tool_name: "archestra__github--list_repos",
-        tool_input: null,
-      }),
+      wrapped: { tool_name: "archestra__github--list_repos", tool_input: null },
     },
   ])("never runs a gateway tool with arguments the model did not write ($case)", async ({
     arguments: written,
@@ -811,12 +808,13 @@ describe("Grok Build LLM wire adapter", () => {
             messages: [{ role: "user", content: "hi" }],
           }),
         });
+      // Grok parses the arguments; their spelling is the adapter's own.
+      const received = (args: string) =>
+        typeof wrapped === "string" ? args : JSON.parse(args);
       const complete = (await (await request(false)).json()).choices[0].message
         .tool_calls[0];
-      expect(complete.function).toEqual({
-        name: "use_tool",
-        arguments: wrapped,
-      });
+      expect(complete.function.name).toBe("use_tool");
+      expect(received(complete.function.arguments)).toEqual(wrapped);
 
       const events = (await (await request(true)).text())
         .split("\n\n")
@@ -831,7 +829,8 @@ describe("Grok Build LLM wire adapter", () => {
           }),
           { name: "", arguments: "" },
         );
-      expect(streamed).toEqual({ name: "use_tool", arguments: wrapped });
+      expect(streamed.name).toBe("use_tool");
+      expect(received(streamed.arguments)).toEqual(wrapped);
     } finally {
       await adapter.stop();
       await upstream.close();

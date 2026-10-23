@@ -93,6 +93,8 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
   .refine(
     (data) => {
+      // Normalization is intentional: callers persist this parsed object with
+      // empty model lists cleared and legacy rate intervals set to minute.
       // Validation: mcp_server_calls requires mcpServerName and should not have model
       if (data.limitType === "mcp_server_calls") {
         if (!data.mcpServerName) {

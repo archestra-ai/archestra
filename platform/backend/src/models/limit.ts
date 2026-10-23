@@ -1333,7 +1333,7 @@ export class LimitValidationService {
     virtualKeyId?: string;
     passthroughVirtualKeyId?: string;
     /** The agent row this request already read. */
-    agent?: { environmentId: string | null };
+    agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
@@ -1364,10 +1364,17 @@ export class LimitValidationService {
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
 
-      // Get organization ID to cleanup and check organization limits (either from teams or fallback)
-      let organizationId: string | null = null;
-      let agentTeams: (typeof schema.teamsTable.$inferSelect)[] = [];
-      if (agentTeamIds.length > 0) {
+      // The proxy already resolved this agent and its team IDs. Reuse that
+      // request-local attribution rather than hydrating the same teams again.
+      let organizationId: string | null = params.agent?.organizationId ?? null;
+      let agentTeams: { id: string; organizationId: string }[] = [];
+      if (organizationId) {
+        const resolvedOrganizationId = organizationId;
+        agentTeams = agentTeamIds.map((id) => ({
+          id,
+          organizationId: resolvedOrganizationId,
+        }));
+      } else if (agentTeamIds.length > 0) {
         agentTeams = await db
           .select()
           .from(schema.teamsTable)

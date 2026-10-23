@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.3](https://github.com/archestra-ai/archestra/compare/platform-v1.4.2...platform-v1.4.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **agent-runtime:** share workspace transfer tickets across replicas (backport release/1.4) ([#9504](https://github.com/archestra-ai/archestra/issues/9504)) ([42a0157](https://github.com/archestra-ai/archestra/commit/42a0157f1752341afd7add65fd5b2e3011319580))
+* **connect:** tell OpenCode and Kilo which models read images (backport release/1.4) ([#9500](https://github.com/archestra-ai/archestra/issues/9500)) ([001e4b3](https://github.com/archestra-ai/archestra/commit/001e4b35f5e0b6ed55fda9944d1fcfe19055d3c4))
+* **guardrails:** keep a session alive after a tool result with NUL characters (backport release/1.4) ([#9508](https://github.com/archestra-ai/archestra/issues/9508)) ([1ff22d9](https://github.com/archestra-ai/archestra/commit/1ff22d90fbfba86ce2405fd5cea12bc80fc3226b))
+* **k8s:** emit the IPv6 egress floor rule only on clusters that serve IPv6 (backport release/1.4) ([#9502](https://github.com/archestra-ai/archestra/issues/9502)) ([d161721](https://github.com/archestra-ai/archestra/commit/d1617212ae27a110ea11e6b244dd105a9d0d138a))
+* **openappa:** preserve Anthropic cache prefixes during remedy continuation (backport release/1.4) ([#9509](https://github.com/archestra-ai/archestra/issues/9509)) ([dae8b8d](https://github.com/archestra-ai/archestra/commit/dae8b8ddb88562ee1dc69b6819f5b3e395b69cea))
+
 ## [1.4.2](https://github.com/archestra-ai/archestra/compare/platform-v1.4.1...platform-v1.4.2) (2026-10-22)
 
 

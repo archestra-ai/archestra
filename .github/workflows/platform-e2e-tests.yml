@@ -160,10 +160,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -304,10 +305,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a

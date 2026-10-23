@@ -50,10 +50,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: inputs.push_chart
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: helm package
         env:

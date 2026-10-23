@@ -133,10 +133,11 @@ jobs:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Verify source and reuse image
         id: reuse
@@ -173,10 +174,11 @@ jobs:
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Log in to Docker Hub
         if: ${{ inputs.push_image && inputs.auth_provider == 'dockerhub' }}
@@ -276,10 +278,11 @@ jobs:
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Log in to Docker Hub
         if: ${{ inputs.auth_provider == 'dockerhub' }}

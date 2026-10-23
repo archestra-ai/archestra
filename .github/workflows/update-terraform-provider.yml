@@ -147,7 +147,7 @@ jobs:
           persist-credentials: false
       - name: Generate provider-scoped releaser token
         id: token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@d3a50799fd699bd774eb02e9e1be522639b3dcaa
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

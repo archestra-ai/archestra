@@ -20,7 +20,7 @@ runs:
   steps:
     - name: Generate a token
       id: generate-token
-      uses: ./.github/actions/github-app-token
+      uses: archestra-ai/.github/actions/github-app-token@d3a50799fd699bd774eb02e9e1be522639b3dcaa
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}

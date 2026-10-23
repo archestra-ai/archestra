@@ -465,20 +465,33 @@ export const SEQUENTIAL_APPLICATION_BYTES = Buffer.byteLength(
   JSON.stringify({ files: SEQUENTIAL_FILES, tasks: SEQUENTIAL_TASKS }),
 );
 
+export function renderSequentialChecks(tasks, stageCount) {
+  assert.ok(Number.isInteger(stageCount) && stageCount >= 1 && stageCount <= tasks.length);
+  return renderChecks(tasks.slice(0, stageCount));
+}
+
 function sequentialChecks(stageCount) {
-  assert.ok(
-    Number.isInteger(stageCount) &&
-      stageCount >= 1 &&
-      stageCount <= SEQUENTIAL_TASKS.length,
-  );
-  return `import test from "node:test";\nimport assert from "node:assert/strict";\n${SEQUENTIAL_TASKS.slice(
-    0,
-    stageCount,
-  )
-    .map(
-      (task, index) =>
-        `import { ${task.name} as feature${index} } from "/workspace/${task.path}";\n${task.cases.map((entry, caseIndex) => `test(${JSON.stringify(`${index + 1}:${task.name}:${caseIndex + 1}`)}, () => { const args = ${JSON.stringify(entry.args)}; const before = structuredClone(args); ${entry.throws ? `assert.throws(() => feature${index}(...args));` : `assert.deepEqual(feature${index}(...args), ${JSON.stringify(entry.expected)});`} assert.deepEqual(args, before); });`).join("\n")}`,
-    )
+  return renderSequentialChecks(SEQUENTIAL_TASKS, stageCount);
+}
+
+function renderChecks(tasks) {
+  return `import test from "node:test";\nimport assert from "node:assert/strict";\n${tasks
+    .map((task, index) => {
+      assert.match(task.name, /^[A-Za-z][A-Za-z0-9]*$/);
+      assert.match(task.path, /^src\/[A-Za-z][A-Za-z0-9]*\.mjs$/);
+      const binding = `feature${index}`;
+      const cases = task.cases
+        .map((entry, caseIndex) => {
+          const title = JSON.stringify(`${index + 1}:${task.name}:${caseIndex + 1}`);
+          const args = JSON.stringify(entry.args);
+          const invocation = entry.throws
+            ? `assert.throws(() => ${binding}(...args));`
+            : `assert.deepEqual(${binding}(...args), ${JSON.stringify(entry.expected)});`;
+          return `test(${title}, () => { const args = ${args}; const before = structuredClone(args); ${invocation} assert.deepEqual(args, before); });`;
+        })
+        .join("\n");
+      return `import { ${task.name} as ${binding} } from ${JSON.stringify(`/workspace/${task.path}`)};\n${cases}`;
+    })
     .join("\n")}\n`;
 }
 

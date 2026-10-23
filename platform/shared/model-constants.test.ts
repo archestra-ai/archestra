@@ -3,6 +3,7 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  findTierDefault,
   getAgentRuntimeAllowedProtocols,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
@@ -415,6 +416,23 @@ describe("resolveClaudeContextVariant", () => {
         contextLength: 1_000_000,
       }),
     ).toBe("claude-opus-4-8[1m]");
+  });
+});
+
+describe("findTierDefault", () => {
+  test("picks Kimi K3.1 Pro from Moonshot's catalog, not its Highspeed variant", () => {
+    // The default matches as a substring, so `kimi-k3.1-pro-highspeed` matches
+    // too; the plain model must still win.
+    const models = [
+      "kimi-k3.1-pro-highspeed",
+      "kimi-k3",
+      "kimi-k3.1-pro",
+      "kimi-k2.6",
+    ].map((modelId) => ({ modelId }));
+
+    expect(findTierDefault(models, "kimi", "normal")?.modelId).toBe(
+      "kimi-k3.1-pro",
+    );
   });
 });
 

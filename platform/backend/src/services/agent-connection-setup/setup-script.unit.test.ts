@@ -1656,6 +1656,28 @@ esac
   });
 
   test.each([
+    "linux",
+    "windows",
+  ] as const)("opencode (%s): reconnecting a Kimi key clears the model an older connection pinned", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("opencode", platform),
+      proxy: {
+        ...OPENAI_PASSTHROUGH_PROXY,
+        provider: "kimi",
+        providerLabel: "Moonshot (Kimi)",
+        url: "https://archestra.example.com/v1/kimi",
+      },
+    });
+
+    // Older connections pinned the Kimi default of their time; a later
+    // default must not stop the cleanup from recognizing that pin.
+    expect(script).toContain("moonshotai/kimi-k2-0711-preview");
+    expect(script).not.toContain(
+      `moonshotai/${PROVIDER_MODEL_TIERS.kimi.normal}`,
+    );
+  });
+
+  test.each([
     ["opencode v2.0.25", 'id: "archestra.llm-proxy"'],
     ["1.18.30", "export const ArchestraLlmProxy"],
     ["", "export const ArchestraLlmProxy"],

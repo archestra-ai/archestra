@@ -17,6 +17,10 @@ on:
         type: string
         default: ""
     secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -56,5 +60,7 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
     secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

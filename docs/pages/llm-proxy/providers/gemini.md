@@ -37,16 +37,12 @@ Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding mode
 
 ### Missing Models and Nano Banana
 
-Vertex AI's model list depends on your configured location and project access. For global-only models, including Gemini 3 image models and Nano Banana 2.1, enable [`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT=true`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT), restart Archestra, then click **Refresh Models** on **Models**. These models use Google's global endpoint; other models keep using your configured region. Leave this disabled if requests must stay in that region.
+Some Vertex AI models, including Nano Banana 2.1, require the global endpoint.
 
-Search **Models** by name or API model ID:
+1. Set [`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT=true`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT) and restart Archestra.
+2. Click **Refresh Models**, then search for `Nano Banana`.
 
-| Name | API Model ID |
-| --- | --- |
-| Nano Banana | `gemini-2.5-flash-image` |
-| Nano Banana 2.1 | `gemini-nano-banana-2.1` |
-
-Enabling the global endpoint does not grant access to a model. If a model is still missing, check the provider and access filters, and confirm that your Google Cloud project can use it.
+Leave global access disabled if requests must stay in your configured region.
 
 ### GKE with Workload Identity (Recommended)
 

@@ -36,7 +36,14 @@ import McpDeploymentLeaseModel, {
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
-import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
+import {
+  agentRuntimeFailureReason,
+  agentRuntimeTurnFailure,
+} from "@/services/agent-runtime/failure-reason";
+import {
+  agentRunFailure,
+  tagAgentRunFailure,
+} from "@/services/agent-runtime/run-failure";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
@@ -51,6 +58,7 @@ import type {
   AgentRuntimeSteerMode,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { A2ATaskFailure } from "@/types/a2a-task";
 import {
   type AgentWorkspaceFileRequest,
   AgentWorkspaceFileRequestSchema,
@@ -88,13 +96,17 @@ import {
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
 import { resolvePlatformServiceDestination } from "./platform-service";
-import { describeAgentRuntimePodFailure } from "./pod-failure";
+import {
+  classifyAgentRuntimePodFailure,
+  describeAgentRuntimePodFailure,
+} from "./pod-failure";
 import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
   type AgentRuntimeStartupProgressReporter,
   attachingProgress,
   describeAgentRuntimeStartupProgress,
+  hasAgentRuntimeImagePullFailure,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
 import { buildTmuxSteerCommand } from "./steering";
@@ -131,7 +143,10 @@ class AgentRuntimeManager {
    */
   async assertSandboxApiInstalled(): Promise<void> {
     if (!(await agentSandboxApi.refresh())) {
-      throw new ApiError(503, AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE);
+      throw tagAgentRunFailure(
+        new ApiError(503, AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE),
+        "launch.controller_missing",
+      );
     }
   }
 
@@ -459,8 +474,11 @@ class AgentRuntimeManager {
           ? ["access to the host system"]
           : []),
       ].join(" and ");
-      throw new Error(
-        `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
+      throw tagAgentRunFailure(
+        new Error(
+          `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
+        ),
+        "run.settings_changed",
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
@@ -551,9 +569,12 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(
-        409,
-        "The saved files have reached their retention deadline",
+      throw tagAgentRunFailure(
+        new ApiError(
+          409,
+          "The saved files have reached their retention deadline",
+        ),
+        "run.resume_refused",
       );
     }
     if (
@@ -561,9 +582,9 @@ class AgentRuntimeManager {
       pending.metadata?.labels?.[AGENT_RUNTIME_WORKSPACE_LABEL] !==
         session.workloadName
     ) {
-      throw new ApiError(
-        409,
-        "The saved conversation belongs to a different run",
+      throw tagAgentRunFailure(
+        new ApiError(409, "The saved conversation belongs to a different run"),
+        "run.resume_refused",
       );
     }
     // The initial turn is already part of the Sandbox's bootstrap contract.
@@ -601,9 +622,12 @@ class AgentRuntimeManager {
         ],
       });
       if (published !== "present")
-        throw new ApiError(
-          502,
-          "The run was interrupted before its command was saved. Select Resume to try again.",
+        throw tagAgentRunFailure(
+          new ApiError(
+            502,
+            "The run was interrupted before its command was saved. Select Resume to try again.",
+          ),
+          "turn.interrupted",
         );
       return;
     }
@@ -891,9 +915,12 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(
-        409,
-        "The saved files have reached their retention deadline",
+      throw tagAgentRunFailure(
+        new ApiError(
+          409,
+          "The saved files have reached their retention deadline",
+        ),
+        "run.resume_refused",
       );
     }
     const agent = await AgentModel.findById(session.agentId);
@@ -933,7 +960,10 @@ class AgentRuntimeManager {
         timeoutMessage: "The run could not be resumed",
       }))
     ) {
-      throw new ApiError(409, "The run could not be resumed");
+      throw tagAgentRunFailure(
+        new ApiError(409, "The run could not be resumed"),
+        "run.resume_refused",
+      );
     }
   }
 
@@ -1180,6 +1210,7 @@ class AgentRuntimeManager {
   }): Promise<{
     outcome: "succeeded" | "failed" | "aborted";
     reason?: string;
+    failure?: A2ATaskFailure;
   }> {
     const clients = this.requireClients();
     const { sandbox: sandboxName } = agentRuntimeNames(
@@ -1206,6 +1237,7 @@ class AgentRuntimeManager {
           return {
             outcome: "failed",
             reason: "The Agent Sandbox no longer exists",
+            failure: agentRunFailure("run.workspace_missing"),
           };
         }
         const pod = await this.findPod(params.session);
@@ -1229,6 +1261,7 @@ class AgentRuntimeManager {
               : {
                   outcome: "failed",
                   reason: agentRuntimeFailureReason(result),
+                  failure: agentRuntimeTurnFailure(result),
                 };
           }
         }
@@ -1252,6 +1285,13 @@ class AgentRuntimeManager {
               condition?.message ??
               condition?.reason ??
               "The Agent Runtime run exited without completing",
+            failure: agentRunFailure(
+              podFailure && pod
+                ? classifyAgentRuntimePodFailure(pod)
+                : expired
+                  ? "run.deadline_exceeded"
+                  : "pod.failed",
+            ),
           };
         }
         retryDelayMs = interval;
@@ -1847,15 +1887,21 @@ done`
     const deadline =
       Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
     let lastProgress: AgentRuntimeStartupProgress | null = null;
+    let lastPod: k8s.V1Pod | null = null;
     while (Date.now() < deadline) {
       const pod = await this.findPod(params.session);
+      lastPod = pod;
       const phase = pod?.status?.phase;
       if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
       const podFailure = describeAgentRuntimePodFailure(
         pod,
         params.session.runtimeScope,
       );
-      if (podFailure) throw new Error(podFailure);
+      if (podFailure && pod)
+        throw tagAgentRunFailure(
+          new Error(podFailure),
+          classifyAgentRuntimePodFailure(pod),
+        );
       if (phase === "Succeeded") return null;
 
       const progress = describeAgentRuntimeStartupProgress(pod);
@@ -1870,8 +1916,13 @@ done`
       lastProgress = progress;
       await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
     }
-    throw new Error(
-      `${params.timeoutMessage} within ${config.agentRuntime.podStartTimeoutSeconds} seconds.${lastProgress ? ` Last observed startup step: ${lastProgress.message}.` : ""}`,
+    throw tagAgentRunFailure(
+      new Error(
+        `${params.timeoutMessage} within ${config.agentRuntime.podStartTimeoutSeconds} seconds.${lastProgress ? ` Last observed startup step: ${lastProgress.message}.` : ""}`,
+      ),
+      hasAgentRuntimeImagePullFailure(lastPod)
+        ? "pod.image_pull"
+        : "launch.capacity_timeout",
     );
   }
 

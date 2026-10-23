@@ -149,6 +149,10 @@ test.for([
       ...(mode === "initial" ? {} : { resumeFromTaskId: previousTask.id }),
     }),
   ).rejects.toThrow("publication connection lost");
+  expect((await A2ATaskModel.findById(task.id))?.failure).toEqual({
+    code: "run.unknown",
+    retriable: false,
+  });
   const run = await AgentRunModel.findByTaskId(task.id);
   if (!run) throw new Error("Expected persisted run");
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
@@ -266,4 +270,8 @@ test("a throttled launch settles the task as failed before its workspace cleanup
     "Start the run again in a minute",
   );
   expect(taskDuringCleanup?.statusReason).toContain("ENHANCE_YOUR_CALM");
+  expect(taskDuringCleanup?.failure).toEqual({
+    code: "launch.kubernetes_unavailable",
+    retriable: true,
+  });
 });

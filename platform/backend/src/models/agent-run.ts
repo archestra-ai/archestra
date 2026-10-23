@@ -20,6 +20,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
+  AgentRunFailure,
   AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
@@ -479,6 +480,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -543,6 +545,7 @@ class AgentRunModel {
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -899,6 +902,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -987,6 +991,20 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+/** A FAILED task's stored classification plus its status reason. */
+function failureExpression(): SQL<AgentRunFailure | null> {
+  const failure = schema.a2aTasksTable.failure;
+  return sql<AgentRunFailure | null>`
+    CASE WHEN ${schema.a2aTasksTable.state} = 'TASK_STATE_FAILED'
+      AND ${failure} IS NOT NULL
+    THEN jsonb_build_object(
+      'code', ${failure}->>'code',
+      'retriable', (${failure}->>'retriable')::boolean,
+      'message', COALESCE(${schema.a2aTasksTable.statusReason}, '')
+    ) END
+  `;
 }
 
 function hardDeadlineAtExpression(): SQL<Date> {

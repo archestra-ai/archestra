@@ -36,11 +36,24 @@ export function isTerminalA2ATaskState(state: A2ATaskState): boolean {
   return A2A_TERMINAL_TASK_STATES.includes(state);
 }
 
+/**
+ * Machine-readable classification of a FAILED Agent Runtime task, stored next
+ * to its human-readable `statusReason`. The code vocabulary and its retry
+ * semantics live in `services/agent-runtime/run-failure.ts`.
+ */
+export const A2ATaskFailureSchema = z.object({
+  code: z.string().min(1).max(160),
+  retriable: z.boolean(),
+});
+export type A2ATaskFailure = z.infer<typeof A2ATaskFailureSchema>;
+
 export const SelectA2ATaskSchema = createSelectSchema(schema.a2aTasksTable, {
   state: A2ATaskStateSchema,
+  failure: A2ATaskFailureSchema.nullable(),
 });
 export const InsertA2ATaskSchema = createInsertSchema(schema.a2aTasksTable, {
   state: A2ATaskStateSchema,
+  failure: A2ATaskFailureSchema.nullable().optional(),
 }).omit({
   id: true,
   createdAt: true,

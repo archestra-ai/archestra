@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import type { V1Pod } from "@kubernetes/client-node";
+import type { AgentRunFailureCode } from "@/services/agent-runtime/run-failure";
 
 const TRUNCATED = "… (truncated)";
 
@@ -73,6 +74,26 @@ export function describeAgentRuntimePodFailure(
   return summary.length > 4096
     ? `${summary.slice(0, 4096 - TRUNCATED.length - 1)}\n${TRUNCATED}`
     : summary;
+}
+
+/** Failure code for a pod that `describeAgentRuntimePodFailure` reports. */
+export function classifyAgentRuntimePodFailure(
+  pod: V1Pod,
+): Extract<AgentRunFailureCode, `pod.${string}`> {
+  const disrupted = (pod.status?.conditions ?? []).some(
+    (condition) =>
+      condition.type === "DisruptionTarget" && condition.status === "True",
+  );
+  if (pod.status?.reason === "Evicted" || disrupted) return "pod.evicted";
+  const statuses = [
+    ...(pod.status?.initContainerStatuses ?? []),
+    ...(pod.status?.containerStatuses ?? []),
+  ];
+  if (
+    statuses.some((status) => status.state?.terminated?.reason === "OOMKilled")
+  )
+    return "pod.oom_killed";
+  return "pod.failed";
 }
 
 function diagnosticText(value: string | undefined): string {

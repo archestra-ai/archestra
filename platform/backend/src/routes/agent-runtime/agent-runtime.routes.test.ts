@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -687,6 +688,70 @@ describe("Agent Runtime routes", () => {
       "Implement the requested change",
     );
     expect(JSON.stringify(audit)).not.toContain("requirements.txt");
+  });
+
+  test("exposes a classified failure on run reads and leaves other runs without one", async () => {
+    const failed = await createTask(agent.id);
+    await createRun({ taskId: failed.id, actorUserId: user.id });
+    await settleFailedA2ATask({
+      taskId: failed.id,
+      contextId: failed.contextId,
+      statusReason: "The Agent Runtime pod failed.\nReason: Evicted",
+      failure: { code: "pod.evicted", retriable: true },
+    });
+    // A failure settled before classification existed.
+    const legacy = await createTask(agent.id);
+    await createRun({ taskId: legacy.id, actorUserId: user.id });
+    await settleFailedA2ATask({
+      taskId: legacy.id,
+      contextId: legacy.contextId,
+      statusReason: "The Agent Runtime turn exited with status 1",
+    });
+    const running = await createTask(agent.id);
+    await createRun({ taskId: running.id, actorUserId: user.id });
+
+    const expected = {
+      code: "pod.evicted",
+      retriable: true,
+      message: "The Agent Runtime pod failed.\nReason: Evicted",
+    };
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${failed.id}`,
+    });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      state: "TASK_STATE_FAILED",
+      statusReason: expected.message,
+      failure: expected,
+    });
+    for (const taskId of [legacy.id, running.id]) {
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/agent-runs/${taskId}`,
+      });
+      expect(other.json().failure).toBeNull();
+    }
+
+    const mine = await app.inject({ method: "GET", url: "/api/agent-runs" });
+    expect(mine.statusCode, mine.body).toBe(200);
+    const agentRuns = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runs`,
+    });
+    expect(agentRuns.statusCode, agentRuns.body).toBe(200);
+    for (const rows of [
+      mine.json().data as Array<{ taskId: string; failure: unknown }>,
+      agentRuns.json() as Array<{ taskId: string; failure: unknown }>,
+    ]) {
+      expect(
+        Object.fromEntries(rows.map((row) => [row.taskId, row.failure])),
+      ).toEqual({
+        [failed.id]: expected,
+        [legacy.id]: null,
+        [running.id]: null,
+      });
+    }
   });
 
   test("does not start a run inside a project the caller cannot read", async ({

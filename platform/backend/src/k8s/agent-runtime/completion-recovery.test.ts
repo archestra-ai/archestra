@@ -443,6 +443,7 @@ test.for([
       : {
           outcome: "failed",
           reason: "The Agent Runtime turn exited with status 7",
+          failure: { code: "turn.exit_status", retriable: false },
         },
   );
 });
@@ -457,6 +458,7 @@ test("propagates a custom image failure without a platform code registry", async
     outcome: "failed",
     reason:
       "The selected dataset is unavailable. Choose an existing dataset. (Runtime exit status 42.)",
+    failure: { code: "image.custom_indexer.dataset_missing", retriable: false },
   });
 });
 
@@ -465,6 +467,7 @@ test("does not expose malformed failure payloads", async ({ run }) => {
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "failed",
     reason: "The Agent Runtime turn exited with status 78",
+    failure: { code: "turn.exit_status", retriable: false },
   });
 });
 
@@ -488,6 +491,7 @@ test("still fails when the sandbox was deleted", async ({ run }) => {
   ).resolves.toEqual({
     outcome: "failed",
     reason: "The Agent Sandbox no longer exists",
+    failure: { code: "run.workspace_missing", retriable: false },
   });
 });
 
@@ -514,7 +518,15 @@ test.for([
   completeExec("");
   await expect(
     manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).resolves.toEqual({ outcome: "failed", reason: "Workspace ended" });
+  ).resolves.toEqual({
+    outcome: "failed",
+    reason: "Workspace ended",
+    failure: {
+      code:
+        condition === "SandboxExpired" ? "run.deadline_exceeded" : "pod.failed",
+      retriable: false,
+    },
+  });
 });
 
 test.for([
@@ -543,6 +555,7 @@ test.for([
       "signal 9",
       "Container exceeded its memory limit",
     ],
+    failure: { code: "pod.oom_killed", retriable: false },
   },
   {
     name: "node eviction",
@@ -552,6 +565,7 @@ test.for([
       message: "The node was low on resource: ephemeral-storage.",
     },
     details: ["Evicted", "The node was low on resource: ephemeral-storage."],
+    failure: { code: "pod.evicted", retriable: true },
   },
   {
     name: "workspace initialization failure",
@@ -575,11 +589,13 @@ test.for([
       "exit code 1",
       "Could not initialize the workspace volume",
     ],
+    failure: { code: "pod.failed", retriable: false },
   },
   {
     name: "missing termination diagnostics",
     status: { phase: "Failed" },
     details: ["Kubernetes reported no additional failure details"],
+    failure: { code: "pod.failed", retriable: false },
   },
   {
     name: "pod disruption",
@@ -601,10 +617,12 @@ test.for([
       ],
     },
     details: ["TerminationByKubelet", "Kubelet is terminating the pod."],
+    failure: { code: "pod.evicted", retriable: true },
   },
 ])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
   status,
   details,
+  failure,
 }, { run }) => {
   server.use(
     http.get(sandboxUrl, () =>
@@ -632,6 +650,7 @@ test.for([
   expect(completion.outcome).toBe("failed");
   expect(completion.reason).toContain("test/worker");
   for (const detail of details) expect(completion.reason).toContain(detail);
+  expect(completion.failure).toEqual(failure);
   expect(completion.reason).not.toContain("exit code 0");
   expect(exec).not.toHaveBeenCalled();
 });

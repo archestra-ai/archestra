@@ -1610,6 +1610,9 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `run.agent_id` | `string \| null` | Yes | The agent doing the work. |
 | `run.status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
+| `run.failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
+| `run.failure.code` | `string` | Yes |  |
+| `run.failure.retriable` | `boolean` | Yes |  |
 | `run.created_at` | `string` | Yes | ISO 8601. |
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string` | Yes | Open the run and its workspace in the browser. |
@@ -1634,6 +1637,9 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `run.agent_id` | `string \| null` | Yes | The agent doing the work. |
 | `run.status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
+| `run.failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
+| `run.failure.code` | `string` | Yes |  |
+| `run.failure.retriable` | `boolean` | Yes |  |
 | `run.created_at` | `string` | Yes | ISO 8601. |
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string \| null` | Yes |  |
@@ -1677,6 +1683,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runs[].state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `runs[].agent_id` | `string \| null` | No | The agent doing the work. |
 | `runs[].status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
+| `runs[].failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
 | `runs[].created_at` | `string` | No | ISO 8601. |
 | `runs[].state_changed_at` | `string \| string \| null` | Yes | ISO 8601 of the last transition. |
 | `runs[].llm_session_id` | `string \| null` | No | Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle. |

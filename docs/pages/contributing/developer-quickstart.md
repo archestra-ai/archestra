@@ -120,37 +120,4 @@ pnpm also skips package install scripts in this repository. Both settings are in
 pnpm rebuild <package-name>
 ```
 
-## Benchmark the LLM Proxy
-
-Measure authentication, routing and request persistence separately from upstream model calls with the production backend and a local mock. Run from a clean checkout's `platform/` directory with Node.js, pnpm, Rust and Docker installed:
-
-```bash
-pnpm install --frozen-lockfile
-bash benchmarks/ci.sh --requests=1000 --stream-requests=50 --warmup=20 --repeats=3
-```
-
-The launcher creates and removes a disposable database. The [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) describes workload options and reproduction; [recorded results](https://github.com/archestra-ai/archestra/blob/main/platform/benchmarks/baselines/2026-10-23-optimization.json) retain every trial summary, tested revision and raw-file digest.
-
-### Local Results
-
-The 2026-10-23 alternating comparison measured 549 chat requests per second and 100% success with 50 requests in flight, pooling six optimized trials of 1,000 requests each.
-
-| Non-Streaming Chat Latency | P50 | P95 | P99 |
-| --- | ---: | ---: | ---: |
-| Gateway request latency | 83 ms | 111 ms | 152 ms |
-| Gateway overhead | 77 ms | 103 ms | 128 ms |
-| Complete client response | 87 ms | 117 ms | 159 ms |
-
-Gateway latency spans server receipt through response serialization, including awaited persistence. Overhead subtracts each request's upstream SDK-call duration before calculating percentiles. Client latency ends after complete body delivery; streaming reports time to first content, with complete-stream gateway timing unmeasured.
-
-The comparison used an Apple M5 Pro, 64 GiB RAM, Node.js 24.21.0, PostgreSQL 17.11 and virtual-key authentication with persistence. Two production builds stayed resident with separate disposable databases and identical mocks; one received load at a time. Configured key budgets, response caching and real inference were absent.
-
-- Longer sequential confirmations pooled 30,000 optimized chat requests: 124 ms client P50 and 286 ms P99. The shared development host varied between runs; local measurements are not a production capacity guarantee.
-- A separate concurrency sweep measured chat at 21 ms client P50 / 36 ms P99 with 10 requests in flight. Streaming first content at concurrency 50 was 91 ms P50 from 150 proxy requests; the mock emits 20 content events 10 ms apart.
-- The command above reproduces the sweep. The README gives the separate alternating-build protocol; compare results only when hardware, workload, concurrency and enabled features match.
-
-### Release Comparisons
-
-Each platform release PR runs the mock workloads and updates one comment with throughput, success rate, gateway latency, overhead and client latency. Each measured value includes its percentage increase or decrease against the last published release on the same track when the setup matches. First runs, missing or failed release data, changed setups and unmeasured values are labeled explicitly.
-
-The comment retains compact metrics for future comparisons; detailed workflow artifacts expire after 14 days. Shared-runner latency is informational, and failed requests fail the benchmark.
+<span id="benchmark-the-llm-proxy"></span>

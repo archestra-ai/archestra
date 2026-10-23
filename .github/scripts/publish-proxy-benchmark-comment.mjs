@@ -45,7 +45,7 @@ export async function publishBenchmarkComment({
     }
   }
   body += `\n${benchmarkPayload(savedSummary, source.head.sha)}\n`;
-  body += `\nRevision: \`${source.head.sha}\` · [Workflow and measurements](${runUrl})\n`;
+  body += `\nMeasured revision: \`${source.head.sha}\` · [Workflow and measurements](${runUrl})\n`;
   const comments = await github.paginate(github.rest.issues.listComments, {
     ...args,
     per_page: 100,

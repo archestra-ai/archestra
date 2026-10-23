@@ -120,12 +120,34 @@ export async function findReleaseBenchmark({ github, context }) {
       );
     if (
       !sha.test(payload.gitCommit) ||
-      payload.gitCommit !== releasePr.head.sha ||
       payload.summary.gitCommit !== payload.gitCommit
     )
       return missing(
         `Last release (${previous.tag_name}) has stale benchmark data for a different release PR revision.`,
       );
+    if (payload.gitCommit !== releasePr.head.sha) {
+      const { data: changes } = await github.rest.repos.compareCommits({
+        ...repo,
+        base: payload.gitCommit,
+        head: releasePr.head.sha,
+      });
+      // Generated tables/screenshots do not change the measured backend.
+      // Reject truncated file lists and every execution/configuration change.
+      if (
+        changes.status !== "ahead" ||
+        !changes.files?.length ||
+        changes.files.length >= 300 ||
+        changes.files.some(
+          (file) =>
+            !file.filename.startsWith("docs/") ||
+            (file.previous_filename &&
+              !file.previous_filename.startsWith("docs/")),
+        )
+      )
+        return missing(
+          `Last release (${previous.tag_name}) has stale benchmark data for a different release PR revision.`,
+        );
+    }
     renderSummary(payload.summary); // Only validated numeric metrics may reach the comment.
     const { data: tree } = await github.rest.git.getTree({
       ...repo,

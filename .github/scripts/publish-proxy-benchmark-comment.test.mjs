@@ -12,6 +12,7 @@ function fixture() {
   const sha = "a".repeat(40);
   const comments = [];
   const context = {
+    eventName: "pull_request",
     repo: { owner: "example", repo: "gateway" },
     runId: 123,
     payload: {
@@ -59,7 +60,10 @@ function fixture() {
           return {
             data: {
               sha: "e".repeat(40),
-              commit: { tree: { sha: "f".repeat(40) } },
+              commit: {
+                tree: { sha: "f".repeat(40) },
+                message: "release source",
+              },
             },
           };
         },
@@ -235,7 +239,32 @@ test("workflow selects release updates and benchmark changes without loading unr
   f.github.paginate = async () => [{ filename: "platform/CHANGELOG.md" }];
   await execute(f.github, f.context, core);
   assert.deepEqual(output, { run: "true", release: "true" });
+  f.github.rest.repos.getCommit = async () => ({
+    data: {
+      commit: { message: "docs: update proxy benchmark results" },
+      parents: [{ sha: "f".repeat(40) }],
+      files: [
+        {
+          filename: "docs/pages/admin/observability/performance-benchmarks.md",
+          status: "modified",
+        },
+      ],
+    },
+  });
+  // Release PRs can contain benchmark code changes from before the docs commit.
+  f.github.paginate = async () => [{ filename: "platform/benchmarks/run.mjs" }];
+  await execute(f.github, f.context, core);
+  assert.deepEqual(output, { run: "false", release: "true" });
+  const generatedCommit = await f.github.rest.repos.getCommit();
+  generatedCommit.data.files.push({
+    filename: "platform/backend/src/server.ts",
+    status: "modified",
+  });
+  f.github.rest.repos.getCommit = async () => generatedCommit;
+  await execute(f.github, f.context, core);
+  assert.deepEqual(output, { run: "true", release: "true" });
   f.context.payload.pull_request.head.ref = "feature/work";
+  f.github.paginate = async () => [{ filename: "platform/CHANGELOG.md" }];
   await execute(f.github, f.context, core);
   assert.deepEqual(output, { run: "false", release: "false" });
   f.github.paginate = async () => [{ filename: "platform/benchmarks/run.mjs" }];
@@ -328,6 +357,53 @@ test("stale revisions, different released source trees and invalid saved data ca
       f.previousComments[0].body =
         benchmarkMarker + "<!-- archestra-llm-proxy-benchmark-data:v1:AAAA -->";
     assert.equal((await findReleaseBenchmark(f)).state, "missing", mode);
+  }
+});
+
+test("generated docs may follow a measurement, but changed execution inputs and truncated comparisons cannot", async () => {
+  for (const mode of [
+    "docs",
+    "source",
+    "workflow",
+    "renamed",
+    "diverged",
+    "truncated",
+    "tree",
+  ]) {
+    const f = fixture();
+    savePrevious(f);
+    f.previousPr.head.sha = "0".repeat(40);
+    f.github.rest.repos.compareCommits = async ({ base }) => ({
+      data: {
+        status:
+          mode === "diverged" && !base.startsWith("platform-v")
+            ? "diverged"
+            : "ahead",
+        files:
+          mode === "truncated"
+            ? Array(300).fill({ filename: "docs/example.md" })
+            : [
+                {
+                  filename:
+                    mode === "source"
+                      ? "platform/backend/src/server.ts"
+                      : mode === "workflow"
+                        ? ".github/workflows/llm-proxy-benchmark.yml"
+                        : "docs/pages/admin/observability/performance-benchmarks.md",
+                  ...(mode === "renamed"
+                    ? { previous_filename: "platform/backend/src/server.ts" }
+                    : {}),
+                },
+              ],
+      },
+    });
+    if (mode === "tree")
+      f.github.rest.git.getTree = async () => ({ data: { tree: [] } });
+    assert.equal(
+      (await findReleaseBenchmark(f)).state,
+      mode === "docs" ? "available" : "missing",
+      mode,
+    );
   }
 });
 

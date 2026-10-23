@@ -940,7 +940,7 @@ export const PROVIDER_MODEL_TIERS: Record<
     smart: "claude-opus-5-5",
   },
   minimax: { normal: "MiniMax-M3" },
-  kimi: { normal: "kimi-k2-0711-preview" },
+  kimi: { normal: "kimi-k3.1-pro" },
   azure: { normal: "gpt-5.5" },
   "github-copilot": {
     // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.

@@ -154,6 +154,9 @@ RUN apk add --no-cache \
    # Require the fixed Node.js package and invalidate cached runtime layers.
    # CVE-2026-106069, CVE-2026-105483 and CVE-2026-105482 affect older builds.
    apk add --no-cache --upgrade "nodejs>=24.22.1-r0" && \
+   # Alpine's nodejs links the shared Brotli decoder, so the Node.js fix alone
+   # does not cover CVE-2026-111497; require the patched brotli-libs too.
+   apk add --no-cache --upgrade "brotli-libs>=1.2.1-r0" && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
    # fixes. Require the 9.20.29-r0 release that fixes its seven HIGH CVEs.
    apk add --no-cache --upgrade "bind>=9.20.29-r0" && \

@@ -8,9 +8,13 @@ test("permits matching schemas and refuses extra source storage columns before c
   try {
     await source.exec("CREATE TABLE secret (id text, secret jsonb)");
     await target.exec("CREATE TABLE secret (id text, secret jsonb)");
-    await expect(assertMatchingHydrationSchemas({ source, target })).resolves.toBeUndefined();
+    await expect(
+      assertMatchingHydrationSchemas({ source, target }),
+    ).resolves.toBeUndefined();
     await source.exec("ALTER TABLE secret ADD COLUMN storage_kind text");
-    await expect(assertMatchingHydrationSchemas({ source, target })).rejects.toThrow("schemas must match");
+    await expect(
+      assertMatchingHydrationSchemas({ source, target }),
+    ).rejects.toThrow("schemas must match");
     expect((await target.query("SELECT * FROM secret")).rows).toEqual([]);
   } finally {
     await source.close();

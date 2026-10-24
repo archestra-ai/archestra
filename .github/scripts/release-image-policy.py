@@ -32,7 +32,8 @@ def requires_scan(event_name, event, repository):
     return True
 
 
-def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None):
+def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None,
+                  workflow_sha=None):
     if classify_result != "success":
         raise ValueError("Release classification did not succeed")
     required = requires_scan(event_name, event, repository)
@@ -53,8 +54,10 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
         for key in ("sha", "ref"):
             if current[field][key] != expected[field][key]:
                 raise ValueError("Release PR or base changed during scanning; rerun on the current revision")
-    if not SHA.fullmatch(expected["merge_commit_sha"]) or current["merge_commit_sha"] != expected["merge_commit_sha"]:
-        raise ValueError("Release merge candidate changed during scanning")
+    # The event payload's merge_commit_sha can predate GitHub's recomputed test
+    # merge, so bind the scanned commit to the PR's live merge candidate instead.
+    if not SHA.fullmatch(workflow_sha or "") or current["merge_commit_sha"] != workflow_sha:
+        raise ValueError("Scans are not associated with the release PR's current merge candidate")
 
 
 def main():
@@ -69,14 +72,12 @@ def main():
         required = requires_scan(event_name, event, repository)
         current = None
         if required and os.environ["SCAN_RESULT"] == "success":
-            pr = event["pull_request"]
-            if pr["merge_commit_sha"] != os.environ["GITHUB_SHA"]:
-                raise ValueError("Scans are not associated with the event's merge candidate")
             current = json.loads(subprocess.check_output(
-                ["gh", "api", f"repos/{repository}/pulls/{int(pr['number'])}"], text=True,
+                ["gh", "api", f"repos/{repository}/pulls/{int(event['pull_request']['number'])}"], text=True,
             ))
         validate_gate(event_name, event, repository, os.environ["CLASSIFY_RESULT"],
-                      os.environ["SCAN_REQUIRED"], os.environ["SCAN_RESULT"], current)
+                      os.environ["SCAN_REQUIRED"], os.environ["SCAN_RESULT"], current,
+                      os.environ["GITHUB_SHA"])
         print("Release images scanned for the current candidate." if required else
               "No release image scan required for this event; publication scans its own artifacts.")
     else:

@@ -12,6 +12,37 @@ import sys
 SHA = re.compile(r"[0-9a-f]{40}")
 
 
+def candidate_matrix(root):
+    """Scan every maintained catalog target, including this branch's inventory."""
+    platform = root / "platform"
+    images = [
+        {"image": "platform", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": ""},
+        {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
+    ]
+    for image, directory in (("mcp-server-base", "mcp_server"), ("p4-shim", "p4_shim"),
+                             ("sandbox-base", "sandbox_base")):
+        context = f"./platform/docker_images/{directory}"
+        images.append({"image": image, "context": context, "dockerfile": f"{context}/Dockerfile", "target": ""})
+    catalog = json.loads((platform / "shared/agent-catalog-images.json").read_text())
+    if not isinstance(catalog, dict) or not catalog:
+        raise ValueError("Missing published agent inventory")
+    targets = list(catalog.values())
+    if (not all(isinstance(target, str) and re.fullmatch(r"agent-[a-z0-9-]+", target) for target in targets)
+            or len(targets) != len(set(targets))):
+        raise ValueError("Invalid or duplicate agent image targets")
+    dockerfile = platform / "docker_images/agent/Dockerfile"
+    stages = set(re.findall(r"^FROM\s+.+\s+AS\s+(\S+)\s*$", dockerfile.read_text(), re.M | re.I))
+    for target in targets:
+        if target not in stages:
+            raise ValueError(f"Published agent target has no Dockerfile stage: {target}")
+        images.append({"image": target, "context": "./platform",
+                       "dockerfile": "./platform/docker_images/agent/Dockerfile", "target": target})
+    for image in images:
+        if not (root / image["dockerfile"]).is_file():
+            raise ValueError(f"Missing image Dockerfile: {image['dockerfile']}")
+    return {"include": images}
+
+
 def requires_scan(event_name, event, repository):
     if event_name in ("merge_group", "workflow_dispatch"):
         return False
@@ -66,8 +97,10 @@ def main():
     event_name, repository = os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REPOSITORY"]
     if mode == "classify":
         decision = requires_scan(event_name, event, repository)
+        matrix = candidate_matrix(Path(__file__).resolve().parents[2])
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"scan={str(decision).lower()}\n")
+            output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None

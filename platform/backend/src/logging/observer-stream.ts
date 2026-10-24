@@ -17,7 +17,11 @@ export function createLogObserverStream({
         );
         if (!record || typeof record !== "object" || Array.isArray(record))
           return;
-        retain(record);
+        try {
+          retain(record);
+        } catch {
+          // Retention and export are independent observers of the same record.
+        }
         const {
           time,
           msg,

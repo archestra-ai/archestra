@@ -55,6 +55,17 @@ test("stdout, retained context and exported OTEL records share credential redact
     observer.write("null");
     observer.write("[]");
     expect(retained).toHaveLength(1);
+    const failedRetention = createLogObserverStream({
+      logger: provider.getLogger("pino"),
+      retain: () => {
+        throw new Error("Retention is unavailable");
+      },
+    });
+    failedRetention.write(
+      JSON.stringify({ level: 50, msg: "export survives" }),
+    );
+    await provider.forceFlush();
+    expect(exporter.getFinishedLogRecords()[1].body).toBe("export survives");
   } finally {
     await provider.shutdown();
   }

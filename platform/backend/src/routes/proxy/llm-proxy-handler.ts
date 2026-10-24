@@ -4193,7 +4193,7 @@ async function persistProxyInteraction({
     attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
-  await InteractionModel.create(
+  await InteractionModel.record(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
       : record,

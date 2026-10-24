@@ -465,20 +465,48 @@ function buildExternalAgentDisplayName(
  *  - Unpaired UTF-16 surrogates, half an astral character left by a completion
  *    or tool result cut mid-character. JSONB is UTF-8, which cannot encode one.
  */
+/** The columns every interaction write needs back from the database. */
+type StoredInteractionKey = Pick<
+  typeof schema.interactionsTable.$inferSelect,
+  "id" | "profileId" | "createdAt"
+>;
+
+const interactionKeyColumns = {
+  id: schema.interactionsTable.id,
+  profileId: schema.interactionsTable.profileId,
+  createdAt: schema.interactionsTable.createdAt,
+};
+
 function stripUnstorableChars<T>(value: T): T {
   if (value === null || value === undefined) return value;
   if (typeof value === "string") {
-    return repairLoneSurrogateText(value.replaceAll("\u0000", "")) as T;
+    return repairLoneSurrogateText(
+      value.includes("\u0000") ? value.replaceAll("\u0000", "") : value,
+    ) as T;
   }
+  // Structure-sharing: a clean subtree, the common case, is returned by
+  // reference instead of being copied.
   if (Array.isArray(value)) {
-    return value.map(stripUnstorableChars) as T;
+    let result: unknown[] | undefined;
+    for (let i = 0; i < value.length; i++) {
+      const stripped = stripUnstorableChars(value[i]);
+      if (stripped !== value[i]) {
+        result ??= value.slice();
+        result[i] = stripped;
+      }
+    }
+    return (result ?? value) as T;
   }
   if (typeof value === "object") {
-    const result: Record<string, unknown> = {};
+    let result: Record<string, unknown> | undefined;
     for (const [k, v] of Object.entries(value)) {
-      result[k] = stripUnstorableChars(v);
+      const stripped = stripUnstorableChars(v);
+      if (stripped !== v) {
+        if (!result) result = { ...(value as Record<string, unknown>) };
+        result[k] = stripped;
+      }
     }
-    return result as T;
+    return (result ?? value) as T;
   }
   return value;
 }
@@ -563,197 +591,23 @@ class InteractionModel {
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
   ) {
-    // Snapshot the environment from the agent at creation time (single funnel
-    // for all interaction writes) so per-environment cost-limit usage stays
-    // stable under later agent reassignment. The agent is authoritative: when a
-    // profile is present its current environment wins over any caller-supplied
-    // value. Only profile-less system interactions may set it explicitly.
-    const { billingUsage, billingAttribution, ...columns } = data;
-    if (billingUsage && !billingAttribution)
-      throw new Error("Billing attribution is required for settlement");
-    const environmentId = billingAttribution
-      ? billingAttribution.environmentId
-      : data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
-        : (data.environmentId ?? null);
-    // Enforced here, in the single funnel, so no writer can store content
-    // the deployment's Log Content mode withholds.
-    const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(columns) : columns;
-    // A withheld row holds no content to encrypt under a conversation key, so
-    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
-    const audit = withheld ? null : (auditContext ?? null);
-
-    // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
-    const sanitized = {
-      ...record,
-      environmentId,
-      request: stripUnstorableChars(record.request),
-      processedRequest: stripUnstorableChars(record.processedRequest),
-      response: stripUnstorableChars(record.response),
-    };
-
-    // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
-    // whole conversation on every row (no-op for all other interactions). Delta
-    // encoding stays active under content encryption: deltas are computed on
-    // plaintext before encryptInteractionContent runs below, and parent
-    // resolution matches on the always-plaintext hash columns.
-    //
-    // EncryptedChat rows are excluded outright. Today they could not qualify anyway
-    // (isEligible demands a Claude session source, and these are chat sources),
-    // but relying on that coincidence would be fragile: a delta chain mixes rows
-    // across requests and only the request that created a row carries its key,
-    // so a chain spanning keys could not be reconstructed by any reader.
-    //
-    // Withheld rows are excluded too: there is no conversation to share with
-    // a parent, and leaving their hash columns empty keeps a later full-content
-    // row from chaining onto a request that was never stored.
-    const { values, tip } =
-      audit || withheld
-        ? { values: sanitized, tip: null }
-        : await InteractionDeltaManager.encodeOnWrite(sanitized);
-
-    const interactionId = values.id ?? uuidv7();
-    const plaintext = {
-      ...values,
-      sessionPreview: buildSessionPreview(sanitized, values.request),
-    };
-    const insertValues = {
-      ...encryptInteractionContent({ ...plaintext }, audit),
-      id: interactionId,
-    };
-    const insert = async (tx?: Transaction) => {
-      const writer = tx ?? db;
-      const [created] = await writer
-        .insert(schema.interactionsTable)
-        // Monotonic v7 id: created_at ties happen under load, and the delta
-        // manager's "most recent interaction" lookup breaks ties with the id.
-        .values(insertValues)
-        .onConflictDoNothing({ target: schema.interactionsTable.id })
-        .returning();
-      if (!created) {
-        const [existing] = await writer
-          .select()
-          .from(schema.interactionsTable)
-          .where(eq(schema.interactionsTable.id, interactionId));
-        if (
-          !existing ||
-          existing.userId !== (data.userId ?? null) ||
-          existing.profileId !== (data.profileId ?? null) ||
-          existing.appId !== (data.appId ?? null) ||
-          existing.connectorId !== (data.connectorId ?? null)
-        )
-          throw new Error(
-            "Interaction id was already used for different attribution",
-          );
-        return existing;
-      }
-      return created;
-    };
-    const write = (tx?: Transaction) =>
-      insertValues.userId == null
-        ? insert(tx)
-        : InteractionUserActivityModel.append(insertValues, tx);
-    const interaction =
-      billingUsage && billingAttribution
-        ? await retainDeletedBillingAttribution({
-            values: insertValues,
-            run: () =>
-              retryOnceOnDeadlock(() =>
-                withDbTransaction(async (tx) => {
-                  const claimed = await InteractionBillingModel.claim({
-                    tx,
-                    interactionId,
-                    usage: billingUsage,
-                    attribution: billingAttribution,
-                    userId: data.userId ?? null,
-                    billingTeamId: data.billingTeamId ?? null,
-                    billingMode: data.billingMode ?? "metered",
-                    attributionLabels: data.attributionLabels,
-                    logIdentity: {
-                      profileId: data.profileId,
-                      appId: data.appId ?? null,
-                      connectorId: data.connectorId ?? null,
-                      serviceAccountId: data.serviceAccountId ?? null,
-                    },
-                  });
-                  if (!claimed) {
-                    const [existing] = await tx
-                      .select()
-                      .from(schema.interactionsTable)
-                      .where(eq(schema.interactionsTable.id, interactionId));
-                    if (existing) return existing;
-                  }
-                  if (claimed) {
-                    const [legacy] = await tx
-                      .select({ id: schema.interactionsTable.id })
-                      .from(schema.interactionsTable)
-                      .where(eq(schema.interactionsTable.id, interactionId));
-                    if (legacy)
-                      throw new Error(
-                        "Cannot settle an interaction already written without a billing receipt",
-                      );
-                  }
-                  const created = await write(tx);
-                  if (claimed && data.billingMode !== "subscription") {
-                    if (billingUsage.mode === "enforce") {
-                      await LimitModel.settleBillableUsage({
-                        tx,
-                        usage: billingUsage,
-                        attribution: billingAttribution,
-                      });
-                    } else {
-                      // Shadow records the candidate quote but posts only legacy counts.
-                      await LimitModel.recordInteractionTokenUsage({
-                        agentId: data.profileId ?? "",
-                        teamIds: [],
-                        entities: [],
-                        model: data.model ?? "",
-                        inputTokens: data.inputTokens ?? 0,
-                        outputTokens: data.outputTokens ?? 0,
-                        tx,
-                        attribution: billingAttribution,
-                      });
-                    }
-                  }
-                  return created;
-                }),
-              ),
-          })
-        : await write();
-    // The RETURNING row is this method's public return value, so callers never
-    // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
-    // very key that just encrypted them.
-    restoreWrittenInteractionContent(interaction, {
-      written: insertValues,
-      plaintext,
-      audit,
+    const interaction = await InteractionModel.write({
+      data,
+      auditContext,
+      returnRow: true,
     });
+    return interaction as typeof schema.interactionsTable.$inferSelect;
+  }
 
-    if (tip) {
-      InteractionDeltaManager.commitTip(interaction.id, tip);
-    }
-
-    // Update usage tracking after interaction is created
-    // Run in background to not block the response
-    if (!billingUsage)
-      trackBackgroundWork(
-        InteractionModel.updateUsageAfterInteraction(
-          interaction as InsertInteraction & { id: string },
-        ).catch((error) => {
-          logger.error(
-            { error },
-            `Failed to update usage tracking for interaction ${interaction.id}`,
-          );
-        }),
-      );
-
-    AgentUsageModel.recordUseInBackground({
-      agentId: interaction.profileId,
-      usedAt: interaction.createdAt,
-    });
-
-    return interaction;
+  /**
+   * {@link create} for writers that do not read the stored row back: the
+   * database returns only its key columns instead of the whole row.
+   */
+  static async record(
+    data: InsertInteraction,
+    auditContext?: EncryptedChatAuditContext | null,
+  ): Promise<void> {
+    await InteractionModel.write({ data, auditContext, returnRow: false });
   }
 
   /**
@@ -3537,6 +3391,212 @@ class InteractionModel {
       SELECT value FROM external_agent_ids WHERE value IS NOT NULL
     `);
     return result.rows.map((row) => row.value);
+  }
+
+  private static async write(params: {
+    data: InsertInteraction;
+    auditContext?: EncryptedChatAuditContext | null;
+    returnRow: boolean;
+  }) {
+    const { data, auditContext, returnRow } = params;
+    // Snapshot the environment from the agent at creation time (single funnel
+    // for all interaction writes) so per-environment cost-limit usage stays
+    // stable under later agent reassignment. The agent is authoritative: when a
+    // profile is present its current environment wins over any caller-supplied
+    // value. Only profile-less system interactions may set it explicitly.
+    const { billingUsage, billingAttribution, ...columns } = data;
+    if (billingUsage && !billingAttribution)
+      throw new Error("Billing attribution is required for settlement");
+    const environmentId = billingAttribution
+      ? billingAttribution.environmentId
+      : data.profileId
+        ? await AgentModel.findEnvironmentId(data.profileId)
+        : (data.environmentId ?? null);
+    // Enforced here, in the single funnel, so no writer can store content
+    // the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
+    const record = withheld ? withholdInteractionContent(columns) : columns;
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
+
+    // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
+    const sanitized = {
+      ...record,
+      environmentId,
+      request: stripUnstorableChars(record.request),
+      processedRequest: stripUnstorableChars(record.processedRequest),
+      response: stripUnstorableChars(record.response),
+    };
+
+    // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
+    // whole conversation on every row (no-op for all other interactions). Delta
+    // encoding stays active under content encryption: deltas are computed on
+    // plaintext before encryptInteractionContent runs below, and parent
+    // resolution matches on the always-plaintext hash columns.
+    //
+    // EncryptedChat rows are excluded outright. Today they could not qualify anyway
+    // (isEligible demands a Claude session source, and these are chat sources),
+    // but relying on that coincidence would be fragile: a delta chain mixes rows
+    // across requests and only the request that created a row carries its key,
+    // so a chain spanning keys could not be reconstructed by any reader.
+    //
+    // Withheld rows are excluded too: there is no conversation to share with
+    // a parent, and leaving their hash columns empty keeps a later full-content
+    // row from chaining onto a request that was never stored.
+    const { values, tip } =
+      audit || withheld
+        ? { values: sanitized, tip: null }
+        : await InteractionDeltaManager.encodeOnWrite(sanitized);
+
+    const interactionId = values.id ?? uuidv7();
+    const plaintext = {
+      ...values,
+      sessionPreview: buildSessionPreview(sanitized, values.request),
+    };
+    const insertValues = {
+      ...encryptInteractionContent({ ...plaintext }, audit),
+      id: interactionId,
+    };
+    const insert = async (tx?: Transaction) => {
+      const writer = tx ?? db;
+      const inserting = writer
+        .insert(schema.interactionsTable)
+        // Monotonic v7 id: created_at ties happen under load, and the delta
+        // manager's "most recent interaction" lookup breaks ties with the id.
+        .values(insertValues)
+        .onConflictDoNothing({ target: schema.interactionsTable.id });
+      const [created]: StoredInteractionKey[] = returnRow
+        ? await inserting.returning()
+        : await inserting.returning(interactionKeyColumns);
+      if (!created) {
+        const [existing] = await writer
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.id, interactionId));
+        if (
+          !existing ||
+          existing.userId !== (data.userId ?? null) ||
+          existing.profileId !== (data.profileId ?? null) ||
+          existing.appId !== (data.appId ?? null) ||
+          existing.connectorId !== (data.connectorId ?? null)
+        )
+          throw new Error(
+            "Interaction id was already used for different attribution",
+          );
+        return existing;
+      }
+      return created;
+    };
+    const write = (tx?: Transaction) =>
+      insertValues.userId == null
+        ? insert(tx)
+        : returnRow
+          ? InteractionUserActivityModel.append(insertValues, tx)
+          : InteractionUserActivityModel.appendReturningKey(insertValues, tx);
+    const interaction =
+      billingUsage && billingAttribution
+        ? await retainDeletedBillingAttribution({
+            values: insertValues,
+            run: () =>
+              retryOnceOnDeadlock(() =>
+                withDbTransaction(async (tx) => {
+                  const claimed = await InteractionBillingModel.claim({
+                    tx,
+                    interactionId,
+                    usage: billingUsage,
+                    attribution: billingAttribution,
+                    userId: data.userId ?? null,
+                    billingTeamId: data.billingTeamId ?? null,
+                    billingMode: data.billingMode ?? "metered",
+                    attributionLabels: data.attributionLabels,
+                    logIdentity: {
+                      profileId: data.profileId,
+                      appId: data.appId ?? null,
+                      connectorId: data.connectorId ?? null,
+                      serviceAccountId: data.serviceAccountId ?? null,
+                    },
+                  });
+                  if (!claimed) {
+                    const [existing] = await tx
+                      .select()
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (existing) return existing;
+                  }
+                  if (claimed) {
+                    const [legacy] = await tx
+                      .select({ id: schema.interactionsTable.id })
+                      .from(schema.interactionsTable)
+                      .where(eq(schema.interactionsTable.id, interactionId));
+                    if (legacy)
+                      throw new Error(
+                        "Cannot settle an interaction already written without a billing receipt",
+                      );
+                  }
+                  const created = await write(tx);
+                  if (claimed && data.billingMode !== "subscription") {
+                    if (billingUsage.mode === "enforce") {
+                      await LimitModel.settleBillableUsage({
+                        tx,
+                        usage: billingUsage,
+                        attribution: billingAttribution,
+                      });
+                    } else {
+                      // Shadow records the candidate quote but posts only legacy counts.
+                      await LimitModel.recordInteractionTokenUsage({
+                        agentId: data.profileId ?? "",
+                        teamIds: [],
+                        entities: [],
+                        model: data.model ?? "",
+                        inputTokens: data.inputTokens ?? 0,
+                        outputTokens: data.outputTokens ?? 0,
+                        tx,
+                        attribution: billingAttribution,
+                      });
+                    }
+                  }
+                  return created;
+                }),
+              ),
+          })
+        : await write();
+    // The RETURNING row is create's public return value, so callers never
+    // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
+    // very key that just encrypted them.
+    if (returnRow)
+      restoreWrittenInteractionContent(interaction, {
+        written: insertValues,
+        plaintext,
+        audit,
+      });
+
+    if (tip) {
+      InteractionDeltaManager.commitTip(interaction.id, tip);
+    }
+
+    // Update usage tracking after interaction is created
+    // Run in background to not block the response
+    if (!billingUsage)
+      trackBackgroundWork(
+        InteractionModel.updateUsageAfterInteraction(
+          returnRow
+            ? (interaction as InsertInteraction & { id: string })
+            : { ...plaintext, id: interaction.id },
+        ).catch((error) => {
+          logger.error(
+            { error },
+            `Failed to update usage tracking for interaction ${interaction.id}`,
+          );
+        }),
+      );
+
+    AgentUsageModel.recordUseInBackground({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
+
+    return interaction;
   }
 }
 

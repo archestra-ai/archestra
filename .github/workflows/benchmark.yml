@@ -68,8 +68,11 @@ jobs:
           kubectl get deployment archestra-demo -n archestra-demo -o name --request-timeout=20s
           helm status archestra-platform -n archestra >/dev/null
           helm status archestra-demo -n archestra-demo >/dev/null
-          test "$(kubectl auth can-i create pods/exec -n archestra || true)" = no
-          test "$(kubectl auth can-i get secrets -n kube-system || true)" = no
+          exec_access=$(kubectl auth can-i create pods/exec -n archestra || true)
+          system_secret_access=$(kubectl auth can-i get secrets -n kube-system || true)
+          printf 'Existing staging pod-exec permission: %s\n' "$exec_access"
+          printf 'Existing kube-system secret permission: %s\n' "$system_secret_access"
+          test "$system_secret_access" = no
 
   benchmark:
     name: Run benchmark

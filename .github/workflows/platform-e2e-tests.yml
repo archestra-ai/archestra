@@ -310,7 +310,7 @@ jobs:
 
       - name: Retain Platform byte scan inputs
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-        uses: $/.github/actions/github-upload-artifact
+        uses: ./.github/actions/github-upload-artifact
         with:
           name: platform-byte-scan-inputs
           path: ${{ runner.temp }}/platform-byte-scan-inputs.json

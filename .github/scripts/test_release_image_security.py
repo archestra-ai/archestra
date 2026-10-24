@@ -192,7 +192,7 @@ class ReleasePolicyTests(unittest.TestCase):
                     POLICY.requires_scan("pull_request", {"pull_request": pr}, REPOSITORY)
 
     def test_queue_cannot_green_a_different_release_publication_tree(self):
-        event = {"merge_group": {"base_sha": "b" * 40}}
+        event = {"merge_group": {"base_sha": "b" * 40, "base_ref": "refs/heads/main"}}
         pr = release_pr()
         POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
         for prs, tree, group_tree in (([], None, "a" * 40), ([pr, pr], "a" * 40, "a" * 40),

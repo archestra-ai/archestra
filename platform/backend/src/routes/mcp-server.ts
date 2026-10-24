@@ -411,6 +411,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentValues,
         ...restDataFromRequestBody
       } = body;
+      if (secretId) {
+        throw new ApiError(400, "Credential references cannot be supplied");
+      }
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {
@@ -1455,6 +1458,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "re-authenticate",
       });
+      if (providedSecretId) {
+        throw new ApiError(400, "Credential references cannot be supplied");
+      }
 
       const catalogItem = mcpServer.catalogId
         ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
@@ -1633,8 +1639,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Could not resolve credentials");
       }
 
-      // Delete the old secret if it exists
-      if (mcpServer.secretId) {
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId: newSecretId,
+        oauthRefreshError: null,
+        oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
+        oauthRefreshFailedAt: null,
+      });
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      // Delete the old secret only after the install no longer references it.
+      // A pre-existing shared reference must not revoke another connection.
+      if (
+        mcpServer.secretId &&
+        mcpServer.secretId !== newSecretId &&
+        !(await McpServerModel.hasSecretReference(mcpServer.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(mcpServer.secretId);
           logger.info(
@@ -1646,18 +1669,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             { err: error, mcpServerId: id },
             "Failed to delete old secret during re-authentication",
           );
-          // Continue with update even if old secret deletion fails
         }
       }
-
-      // Update the server with new secret and clear OAuth error fields
-      const updatedServer = await McpServerModel.update(id, {
-        secretId: newSecretId,
-        oauthRefreshError: null,
-        oauthRefreshErrorMessage: null,
-        oauthRefreshErrorDescription: null,
-        oauthRefreshFailedAt: null,
-      });
 
       // The failure episode every mute on this connection was pinned to is
       // over, so the mutes go with it. Dropped after the clear, never before:
@@ -1684,10 +1697,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to restart pod after re-authentication (may not be running)",
           );
         }
-      }
-
-      if (!updatedServer) {
-        throw new ApiError(500, "Failed to update MCP server");
       }
 
       logger.info(
@@ -2576,6 +2585,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (environmentValues && Object.keys(environmentValues).length > 0) ||
         (userConfigValues && Object.keys(userConfigValues).length > 0)
       ) {
+        if (
+          mcpServer.secretId &&
+          (await McpServerModel.hasOtherSecretReference({
+            secretId: mcpServer.secretId,
+            mcpServerId: id,
+          }))
+        ) {
+          throw new ApiError(
+            409,
+            "Re-authenticate this connection before changing its credentials",
+          );
+        }
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );

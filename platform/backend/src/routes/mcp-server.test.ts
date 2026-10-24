@@ -670,6 +670,40 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("install does not reuse a caller-supplied secret from another connection", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const existingSecret = await secretManager().createSecret(
+      { access_token: "fake-existing-token" },
+      "existing-connection-secret",
+    );
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+    });
+    connectAndGetToolsMock.mockResolvedValue([
+      { name: "ping", inputSchema: { type: "object", properties: {} } },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "new-connection",
+        catalogId: catalog.id,
+        scope: "personal",
+        secretId: existingSecret.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    expect(
+      (await secretManager().getSecret(existingSecret.id))?.secret,
+    ).toEqual({ access_token: "fake-existing-token" });
+  });
+
   test("installs a remote MCP server with static additional headers from the catalog", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -1391,6 +1425,68 @@ describe("mcp server inspect route", () => {
     // work cannot leak into the next test in the file, where its async
     // write could fire after the test database is gone.
     await drainPendingReinstall(mcpServer.id);
+  });
+
+  test("reinstall cannot overwrite a credential still used by another connection", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Remote Connection",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Connection credential",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-api-key",
+        },
+      },
+    });
+    const otherOwner = await makeUser();
+    const target = await makeMcpServer({
+      ownerId: otherOwner.id,
+      catalogId: catalog.id,
+    });
+    const current = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    const shared = await secretManager().createSecret(
+      { header_x_api_key: "original-value" },
+      "shared-credential",
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, current.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, target.id));
+    await McpServerUserModel.assignUserToMcpServer(current.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${current.id}/reinstall`,
+      payload: {
+        userConfigValues: { header_x_api_key: "replacement-value" },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect((await secretManager().getSecret(shared.id))?.secret).toMatchObject({
+      header_x_api_key: "original-value",
+    });
+    expect((await McpServerModel.findById(target.id))?.secretId).toBe(
+      shared.id,
+    );
   });
 
   // A partial reinstall (user fills only a newly-added required header) must
@@ -5006,6 +5102,43 @@ describe("mcp server core route coverage", () => {
   });
 
   describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
+    test("does not attach another connection's secret", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "http://127.0.0.1:30082/mcp",
+      });
+      const ownServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const ownSecret = await secretManager().createSecret(
+        { access_token: "fake-own-token" },
+        "own-connection-secret",
+      );
+      const otherSecret = await secretManager().createSecret(
+        { access_token: "fake-other-token" },
+        "other-connection-secret",
+      );
+      await McpServerModel.update(ownServer.id, { secretId: ownSecret.id });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${ownServer.id}/reauthenticate`,
+        payload: { secretId: otherSecret.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect((await McpServerModel.findById(ownServer.id))?.secretId).toBe(
+        ownSecret.id,
+      );
+      expect(await secretManager().getSecret(ownSecret.id)).not.toBeNull();
+      expect(await secretManager().getSecret(otherSecret.id)).not.toBeNull();
+    });
     test("rejects a request with no credential fields (400)", async () => {
       const response = await app.inject({
         method: "PATCH",

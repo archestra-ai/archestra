@@ -1287,7 +1287,7 @@ async function handleUpdateKnowledgeConnector(params: {
       // Environment isolation: cannot mutate a connector in another environment.
       existingConnector.environmentId !== agentEnvironmentId ||
       (access &&
-        !knowledgeSourceAccessControlService.canAccessConnector(
+        !knowledgeSourceAccessControlService.canUpdateConnector(
           access,
           existingConnector,
         ))
@@ -1432,7 +1432,7 @@ async function handleDeleteKnowledgeConnector(params: {
       // Environment isolation: cannot delete a connector in another environment.
       existing.environmentId !== agentEnvironmentId ||
       (access &&
-        !knowledgeSourceAccessControlService.canAccessConnector(
+        !knowledgeSourceAccessControlService.canDeleteConnector(
           access,
           existing,
         ))

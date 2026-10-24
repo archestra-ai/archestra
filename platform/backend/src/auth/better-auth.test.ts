@@ -3316,6 +3316,80 @@ describe("handleAfterHook", () => {
   });
 });
 
+describe("SSO provider registration", () => {
+  test("a member cannot register a personal identity provider", async ({
+    makeMember,
+    makeOrganization,
+    makeSession,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const member = await makeUser({ email: "member@example.com" });
+    await makeMember(member.id, organization.id, { role: "member" });
+    const session = await makeSession(member.id, {
+      activeOrganizationId: organization.id,
+    });
+
+    const response = await postAsSession({
+      path: "/sso/register",
+      session,
+      body: {
+        providerId: "personal-test-provider",
+        issuer: "http://127.0.0.1:18110",
+        domain: "personal.example",
+        userId: member.id,
+        oidcConfig: {
+          issuer: "http://127.0.0.1:18110",
+          clientId: "fake-client",
+          clientSecret: "fake-secret",
+          skipDiscovery: true,
+          pkce: false,
+          authorizationEndpoint: "http://127.0.0.1:18110/authorize",
+          tokenEndpoint: "http://127.0.0.1:18110/token",
+          userInfoEndpoint: "http://127.0.0.1:18110/userinfo",
+          jwksEndpoint: "http://127.0.0.1:18110/jwks",
+        },
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(
+      await db
+        .select()
+        .from(schema.identityProvidersTable)
+        .where(
+          eq(
+            schema.identityProvidersTable.providerId,
+            "personal-test-provider",
+          ),
+        ),
+    ).toHaveLength(0);
+  });
+
+  test("a previously registered personal provider cannot start an SSO callback", async ({
+    makeIdentityProvider,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const provider = await makeIdentityProvider(organization.id, {
+      providerId: "legacy-personal-provider",
+    });
+    await db
+      .update(schema.identityProvidersTable)
+      .set({ organizationId: null })
+      .where(eq(schema.identityProvidersTable.id, provider.id));
+
+    const response = await auth.handler(
+      new Request(
+        "http://localhost:3000/api/auth/sso/callback/legacy-personal-provider?code=fake&state=fake",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+});
+
 describe("dynamic access control endpoints", () => {
   // The organization plugin's `dynamicAccessControl` mounts role CRUD over
   // HTTP. Those endpoints write the same table as `/api/roles` while skipping

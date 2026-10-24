@@ -100,7 +100,11 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic" as const,
       modelId: model.modelId,
       authenticatedUserId: user.id,
-      catalogModel: model,
+      catalogModel:
+        (await ModelModel.findIdentityByProviderAndModelId(
+          "anthropic",
+          model.modelId,
+        )) ?? undefined,
     };
     await expect(checkModelTeamAccess(context)).resolves.toEqual({
       allowed: true,

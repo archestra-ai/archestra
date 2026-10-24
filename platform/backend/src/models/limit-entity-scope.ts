@@ -1,4 +1,4 @@
-import { and, eq, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { schema } from "@/database";
 import { type LimitEntityType, LimitEntityTypeSchema } from "@/types/limit";
 
@@ -17,12 +17,14 @@ export function limitEntityParameters(
   ) as Record<LimitEntityType, string[]>;
 }
 
-export function limitEntitiesCondition(): SQL {
+export function limitEntitiesCondition(
+  arrays: Partial<Record<LimitEntityType, SQLWrapper>> = {},
+): SQL {
   return or(
     ...LimitEntityTypeSchema.options.map((type) =>
       and(
         eq(schema.limitsTable.entityType, type),
-        sql`${schema.limitsTable.entityId} = ANY(${sql.placeholder(type)}::text[])`,
+        sql`${schema.limitsTable.entityId} = ANY(${arrays[type] ?? sql.placeholder(type)}::text[])`,
       ),
     ),
   ) as SQL;

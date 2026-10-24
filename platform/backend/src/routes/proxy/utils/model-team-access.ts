@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { ModelModel } from "@/models";
 import MemberModel from "@/models/member";
+import type { ProxyRequestContext } from "@/models/proxy-request-context";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { Model } from "@/types/model";
@@ -25,8 +26,14 @@ export async function checkModelTeamAccess(params: {
   modelId: string;
   organizationId: string;
   authenticatedUserId: string | undefined;
-  /** The catalog row read by this request; grants are always read below. */
+  /** The catalog row read by this request. */
   catalogModel?: Pick<Model, "id" | "provider" | "modelId">;
+  /** Read once after authentication; never retain this across requests. */
+  policySnapshot?: {
+    organizationId: string;
+    modelId: string;
+    policies: ProxyRequestContext["modelPolicies"];
+  };
 }): Promise<ModelTeamAccessResult> {
   const { provider, modelId, organizationId, authenticatedUserId } = params;
 
@@ -58,9 +65,12 @@ export async function checkModelTeamAccess(params: {
   // member's full team/role graph. Restricted models and service accounts
   // still resolve their complete grant subjects below. No result is cached
   // across requests, so membership and grant revocations take effect next call.
-  const organizationWide = (
-    await ResourcePermissionPolicyModel.findApplicable(key)
-  ).some(
+  const policies =
+    params.policySnapshot?.organizationId === organizationId &&
+    params.policySnapshot.modelId === model.id
+      ? params.policySnapshot.policies
+      : await ResourcePermissionPolicyModel.findApplicable(key);
+  const organizationWide = policies.some(
     (entry) =>
       (entry.scope === "*" || entry.scope === model.id) &&
       (authenticatedUserId

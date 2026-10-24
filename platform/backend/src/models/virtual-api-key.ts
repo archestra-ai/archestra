@@ -11,6 +11,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNull,
@@ -1019,7 +1020,27 @@ class VirtualApiKeyModel {
       .get()
       .execute({ tokenStart });
 
-    for (const virtualKey of candidates) {
+    return VirtualApiKeyModel.validateCandidates(
+      tokenValue,
+      candidates.map((virtualKey) => ({ virtualKey })),
+    );
+  }
+
+  /** Read a passthrough credential and its current owner's membership together. */
+  static async validateTokenWithOwner(tokenValue: string) {
+    const candidates = await VirtualApiKeyModel.byTokenStartWithOwner
+      .get()
+      .execute({
+        tokenStart: getTokenStart(tokenValue),
+      });
+    return VirtualApiKeyModel.validateCandidates(tokenValue, candidates);
+  }
+
+  private static async validateCandidates<
+    T extends { virtualKey: SelectVirtualApiKey },
+  >(tokenValue: string, candidates: T[]): Promise<T | null> {
+    for (const candidate of candidates) {
+      const { virtualKey } = candidate;
       const secret = await secretManager().getSecret(virtualKey.secretId);
       if (!secret) {
         logger.warn(
@@ -1051,7 +1072,7 @@ class VirtualApiKeyModel {
           );
         }
 
-        return { virtualKey };
+        return candidate;
       }
     }
 
@@ -1342,6 +1363,46 @@ class VirtualApiKeyModel {
       authorName: authorNameByVirtualApiKeyId,
     };
   }
+
+  private static readonly byTokenStartWithOwner = new PreparedQuery(
+    (database) => {
+      const keys = schema.virtualApiKeysTable;
+      const members = schema.membersTable;
+      const users = schema.usersTable;
+      const membership = database
+        .select()
+        .from(members)
+        .where(
+          and(
+            eq(members.userId, keys.authorId),
+            eq(members.organizationId, keys.organizationId),
+          ),
+        )
+        .orderBy(members.createdAt, members.id)
+        .limit(1)
+        .as("proxy_key_owner_membership");
+      return database
+        .select({
+          virtualKey: getTableColumns(keys),
+          user: { id: users.id, email: users.email, name: users.name },
+          membership: {
+            id: membership.id,
+            organizationId: membership.organizationId,
+            userId: membership.userId,
+            role: membership.role,
+            createdAt: membership.createdAt,
+            defaultAgentId: membership.defaultAgentId,
+            defaultModelId: membership.defaultModelId,
+            defaultChatApiKeyId: membership.defaultChatApiKeyId,
+          },
+        })
+        .from(keys)
+        .leftJoin(users, eq(users.id, keys.authorId))
+        .leftJoinLateral(membership, sql`true`)
+        .where(eq(keys.tokenStart, sql.placeholder("tokenStart")))
+        .prepare("archestra_virtual_key_with_owner_by_token_start");
+    },
+  );
 
   private static readonly byTokenStart = new PreparedQuery((database) =>
     database

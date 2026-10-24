@@ -12,6 +12,8 @@ export function updateBenchmarkTable(markdown, summary) {
   renderSummary(summary);
   if (
     !summary.complete ||
+    summary.diagnostic ||
+    (summary.webWorkers ?? 1) !== 1 ||
     !Number.isInteger(summary.logicalCpus) ||
     summary.logicalCpus <= 0 ||
     !Number.isFinite(summary.memoryGiB) ||
@@ -74,6 +76,8 @@ export async function commitBenchmarkDocs({
     source.user?.login !== "archestra-ci[bot]" ||
     benchmarkResult !== "success" ||
     !summary?.complete ||
+    summary.diagnostic ||
+    (summary.webWorkers ?? 1) !== 1 ||
     summary.gitCommit !== source.head.sha ||
     !sha.test(summary.platformTree)
   )

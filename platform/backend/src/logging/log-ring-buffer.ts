@@ -1,5 +1,3 @@
-import { Writable } from "node:stream";
-
 /**
  * A single retained log record, trimmed to the fields worth cross-referencing
  * alongside a captured backend exception (see `error-tracking.ts`).
@@ -52,21 +50,21 @@ class LogRingBuffer {
     this.capacity = capacity;
   }
 
-  /**
-   * Pino multistream branch that parses each serialized JSON log record and
-   * retains a trimmed copy. Parse/shape errors are ignored so logging is never
-   * disrupted by buffering.
-   */
-  createStream(): Writable {
-    return new Writable({
-      write: (
-        chunk: Buffer,
-        _encoding: string,
-        callback: (error?: Error | null) => void,
-      ) => {
-        this.ingest(chunk);
-        callback();
-      },
+  /** Accept only the structured record parsed after Pino's shared redaction. */
+  ingest(record: unknown): void {
+    if (typeof record !== "object" || record === null) return;
+    const { time, level, msg, trace_id, session_id } = record as Record<
+      string,
+      unknown
+    >;
+    if (typeof level !== "number") return;
+    this.push({
+      time: typeof time === "number" ? time : Date.now(),
+      level,
+      levelLabel: PINO_LEVEL_LABELS[level] ?? "info",
+      msg: typeof msg === "string" ? msg.slice(0, MAX_MSG_LENGTH) : String(msg),
+      traceId: typeof trace_id === "string" ? trace_id : undefined,
+      sessionId: typeof session_id === "string" ? session_id : undefined,
     });
   }
 
@@ -88,31 +86,6 @@ class LogRingBuffer {
       return true;
     });
     return matching.slice(-limit);
-  }
-
-  private ingest(chunk: Buffer): void {
-    let record: unknown;
-    try {
-      record = JSON.parse(chunk.toString());
-    } catch {
-      return;
-    }
-    if (typeof record !== "object" || record === null) return;
-
-    const { time, level, msg, trace_id, session_id } = record as Record<
-      string,
-      unknown
-    >;
-    if (typeof level !== "number") return;
-
-    this.push({
-      time: typeof time === "number" ? time : Date.now(),
-      level,
-      levelLabel: PINO_LEVEL_LABELS[level] ?? "info",
-      msg: typeof msg === "string" ? msg.slice(0, MAX_MSG_LENGTH) : String(msg),
-      traceId: typeof trace_id === "string" ? trace_id : undefined,
-      sessionId: typeof session_id === "string" ? session_id : undefined,
-    });
   }
 
   private push(record: RetainedLogRecord): void {

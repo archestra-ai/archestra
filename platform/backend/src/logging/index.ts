@@ -1,19 +1,15 @@
-import { Writable } from "node:stream";
 import {
   isSpanContextValid,
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
-import {
-  logs,
-  type Logger as OtelLogger,
-  SeverityNumber,
-} from "@opentelemetry/api-logs";
+import { logs } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
 import { createLogger } from "@/logging/create-logger";
 import { LOG_FORMAT } from "@/logging/log-format";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
+import { createLogObserverStream } from "@/logging/observer-stream";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -34,7 +30,7 @@ import { getActiveSessionId } from "@/observability/request-context";
  *
  *   1. Inject trace context (`trace_id`, `span_id`, `trace_flags`) into every
  *      log record via pino's `mixin` option — visible in console output.
- *   2. Forward log records to the OTEL Logs API via a custom `Writable` stream
+ *   2. Forward log records to the OTEL Logs API via a shared structured stream
  *      combined with `pino.multistream` — sends logs to the OTLP collector.
  *
  * The OTEL Logs SDK automatically captures the active span context when
@@ -57,11 +53,13 @@ function createDefaultLogger(): pino.Logger {
     }),
     streams: [
       { level: "trace", stream: createStdoutStream() },
-      { level: "trace", stream: createOtelLogStream() },
-      // Retain a rolling window of recent records so captured backend
-      // exceptions can carry the log lines that preceded them (see
-      // `log-ring-buffer.ts` and the PostHog error-tracking service).
-      { level: "trace", stream: logRingBuffer.createStream() },
+      {
+        level: "trace",
+        stream: createLogObserverStream({
+          logger: logs.getLogger("pino"),
+          retain: (record) => logRingBuffer.ingest(record),
+        }),
+      },
     ],
   });
 }
@@ -145,76 +143,4 @@ function injectTraceContext(): Record<string, string> {
   }
 
   return result;
-}
-
-// --- Internal helpers (OTEL log stream) ---
-
-/** Map pino log levels → OTEL severity numbers */
-const PINO_TO_OTEL_SEVERITY: Record<number, SeverityNumber> = {
-  10: SeverityNumber.TRACE,
-  20: SeverityNumber.DEBUG,
-  30: SeverityNumber.INFO,
-  40: SeverityNumber.WARN,
-  50: SeverityNumber.ERROR,
-  60: SeverityNumber.FATAL,
-};
-
-/** Convert epoch milliseconds to `[seconds, nanoseconds]` HrTime tuple */
-function millisToHrTime(millis: number): [number, number] {
-  return [Math.trunc(millis / 1000), (millis % 1000) * 1_000_000];
-}
-
-/**
- * Create a writable stream that forwards pino log records to the OTEL Logs API.
- *
- * Mirrors `@opentelemetry/instrumentation-pino`'s `OTelPinoStream`:
- * - Parses JSON log records from pino
- * - Strips redundant fields (hostname, pid, trace context injected by mixin)
- * - Maps pino levels to OTEL severity numbers
- * - Emits records via the global OTEL LoggerProvider
- */
-function createOtelLogStream(): Writable {
-  const otelLogger: OtelLogger = logs.getLogger("pino");
-
-  return new Writable({
-    write(
-      chunk: Buffer,
-      _encoding: string,
-      callback: (error?: Error | null) => void,
-    ) {
-      try {
-        const record = JSON.parse(chunk.toString());
-        const {
-          time,
-          msg,
-          level,
-          // Strip fields redundant with OTEL resource attributes
-          hostname: _hostname,
-          pid: _pid,
-          // Strip trace context fields added by mixin (redundant — the OTEL SDK
-          // captures the active span context automatically via `context.active()`)
-          trace_id: _traceId,
-          span_id: _spanId,
-          trace_flags: _traceFlags,
-          ...attributes
-        } = record;
-
-        const timestamp = millisToHrTime(
-          typeof time === "number" ? time : Date.now(),
-        );
-
-        otelLogger.emit({
-          timestamp,
-          observedTimestamp: timestamp,
-          severityNumber: PINO_TO_OTEL_SEVERITY[level] ?? SeverityNumber.INFO,
-          severityText: pino.levels.labels[level] ?? "INFO",
-          body: msg,
-          attributes,
-        });
-      } catch {
-        // Ignore JSON parse errors (shouldn't happen with standard pino output)
-      }
-      callback();
-    },
-  });
 }

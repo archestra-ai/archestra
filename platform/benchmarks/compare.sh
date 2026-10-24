@@ -18,7 +18,7 @@ if ! git cat-file -e "$baseline_sha^{commit}" 2>/dev/null; then
 fi
 # Native bindings and schema are shared only when their source inputs match.
 # JavaScript dependencies are installed separately so patches remain attributable.
-for dependency in platform/package.json platform/shared platform/archestra-rs platform/backend/package.json platform/backend/tsdown.config.ts platform/backend/src/database/migrations; do
+for dependency in platform/package.json platform/shared platform/archestra-rs platform/backend/package.json platform/backend/tsdown.config.ts platform/backend/src/database/schemas; do
   if [[ "$(git rev-parse "$baseline_sha:$dependency")" != "$(git rev-parse "$candidate_sha:$dependency")" ]]; then
     echo "Comparison requires matching dependency/build/schema inputs: $dependency" >&2
     exit 1
@@ -72,7 +72,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 for (const [commit, dist] of [[process.argv[2],process.argv[3]],[process.argv[4],process.argv[5]]]) {
-  const inputs = Object.fromEntries(['pnpm-lock.yaml','pnpm-workspace.yaml','patches'].map(file => [file, execFileSync('git',['rev-parse',`${commit}:platform/${file}`],{encoding:'utf8'}).trim()]));
+  const inputs = Object.fromEntries(['pnpm-lock.yaml','pnpm-workspace.yaml','patches','backend/src/database/migrations','backend/src/database/schemas'].map(file => [file, execFileSync('git',['rev-parse',`${commit}:platform/${file}`],{encoding:'utf8'}).trim()]));
   fs.writeFileSync(path.join(dist,'dependency-inputs.json'),JSON.stringify(inputs));
 }
 JS

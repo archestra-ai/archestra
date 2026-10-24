@@ -22,6 +22,10 @@ if (process.argv.length > 7 || !/^[1-4]$/.test(candidateWorkers))
 const variants = comparisonVariants(process.argv.slice(2, 6)).map(
   (variant) => ({
     ...variant,
+    backendSource:
+      variant.target === "baseline"
+        ? path.dirname(variant.dist)
+        : path.join(root, "backend"),
     webWorkers: variant.target === "candidate" ? Number(candidateWorkers) : 1,
   }),
 );
@@ -203,8 +207,31 @@ try {
     };
     fs.writeFileSync(
       path.join(output, `${v.target}-migration.log`),
-      await command("pnpm", ["--dir", "backend", "db:migrate"], env),
+      await command("pnpm", ["--dir", v.backendSource, "db:migrate"], env),
     );
+    // Each disposable database must use its own revision's functions as well
+    // as its own JS dependencies. Record the actual installed function, not
+    // merely the migration filenames, so comparisons can verify isolation.
+    report.variants.find(({ target }) => target === v.target).database =
+      JSON.parse(
+        await command(
+          "docker",
+          [
+            ...compose,
+            "exec",
+            "-T",
+            "postgres",
+            "psql",
+            "-U",
+            "benchmark",
+            "-d",
+            "benchmark",
+            "-Atc",
+            "SELECT json_build_object('serverVersion', current_setting('server_version'), 'appendFunctionSha256', encode(sha256(convert_to(pg_get_functiondef('interaction_user_activity_append(jsonb)'::regprocedure), 'UTF8')), 'hex'))",
+          ],
+          dockerEnv,
+        ),
+      );
     start(
       process.execPath,
       ["benchmarks/mock-upstream.mjs", String(offset)],

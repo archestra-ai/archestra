@@ -72,7 +72,7 @@ jobs:
           system_secret_access=$(kubectl auth can-i get secrets -n kube-system || true)
           printf 'Existing staging pod-exec permission: %s\n' "$exec_access"
           printf 'Existing kube-system secret permission: %s\n' "$system_secret_access"
-          test "$system_secret_access" = no
+          [[ "$system_secret_access" == no || "$system_secret_access" == "no - "* ]]
 
   benchmark:
     name: Run benchmark

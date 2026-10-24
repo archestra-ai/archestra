@@ -44,6 +44,11 @@ const report = {
     offset,
     commit,
     dist,
+    dependencyInputs: fs.existsSync(path.join(dist, "dependency-inputs.json"))
+      ? JSON.parse(
+          fs.readFileSync(path.join(dist, "dependency-inputs.json"), "utf8"),
+        )
+      : null,
   })),
   blocks: [],
 };

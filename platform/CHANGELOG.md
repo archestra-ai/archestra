@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.78](https://github.com/archestra-ai/archestra/compare/platform-v1.3.77...platform-v1.3.78) (2026-10-24)
+
+
+### Bug Fixes
+
+* **llm-proxy:** verify internal calls on release/1.3 ([#9367](https://github.com/archestra-ai/archestra/issues/9367)) ([2624264](https://github.com/archestra-ai/archestra/commit/2624264df71cbd22df680d2a70c110f4fe275d96))
+* **mcp:** backport caller-bound connector OAuth to release/1.3 ([#9365](https://github.com/archestra-ai/archestra/issues/9365)) ([780a1ed](https://github.com/archestra-ai/archestra/commit/780a1ed5805d9286faaa845ed09b10e8aaf17e43))
+* **mcp:** backport OAuth outbound guard and security dependency patches ([#9355](https://github.com/archestra-ai/archestra/issues/9355)) ([084fdbe](https://github.com/archestra-ai/archestra/commit/084fdbe915be9d32fa88326b2cbcd4c40732b09a))
+* **security:** backport Node runtime and HTTP dependency fixes to 1.3 ([#9596](https://github.com/archestra-ai/archestra/issues/9596)) ([543cd81](https://github.com/archestra-ai/archestra/commit/543cd8127ff8ca1af393be9fadd92644bf0d3109))
+
 ## [1.3.77](https://github.com/archestra-ai/archestra/compare/platform-v1.3.76...platform-v1.3.77) (2026-10-20)
 
 

@@ -78,7 +78,7 @@ class ReleasePolicyTests(unittest.TestCase):
         pr = release_pr()
         args = dict(event_name="pull_request", event={"pull_request": pr},
                     repository=REPOSITORY, classify_result="success", decision="true",
-                    scan_result="success", current=deepcopy(pr)) | overrides
+                    scan_result="success", current=deepcopy(pr), workflow_sha="c" * 40) | overrides
         POLICY.validate_gate(**args)
 
     def test_every_failed_cancelled_skipped_or_missing_result_blocks_release(self):
@@ -105,6 +105,15 @@ class ReleasePolicyTests(unittest.TestCase):
                 self.gate(current=release_pr() | {key: value})
         with self.assertRaises(ValueError):
             self.gate(current=None)
+        for sha in (None, "", "d" * 40):
+            with self.subTest(workflow_sha=sha), self.assertRaises(ValueError):
+                self.gate(workflow_sha=sha)
+
+    def test_stale_event_merge_sha_passes_when_live_candidate_matches_scanned_commit(self):
+        stale = release_pr() | {"merge_commit_sha": "0" * 40}
+        self.gate(event={"pull_request": stale})
+        stale["merge_commit_sha"] = None
+        self.gate(event={"pull_request": stale})
 
     def test_nonrelease_pass_requires_an_explicit_successful_classification(self):
         for event in ("merge_group", "workflow_dispatch"):
@@ -112,21 +121,30 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.gate(event_name=event, event={}, current=None, decision="", scan_result="skipped")
 
-    def test_api_failure_and_wrong_workflow_sha_cannot_report_success(self):
+    def run_gate(self, github_sha, gh_script):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             event = root / "event.json"
-            event.write_text(json.dumps({"pull_request": release_pr()}))
+            # GitHub can deliver the previous test merge in the event payload.
+            event.write_text(json.dumps({"pull_request": release_pr() | {"merge_commit_sha": "0" * 40}}))
+            (root / "current.json").write_text(json.dumps(release_pr()))
             gh = root / "gh"
-            gh.write_text("#!/bin/sh\nexit 23\n")
+            gh.write_text(gh_script.format(current=root / "current.json"))
             gh.chmod(0o755)
             env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_PATH": str(event), "GITHUB_EVENT_NAME": "pull_request",
-                "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": "c" * 40,
+                "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": github_sha,
                 "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
-            for sha in ("c" * 40, "d" * 40):
-                result = subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "gate"],
-                    env=env | {"GITHUB_SHA": sha}, text=True, capture_output=True)
+            return subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "gate"],
+                env=env, text=True, capture_output=True)
+
+    def test_gate_binds_scans_to_the_live_merge_candidate(self):
+        live = "#!/bin/sh\ncat {current}\n"
+        result = self.run_gate("c" * 40, live)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for sha, gh in (("d" * 40, live), ("c" * 40, "#!/bin/sh\nexit 23\n")):
+            with self.subTest(sha=sha, gh=gh):
+                result = self.run_gate(sha, gh)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.79](https://github.com/archestra-ai/archestra/compare/platform-v1.3.78...platform-v1.3.79) (2026-10-24)
+
+
+### Bug Fixes
+
+* **security:** patch 1.3 agent and sandbox release images ([#9613](https://github.com/archestra-ai/archestra/issues/9613)) ([3d60092](https://github.com/archestra-ai/archestra/commit/3d600927618861f06df06262f8974b08f69d23dc))
+
 ## [1.3.78](https://github.com/archestra-ai/archestra/compare/platform-v1.3.77...platform-v1.3.78) (2026-10-24)
 
 

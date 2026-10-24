@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+from test_release_oci import fixture_archive
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,12 +44,12 @@ class HandoffFixture(unittest.TestCase):
         self.archives = {}
         self.calls = []
         for i, arch in enumerate(("amd64", "arm64")):
-            payload = f"deterministic harmless {arch} image fixture".encode()
+            payload, oci = fixture_archive(arch)
             record = {key: self.index[key] for key in ("repository", "source_sha", "source_tree", "run_id", "run_attempt")}
             record.update(schema=1, created_at=TIME, image="sandbox-base", arch=arch, version="1.4.1",
-                          previous_image="", image_id="sha256:" + str(i + 1) * 64,
+                          previous_image="", image_id=oci["config"], oci=oci,
                           archive_digest="sha256:" + hashlib.sha256(payload).hexdigest())
-            self.artifact(f"release-candidate-sandbox-base-{arch}-2", {"build.json": json.dumps(record), "image.tar": payload})
+            self.artifact(f"release-candidate-sandbox-base-{arch}-2", {"build.json": json.dumps(record), "image.oci.tar": payload})
             self.index["records"].append(record | {"scan_result": "success"})
         self.index_artifact()
         self.jobs = [{"name": "Release Image Security", "status": "completed", "conclusion": "success"},
@@ -100,7 +101,7 @@ class HandoffFixture(unittest.TestCase):
         for arch in ("amd64", "arm64"):
             directory = self.root / arch
             HANDOFF.relay(selection, "sandbox-base", arch, directory, self.fetch)
-            self.assertEqual(HANDOFF.digest(directory / "image.tar"), HANDOFF.selected_record(selection, "sandbox-base", arch)["archive_digest"])
+            self.assertEqual(HANDOFF.digest(directory / "image.oci.tar"), HANDOFF.selected_record(selection, "sandbox-base", arch)["archive_digest"])
             self.assertFalse(directory.with_suffix(".zip").exists())
 
     def test_latest_failure_pending_or_cancelled_run_cannot_fall_back_to_older_green(self):
@@ -169,12 +170,12 @@ class HandoffFixture(unittest.TestCase):
         archive.write_bytes(archive.read_bytes() + b"tampering")
         with self.assertRaisesRegex(ValueError, "checksum"):
             HANDOFF.relay(selection, "sandbox-base", "amd64", self.root / "bad", self.fetch)
-        for names in ({"../build.json": "{}", "image.tar": b"x"},
-                      {"build.json": "{}", "image.tar": b"x", "extra": "x"}):
+        for names in ({"../build.json": "{}", "image.oci.tar": b"x"},
+                      {"build.json": "{}", "image.oci.tar": b"x", "extra": "x"}):
             meta = self.artifact("test", names)
             with self.assertRaises(ValueError):
-                HANDOFF.unpack(self.archives[meta["id"]], self.root / "bad", ["build.json", "image.tar"])
-        meta = self.artifact("test", {"build.json": "{}", "image.tar": b"wrong bytes"})
+                HANDOFF.unpack(self.archives[meta["id"]], self.root / "bad", ["build.json", "image.oci.tar"])
+        meta = self.artifact("test", {"build.json": "{}", "image.oci.tar": b"wrong bytes"})
         row["artifact"] = meta
         with self.assertRaisesRegex(ValueError, "bytes/metadata"):
             HANDOFF.relay(selection, "sandbox-base", "amd64", self.root / "wrong", self.fetch)
@@ -185,44 +186,56 @@ class HandoffFixture(unittest.TestCase):
         HANDOFF.relay(selection, "sandbox-base", "arm64", directory, self.fetch)
         record = HANDOFF.selected_record(selection, "sandbox-base", "arm64")
         candidate = HANDOFF.load_module("release-candidate")
+        original = HANDOFF.load_module
+        def module(name):
+            return candidate if name == "release-candidate" else original(name)
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "EXPECTED_VERSION": "1.4.1"}), patch.object(
             HANDOFF, "command", side_effect=[RELEASE, TREE]
-        ), patch.object(HANDOFF, "load_module", return_value=candidate), patch.object(
+        ), patch.object(HANDOFF, "load_module", side_effect=module), patch.object(
             candidate, "build_inputs", return_value={"version": "1.4.1", "previous_image": ""}
-        ), patch.object(candidate, "inspect_image") as inspect, patch.object(HANDOFF.subprocess, "run") as run:
-            self.assertEqual(HANDOFF.verify_loaded(selection, "sandbox-base", "arm64", directory), record)
-            run.assert_called_once_with(["docker", "load", "--input", str(directory / "image.tar")], check=True)
-            inspect.assert_called_once_with(record["image_id"], record["image_id"], "arm64")
-        (directory / "image.tar").write_bytes(b"changed in same-run transfer")
+        ), patch.object(HANDOFF.subprocess, "run") as run:
+            self.assertEqual(HANDOFF.verify_archive(selection, "sandbox-base", "arm64", directory), record)
+            run.assert_not_called()
+        (directory / "image.oci.tar").write_bytes(b"changed in same-run transfer")
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "EXPECTED_VERSION": "1.4.1"}), patch.object(
             HANDOFF, "command", side_effect=[RELEASE, TREE]
         ), patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "bytes changed"):
-            HANDOFF.verify_loaded(selection, "sandbox-base", "arm64", directory)
+            HANDOFF.verify_archive(selection, "sandbox-base", "arm64", directory)
         run.assert_not_called()
 
-    def test_registry_config_mismatch_stops_before_index_or_final_version_tag(self):
+    def test_preserved_oci_copy_binds_registry_runtime_and_all_provenance(self):
         record = self.index["records"][0]
         image = "docker.io/archestra/platform"
-        with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1"}), patch.object(
-            HANDOFF, "command", side_effect=[json.dumps([image + "@sha256:" + "f" * 64]),
-                                              json.dumps({"config": {"digest": "sha256:" + "0" * 64}})]
-        ), patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "Registry image config"):
+        directory = self.root / "promotion"
+        directory.mkdir()
+        root_digest = "sha256:" + "e" * 64
+        def copy(args, **kwargs):
+            self.assertEqual(args[:4], ["skopeo", "copy", "--all", "--preserve-digests"])
+            Path(args[args.index("--digestfile") + 1]).write_text(root_digest)
+        values = [json.dumps({"manifests": [{"digest": record["oci"]["runtime_manifest"]},
+                                           {"digest": record["oci"]["attestations"][0]}]}),
+                  json.dumps({"config": {"digest": record["image_id"]}}), json.dumps({"layers": []})]
+        with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1", "CANDIDATE_DIR": str(directory)}), patch.object(
+            HANDOFF.subprocess, "run", side_effect=copy
+        ) as run, patch.object(HANDOFF, "command", side_effect=values):
+            self.assertEqual(HANDOFF.push(record, image, "amd64"), root_digest)
+            run.assert_called_once()
+        wrong = [values[0], json.dumps({"config": {"digest": "sha256:" + "0" * 64}})]
+        with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1", "CANDIDATE_DIR": str(directory)}), patch.object(
+            HANDOFF.subprocess, "run", side_effect=copy
+        ), patch.object(HANDOFF, "command", side_effect=wrong), self.assertRaisesRegex(ValueError, "Registry image config"):
             HANDOFF.push(record, image, "amd64")
-        self.assertEqual([call.args[0][:2] for call in run.call_args_list], [["docker", "tag"], ["docker", "push"]])
-        self.assertTrue(all("candidate-14-1-amd64" in str(call) for call in run.call_args_list))
+        with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1", "CANDIDATE_DIR": str(directory)}), patch.object(
+            HANDOFF.subprocess, "run", side_effect=copy
+        ), patch.object(HANDOFF, "command", return_value=json.dumps({"config": {"digest": record["image_id"]}})), self.assertRaisesRegex(ValueError, "provenance manifests"):
+            HANDOFF.push(record, image, "amd64")
 
-    def test_promotion_keeps_the_config_identity_when_docker_hub_normalizes_names(self):
-        record = self.index["records"][0]
-        image = "docker.io/archestra/platform"
-        for repository in (image, "archestra/platform"):
-            with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1"}), patch.object(
-                HANDOFF, "command", side_effect=[json.dumps([repository + "@sha256:" + "f" * 64]),
-                    json.dumps({"config": {"digest": record["image_id"]}}), json.dumps({"digest": "sha256:" + "e" * 64})]
-            ), patch.object(HANDOFF.subprocess, "run") as run:
-                self.assertEqual(HANDOFF.push(record, image, "amd64"), "sha256:" + "e" * 64)
-            self.assertEqual(run.call_count, 3)
-            self.assertEqual(run.call_args_list[-1].args[0][:5], ["docker", "buildx", "imagetools", "create", "--prefer-index=true"])
-            self.assertNotIn("build", [arg for call in run.call_args_list for arg in call.args[0]])
+    def test_lookalike_registry_destinations_are_rejected_before_any_transfer(self):
+        for image in ("dockerXio/archestra/platform", "docker.io.evil/archestra/platform",
+                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform"):
+            with patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "destination"):
+                HANDOFF.push(self.index["records"][0], image, "amd64")
+            run.assert_not_called()
 
 
 class WorkflowHandoffTests(unittest.TestCase):

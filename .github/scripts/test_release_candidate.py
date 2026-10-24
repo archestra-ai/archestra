@@ -25,7 +25,9 @@ def record(image="platform", arch="amd64"):
     return {"schema": 1, **IDENTITY, "image": image, "arch": arch,
             "created_at": NOW.isoformat(), "scan_result": "success", "version": "1.4.1",
             "previous_image": "docker.io/archestra/platform@sha256:" + "3" * 64,
-            "image_id": "sha256:" + "1" * 64, "archive_digest": "sha256:" + "2" * 64}
+            "image_id": "sha256:" + "1" * 64, "archive_digest": "sha256:" + "2" * 64,
+            "oci": {"config": "sha256:" + "1" * 64, "runtime_manifest": "sha256:" + "4" * 64,
+                    "attestations": ["sha256:" + "5" * 64], "provenance": ["sha256:" + "6" * 64]}}
 
 
 class EvidenceTests(unittest.TestCase):

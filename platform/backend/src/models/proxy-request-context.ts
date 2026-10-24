@@ -94,7 +94,8 @@ export default class ProxyRequestContextModel {
       virtualKeyId: params.virtualKeyId ?? null,
       oauthClientId: params.oauthClientId ?? null,
       includeRuntime: params.includeRuntime === true,
-      runtimeVirtualKeyIds,
+      runtimeKey1: runtimeVirtualKeyIds[0] ?? null,
+      runtimeKey2: runtimeVirtualKeyIds[1] ?? null,
       ...limitEntityParameters({
         agent: params.agentId,
         organization: params.organizationId,
@@ -244,15 +245,15 @@ function runtimeCandidatesSelection() {
         'state', runtime_workspace.state
       ) END
     )), '[]'::jsonb)
-    FROM unnest(${sql.placeholder("runtimeVirtualKeyIds")}::text[]) AS requested_runtime_key(id)
+    FROM (VALUES (${sql.placeholder("runtimeKey1")}::text),
+      (${sql.placeholder("runtimeKey2")}::text)) AS requested_runtime_key(id)
     CROSS JOIN LATERAL (
       SELECT organization_id, agent_id, actor_kind, actor_id, actor_user_id, task_id, workload_name
       FROM ${runs} WHERE ${qualified(runs.virtualApiKeyId)} = requested_runtime_key.id::uuid LIMIT 2
     ) AS runtime_run
-    LEFT JOIN LATERAL (
-      SELECT id, organization_id, agent_id, actor_kind, actor_id, workload_name, state
-      FROM ${workspaces} WHERE ${qualified(workspaces.workloadName)} = runtime_run.workload_name LIMIT 1
-    ) AS runtime_workspace ON true
+    LEFT JOIN ${workspaces} AS runtime_workspace
+      ON runtime_workspace.workload_name = runtime_run.workload_name
+    WHERE requested_runtime_key.id IS NOT NULL
   ) ELSE '[]'::jsonb END`;
 }
 

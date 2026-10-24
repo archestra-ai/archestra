@@ -62,6 +62,13 @@ export interface FanoutChannel {
 export interface PgNotifyHub {
   channel(name: string): KeyedNotifier;
   fanout(name: string): FanoutChannel;
+  /**
+   * Changes whenever the listener session changes, and is null while database
+   * notifications are not proven to arrive. A cache that is invalidated by
+   * notifications may trust entries only within one non-null generation:
+   * anything published between sessions was lost.
+   */
+  deliveryGeneration(): number | null;
   close(): Promise<void>;
 }
 
@@ -96,6 +103,7 @@ export function createPollingNotifyHub(): PgNotifyHub {
   const fanoutHandlers = new FanoutHandlers();
   return {
     fanout: (name) => fanoutHandlers.localChannel(name),
+    deliveryGeneration: () => null,
     channel: () => ({
       async notify() {},
       async wait(params) {
@@ -129,6 +137,8 @@ export function createInMemoryNotifyHub(): PgNotifyHub {
 
   return {
     fanout: (name) => fanoutHandlers.localChannel(name),
+    // Database notifications never reach a process-local hub.
+    deliveryGeneration: () => null,
     channel: (name) => ({
       async notify(key) {
         waiters(name).notify(key);
@@ -160,6 +170,8 @@ export class PostgresNotifyHub implements PgNotifyHub {
   private closed = false;
   /** Set once a notification has been observed completing the round trip. */
   private deliveryVerified = false;
+  /** Counts listener sessions whose delivery was verified. */
+  private verifiedSessions = 0;
   private pendingProbe: {
     token: string;
     resolve: (received: boolean) => void;
@@ -213,6 +225,10 @@ export class PostgresNotifyHub implements PgNotifyHub {
         return unsubscribe;
       },
     };
+  }
+
+  deliveryGeneration(): number | null {
+    return this.deliveryVerified ? this.verifiedSessions : null;
   }
 
   async close(): Promise<void> {
@@ -418,6 +434,7 @@ export class PostgresNotifyHub implements PgNotifyHub {
       return;
     }
 
+    if (verified) this.verifiedSessions++;
     this.deliveryVerified = verified;
     if (!verified) {
       logger.warn(

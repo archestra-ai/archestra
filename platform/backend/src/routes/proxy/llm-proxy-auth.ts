@@ -54,6 +54,7 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
+import { proxyConfigCache } from "./proxy-config-cache";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -90,25 +91,9 @@ function requestedModelFromBody(request: FastifyRequest): string | null {
 export async function resolveAgent(
   agentId: string | undefined,
 ): Promise<GatewayAgent> {
-  if (agentId) {
-    const agent = await AgentModel.findGatewayAgentById(agentId);
-    if (!agent) {
-      throw new ApiError(404, `Agent with ID ${agentId} not found`);
-    }
-    if (agent.agentType === "llm_proxy" || agent.agentType === "profile") {
-      if (agent.agentType === "llm_proxy" && agent.isDefault) {
-        return agent;
-      }
-      return AgentModel.getOrgLlmProxy(agent.organizationId);
-    }
-    return agent;
-  }
-
-  const llmProxy = await AgentModel.getDeploymentLlmProxy();
-  if (!llmProxy) {
-    throw new ApiError(503, "No organization exists yet.");
-  }
-  return llmProxy;
+  return proxyConfigCache.read(`agent:${agentId ?? ""}`, () =>
+    readAgent(agentId),
+  );
 }
 
 // =========================================================================
@@ -327,10 +312,36 @@ export async function validateVirtualApiKey(params: {
  * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
  * type, 403 no proxy access).
  */
+/**
+ * Prefetch the gateway and credential rows; the caller must still rate-limit
+ * and validate. The rows can come from the proxy configuration cache: the
+ * token is still compared with its stored secret, and expiry and membership
+ * are still checked, on every request.
+ */
+export async function readPassthroughAuthenticationSnapshot(params: {
+  tokenValue: string;
+  oauthTokenCandidate?: string;
+}) {
+  const oauthTokenHash = params.oauthTokenCandidate
+    ? OAuthAccessTokenModel.hashTokenForLookup(params.oauthTokenCandidate)
+    : undefined;
+  return proxyConfigCache.read(
+    `credential:${VirtualApiKeyModel.tokenStartOf(params.tokenValue)}:${oauthTokenHash ?? ""}`,
+    () =>
+      VirtualApiKeyModel.readDeploymentProxyAndTokenOwner(
+        params.tokenValue,
+        oauthTokenHash,
+      ),
+  );
+}
+
 export async function validatePassthroughVirtualKey(params: {
   tokenValue: string;
   agent: GatewayAgent;
   oauthTokenCandidate?: string;
+  authenticationSnapshot?: Awaited<
+    ReturnType<typeof readPassthroughAuthenticationSnapshot>
+  >;
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
@@ -340,6 +351,11 @@ export async function validatePassthroughVirtualKey(params: {
   const resolved = await VirtualApiKeyModel.validateTokenWithOwner(
     tokenValue,
     oauthTokenHash,
+    params.authenticationSnapshot?.agent.id === agent.id &&
+      params.authenticationSnapshot.agent.organizationId ===
+        agent.organizationId
+      ? params.authenticationSnapshot
+      : undefined,
   );
   if (!resolved) {
     throw new ApiError(401, "Invalid passthrough virtual key");
@@ -827,13 +843,18 @@ export class VirtualKeyRateLimiter {
     this.cache = cache;
   }
 
+  /** Rate-limit bookkeeping only; this never proves current authorization. */
+  hasRecentValidation(credential: string): boolean {
+    return this.locallyValidated.has(localKey(credential));
+  }
+
   /**
    * Reads both buckets and the credential's validation mark in one statement,
    * unless this process validated the credential recently.
    */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
-    if (credential && this.locallyValidated.has(localKey(credential))) return;
+    if (credential && this.hasRecentValidation(credential)) return;
     const now = Date.now();
     const credentialKey = this.credentialKey(ip, credential);
     const ipKey = this.ipKey(ip);
@@ -1453,4 +1474,26 @@ function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
         (retained.length ? `?${retained.join("&")}` : "");
     }
   }
+}
+
+async function readAgent(agentId: string | undefined): Promise<GatewayAgent> {
+  if (agentId) {
+    const agent = await AgentModel.findGatewayAgentById(agentId);
+    if (!agent) {
+      throw new ApiError(404, `Agent with ID ${agentId} not found`);
+    }
+    if (agent.agentType === "llm_proxy" || agent.agentType === "profile") {
+      if (agent.agentType === "llm_proxy" && agent.isDefault) {
+        return agent;
+      }
+      return AgentModel.getOrgLlmProxy(agent.organizationId);
+    }
+    return agent;
+  }
+
+  const llmProxy = await AgentModel.getDeploymentLlmProxy();
+  if (!llmProxy) {
+    throw new ApiError(503, "No organization exists yet.");
+  }
+  return llmProxy;
 }

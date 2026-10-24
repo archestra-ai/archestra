@@ -66,7 +66,9 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
-import ProxyRequestContextModel from "@/models/proxy-request-context";
+import ProxyRequestContextModel, {
+  type ProxyRequestState,
+} from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
@@ -149,6 +151,7 @@ import {
   assertPlatformAuthenticated,
   attemptJwksAuth,
   isJwtLike,
+  readPassthroughAuthenticationSnapshot,
   resolveAgent,
   validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
@@ -173,6 +176,7 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import { proxyConfigCache } from "./proxy-config-cache";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
@@ -603,8 +607,33 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] handleLLMProxy: request received`,
   );
 
-  // Resolve agent
-  const resolvedAgent = await resolveAgent(agentId);
+  let oauthTokenCandidate: string | undefined;
+  if (passthroughVirtualKeyToken && !authOverride) {
+    try {
+      const candidate = normalizeVirtualKeyCandidate(
+        provider.extractApiKey(headers),
+      );
+      if (candidate && !hasArchestraTokenPrefix(candidate))
+        oauthTokenCandidate = candidate;
+    } catch {
+      // Optional prefetch; normal extraction below retains its error ordering.
+    }
+  }
+  // Recently validated credentials already skip the failure-bucket read. Fetch
+  // their gateway and owner in one fresh statement; authorization is still
+  // checked below, after rate limiting. Cold and explicit-agent paths are unchanged.
+  const authenticationSnapshot =
+    !agentId &&
+    passthroughVirtualKeyToken &&
+    !authOverride &&
+    virtualKeyRateLimiter.hasRecentValidation(passthroughVirtualKeyToken)
+      ? await readPassthroughAuthenticationSnapshot({
+          tokenValue: passthroughVirtualKeyToken,
+          oauthTokenCandidate,
+        })
+      : undefined;
+  const resolvedAgent =
+    authenticationSnapshot?.agent ?? (await resolveAgent(agentId));
   const resolvedAgentId = resolvedAgent.id;
   // Pre-call reads shared within this request only; never stored or reused.
   logger.debug(
@@ -642,21 +671,11 @@ export async function handleLLMProxy<
       credential: passthroughVirtualKeyToken,
     });
     try {
-      let oauthTokenCandidate: string | undefined;
-      try {
-        const candidate = normalizeVirtualKeyCandidate(
-          provider.extractApiKey(headers),
-        );
-        if (candidate && !hasArchestraTokenPrefix(candidate))
-          oauthTokenCandidate = candidate;
-      } catch {
-        // Prefetch is optional. Normal extraction below still reports errors
-        // after passthrough/JWKS validation, in its existing order.
-      }
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
         oauthTokenCandidate,
+        authenticationSnapshot,
       });
       await virtualKeyRateLimiter.recordSuccess({
         credential: passthroughVirtualKeyToken,
@@ -1106,7 +1125,7 @@ export async function handleLLMProxy<
   const actualModel = stripClaudeContextVariantSuffix(
     requestAdapter.getModel(),
   );
-  const requestContext = await ProxyRequestContextModel.readForProxy({
+  const requestContext = await readProxyRequestState({
     organizationId: resolvedAgent.organizationId,
     provider: providerName,
     modelId: actualModel,
@@ -4295,4 +4314,16 @@ function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The request's proxy state, served from the proxy configuration cache when
+ * it is live. Budget usage is not part of it; limit checks read usage fresh.
+ */
+async function readProxyRequestState(
+  params: Parameters<typeof ProxyRequestContextModel.readForProxy>[0],
+): Promise<ProxyRequestState> {
+  return proxyConfigCache.read(`context:${JSON.stringify(params)}`, () =>
+    ProxyRequestContextModel.readForProxy(params),
+  );
 }

@@ -3160,10 +3160,10 @@ class InteractionModel {
         response: undefined,
         isTitleGeneration:
           preview?.isTitleGeneration ??
-          requestText.includes("Please write a 5-10 word title"),
+          requestText.includes(TITLE_GENERATION_MARKER),
         isPromptSuggestion:
           preview?.isPromptSuggestion ??
-          requestText.includes("prompt suggestion generator"),
+          requestText.includes(PROMPT_SUGGESTION_MARKER),
         type: row.type,
         createdAt: new Date(row.created_at).getTime(),
       });
@@ -3812,10 +3812,10 @@ function buildSessionPreview(
     input?: unknown[];
     contents?: unknown[];
   };
-  const text = isGuardrailSource(data.source ?? null)
-    ? ""
-    : (JSON.stringify(request) ?? "");
-  const isTitleGeneration = text.includes("Please write a 5-10 word title");
+  const markers = isGuardrailSource(data.source ?? null)
+    ? new Set<string>()
+    : findMarkers(request, SESSION_PREVIEW_MARKERS);
+  const isTitleGeneration = markers.has(TITLE_GENERATION_MARKER);
   const response = data.response as { content?: Array<{ text?: string }> };
   const contentNotStored = isLogContentNotStored(request);
   return {
@@ -3824,7 +3824,7 @@ function buildSessionPreview(
         (value) => Array.isArray(value) && value.length > 0,
       ) || contentNotStored,
     isTitleGeneration,
-    isPromptSuggestion: text.includes("prompt suggestion generator"),
+    isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
       isOpenCodeFamilySessionSource(data.sessionSource ?? null) &&
       computeRequestType(
@@ -3844,6 +3844,35 @@ function buildSessionPreview(
       ? { responseToolNames: [], responseTextPreview: null }
       : buildResponsePreview(data)),
   };
+}
+
+const TITLE_GENERATION_MARKER = "Please write a 5-10 word title";
+const PROMPT_SUGGESTION_MARKER = "prompt suggestion generator";
+const SESSION_PREVIEW_MARKERS = [
+  TITLE_GENERATION_MARKER,
+  PROMPT_SUGGESTION_MARKER,
+];
+
+/**
+ * Markers found in any string of a stored request. Walking the strings finds
+ * the same markers as searching its JSON, since none contains a character JSON
+ * escapes, without serializing a large conversation on every write.
+ */
+function findMarkers(value: unknown, markers: string[]): Set<string> {
+  const found = new Set<string>();
+  const pending: unknown[] = [value];
+  while (pending.length && found.size < markers.length) {
+    const next = pending.pop();
+    if (typeof next === "string") {
+      for (const marker of markers)
+        if (next.includes(marker)) found.add(marker);
+    } else if (Array.isArray(next)) {
+      for (const item of next) pending.push(item);
+    } else if (next && typeof next === "object") {
+      for (const [key, item] of Object.entries(next)) pending.push(key, item);
+    }
+  }
+  return found;
 }
 
 /** The tools a response asked for, else the start of its reply. */

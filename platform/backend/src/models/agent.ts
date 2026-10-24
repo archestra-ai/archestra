@@ -76,7 +76,6 @@ import {
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
   type InsertAgent,
-  type LabelGetResponse,
   type McpServerAgentUsage,
   type ReadinessAgent,
   type SortingQuery,
@@ -104,6 +103,7 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
+import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
@@ -6115,7 +6115,7 @@ class AgentModel {
 
   private static readonly gatewayById = new PreparedQuery((database) =>
     database
-      .select(AgentModel.gatewaySelection())
+      .select(gatewayAgentSelection())
       .from(schema.agentsTable)
       .where(
         and(
@@ -6129,7 +6129,7 @@ class AgentModel {
 
   private static readonly organizationProxy = new PreparedQuery((database) =>
     database
-      .select(AgentModel.gatewaySelection())
+      .select(gatewayAgentSelection())
       .from(schema.agentsTable)
       .where(
         and(
@@ -6148,7 +6148,7 @@ class AgentModel {
 
   private static readonly deploymentProxy = new PreparedQuery((database) =>
     database
-      .select(AgentModel.gatewaySelection())
+      .select(gatewayAgentSelection())
       .from(schema.agentsTable)
       .where(
         and(
@@ -6168,27 +6168,6 @@ class AgentModel {
       .limit(1)
       .prepare("archestra_deployment_llm_proxy"),
   );
-
-  /** Fresh labels in the same database snapshot as the gateway configuration. */
-  private static gatewaySelection() {
-    return {
-      ...getTableColumns(schema.agentsTable),
-      labels: sql<LabelGetResponse[]>`coalesce((
-        SELECT jsonb_agg(jsonb_build_object(
-          'keyId', ${qualified(schema.agentLabelsTable.keyId)},
-          'valueId', ${qualified(schema.agentLabelsTable.valueId)},
-          'key', coalesce(${qualified(schema.labelKeysTable.key)}, ''),
-          'value', coalesce(${qualified(schema.labelValuesTable.value)}, '')
-        ) ORDER BY ${qualified(schema.labelKeysTable.key)})
-        FROM ${schema.agentLabelsTable}
-        LEFT JOIN ${schema.labelKeysTable}
-          ON ${qualified(schema.agentLabelsTable.keyId)} = ${qualified(schema.labelKeysTable.id)}
-        LEFT JOIN ${schema.labelValuesTable}
-          ON ${qualified(schema.agentLabelsTable.valueId)} = ${qualified(schema.labelValuesTable.id)}
-        WHERE ${qualified(schema.agentLabelsTable.agentId)} = ${qualified(schema.agentsTable.id)}
-      ), '[]'::jsonb)`,
-    };
-  }
 
   private static readonly firstOrganization = new PreparedQuery((database) =>
     database

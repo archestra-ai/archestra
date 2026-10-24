@@ -66,7 +66,9 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
-import ProxyRequestContextModel from "@/models/proxy-request-context";
+import ProxyRequestContextModel, {
+  type ProxyRequestState,
+} from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
@@ -156,6 +158,7 @@ import {
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
+import { proxyConfigCache } from "./proxy-config-cache";
 import {
   type AccumulatedToolCall,
   applyInputTokenFallback,
@@ -1122,7 +1125,7 @@ export async function handleLLMProxy<
   const actualModel = stripClaudeContextVariantSuffix(
     requestAdapter.getModel(),
   );
-  const requestContext = await ProxyRequestContextModel.readForProxy({
+  const requestContext = await readProxyRequestState({
     organizationId: resolvedAgent.organizationId,
     provider: providerName,
     modelId: actualModel,
@@ -4311,4 +4314,16 @@ function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The request's proxy state, served from the proxy configuration cache when
+ * it is live. Budget usage is not part of it; limit checks read usage fresh.
+ */
+async function readProxyRequestState(
+  params: Parameters<typeof ProxyRequestContextModel.readForProxy>[0],
+): Promise<ProxyRequestState> {
+  return proxyConfigCache.read(`context:${JSON.stringify(params)}`, () =>
+    ProxyRequestContextModel.readForProxy(params),
+  );
 }

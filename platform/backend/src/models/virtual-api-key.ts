@@ -27,7 +27,9 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { qualified } from "@/database/utils/qualified-column";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { secretManager } from "@/secrets-manager";
 import type {
   CredentialBilling,
@@ -65,6 +67,12 @@ const FORCE_DB = true;
  * burst into at most one write.
  */
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
+const recentLastUsedRefreshes = registerProcessLocalCache(
+  new LRUCacheManager<true>({
+    maxSize: 10_000,
+    defaultTtl: LAST_USED_REFRESH_INTERVAL_MS,
+  }),
+);
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
@@ -1031,6 +1039,11 @@ class VirtualApiKeyModel {
   }
 
   /** Read only; credential and access validation still happen after rate limiting. */
+  /** The non-secret prefix a credential lookup is keyed by. */
+  static tokenStartOf(tokenValue: string): string {
+    return getTokenStart(tokenValue);
+  }
+
   static async readDeploymentProxyAndTokenOwner(
     tokenValue: string,
     oauthTokenHash?: string,
@@ -1093,11 +1106,14 @@ class VirtualApiKeyModel {
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
         // The row we just read already tells us when the conditional UPDATE
         // would be a no-op. Avoid occupying a pool connection for that no-op.
+        // Cached rows keep an old timestamp, so also remember refreshes here.
         if (
-          !virtualKey.lastUsedAt ||
-          virtualKey.lastUsedAt.getTime() <
-            Date.now() - LAST_USED_REFRESH_INTERVAL_MS
+          (!virtualKey.lastUsedAt ||
+            virtualKey.lastUsedAt.getTime() <
+              Date.now() - LAST_USED_REFRESH_INTERVAL_MS) &&
+          !recentLastUsedRefreshes.has(virtualKey.id)
         ) {
+          recentLastUsedRefreshes.set(virtualKey.id, true);
           trackBackgroundWork(
             VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
               logger.warn(

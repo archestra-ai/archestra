@@ -4166,6 +4166,13 @@
       "when": 1792841857847,
       "tag": "0594_prepare-interaction-appends",
       "breakpoints": true
+    },
+    {
+      "idx": 595,
+      "version": "7",
+      "when": 1792873668058,
+      "tag": "0595_notify-proxy-config-changes",
+      "breakpoints": true
     }
   ]
 }

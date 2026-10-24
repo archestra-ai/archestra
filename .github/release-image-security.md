@@ -8,8 +8,9 @@ later release publication will succeed.
 
 ## Events and revision binding
 
-- Release Please PRs scan their live test-merge revision and recheck their open
-  state, head, base and current test-merge SHA after scanning.
+- Release Please PRs receive the required classification and compatibility
+  contexts without building or scanning candidate images. The merge queue scans
+  the exact combined revision once a version-changing group is constructed.
 - Merge groups targeting `main` or `release/X.Y` compare the platform manifest at
   the event's exact base and head commits. Any version change scans the **whole
   combined group**, even when its queue branch names an ordinary PR. No PR
@@ -21,9 +22,10 @@ later release publication will succeed.
 - The gate rechecks the queue ref still points at the scanned group SHA. GitHub's
   merge queue remains responsible for invalidating superseded groups.
 - It also resolves the single open Release Please PR and reconstructs its merge
-  **tree** with `git merge-tree --write-tree` from the exact PR head and group
-  base commits. GitHub's asynchronously computed `merge_commit_sha` is not used
-  for this comparison: it can be missing or stale while head/base are current.
+  **tree** with `git merge-tree --write-tree` from the exact PR head and the
+  merge group's immutable base commit. GitHub's asynchronously computed
+  `merge_commit_sha` and PR REST `base.sha` are not used for this comparison:
+  either can be missing or stale during concurrent merges.
   Missing Git objects, conflicts or an invalid merge result fail closed.
 - The entire reconstructed tree must equal the scanned group's tree. A mixed
   group whose release would contain different source still fails closed with
@@ -32,8 +34,9 @@ later release publication will succeed.
   code cannot stand in for the earlier release commit's contents. No paths,
   including generated documentation, are excluded from this comparison.
 - After checking all evidence, the gate rechecks the PR's open state, exact
-  head/base and the queue ref before writing the candidate index. The index
-  retains the PR number, head/base SHAs and reconstructed tree for audit.
+  head and target branch plus the queue ref before writing the candidate index.
+  The index retains the PR number, exact head and queue base SHAs, and
+  reconstructed tree for audit.
 
 The matrix derives agents from this branch's catalog and includes Platform full
 and slim, MCP, p4 and sandbox. The publisher-inventory regression follows release
@@ -126,9 +129,9 @@ failures, wrong workflow/event/repository/branch, and same-run transfer and imag
 identity checks. Docker/registry operations are stubbed at their external boundary;
 these tests never build vulnerable images, reproduce exploits, or push images.
 
-Regular feature and fork PRs skip candidate Docker CVE scans. Their hosted policy
-jobs exercise these fixtures, and workflow-input changes can independently run
-catalog build validation. Neither is a release execution.
+All PRs skip candidate Docker CVE scans; version-changing merge groups require
+them. Hosted policy jobs exercise the fixtures, and workflow-input changes can
+independently run catalog build validation. Neither is a release execution.
 
 A bounded hosted rehearsal creates tiny marker-only scratch images on the two
 work branches. Explicit handoff-fixture dispatch skips every production step,

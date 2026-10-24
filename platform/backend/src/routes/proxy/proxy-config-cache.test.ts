@@ -148,6 +148,35 @@ describe("ProxyConfigCache", () => {
     expect(loads).toBe(2);
   });
 
+  test("concurrent misses share one database read", async () => {
+    await becomeLive();
+    let release = () => {};
+    const slow = () =>
+      new Promise<number>((resolve) => {
+        release = () => resolve(++loads);
+      });
+
+    const reads = Array.from({ length: 20 }, () => cache.read("gateway", slow));
+    release();
+
+    expect(await Promise.all(reads)).toEqual(Array(20).fill(1));
+    expect(loads).toBe(1);
+  });
+
+  test("an aging entry is refreshed in the background, not on a miss", async () => {
+    await becomeLive();
+    await cache.read("gateway", load);
+    vi.setSystemTime(Date.now() + PROXY_CONFIG_TTL_MS - 500);
+
+    // Still served from memory while the refresh runs.
+    expect(await cache.read("gateway", load)).toBe(1);
+    await vi.waitFor(() => expect(loads).toBe(2));
+
+    vi.setSystemTime(Date.now() + 1_000);
+    expect(await cache.read("gateway", load)).toBe(2);
+    expect(loads).toBe(2);
+  });
+
   test("a failed read is not cached", async () => {
     await becomeLive();
     await expect(

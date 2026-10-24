@@ -102,3 +102,7 @@ FOR EACH ROW EXECUTE FUNCTION archestra_notify_proxy_config('title', 'pinned_at'
 CREATE TRIGGER archestra_notify_proxy_config
 AFTER INSERT OR UPDATE OR DELETE ON "agent_workspaces"
 FOR EACH ROW EXECUTE FUNCTION archestra_notify_proxy_config('backend', 'runtime_scope', 'active', 'active_task_id', 'last_task_id', 'created_at', 'last_activity_at', 'idle_at', 'expires_at', 'updated_at');
+--> statement-breakpoint
+CREATE TRIGGER archestra_notify_proxy_config
+AFTER INSERT OR UPDATE OR DELETE ON "tools"
+FOR EACH ROW EXECUTE FUNCTION archestra_notify_proxy_config('updated_at');

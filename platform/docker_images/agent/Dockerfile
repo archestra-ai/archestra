@@ -57,6 +57,16 @@ ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
+# npm's separately bundled Undici is not covered by application lockfiles.
+# 6.29.1 fixes CVE-2026-109869 and has cleared the seven-day release-age window.
+# Fetch the replacement before removing the copy npm itself uses to fetch it.
+RUN cd /usr/local/lib/node_modules/npm/node_modules \
+ && npm pack undici@6.29.1 \
+ && rm -rf undici \
+ && tar -xzf undici-6.29.1.tgz \
+ && mv package undici \
+ && rm undici-6.29.1.tgz
+
 COPY docker_images/agent/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
 # copy to serve file transfers. One is installed anyway: it keeps the image's
@@ -73,7 +83,8 @@ WORKDIR /home/node/workspace
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
- && python3 /tmp/agent-image-tests/interactive-resume.py
+ && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
 USER root

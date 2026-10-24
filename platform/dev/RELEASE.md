@@ -6,6 +6,12 @@ Archestra uses two release pipelines:
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
+## Image CVE Gate
+
+Release Please PRs scan the exact candidate Platform full/slim, MCP and p4 images before queue entry. Release publication additionally scans every immutable architecture digest for all image families before assigning version tags. Scan, classification, build, API or digest-provenance errors block publication. The existing fixable critical/high threshold remains unchanged.
+
+The 1.3 merge queue retains its existing Platform, MCP and p4 image scans. Compatibility check names are emitted by only one owner on each event, so a skipped or passing duplicate cannot mask a failed scan. Stable artifacts still require independent qualification and environment approval.
+
 ## Release A Beta
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).

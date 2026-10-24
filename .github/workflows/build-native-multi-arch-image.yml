@@ -174,7 +174,8 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           digest="${DIGEST}"
-          touch "/tmp/digests/${digest#sha256:}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          git rev-parse HEAD > "/tmp/digests/${digest#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
 
@@ -202,6 +203,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Download digests
         uses: ./.github/actions/github-download-artifact
@@ -226,13 +228,48 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # Every per-arch digest comes from this run's successful build matrix,
+      # checked out at checkout_ref. Validate the complete set before scanning
+      # or assigning a public version tag; never substitute a previous scan.
+      - name: Resolve release scan inputs
+        id: release-scan
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          AMD64_ONLY: ${{ inputs.amd64_only }}
+        run: bash .github/scripts/release-scan-inputs.sh /tmp/digests
+
+      - name: Scan release amd64 bytes before tagging
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ steps.release-scan.outputs.amd64 }}
+          platform: linux/amd64
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
+
+      - name: Scan release arm64 bytes before tagging
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') && !inputs.amd64_only }}
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ steps.release-scan.outputs.arm64 }}
+          platform: linux/arm64
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
+
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
           # Stable aliases move only in the release workflow's approved publication job.
+          references=()
+          for digest in *; do
+            references+=("${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:${digest}")
+          done
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
-            $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+            "${references[@]}"
         env:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}

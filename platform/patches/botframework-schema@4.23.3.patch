@@ -1,0 +1,21 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -203,7 +203,7 @@
+     return attachment.safeParse(val).success;
+ }
+ exports.isAttachment = isAttachment;
+-const entity = z.record(z.unknown()).refine((val) => typeof val.type === 'string');
++const entity = z.record(z.string(), z.unknown()).refine((val) => typeof val.type === 'string');
+ /**
+  * @internal
+  */
+@@ -248,7 +248,7 @@
+ const semanticAction = z.object({
+     id: z.string(),
+     state: z.string(),
+-    entities: z.record(entity),
++    entities: z.record(z.string(), entity),
+ });
+ /**
+  * @internal

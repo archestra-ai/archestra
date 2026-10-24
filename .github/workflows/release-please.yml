@@ -239,8 +239,10 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
@@ -256,8 +258,10 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-p4-shim-docker-image:
     name: Build and push p4 Shim Docker image
@@ -275,8 +279,10 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
@@ -294,8 +300,10 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
@@ -343,8 +351,8 @@ jobs:
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-beta.') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
     name: Publish release
@@ -380,11 +388,17 @@ jobs:
           persist-credentials: false
 
       - name: Check publication is still allowed
+        id: publication-policy
         shell: bash
         env:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          PRESERVE_LATEST=false
+          # Explicitly approved one-time security release of the retired line.
+          if [ "${GITHUB_REF_NAME:-}" = release/1.3 ] && [ "$VERSION" = 1.3.78 ]; then
+            PRESERVE_LATEST=true
+          fi
           if [[ "$VERSION" != *-beta.* ]]; then
             # Fetch every page before comparing: process substitution hides API failures.
             # An empty successful list permits the first stable release without a 404 exception.
@@ -393,11 +407,15 @@ jobs:
             while IFS= read -r RELEASE_TAG; do
               [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
               RELEASE_VERSION=${RELEASE_TAG#platform-v}
+              if [ "$PRESERVE_LATEST" = true ] && [[ "$RELEASE_VERSION" != 1.3.* ]]; then
+                continue
+              fi
               # Ubuntu's GNU sort -V orders the numeric stable versions accepted above.
               test "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$VERSION" \
                 || { echo "::error::Newer stable release ${RELEASE_TAG} exists (published or draft); cannot publish ${TAG_NAME}"; exit 1; }
             done <<< "$STABLE_TAGS"
           fi
+          echo "preserve_latest=$PRESERVE_LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Download saved chart
         uses: ./.github/actions/github-download-artifact
@@ -415,8 +433,8 @@ jobs:
         if: ${{ github.ref_name != 'main' }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Log in to Docker Hub
         uses: ./.github/actions/docker-login
@@ -427,9 +445,15 @@ jobs:
       - name: Publish approved stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           test -s release-images/mcp-server-base
           helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          if [ "$PRESERVE_LATEST" = true ]; then
+            echo "Published the security patch chart; preserving newer image latest tags."
+            exit 0
+          fi
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")
@@ -439,6 +463,8 @@ jobs:
 
       - name: Move the platform latest tag
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           # Quickstart pulls archestra/platform:latest, so it follows the newest
           # published release, release candidates included. Companion and agent
@@ -446,8 +472,12 @@ jobs:
           # the agent images by that tag. This step runs after the companion
           # images are tagged, so a stable platform never points ahead of them.
           PLATFORM_IMAGE=$(cat release-images/platform)
+          if [ "$PRESERVE_LATEST" = true ]; then
+            echo "Preserving the newer platform latest tag."
+            exit 0
+          fi
           version_is_newer() {
-            local a_base=${1%%-*} b_base=${2%%-*} a_pre= b_pre=
+            local a_base=${1%%-*} b_base=${2%%-*} a_pre='' b_pre=''
             [[ "$1" == *-* ]] && a_pre=${1#*-}
             [[ "$2" == *-* ]] && b_pre=${2#*-}
             if [ "$a_base" != "$b_base" ]; then
@@ -478,6 +508,8 @@ jobs:
 
       - name: Publish GitHub release
         shell: bash
+        env:
+          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           # A retry may find an already published immutable release.
           IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
@@ -485,12 +517,14 @@ jobs:
           gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
           if [[ "$VERSION" == *-beta.* ]]; then
             gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
+          elif [ "$PRESERVE_LATEST" = true ]; then
+            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest=false
           else
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
 
       - name: Generate website deployment token
-        if: ${{ github.ref_name != 'main' }}
+        if: ${{ github.ref_name != 'main' && steps.publication-policy.outputs.preserve_latest != 'true' }}
         id: website-token
         uses: ./.github/actions/github-app-token
         with:
@@ -501,7 +535,7 @@ jobs:
           permission-actions: write
 
       - name: Refresh release website
-        if: ${{ github.ref_name != 'main' }}
+        if: ${{ github.ref_name != 'main' && steps.publication-policy.outputs.preserve_latest != 'true' }}
         env:
           GH_TOKEN: ${{ steps.website-token.outputs.token }}
         run: gh workflow run deploy-docs.yml --repo archestra-ai/website --ref main -f "docs_ref=$TAG_NAME"

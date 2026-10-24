@@ -1073,6 +1073,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -1281,7 +1282,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -5540,6 +5540,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -5746,7 +5747,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts"
@@ -7388,6 +7388,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -7596,7 +7597,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -8656,6 +8656,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -8871,7 +8872,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -9931,6 +9931,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -10139,7 +10140,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -11199,6 +11199,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -11259,6 +11260,7 @@
               },
               "max_tokens": {
                 "type": "integer",
+                "minimum": 0,
                 "exclusiveMinimum": true,
                 "maximum": 9007199254740991
               },
@@ -11443,7 +11445,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -12740,7 +12741,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "A choice in the chat completion response"
@@ -13997,7 +13997,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "A choice in the chat completion response"
@@ -14933,7 +14932,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://docs.z.ai/api-reference/llm/chat-completion#response"
@@ -16034,6 +16032,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -16243,7 +16242,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -17303,6 +17301,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -17512,7 +17511,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -20063,6 +20061,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -20271,7 +20270,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -21594,6 +21592,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -21810,7 +21809,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -26254,6 +26252,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -26468,7 +26467,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -28187,6 +28185,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -28403,7 +28402,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -29512,6 +29510,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -29735,7 +29734,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -30844,6 +30842,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -31060,7 +31059,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -32169,6 +32167,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -32230,6 +32229,7 @@
               },
               "max_tokens": {
                 "type": "integer",
+                "minimum": 0,
                 "exclusiveMinimum": true,
                 "maximum": 9007199254740991
               },
@@ -32422,7 +32422,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -33775,7 +33774,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -35089,7 +35087,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -36042,7 +36039,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -37195,6 +37191,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -37411,7 +37408,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -38520,6 +38516,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -38736,7 +38733,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -41407,6 +41403,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -41623,7 +41620,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -52308,6 +52304,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -52922,6 +52919,7 @@
                 "properties": {
                   "baseVersion": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -52944,6 +52942,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -65091,7 +65090,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "projectId": {
                     "nullable": true,
@@ -85264,6 +85263,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 9007199254740991
             },
@@ -85642,6 +85642,7 @@
                 "properties": {
                   "baseVersion": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -85668,6 +85669,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 9007199254740991
             },
@@ -86521,6 +86523,7 @@
                 "properties": {
                   "version": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -86839,6 +86842,7 @@
                 "properties": {
                   "version": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -88301,7 +88305,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -88312,7 +88316,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -95718,7 +95722,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -97417,7 +97420,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -116661,7 +116663,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "thinkingEffort": {
                     "nullable": true,
@@ -128553,12 +128555,12 @@
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                           },
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                           }
                         },
                         "required": [
@@ -129046,12 +129048,12 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       }
                     },
                     "required": [
@@ -129699,12 +129701,12 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
@@ -130075,12 +130077,12 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
@@ -130498,12 +130500,12 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       }
                     },
                     "required": [
@@ -134278,6 +134280,7 @@
                         },
                         "hackathonMaxFinalCutMs": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -134804,6 +134807,7 @@
                       "ttlDays": {
                         "nullable": true,
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 3650
                       }
@@ -136712,6 +136716,7 @@
                   },
                   "limitValue": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -137068,6 +137073,7 @@
                 "properties": {
                   "limitValue": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -146815,6 +146821,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -147058,7 +147065,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -148360,6 +148366,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -148613,7 +148620,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -154365,7 +154371,7 @@
                         "expiresAt": {
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         }
                       },
                       "required": [
@@ -154667,7 +154673,7 @@
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "message": {
                       "type": "string"
@@ -154942,7 +154948,7 @@
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "message": {
                       "type": "string"
@@ -155507,7 +155513,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -155518,7 +155524,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -176861,6 +176867,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -177956,6 +177963,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -178180,7 +178188,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -179918,6 +179925,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -181013,6 +181021,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -181237,7 +181246,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -182970,6 +182978,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -184065,6 +184074,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -184289,7 +184299,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -185835,7 +185844,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -189960,7 +189968,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -189970,7 +189978,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -190578,7 +190586,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -190589,7 +190597,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -213037,6 +213045,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -214132,6 +214141,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -214356,7 +214366,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -216094,6 +216103,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -217189,6 +217199,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -217413,7 +217424,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -219146,6 +219156,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -220241,6 +220252,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -220465,7 +220477,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -222011,7 +222022,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -237262,7 +237272,7 @@
                         "email": {
                           "type": "string",
                           "format": "email",
-                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                         },
                         "organizationId": {
                           "type": "string"
@@ -238884,6 +238894,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -239127,7 +239138,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -240434,6 +240444,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -240687,7 +240698,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -246082,6 +246092,7 @@
                                       },
                                       "batchSize": {
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       }
@@ -247567,6 +247578,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           }
@@ -248665,6 +248677,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
+                              "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
                             }
@@ -250101,6 +250114,7 @@
                                 },
                                 "batchSize": {
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 }
@@ -251412,6 +251426,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           }
@@ -252508,6 +252523,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
+                              "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
                             }
@@ -291367,7 +291383,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -291378,7 +291394,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -294988,6 +295004,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -295231,7 +295248,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -296538,6 +296554,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -296791,7 +296808,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -306162,7 +306178,7 @@
                     "type": "string",
                     "maxLength": 320,
                     "format": "email",
-                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                   }
                 },
                 "required": [
@@ -306453,7 +306469,7 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
@@ -313033,6 +313049,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -314128,6 +314145,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -315478,6 +315496,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -316429,6 +316448,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -317376,6 +317396,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -318323,6 +318344,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -319282,6 +319304,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -320295,6 +320318,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -321280,6 +321304,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -322297,6 +322322,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -323257,6 +323283,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -324249,6 +324276,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -325178,6 +325206,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -326476,13 +326505,13 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "nextRefreshAt": {
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "refreshing": {
                       "type": "boolean"
@@ -327295,6 +327324,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -333400,203 +333430,182 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "repoUrl": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "ref": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "marketplacePath": {
-                        "type": "string",
-                        "enum": [
-                          ".claude-plugin/marketplace.json",
-                          ".github/plugin/marketplace.json",
-                          ".agents/plugins/marketplace.json",
-                          ".cursor-plugin/marketplace.json",
-                          "marketplace.json"
-                        ]
-                      },
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
-                    "required": [
-                      "repoUrl"
+                "type": "object",
+                "properties": {
+                  "repoUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ref": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "marketplacePath": {
+                    "type": "string",
+                    "enum": [
+                      ".claude-plugin/marketplace.json",
+                      ".github/plugin/marketplace.json",
+                      ".agents/plugins/marketplace.json",
+                      ".cursor-plugin/marketplace.json",
+                      "marketplace.json"
                     ]
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "marketplacePath": {
-                        "type": "string",
-                        "enum": [
-                          ".claude-plugin/marketplace.json",
-                          ".github/plugin/marketplace.json",
-                          ".agents/plugins/marketplace.json",
-                          ".cursor-plugin/marketplace.json",
-                          "marketplace.json"
-                        ]
-                      },
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      },
-                      "trackingRef": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "selected": {
-                        "minItems": 1,
-                        "maxItems": 10,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "displayName": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 120
-                            },
-                            "description": {
-                              "default": "",
-                              "type": "string",
-                              "maxLength": 1000
-                            },
-                            "clientType": {
-                              "type": "string",
-                              "enum": [
-                                "claude-code",
-                                "copilot-cli",
-                                "codex",
-                                "cursor"
-                              ]
-                            },
-                            "supportedPlatforms": {
-                              "minItems": 1,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "posix",
-                                  "windows"
-                                ]
-                              }
-                            },
-                            "sourceRepoUrl": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "sourceRef": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "sourceSubdir": {
-                              "type": "string"
-                            },
-                            "approvedSourceSha": {
-                              "type": "string",
-                              "pattern": "^[a-f0-9]{40}$"
-                            },
-                            "exclude": {
-                              "default": [],
-                              "maxItems": 50,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1
-                              }
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "displayName",
-                            "clientType",
-                            "supportedPlatforms",
-                            "sourceRepoUrl",
-                            "sourceRef",
-                            "sourceSubdir",
-                            "approvedSourceSha"
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  "trackingRef": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "selected": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "description": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "clientType": {
+                          "type": "string",
+                          "enum": [
+                            "claude-code",
+                            "copilot-cli",
+                            "codex",
+                            "cursor"
                           ]
-                        }
-                      },
-                      "scope": {
-                        "default": "personal",
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "teamIds": {
-                        "default": [],
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "userIds": {
-                        "default": [],
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "syncInterval": {
-                        "default": "1d",
-                        "anyOf": [
-                          {
+                        },
+                        "supportedPlatforms": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
                             "type": "string",
                             "enum": [
-                              "15m",
-                              "1h",
-                              "1d"
-                            ]
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
+                              "posix",
+                              "windows"
                             ]
                           }
+                        },
+                        "sourceRepoUrl": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sourceRef": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sourceSubdir": {
+                          "type": "string"
+                        },
+                        "approvedSourceSha": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{40}$"
+                        },
+                        "exclude": {
+                          "default": [],
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "displayName",
+                        "clientType",
+                        "supportedPlatforms",
+                        "sourceRepoUrl",
+                        "sourceRef",
+                        "sourceSubdir",
+                        "approvedSourceSha"
+                      ]
+                    }
+                  },
+                  "scope": {
+                    "default": "personal",
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teamIds": {
+                    "default": [],
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "userIds": {
+                    "default": [],
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "syncInterval": {
+                    "default": "1d",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "15m",
+                          "1h",
+                          "1d"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "nullable": true,
+                        "enum": [
+                          null
                         ]
                       }
-                    },
-                    "required": [
-                      "marketplacePath",
-                      "approvedCommitSha",
-                      "trackingRef",
-                      "selected"
                     ]
                   }
+                },
+                "required": [
+                  "repoUrl",
+                  "marketplacePath",
+                  "approvedCommitSha",
+                  "trackingRef",
+                  "selected"
                 ]
               }
             }
@@ -334643,124 +334652,113 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "repoUrl": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "ref": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "subdir": {
-                        "default": "",
-                        "type": "string"
-                      },
-                      "exclude": {
-                        "default": [],
-                        "maxItems": 50,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
-                    "required": [
-                      "repoUrl"
+                "type": "object",
+                "properties": {
+                  "repoUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ref": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "subdir": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "exclude": {
+                    "default": [],
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "clientType": {
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "copilot-cli",
+                      "codex",
+                      "cursor"
                     ]
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "displayName": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 120
-                      },
-                      "description": {
-                        "default": "",
-                        "type": "string",
-                        "maxLength": 1000
-                      },
-                      "clientType": {
-                        "type": "string",
-                        "enum": [
-                          "claude-code",
-                          "copilot-cli",
-                          "codex",
-                          "cursor"
-                        ]
-                      },
-                      "supportedPlatforms": {
-                        "minItems": 1,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "enum": [
-                            "posix",
-                            "windows"
-                          ]
-                        }
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "teamIds": {
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "userIds": {
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      },
-                      "trackingRef": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      }
-                    },
-                    "required": [
-                      "displayName",
-                      "clientType",
-                      "approvedCommitSha"
+                  "supportedPlatforms": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "posix",
+                        "windows"
+                      ]
+                    }
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
                     ]
+                  },
+                  "teamIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "userIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  "trackingRef": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
                   }
+                },
+                "required": [
+                  "repoUrl",
+                  "displayName",
+                  "clientType",
+                  "approvedCommitSha"
                 ]
               }
             }
@@ -335762,38 +335760,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    }
+                "type": "object",
+                "properties": {
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      }
-                    },
-                    "required": [
-                      "approvedCommitSha"
-                    ]
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
                   }
+                },
+                "required": [
+                  "approvedCommitSha"
                 ]
               }
             }
@@ -359137,6 +359126,7 @@
                   "expiresIn": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -360711,7 +360701,7 @@
                   "expiresAt": {
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 },
                 "required": [
@@ -361299,7 +361289,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "isActive": {
                     "type": "boolean"
@@ -365899,6 +365889,7 @@
                   "baseVersion": {
                     "description": "The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.",
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -367540,6 +367531,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -374340,7 +374332,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 }
               }
@@ -374806,7 +374798,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 }
               }
@@ -376596,7 +376588,6 @@
           },
           {
             "schema": {
-              "default": false,
               "type": "string"
             },
             "in": "query",
@@ -376606,7 +376597,6 @@
           },
           {
             "schema": {
-              "default": false,
               "type": "string"
             },
             "in": "query",
@@ -401860,6 +401850,7 @@
                         },
                         "timestampMs": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },

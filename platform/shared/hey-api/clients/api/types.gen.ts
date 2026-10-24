@@ -341,7 +341,7 @@ export type OpenAiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -1897,7 +1897,7 @@ export type CerebrasChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
@@ -2411,7 +2411,7 @@ export type MistralChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -2806,7 +2806,7 @@ export type PerplexityChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -3200,7 +3200,7 @@ export type GroqChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -3604,7 +3604,7 @@ export type OpenrouterChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -3977,7 +3977,7 @@ export type VllmChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -4334,7 +4334,7 @@ export type OllamaChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -4600,7 +4600,7 @@ export type ZhipuaiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
@@ -4987,7 +4987,7 @@ export type DeepSeekChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -5382,7 +5382,7 @@ export type ArchestraChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -6213,7 +6213,7 @@ export type XaiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -6647,7 +6647,7 @@ export type OpenAiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -8203,7 +8203,7 @@ export type CerebrasChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
@@ -8717,7 +8717,7 @@ export type MistralChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -9112,7 +9112,7 @@ export type PerplexityChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -9506,7 +9506,7 @@ export type GroqChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -9910,7 +9910,7 @@ export type OpenrouterChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -10283,7 +10283,7 @@ export type VllmChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -10640,7 +10640,7 @@ export type OllamaChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -10906,7 +10906,7 @@ export type ZhipuaiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
@@ -11293,7 +11293,7 @@ export type DeepSeekChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -11688,7 +11688,7 @@ export type ArchestraChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -12519,7 +12519,7 @@ export type XaiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -27191,7 +27191,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -27692,7 +27692,7 @@ export type AzureChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -40589,7 +40589,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -41073,7 +41073,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -47258,7 +47258,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -48073,7 +48073,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -48888,7 +48888,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -49158,7 +49158,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -54495,7 +54495,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -55310,7 +55310,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -56125,7 +56125,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -56395,7 +56395,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -60660,7 +60660,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -61144,7 +61144,7 @@ export type KimiChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -75518,7 +75518,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -76002,7 +76002,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -85619,12 +85619,10 @@ export type ImportGithubPluginMarketplaceData = {
     body: {
         repoUrl: string;
         ref?: string | null;
-        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        marketplacePath: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
-    } & {
-        marketplacePath: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
         approvedCommitSha: string;
         trackingRef: string | null;
         selected: Array<{
@@ -85905,7 +85903,6 @@ export type ImportGithubPluginData = {
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
-    } & {
         displayName: string;
         description?: string;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
@@ -86165,7 +86162,6 @@ export type ApplyGithubPluginUpdateData = {
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
-    } & {
         approvedCommitSha: string;
     };
     path: {

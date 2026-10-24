@@ -1,0 +1,441 @@
+diff --git a/dist/cjs/clients/baseClient.cjs b/dist/cjs/clients/baseClient.cjs
+index 3640b7a72f60fa38fb43c6e3893e8a6392f93be1..fd11c89f96cc3b084e4bc5785bc326fade44f0f8 100644
+--- a/dist/cjs/clients/baseClient.cjs
++++ b/dist/cjs/clients/baseClient.cjs
+@@ -17,8 +17,8 @@ class BaseClient {
+             this.config = config.ConfigSchema.parse(this.config);
+         }
+         catch (e) {
+-            if (e instanceof zod.ZodError && e.errors[0].code === 'invalid_string') {
+-                throw new Error(e.errors[0].message);
++            if (e instanceof zod.ZodError && e.issues[0].code === 'invalid_format') {
++                throw new Error(e.issues[0].message);
+             }
+             throw e;
+         }
+diff --git a/dist/cjs/config.cjs b/dist/cjs/config.cjs
+index acf2aa62242d7d50166caea0703cc1afb5f1d717..7e2ff4e92c142ce7db7cfee27ca031991162f31e 100644
+--- a/dist/cjs/config.cjs
++++ b/dist/cjs/config.cjs
+@@ -44,9 +44,9 @@ const RequestConfigSchema = zod.z.any();
+ /** Middleware configuration schema */
+ const MiddlewaresSchema = zod.z.object({
+     /** Error handler middleware */
+-    onError: zod.z.optional(zod.z.function().args(zod.z.any()).returns(zod.z.void())),
++    onError: zod.z.optional(zod.z.custom((value) => typeof value === 'function').transform((handler) => zod.z.function({ input: zod.z.tuple([zod.z.any()]).rest(zod.z.unknown()), output: zod.z.void() }).implement(handler))),
+     /** Response handler middleware */
+-    onResponse: zod.z.optional(zod.z.function().args(zod.z.any()).returns(zod.z.void())),
++    onResponse: zod.z.optional(zod.z.custom((value) => typeof value === 'function').transform((handler) => zod.z.function({ input: zod.z.tuple([zod.z.any()]).rest(zod.z.unknown()), output: zod.z.void() }).implement(handler))),
+ });
+ const ConfigSchema = zod.z.object({
+     host: zod.z.string().url({
+diff --git a/dist/esm/clients/baseClient.mjs b/dist/esm/clients/baseClient.mjs
+index 59ef6f1b93528ad83949cdba8c5ad5b320b3adb1..0de4c1452801d591d2ada194498e0b6955e760e9 100644
+--- a/dist/esm/clients/baseClient.mjs
++++ b/dist/esm/clients/baseClient.mjs
+@@ -15,8 +15,8 @@ class BaseClient {
+             this.config = ConfigSchema.parse(this.config);
+         }
+         catch (e) {
+-            if (e instanceof ZodError && e.errors[0].code === 'invalid_string') {
+-                throw new Error(e.errors[0].message);
++            if (e instanceof ZodError && e.issues[0].code === 'invalid_format') {
++                throw new Error(e.issues[0].message);
+             }
+             throw e;
+         }
+diff --git a/dist/esm/config.mjs b/dist/esm/config.mjs
+index 3d2890c08666ebbde5c21882f532d48b6876ddb9..68bae007608176994304a6316c3d603317573f8c 100644
+--- a/dist/esm/config.mjs
++++ b/dist/esm/config.mjs
+@@ -42,9 +42,9 @@ const RequestConfigSchema = z.any();
+ /** Middleware configuration schema */
+ const MiddlewaresSchema = z.object({
+     /** Error handler middleware */
+-    onError: z.optional(z.function().args(z.any()).returns(z.void())),
++    onError: z.optional(z.custom((value) => typeof value === 'function').transform((handler) => z.function({ input: z.tuple([z.any()]).rest(z.unknown()), output: z.void() }).implement(handler))),
+     /** Response handler middleware */
+-    onResponse: z.optional(z.function().args(z.any()).returns(z.void())),
++    onResponse: z.optional(z.custom((value) => typeof value === 'function').transform((handler) => z.function({ input: z.tuple([z.any()]).rest(z.unknown()), output: z.void() }).implement(handler))),
+ });
+ const ConfigSchema = z.object({
+     host: z.string().url({
+diff --git a/dist/esm/types/config.d.ts b/dist/esm/types/config.d.ts
+index 60fcbc353d3094e8204254689529fd604b14ee43..45c0affeceda8a16d4bb7889372413a4463f99fc 100644
+--- a/dist/esm/types/config.d.ts
++++ b/dist/esm/types/config.d.ts
+@@ -7,316 +7,74 @@ import type { AxiosError } from 'axios';
+  */
+ export declare const BasicSchema: z.ZodObject<{
+     basic: z.ZodObject<{
+-        /** User's email associated with Atlassian account */
+         email: z.ZodString;
+-        /**
+-         * API token generated from Atlassian account settings
+-         *
+-         * @see {@link https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/} for how to create API tokens
+-         */
+         apiToken: z.ZodString;
+-    }, "strict", z.ZodTypeAny, {
+-        email: string;
+-        apiToken: string;
+-    }, {
+-        email: string;
+-        apiToken: string;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    basic: {
+-        email: string;
+-        apiToken: string;
+-    };
+-}, {
+-    basic: {
+-        email: string;
+-        apiToken: string;
+-    };
+-}>;
++    }, z.core.$strict>;
++}, z.core.$strict>;
+ /** JWT authentication configuration */
+ export declare const JWTSchema: z.ZodObject<{
+     jwt: z.ZodObject<{
+-        /** The key from the app descriptor */
+         issuer: z.ZodString;
+-        /** The shared secret key from app installation */
+         secret: z.ZodString;
+-        /** Token expiry time (default: 180) */
+         expiryTimeSeconds: z.ZodOptional<z.ZodNumber>;
+-    }, "strict", z.ZodTypeAny, {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    }, {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    jwt: {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    };
+-}, {
+-    jwt: {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    };
+-}>;
++    }, z.core.$strict>;
++}, z.core.$strict>;
+ /** OAuth2 authentication configuration */
+ export declare const OAuth2Schema: z.ZodObject<{
+     oauth2: z.ZodObject<{
+-        /** OAuth2 access token */
+         accessToken: z.ZodString;
+-    }, "strict", z.ZodTypeAny, {
+-        accessToken: string;
+-    }, {
+-        accessToken: string;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    oauth2: {
+-        accessToken: string;
+-    };
+-}, {
+-    oauth2: {
+-        accessToken: string;
+-    };
+-}>;
++    }, z.core.$strict>;
++}, z.core.$strict>;
+ /** Authentication configuration schema */
+-export declare const AuthenticationSchema: z.ZodUnion<[z.ZodObject<{
++export declare const AuthenticationSchema: z.ZodUnion<readonly [z.ZodObject<{
+     basic: z.ZodObject<{
+-        /** User's email associated with Atlassian account */
+         email: z.ZodString;
+-        /**
+-         * API token generated from Atlassian account settings
+-         *
+-         * @see {@link https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/} for how to create API tokens
+-         */
+         apiToken: z.ZodString;
+-    }, "strict", z.ZodTypeAny, {
+-        email: string;
+-        apiToken: string;
+-    }, {
+-        email: string;
+-        apiToken: string;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    basic: {
+-        email: string;
+-        apiToken: string;
+-    };
+-}, {
+-    basic: {
+-        email: string;
+-        apiToken: string;
+-    };
+-}>, z.ZodObject<{
++    }, z.core.$strict>;
++}, z.core.$strict>, z.ZodObject<{
+     jwt: z.ZodObject<{
+-        /** The key from the app descriptor */
+         issuer: z.ZodString;
+-        /** The shared secret key from app installation */
+         secret: z.ZodString;
+-        /** Token expiry time (default: 180) */
+         expiryTimeSeconds: z.ZodOptional<z.ZodNumber>;
+-    }, "strict", z.ZodTypeAny, {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    }, {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    jwt: {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    };
+-}, {
+-    jwt: {
+-        issuer: string;
+-        secret: string;
+-        expiryTimeSeconds?: number | undefined;
+-    };
+-}>, z.ZodObject<{
++    }, z.core.$strict>;
++}, z.core.$strict>, z.ZodObject<{
+     oauth2: z.ZodObject<{
+-        /** OAuth2 access token */
+         accessToken: z.ZodString;
+-    }, "strict", z.ZodTypeAny, {
+-        accessToken: string;
+-    }, {
+-        accessToken: string;
+-    }>;
+-}, "strict", z.ZodTypeAny, {
+-    oauth2: {
+-        accessToken: string;
+-    };
+-}, {
+-    oauth2: {
+-        accessToken: string;
+-    };
+-}>]>;
++    }, z.core.$strict>;
++}, z.core.$strict>]>;
+ /** Base request configuration */
+ export declare const RequestConfigSchema: z.ZodAny;
+ /** Middleware configuration schema */
+ export declare const MiddlewaresSchema: z.ZodObject<{
+-    /** Error handler middleware */
+-    onError: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny], z.ZodUnknown>, z.ZodVoid>>;
+-    /** Response handler middleware */
+-    onResponse: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny], z.ZodUnknown>, z.ZodVoid>>;
+-}, "strip", z.ZodTypeAny, {
+-    onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-}, {
+-    onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-}>;
++    onError: z.ZodOptional<z.ZodPipe<z.ZodCustom<(...args: unknown[]) => void, (...args: unknown[]) => void>, z.ZodTransform<(args_0: any, ...args: unknown[]) => void, (...args: unknown[]) => void>>>;
++    onResponse: z.ZodOptional<z.ZodPipe<z.ZodCustom<(...args: unknown[]) => void, (...args: unknown[]) => void>, z.ZodTransform<(args_0: any, ...args: unknown[]) => void, (...args: unknown[]) => void>>>;
++}, z.core.$strip>;
+ export declare const ConfigSchema: z.ZodObject<{
+     host: z.ZodString;
+     baseRequestConfig: z.ZodOptional<z.ZodAny>;
+-    authentication: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
++    authentication: z.ZodOptional<z.ZodUnion<readonly [z.ZodObject<{
+         basic: z.ZodObject<{
+-            /** User's email associated with Atlassian account */
+             email: z.ZodString;
+-            /**
+-             * API token generated from Atlassian account settings
+-             *
+-             * @see {@link https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/} for how to create API tokens
+-             */
+             apiToken: z.ZodString;
+-        }, "strict", z.ZodTypeAny, {
+-            email: string;
+-            apiToken: string;
+-        }, {
+-            email: string;
+-            apiToken: string;
+-        }>;
+-    }, "strict", z.ZodTypeAny, {
+-        basic: {
+-            email: string;
+-            apiToken: string;
+-        };
+-    }, {
+-        basic: {
+-            email: string;
+-            apiToken: string;
+-        };
+-    }>, z.ZodObject<{
++        }, z.core.$strict>;
++    }, z.core.$strict>, z.ZodObject<{
+         jwt: z.ZodObject<{
+-            /** The key from the app descriptor */
+             issuer: z.ZodString;
+-            /** The shared secret key from app installation */
+             secret: z.ZodString;
+-            /** Token expiry time (default: 180) */
+             expiryTimeSeconds: z.ZodOptional<z.ZodNumber>;
+-        }, "strict", z.ZodTypeAny, {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        }, {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        }>;
+-    }, "strict", z.ZodTypeAny, {
+-        jwt: {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        };
+-    }, {
+-        jwt: {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        };
+-    }>, z.ZodObject<{
++        }, z.core.$strict>;
++    }, z.core.$strict>, z.ZodObject<{
+         oauth2: z.ZodObject<{
+-            /** OAuth2 access token */
+             accessToken: z.ZodString;
+-        }, "strict", z.ZodTypeAny, {
+-            accessToken: string;
+-        }, {
+-            accessToken: string;
+-        }>;
+-    }, "strict", z.ZodTypeAny, {
+-        oauth2: {
+-            accessToken: string;
+-        };
+-    }, {
+-        oauth2: {
+-            accessToken: string;
+-        };
+-    }>]>>;
++        }, z.core.$strict>;
++    }, z.core.$strict>]>>;
+     middlewares: z.ZodOptional<z.ZodObject<{
+-        /** Error handler middleware */
+-        onError: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny], z.ZodUnknown>, z.ZodVoid>>;
+-        /** Response handler middleware */
+-        onResponse: z.ZodOptional<z.ZodFunction<z.ZodTuple<[z.ZodAny], z.ZodUnknown>, z.ZodVoid>>;
+-    }, "strip", z.ZodTypeAny, {
+-        onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-        onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    }, {
+-        onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-        onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    }>>;
+-    /** Adds `'X-Atlassian-Token': 'no-check'` to each request header */
++        onError: z.ZodOptional<z.ZodPipe<z.ZodCustom<(...args: unknown[]) => void, (...args: unknown[]) => void>, z.ZodTransform<(args_0: any, ...args: unknown[]) => void, (...args: unknown[]) => void>>>;
++        onResponse: z.ZodOptional<z.ZodPipe<z.ZodCustom<(...args: unknown[]) => void, (...args: unknown[]) => void>, z.ZodTransform<(args_0: any, ...args: unknown[]) => void, (...args: unknown[]) => void>>>;
++    }, z.core.$strip>>;
+     noCheckAtlassianToken: z.ZodOptional<z.ZodBoolean>;
+-    /** Prefix for all API routes. */
+     apiPrefix: z.ZodOptional<z.ZodString>;
+-}, "strip", z.ZodTypeAny, {
+-    host: string;
+-    baseRequestConfig?: any;
+-    authentication?: {
+-        basic: {
+-            email: string;
+-            apiToken: string;
+-        };
+-    } | {
+-        jwt: {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        };
+-    } | {
+-        oauth2: {
+-            accessToken: string;
+-        };
+-    } | undefined;
+-    middlewares?: {
+-        onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-        onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    } | undefined;
+-    noCheckAtlassianToken?: boolean | undefined;
+-    apiPrefix?: string | undefined;
+-}, {
+-    host: string;
+-    baseRequestConfig?: any;
+-    authentication?: {
+-        basic: {
+-            email: string;
+-            apiToken: string;
+-        };
+-    } | {
+-        jwt: {
+-            issuer: string;
+-            secret: string;
+-            expiryTimeSeconds?: number | undefined;
+-        };
+-    } | {
+-        oauth2: {
+-            accessToken: string;
+-        };
+-    } | undefined;
+-    middlewares?: {
+-        onError?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-        onResponse?: ((args_0: any, ...args: unknown[]) => void) | undefined;
+-    } | undefined;
+-    noCheckAtlassianToken?: boolean | undefined;
+-    apiPrefix?: string | undefined;
+-}>;
++}, z.core.$strip>;
+ export type Config = z.infer<typeof ConfigSchema>;
+ export type Authentication = z.infer<typeof AuthenticationSchema>;
+ export type Basic = z.infer<typeof BasicSchema>;
+diff --git a/src/clients/baseClient.ts b/src/clients/baseClient.ts
+index fefa64f8fc83c6c1e0052e0e63c5dcd5581f0931..6da70dd33c51668271383dda7ff8b40dfca780d0 100644
+--- a/src/clients/baseClient.ts
++++ b/src/clients/baseClient.ts
+@@ -20,8 +20,8 @@ export class BaseClient implements Client {
+     try {
+       this.config = ConfigSchema.parse(this.config);
+     } catch (e) {
+-      if (e instanceof ZodError && e.errors[0].code === 'invalid_string') {
+-        throw new Error(e.errors[0].message);
++      if (e instanceof ZodError && e.issues[0].code === 'invalid_format') {
++        throw new Error(e.issues[0].message);
+       }
+ 
+       throw e;
+diff --git a/src/config.ts b/src/config.ts
+index e7ef43134d031785fea822b22f6052031ce6707c..435965c509966393b1dde218bd2ba1bcb42d28da 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -48,9 +48,9 @@ export const RequestConfigSchema = z.any();
+ /** Middleware configuration schema */
+ export const MiddlewaresSchema = z.object({
+   /** Error handler middleware */
+-  onError: z.optional(z.function().args(z.any()).returns(z.void())),
++  onError: z.optional(z.custom<(...args: unknown[]) => void>((value) => typeof value === 'function').transform((handler) => z.function({ input: z.tuple([z.any()]).rest(z.unknown()), output: z.void() }).implement(handler))),
+   /** Response handler middleware */
+-  onResponse: z.optional(z.function().args(z.any()).returns(z.void())),
++  onResponse: z.optional(z.custom<(...args: unknown[]) => void>((value) => typeof value === 'function').transform((handler) => z.function({ input: z.tuple([z.any()]).rest(z.unknown()), output: z.void() }).implement(handler))),
+ });
+ 
+ export const ConfigSchema = z.object({

@@ -13,7 +13,7 @@ WORKFLOW = Path(__file__).resolve().parents[1] / "workflows/release-please.yml"
 
 
 class ReleasePublicationTests(unittest.TestCase):
-    def run_guard(self, releases=(), *, api_status=0, version="1.3.51", freeze="false"):
+    def run_guard(self, releases=(), *, api_status=0, version="1.3.51", freeze="false", ref="release/1.3"):
         section = WORKFLOW.read_text().split(
             "      - name: Check publication is still allowed\n", 1
         )[1].split("      - name:", 1)[0]
@@ -30,6 +30,7 @@ gh() {
   return "$API_STATUS"
 }
 """
+        output = tempfile.NamedTemporaryFile(mode="w+")
         result = subprocess.run(
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c",
              stub + script + "\nprintf 'PROMOTION_ALLOWED\\n'"],
@@ -41,11 +42,15 @@ gh() {
                 "TAG_NAME": f"platform-v{version}",
                 "GH_REPO": "fixture/repo",
                 "RELEASE_FREEZE": freeze,
+                "GITHUB_REF_NAME": ref,
+                "GITHUB_OUTPUT": output.name,
             },
             capture_output=True,
             text=True,
             timeout=10,
         )
+        result.policy_output = Path(output.name).read_text()
+        output.close()
         return result
 
     def assert_allowed(self, result):
@@ -72,6 +77,21 @@ gh() {
                 self.assert_blocked(self.run_guard([
                     {"tag_name": "platform-v1.4.0", "prerelease": False, "draft": draft}
                 ]))
+
+    def test_one_time_security_patch_preserves_newer_channels(self):
+        releases = [{"tag_name": "platform-v1.4.4", "prerelease": False}]
+        result = self.run_guard(releases, version="1.3.78")
+        self.assert_allowed(result)
+        self.assertEqual(result.policy_output, "preserve_latest=true\n")
+        for ref, version in (("main", "1.3.78"), ("release/1.3", "1.3.79")):
+            with self.subTest(ref=ref, version=version):
+                self.assert_blocked(self.run_guard(releases, ref=ref, version=version))
+        for draft in (False, True):
+            self.assert_blocked(self.run_guard([
+                {"tag_name": "platform-v1.3.79", "prerelease": False, "draft": draft}
+            ], version="1.3.78"))
+        self.assert_blocked(self.run_guard(releases, version="1.3.78", freeze="true"))
+        self.assert_blocked(self.run_guard(releases, version="1.3.78", api_status=1))
 
     def test_older_and_same_stable_allow_retry(self):
         self.assert_allowed(self.run_guard([
@@ -134,7 +154,7 @@ gh() {
 
     PLATFORM_IMAGE = "archestra/platform@sha256:" + "b" * 64
 
-    def run_platform_latest(self, releases=(), *, version, api_status=0):
+    def run_platform_latest(self, releases=(), *, version, api_status=0, preserve_latest="false"):
         section = WORKFLOW.read_text().split(
             "      - name: Move the platform latest tag\n", 1
         )[1].split("      - name:", 1)[0]
@@ -165,6 +185,7 @@ docker() { printf 'docker %s\\n' "$*"; }
                     "API_STATUS": str(api_status),
                     "VERSION": version,
                     "GH_REPO": "fixture/repo",
+                    "PRESERVE_LATEST": preserve_latest,
                 },
                 capture_output=True,
                 text=True,
@@ -251,6 +272,35 @@ docker() { printf 'docker %s\\n' "$*"; }
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("docker", result.stdout)
         self.assertIn("Cannot list releases", result.stdout)
+
+    def test_security_patch_never_moves_platform_latest(self):
+        result = self.run_platform_latest(version="1.3.78", preserve_latest="true")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("docker", result.stdout)
+
+    def test_security_patch_publishes_chart_and_github_release_without_latest(self):
+        source = WORKFLOW.read_text()
+        def script(name):
+            section = source.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
+            return textwrap.dedent(section.split("        run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            images = Path(directory) / "release-images"
+            images.mkdir()
+            (images / "mcp-server-base").write_text("registry.example.invalid/mcp@sha256:" + "a" * 64)
+            env = os.environ | {"VERSION": "1.3.78", "TAG_NAME": "platform-v1.3.78", "PRESERVE_LATEST": "true"}
+            result = subprocess.run(
+                ["bash", "-eo", "pipefail", "-c", 'helm() { echo "helm $*"; }; docker() { echo "docker $*"; };\n' + script("Publish approved stable artifacts without rebuilding")],
+                cwd=directory, env=env, capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("helm push archestra-platform-1.3.78.tgz", result.stdout)
+            self.assertFalse(any(line.startswith("docker ") for line in result.stdout.splitlines()))
+            result = subprocess.run(
+                ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script("Publish GitHub release")],
+                cwd=directory, env=env, capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("--draft=false --prerelease=false --latest=false", result.stdout)
 
 
 if __name__ == "__main__":

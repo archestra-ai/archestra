@@ -1,0 +1,45 @@
+diff --git a/lib/storage.js b/lib/storage.js
+--- a/lib/storage.js
++++ b/lib/storage.js
+@@ -45,7 +45,7 @@
+ const z = __importStar(require("zod"));
+ const crypto_1 = require("crypto");
+ const botbuilder_stdlib_1 = require("botbuilder-stdlib");
+-const storeItems = z.record(z.unknown());
++const storeItems = z.record(z.string(), z.unknown());
+ /**
+  * @internal
+  *
+diff --git a/lib/configurationBotFrameworkAuthentication.js b/lib/configurationBotFrameworkAuthentication.js
+--- a/lib/configurationBotFrameworkAuthentication.js
++++ b/lib/configurationBotFrameworkAuthentication.js
+@@ -119,7 +119,7 @@
+         super();
+         try {
+             botframework_connector_1.AseChannelValidation.init(botFrameworkAuthConfig);
+-            const typedBotFrameworkAuthConfig = TypedOptions.nonstrict().parse(botFrameworkAuthConfig);
++            const typedBotFrameworkAuthConfig = TypedOptions.passthrough().parse(botFrameworkAuthConfig);
+             const { CallerId, ChannelService, OAuthUrl = typedBotFrameworkAuthConfig[botframework_connector_1.AuthenticationConstants.OAuthUrlKey], ToBotFromChannelOpenIdMetadataUrl = typedBotFrameworkAuthConfig[botframework_connector_1.AuthenticationConstants.BotOpenIdMetadataKey], ToBotFromChannelTokenIssuer, ToBotFromEmulatorOpenIdMetadataUrl, ToChannelFromBotLoginUrl, ToChannelFromBotOAuthScope, } = typedBotFrameworkAuthConfig;
+             let ValidateAuthority = true;
+             try {
+@@ -133,7 +133,7 @@
+         catch (err) {
+             // Throw a new error with the validation details prominently featured.
+             if (z.instanceof(z.ZodError).safeParse(err).success) {
+-                throw new Error(JSON.stringify(err.errors, null, 2));
++                throw new Error(JSON.stringify(err.issues, null, 2));
+             }
+             throw err;
+         }
+diff --git a/lib/configurationServiceClientCredentialFactory.js b/lib/configurationServiceClientCredentialFactory.js
+--- a/lib/configurationServiceClientCredentialFactory.js
++++ b/lib/configurationServiceClientCredentialFactory.js
+@@ -71,7 +71,7 @@
+      */
+     constructor(factoryOptions = {}) {
+         var _a;
+-        const { MicrosoftAppId = null, MicrosoftAppPassword = null, MicrosoftAppType = null, MicrosoftAppTenantId = null, [botframework_connector_1.AuthenticationConstants.CertificateThumbprint]: CertificateThumbprint = null, [botframework_connector_1.AuthenticationConstants.CertificatePrivateKey]: CertificatePrivateKey = null, } = TypedConfig.nonstrict().parse(factoryOptions);
++        const { MicrosoftAppId = null, MicrosoftAppPassword = null, MicrosoftAppType = null, MicrosoftAppTenantId = null, [botframework_connector_1.AuthenticationConstants.CertificateThumbprint]: CertificateThumbprint = null, [botframework_connector_1.AuthenticationConstants.CertificatePrivateKey]: CertificatePrivateKey = null, } = TypedConfig.passthrough().parse(factoryOptions);
+         super(MicrosoftAppId, MicrosoftAppPassword, MicrosoftAppTenantId);
+         const appType = (_a = MicrosoftAppType === null || MicrosoftAppType === void 0 ? void 0 : MicrosoftAppType.trim()) !== null && _a !== void 0 ? _a : MultiTenant;
+         const withCertificate = CertificateThumbprint || CertificatePrivateKey;

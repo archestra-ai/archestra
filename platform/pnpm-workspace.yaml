@@ -24,8 +24,18 @@ catalog:
   # cannot both install a `tsc` bin.
   typescript: "npm:@typescript/typescript6@^6.0.0"
   typescript-7: "npm:typescript@7.0.1-rc"
-  zod: ^4.3.4
+  zod: ^4.6.6
 overrides:
+  # GHSA-mrhx-c7xc-m3w5: preserve these SDK versions on patched Zod 4.
+  # Their package patches retain the existing record and error contracts.
+  'botbuilder@4.23.3>zod': '>=4.6.6 <5'
+  'botbuilder-core@4.23.3>zod': '>=4.6.6 <5'
+  'botframework-connector@4.23.3>zod': '>=4.6.6 <5'
+  'botframework-schema@4.23.3>zod': '>=4.6.6 <5'
+  'confluence.js@2.1.0>zod': '>=4.6.6 <5'
+  # Patched transitive HTTP dependencies; versions have cleared the age rule.
+  follow-redirects: ">=1.16.1"
+  http-cache-semantics: ">=4.3.0 <5"
   # CVE-2026-49356 (GHSA-4x5r-pxfx-6jf8, LOW, arbitrary source-map read via
   # sourceMappingURL handling) fixed in 7.29.6. Transitive-only (build tooling),
   # so an override is the only way to lift every resolution past the vulnerable
@@ -51,7 +61,7 @@ overrides:
   # shell-quote's parse() on plain space-separated input. Vulnerable range is
   # <= 1.8.4, fixed in 1.9.0 — the floor must be >=1.9.0, since a >=1.8.4 floor
   # still resolves the vulnerable 1.8.4.
-  shell-quote: '>=1.9.0'
+  shell-quote: '>=1.11.0'
   ws@>=8: '>=8.21.0'
   # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
   # catch; force that edge to the CVE-2026-48779 fix too.
@@ -61,16 +71,17 @@ overrides:
   websocket-driver: '>=0.7.5'
   # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6; CVE-2026-94483 (HIGH, SSRF)
   # fixed in 16.3.8.
-  next: 16.3.8
+  next: 16.4.1
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
   form-data@<4: '>=3.0.5 <4'
   '@hono/node-server': 1.19.14
-  body-parser: 2.2.1
+  # CVE-2026-111181: trailing compressed bytes can terminate the process.
+  body-parser: 2.4.0
   # GHSA-cmwh-pvxp-8882 (fixed 3.4.11) and GHSA-c2j3-45gr-mqc4 (fixed 3.4.12).
   # Pinned exact so dompurify stays deduped to one version.
-  dompurify: 3.4.13
+  dompurify: '>=3.4.17 <4'
   glob: 11.1.0
   # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
   esbuild: '>=0.28.1'
@@ -87,7 +98,8 @@ overrides:
   # in 4.3.1.
   # CVE-2026-84375: resource consumption fixed in 4.3.2.
   js-yaml: '>=4.3.2 <5'
-  qs: 6.15.2
+  # Keep body-parser 2.4.0's upstream query parser minimum.
+  qs: '>=6.16.1 <7'
   d3-path: 3.1.0
   # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
   hono: 4.12.25
@@ -113,7 +125,9 @@ overrides:
   # line against an unvetted newer release on its own. Bounded to <8 so the
   # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
   # is a major-version change and not this pin's business.
-  undici: '>=7.29.1 <8'
+  # CVE-2026-109869 (HIGH, unhandled error on excessive content-encodings)
+  # fixed in 7.30.1; published before the seven-day release-age window.
+  undici: '>=7.30.1 <8'
   # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
   # Preserve the consumers' release lines.
   '@xmldom/xmldom': 0.9.12
@@ -153,7 +167,7 @@ overrides:
   # same class again) fixed in 5.0.9.
   # CVE-2026-102276 and CVE-2026-102278 require the 5.0.11 fix.
   brace-expansion: '>=5.0.11'
-  smol-toml: '>=1.6.1'
+  smol-toml: '>=1.9.0'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
   # CVE-2026-54285 (GHSA-8988-4f7v-96qf, unbounded memory allocation when
@@ -172,9 +186,15 @@ overrides:
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
-      zod: ^4.3.4
+      zod: ^4.6.6
 
 patchedDependencies:
+  # Preserve the stable SDK APIs when resolving their patched validator.
+  'botbuilder@4.23.3': patches/botbuilder@4.23.3.patch
+  'botbuilder-core@4.23.3': patches/botbuilder-core@4.23.3.patch
+  'botframework-connector@4.23.3': patches/botframework-connector@4.23.3.patch
+  'botframework-schema@4.23.3': patches/botframework-schema@4.23.3.patch
+  'confluence.js@2.1.0': patches/confluence.js@2.1.0.patch
   # Grok can think, start its answer, and think again in one response. The chat
   # model named every reasoning run `reasoning-<completion id>` and sent the
   # second run's deltas to the part it had already closed, so chat stopped with
@@ -226,6 +246,9 @@ verifyDepsBeforeRun: false
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
+  # CVE-2026-111181: exact fix approved for the one-time 1.3 security release.
+  # Published 2026-10-22 11:39:38 UTC; remove after 2026-10-29 11:39:38 UTC.
+  - body-parser@2.4.0
   # TEMPORARY: source-map-js 1.2.2 (fix CVE-2026-93749, HIGH) was published
   # 2026-09-30 and clears the 7-day window on 2026-10-07. Remove on/after that
   # date and relax the override to a '>=1.2.2' floor.

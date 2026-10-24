@@ -722,10 +722,16 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
  * promptly, long enough to cover a client's ordinary request cadence.
  */
 const RECENTLY_VALIDATED_TTL_MS = 5 * 60_000;
-// Coalesce bookkeeping only: every request still reads the distributed failure
-// buckets and validates its credential. A busy credential's exemption is
-// refreshed at most once per second per process (up to one second less TTL).
+// Coalesce bookkeeping only. A busy credential's exemption is refreshed at most
+// once per second per process (up to one second less TTL).
 const VALIDATION_MARK_REFRESH_MS = 1_000;
+/**
+ * How long this process skips the distributed bucket read for a credential it
+ * just validated. Every request still validates its credential; only the
+ * failure-count read is skipped, and any failure for the credential ends the
+ * skip. Guessed credentials never validate, so they always read the buckets.
+ */
+const LOCAL_VALIDATION_TTL_MS = RATE_LIMIT_WINDOW_MS;
 
 interface RateLimitEntry {
   count: number;
@@ -788,15 +794,32 @@ export class VirtualKeyRateLimiter {
     }),
   );
 
+  /**
+   * Credentials this process validated recently. A credential below its
+   * failure limit when it validated cannot have reached the limit since
+   * without failing here (which clears the mark) or failing elsewhere, and a
+   * failure elsewhere only costs one more validation before this process
+   * reads the buckets again. Validated credentials are exempt from the
+   * IP-wide bucket, so neither bucket can reject them.
+   */
+  private readonly locallyValidated = registerProcessLocalCache(
+    new LRUCacheManager<true>({
+      maxSize: 10_000,
+      defaultTtl: LOCAL_VALIDATION_TTL_MS,
+    }),
+  );
+
   constructor(cache: RateLimitCache) {
     this.cache = cache;
   }
 
   /**
-   * Reads both buckets and the credential's validation mark in one statement.
+   * Reads both buckets and the credential's validation mark in one statement,
+   * unless this process validated the credential recently.
    */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
+    if (credential && this.locallyValidated.has(localKey(credential))) return;
     const now = Date.now();
     const credentialKey = this.credentialKey(ip, credential);
     const ipKey = this.ipKey(ip);
@@ -834,6 +857,7 @@ export class VirtualKeyRateLimiter {
     credential?: string;
   }): Promise<void> {
     const { ip, credential } = params;
+    if (credential) this.locallyValidated.delete(localKey(credential));
     await this.cache.incrementFixedWindows({
       keys: [this.credentialKey(ip, credential), this.ipKey(ip)],
       windowMs: RATE_LIMIT_WINDOW_MS,
@@ -851,6 +875,7 @@ export class VirtualKeyRateLimiter {
   async recordSuccess(params: { credential?: string }): Promise<void> {
     const { credential } = params;
     if (!credential) return;
+    this.locallyValidated.set(localKey(credential), true);
     const key = this.validatedKey(credential);
     const pending = this.successWrites.get(key);
     if (pending) return pending;
@@ -1187,6 +1212,13 @@ const CREDENTIAL_FINGERPRINT_KEY = createSecretKey(
  *
  * Requests that present no credential at all share the "none" bucket.
  */
+/** Full-length digest: a process-local key must never collide with a guess. */
+function localKey(credential: string): string {
+  return createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY)
+    .update(credential)
+    .digest("base64url");
+}
+
 function fingerprintCredential(credential: string | undefined): string {
   if (!credential) return "none";
   const hmac = createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY);

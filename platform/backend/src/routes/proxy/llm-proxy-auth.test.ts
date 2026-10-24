@@ -1305,6 +1305,27 @@ describe("VirtualKeyRateLimiter", () => {
     ).rejects.toThrow("Too many failed virtual API key attempts");
   });
 
+  test("skips the shared bucket read for a credential this process just validated", async () => {
+    const reads = vi.spyOn(cacheManager, "getMany");
+    await limiter.recordSuccess({ credential: KEY_A });
+
+    await limiter.check({ ip: "1.2.3.4", credential: KEY_A });
+    expect(reads).not.toHaveBeenCalled();
+    // A credential that has not validated here still reads the buckets.
+    await limiter.check({ ip: "1.2.3.4", credential: KEY_B });
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failure ends the skip, so a revoked credential is throttled again", async () => {
+    await limiter.recordSuccess({ credential: KEY_A });
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure({ ip: "5.6.7.8", credential: KEY_A });
+    }
+    await expect(
+      limiter.check({ ip: "5.6.7.8", credential: KEY_A }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+  });
+
   test("never writes the credential into the recently-validated cache key", async () => {
     await limiter.recordSuccess({ credential: KEY_A });
     const keys = (await storedEntries()).map((entry) => entry.key);

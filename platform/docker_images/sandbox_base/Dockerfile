@@ -14,9 +14,13 @@ FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e0
 
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the
 # model is never tempted to `pip install` into a location the venv won't see).
+# libbrotli1 is listed so apt upgrades the copy the base image ships: Debian's
+# nodejs and curl decode Brotli through it. The floor fails the build if the
+# CVE-2026-111497 fix is missing.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      bash coreutils curl git jq ca-certificates build-essential nodejs npm unzip zip \
+      bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 unzip zip \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \

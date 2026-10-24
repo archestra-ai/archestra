@@ -3,6 +3,41 @@ import { z } from "zod";
 import { renderSchemaRows } from "./codegen-archestra-mcp-server-docs";
 
 describe("codegen-archestra-mcp-server-docs", () => {
+  test("renders compact nullable types without losing nested fields", () => {
+    const rows = renderSchemaRows({
+      type: "object",
+      properties: {
+        label: { type: ["string", "null"] },
+        settings: {
+          type: ["object", "null"],
+          properties: { enabled: { type: ["boolean", "null"] } },
+        },
+        records: {
+          type: ["array", "null"],
+          items: {
+            type: "object",
+            properties: { id: { type: "string" } },
+          },
+        },
+      },
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "`label`", type: "`string \\| null`" }),
+        expect.objectContaining({
+          name: "`settings.enabled`",
+          type: "`boolean \\| null`",
+        }),
+        expect.objectContaining({
+          name: "`records`",
+          type: "`object[] \\| null`",
+        }),
+        expect.objectContaining({ name: "`records[].id`", type: "`string`" }),
+      ]),
+    );
+  });
+
   test("renders nullable nested enterprise-managed config fields", () => {
     const schema = z.toJSONSchema(
       z.object({

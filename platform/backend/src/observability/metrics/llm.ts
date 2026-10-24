@@ -817,9 +817,20 @@ export function getObservableFetch(
       response.ok &&
       response.headers.get("content-type")?.includes("application/json")
     ) {
-      const cloned = response.clone();
+      // Read the body once and give the SDK a response over the same text:
+      // cloning tees the stream, which costs more than the JSON it carries.
+      let text: string;
       try {
-        const data = await cloned.json();
+        text = await response.text();
+      } catch (readError) {
+        return new Response(
+          new ReadableStream({ start: (stream) => stream.error(readError) }),
+          response,
+        );
+      }
+      const replayed = new Response(text, response);
+      try {
+        const data = JSON.parse(text);
         // Extract model from response if not in request
         if (!model && data.model) {
           model = data.model;
@@ -836,10 +847,10 @@ export function getObservableFetch(
             model ?? "unknown",
             source,
           );
-          return response;
+          return replayed;
         }
         if (!data.usage) {
-          return response;
+          return replayed;
         }
         const extractor = fetchUsageExtractors[provider];
         if (extractor) {
@@ -857,6 +868,7 @@ export function getObservableFetch(
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");
       }
+      return replayed;
     }
 
     return response;

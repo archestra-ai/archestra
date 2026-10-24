@@ -9,6 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { withTransactionRetry } from "@/database/retry";
 import * as schema from "@/database/schemas";
 import type { InteractionUserActivityState } from "@/types/interaction-user-activity";
@@ -18,13 +19,10 @@ export default class InteractionUserActivityModel {
     values: typeof schema.interactionsTable.$inferInsert,
     tx?: Transaction,
   ) {
-    const columns = getTableColumns(schema.interactionsTable);
+    const columns = interactionColumns;
     const payload: Record<string, string | null> = {};
-    for (const [key, column] of Object.entries(columns)) {
-      if (
-        values[key as keyof typeof values] === undefined &&
-        (column.defaultFn || (!column.default && column.onUpdateFn))
-      ) {
+    for (const key of runtimeDefaultColumns) {
+      if (values[key as keyof typeof values] === undefined) {
         throw new Error(`Unsupported interaction runtime default: ${key}`);
       }
     }
@@ -46,21 +44,14 @@ export default class InteractionUserActivityModel {
       }
       payload[column.name] = encoded === null ? null : String(encoded);
     }
-    const selected = Object.fromEntries(
-      Object.entries(columns).map(([key, column]) => [
-        key,
-        sql`${column}`.mapWith(column),
-      ]),
-    ) as {
-      [Key in keyof typeof columns]: SQL<
-        (typeof schema.interactionsTable.$inferSelect)[Key]
-      >;
-    };
-    const [interaction] = await (tx ?? db)
-      .select(selected)
-      .from(
-        sql`interaction_user_activity_append(${JSON.stringify(payload)}::jsonb) AS interactions`,
-      );
+    // An explicit transaction must keep its own session. The common standalone
+    // path reuses only the compiled statement, with fresh payload and results.
+    const query = tx
+      ? InteractionUserActivityModel.prepareAppend(tx)
+      : InteractionUserActivityModel.appendQuery.get();
+    const [interaction] = await query.execute({
+      payload: JSON.stringify(payload),
+    });
     return interaction;
   }
 
@@ -440,6 +431,30 @@ export default class InteractionUserActivityModel {
     }));
   }
 
+  private static readonly appendQuery = new PreparedQuery((database) =>
+    InteractionUserActivityModel.prepareAppend(database),
+  );
+
+  private static prepareAppend(database: Pick<typeof db, "select">) {
+    const columns = getTableColumns(schema.interactionsTable);
+    const selected = Object.fromEntries(
+      Object.entries(columns).map(([key, column]) => [
+        key,
+        sql`${column}`.mapWith(column),
+      ]),
+    ) as {
+      [Key in keyof typeof columns]: SQL<
+        (typeof schema.interactionsTable.$inferSelect)[Key]
+      >;
+    };
+    return database
+      .select(selected)
+      .from(
+        sql`interaction_user_activity_append(${sql.placeholder("payload")}::jsonb) AS interactions`,
+      )
+      .prepare("archestra_interaction_user_activity_append");
+  }
+
   private static async finish() {
     return withDbTransaction(async (tx) => {
       const [state] = await tx
@@ -678,3 +693,11 @@ function aggregate(source: SQL) {
     GROUP BY 1,input.user_id ORDER BY 1,input.user_id
   `;
 }
+
+// Schema encoders are immutable metadata; payloads and database results stay fresh.
+const interactionColumns = getTableColumns(schema.interactionsTable);
+const runtimeDefaultColumns = Object.entries(interactionColumns)
+  .filter(
+    ([, column]) => column.defaultFn || (!column.default && column.onUpdateFn),
+  )
+  .map(([key]) => key);

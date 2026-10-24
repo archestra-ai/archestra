@@ -574,7 +574,7 @@ export class OpenAIRequestAdapter
       }
     }
 
-    logger.info(
+    logger.debug(
       {
         model: this.getModel(),
         messageCount: messages.length,

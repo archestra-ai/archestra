@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
 
       # Each client resolves on its own, so one unreachable source does not
       # hold back the other. The last step fails the job for any miss.
@@ -137,7 +137,7 @@ jobs:
       # The App token makes pushes and the new PR trigger ordinary CI.
       - name: Generate releaser token
         id: token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

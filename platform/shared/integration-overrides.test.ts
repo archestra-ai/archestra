@@ -187,7 +187,7 @@ describe("coding agent ordering", () => {
         },
         catalog,
       ),
-    ).toEqual(["codex", "opencode", "claude-code", "openclaw"]);
+    ).toEqual(["codex", "opencode", "claude-code", "openclaw", "grok"]);
   });
   it("round-trips reordering and restores a hidden entry at its new position", () => {
     const order = ["hermes", "codex", "claude-code"] as const;

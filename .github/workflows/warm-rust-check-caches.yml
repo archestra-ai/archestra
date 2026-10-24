@@ -51,7 +51,7 @@ jobs:
       # jobs restore this default-branch entry without publishing their own.
       - name: Restore or save Cargo dependencies
         id: cargo-cache
-        uses: ./.github/actions/setup-rust-build
+        uses: $/.github/actions/setup-rust-build
         with:
           workspaces: ${{ matrix.workspace }}
           shared-key: ${{ matrix.cache-key }}

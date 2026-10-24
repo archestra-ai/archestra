@@ -44,6 +44,7 @@ import {
   openappaFailure,
   runtimeFailureCode,
   unansweredAnnotationNotice,
+  undeclaredToolNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { toolEntries } from "@/openappa/policy-text";
@@ -1318,10 +1319,10 @@ export async function evaluateToolCalls(
       try {
         decision = await dispatchCall(event);
       } catch (error) {
-        // An annotator that gives no answer refuses only this call. Failing the
-        // batch would cancel the calls already admitted, and an admitted call
-        // that spent an approval would lose it.
-        const notice = unansweredAnnotationNotice(error);
+        // These unrecorded refusals apply only to this call. Failing the batch
+        // would cancel admitted siblings, including spent approvals.
+        const notice =
+          undeclaredToolNotice(error) ?? unansweredAnnotationNotice(error);
         if (notice === null) throw error;
         logger.warn(
           {
@@ -1330,7 +1331,7 @@ export async function evaluateToolCalls(
             sessionId: session.session_id,
             tool,
           },
-          "OpenAPPA could not rule on a tool call because its annotator gave no answer; the call is returned as a notice",
+          "OpenAPPA refused a tool call before recording it; the call is returned as a notice",
         );
         return {
           kind: "deny" as const,

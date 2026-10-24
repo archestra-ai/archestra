@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ClientMark } from "../client-mark";
+import { type ClientMark, PI_MARK } from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
 import {
   OPENCODE_FAMILY_CLIENTS,
@@ -357,6 +357,7 @@ export const ClientFilterSchema = z.enum([
   CURSOR_CLIENT_FILTER,
   OPENCODE_CLIENT_FILTER,
   KILO_CLIENT_FILTER,
+  "pi",
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -439,6 +440,15 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     isClientAgentId: (externalAgentId: string | null | undefined) =>
       externalAgentId?.trim().toLowerCase() === client.id,
   })),
+  {
+    filter: "pi",
+    label: "Pi",
+    // Multi-provider coding client; its own mark always takes precedence.
+    provider: "openai",
+    mark: PI_MARK,
+    agentIds: ["pi"],
+    isClientAgentId: (id) => id?.trim().toLowerCase() === "pi",
+  },
   {
     filter: COPILOT_CLI_CLIENT_FILTER,
     label: COPILOT_CLI_CLIENT_LABEL,

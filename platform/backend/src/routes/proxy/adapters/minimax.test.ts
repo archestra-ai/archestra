@@ -55,6 +55,16 @@ function parseSse(sseData: string | Uint8Array | null) {
 }
 
 describe("MinimaxStreamAdapter reasoning", () => {
+  test("marks synthesized usage so token quotas cannot count it as provider usage", () => {
+    const adapter = minimaxAdapterFactory.createStreamAdapter();
+    adapter.processChunk(textChunk("A locally counted response"));
+    adapter.formatEndSSE();
+    expect(adapter.state.usage).toMatchObject({
+      inputTokensEstimated: true,
+      outputTokensEstimated: true,
+    });
+  });
+
   test("extracts deltas from cumulative reasoning_details into reasoning_content", () => {
     const adapter = minimaxAdapterFactory.createStreamAdapter();
 

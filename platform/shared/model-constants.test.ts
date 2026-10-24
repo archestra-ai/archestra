@@ -3,6 +3,7 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  findTierDefault,
   getAgentRuntimeAllowedProtocols,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
@@ -205,6 +206,10 @@ describe("getAgentRuntimeModelCompatibility", () => {
       },
       {
         runtimeCommand: ["archestra-openclaw"],
+        inferenceProtocol: "openai_chat",
+      },
+      {
+        runtimeCommand: ["archestra-grok"],
         inferenceProtocol: "openai_chat",
       },
     ] as const) {
@@ -414,6 +419,23 @@ describe("resolveClaudeContextVariant", () => {
   });
 });
 
+describe("findTierDefault", () => {
+  test("picks Kimi K3.1 Pro from Moonshot's catalog, not its Highspeed variant", () => {
+    // The default matches as a substring, so `kimi-k3.1-pro-highspeed` matches
+    // too; the plain model must still win.
+    const models = [
+      "kimi-k3.1-pro-highspeed",
+      "kimi-k3",
+      "kimi-k3.1-pro",
+      "kimi-k2.6",
+    ].map((modelId) => ({ modelId }));
+
+    expect(findTierDefault(models, "kimi", "normal")?.modelId).toBe(
+      "kimi-k3.1-pro",
+    );
+  });
+});
+
 describe("isSmallModel", () => {
   test("makes no claim when the serving backend reported no size", () => {
     // Only Ollama reports a parameter count today; everywhere else this is null
@@ -467,6 +489,9 @@ describe("getAgentRuntimeAllowedProtocols", () => {
     ).toEqual(["anthropic"]);
     expect(getAgentRuntimeAllowedProtocols(["archestra-codex"])).toEqual([
       "openai_responses",
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
       "openai_chat",
     ]);
     for (const command of [

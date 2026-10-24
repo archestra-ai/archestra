@@ -548,9 +548,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
-    // A call whose annotator gave no answer never ran, and the runtime has no
-    // record of it. Its result is the notice the client ran in its place, so
-    // it is answered with that notice instead of being ruled on as a call.
+    // An undeclared call or one whose annotator gave no answer never ran, and
+    // the runtime has no record of it. Restore the host-held notice instead of
+    // accepting client text or ruling on it as an executed call.
     const unansweredNotices = new Map<string, string>();
     for (const answer of results) {
       const notice = await cacheManager.get<string>(

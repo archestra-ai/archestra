@@ -6,7 +6,8 @@ image_tag=${1:?image tag is required}
 # Current full and slim images each contain 1,726 packages. Keep a wide margin
 # for legitimate removals while rejecting empty or materially truncated SBOMs.
 minimum_packages=${2:-1000}
-image_repo=${image_tag%:*}
+image_repo=${image_tag%@*}
+if [ "$image_repo" = "$image_tag" ]; then image_repo=${image_tag%:*}; fi
 registry_host=${image_repo%%/*}
 registry_path=${image_repo#*/}
 

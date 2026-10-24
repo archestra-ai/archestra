@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
+  echo "archestra: Grok Build requires an Agent configured for OpenAI Chat Completions" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "grok_protocol" "Grok Build requires an Agent configured for OpenAI Chat Completions."
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
+fi
+: "${OPENAI_BASE_URL:?}" "${OPENAI_API_KEY:?}"
+: "${ARCHESTRA_MCP_GATEWAY_URL:?}" "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}"
+: "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! command -v grok >/dev/null 2>&1; then
+  "${script_dir}/archestra-grok-turn-failure" missing
+  exit 78
+fi
+# GROK_HOME holds Grok's config, rules, logs and saved sessions. The persisted
+# state directory keeps sessions available to follow-ups.
+export GROK_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/grok"
+export GROK_DISABLE_AUTOUPDATER=1
+mkdir -p "${runtime_dir}" "${GROK_HOME}/rules"
+chmod 0700 "${GROK_HOME}"
+
+# Home-level rules load for every project without folder trust and without a
+# file in the workspace. Grok gives them to the model with its own prompt.
+rules_file="${GROK_HOME}/rules/archestra-runtime.md"
+"${script_dir}/archestra-agent-instructions" > "${rules_file}.tmp"
+chmod 0600 "${rules_file}.tmp"
+mv "${rules_file}.tmp" "${rules_file}"
+
+# Credentials stay in the environment. Grok reads the provider key through
+# env_key and the runtime binding through env_http_headers; the gateway bridge
+# reads the gateway token and binding itself.
+python3 - "${GROK_HOME}/config.toml" "${script_dir}/archestra-grok-hook" "${script_dir}/archestra-grok-mcp" <<'PYTHON'
+import json
+import os
+import sys
+import time
+
+config_path, hook, bridge = sys.argv[1], sys.argv[2], sys.argv[3]
+env = os.environ
+session = env.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
+binding = env.get("ARCHESTRA_AGENT_RUNTIME_BINDING", "")
+tracing = {
+    "X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
+    "X-Archestra-Session-Id": session,
+    "X-Appa-Session-ID": session,
+}
+
+
+def string(value):
+    # A JSON string is a valid TOML basic string: both escape the quote, the
+    # backslash and control characters the same way. Non-ASCII text stays
+    # literal because TOML rejects the UTF-16 surrogate pairs JSON would write
+    # for it.
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def table(values):
+    return "{ " + ", ".join(f"{string(key)} = {string(value)}" for key, value in values.items()) + " }"
+
+
+def positive(name):
+    value = env.get(name, "")
+    return int(value) if value.isdigit() and int(value) > 0 else None
+
+
+lines = [
+    "[cli]",
+    "auto_update = false",
+    "show_tips = false",
+    "",
+    # Product telemetry, remote patches and xAI-hosted tools never leave the
+    # Agent-scoped proxy and gateway. Session summaries, turn recaps and prompt
+    # suggestions would spend extra model calls on every turn.
+    "[features]",
+    "telemetry = false",
+    "feedback = false",
+    "campaigns = false",
+    "managed_config = false",
+    "remote_fetch = false",
+    "backend_tools = false",
+    "image_gen = false",
+    "video_gen = false",
+    "web_fetch = false",
+    "voice_mode = false",
+    "title_refresh = false",
+    "session_recap = false",
+    "turn_summary = false",
+    "non_git_warning = false",
+    "",
+    "[telemetry]",
+    "trace_upload = false",
+    "",
+    "[managed_mcps]",
+    "enabled = false",
+    "",
+    # Only the Agent's gateway serves MCP tools. Other harnesses' settings in
+    # the workspace or home directory do not add servers or hooks.
+    "[compat.claude]",
+    "mcps = false",
+    "hooks = false",
+    "",
+    "[compat.cursor]",
+    "mcps = false",
+    "hooks = false",
+    "",
+    "[ui]",
+    "prompt_suggestions = false",
+    # Runtime steering types into the terminal while a turn runs. Steer makes
+    # that text part of the running turn instead of a queued next turn.
+    'follow_up_behavior = "steer"',
+    "",
+    # Every auxiliary call uses the Agent's model through the proxy. Without
+    # these, Grok sends titles and summaries to its built-in model ids.
+    "[models]",
+    'default = "archestra"',
+    'session_summary = "archestra"',
+    'prompt_suggestion = "archestra"',
+    'image_description = "archestra"',
+    'web_search = "archestra"',
+    "",
+    "[model.archestra]",
+    f"model = {string(env['ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL'])}",
+    f"name = {string(env['ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL'])}",
+    f"base_url = {string(env['OPENAI_BASE_URL'])}",
+    'env_key = "OPENAI_API_KEY"',
+    'api_backend = "chat_completions"',
+    f"extra_headers = {table(tracing)}",
+]
+if binding:
+    lines.append('env_http_headers = { "X-Archestra-Runtime-Binding" = "ARCHESTRA_AGENT_RUNTIME_BINDING" }')
+context_length = positive("ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH")
+if context_length:
+    lines.append(f"context_window = {context_length}")
+output_length = positive("ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH")
+if output_length:
+    lines.append(f"max_completion_tokens = {output_length}")
+lines += [
+    "",
+    # The bridge reads the gateway URL, token and run headers from the
+    # environment and makes gateway tool names acceptable to Grok.
+    "[mcp_servers.archestra]",
+    f"command = {string(bridge)}",
+    "startup_timeout_sec = 30",
+    "",
+]
+
+
+def hook_group(event, matcher=None, timeout=10):
+    group = [f"[[hooks.{event}]]"]
+    if matcher:
+        group.append(f"matcher = {string(matcher)}")
+    group.append(f"hooks = [{{ type = \"command\", command = {string(hook + ' ' + event)}, timeout = {timeout} }}]")
+    return group + [""]
+
+
+lines += hook_group("SessionStart")
+lines += hook_group("UserPromptSubmit")
+lines += hook_group("PreToolUse", "^ask_user_question$")
+# Any finished tool means an answered question or approved permission.
+lines += hook_group("PostToolUse")
+lines += hook_group("Notification", "^permission_prompt$")
+# A denied call (by the person or a rule) no longer waits on anyone.
+lines += hook_group("PermissionDenied")
+lines += hook_group("Stop", timeout=30)
+lines += hook_group("StopFailure", timeout=30)
+lines += hook_group("StopCancelled", timeout=30)
+
+
+def write_private(path, content):
+    temporary = f"{path}.tmp"
+    with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+        file.write(content)
+    os.replace(temporary, path)
+
+
+write_private(config_path, "\n".join(lines))
+# Grok asks whether to trust a new working directory and, until it is trusted,
+# skips the hooks above. This is the grant `grok --trust` records; ACP sessions
+# have no flag for it. The runtime's working directory is the Agent's own.
+write_private(
+    os.path.join(os.path.dirname(config_path), "trusted_folders.toml"),
+    f"[folders.{string(os.getcwd())}]\ntrusted = true\ndecided_at = {int(time.time())}\n",
+)
+PYTHON
+
+session_file="${runtime_dir}/grok-main-session"
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved Grok Build session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+else
+  # A new conversation: the SessionStart hook records its session.
+  rm -f "${session_file}"
+fi
+
+args=(--trust --always-approve)
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  args+=(--resume "$(cat "${session_file}")")
+fi
+
+case "${runtime_mode}" in
+  interactive)
+    exec "${script_dir}/archestra-grok-tui-start" grok "${args[@]}"
+    ;;
+  one_shot)
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      # Without a terminal, drive Grok over its Agent Client Protocol server.
+      exec "${script_dir}/archestra-grok-acp"
+    fi
+    # The native TUI runs in the pane like the other maintained clients, so
+    # terminal steering reaches the running turn. The Stop hook settles it.
+    exec "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      "${script_dir}/archestra-grok-tui-start" grok "${args[@]}"
+    ;;
+  *)
+    echo "archestra: unknown Agent Runtime mode" >&2
+    exit 78
+    ;;
+esac

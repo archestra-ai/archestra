@@ -46,8 +46,10 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   buildCurlExample,
+  getImageExampleOperations,
   getProviderAuthHeader,
   getProxyBaseUrl,
+  type ImageExampleOperation,
   providerKeyEnvVar,
   type RequestCredential,
   type RequestTarget,
@@ -436,6 +438,7 @@ export function RequestExample({
   const isPending = usesCatalog
     ? passthroughModelsPending
     : readsLinkedModels && linkedModelsPending;
+  const imageOperations = getImageExampleOperations(target);
   const candidates = usesCatalog
     ? (passthroughModels ?? []).map((model) => ({
         id: model.id,
@@ -459,10 +462,7 @@ export function RequestExample({
             (model.provider === "jev" ||
               !model.outputModalities ||
               model.outputModalities.includes("text") ||
-              (target.kind === "provider" &&
-                target.provider === "azure" &&
-                model.provider === "azure" &&
-                model.outputModalities.includes("image"))),
+              model.outputModalities.includes("image")),
         )
         .map((model) => ({
           id: model.modelId,
@@ -476,11 +476,7 @@ export function RequestExample({
             : null,
         }));
   const modelOptions = candidates
-    .filter(
-      (model) =>
-        !model.isImage ||
-        (target.kind === "provider" && target.provider === "azure"),
-    )
+    .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
       target.kind === "model-router"
         ? routerProviders.includes(model.provider) &&
@@ -516,13 +512,14 @@ export function RequestExample({
       ? pickedModel
       : modelOptions[0]?.value;
   const selectedModel = modelOptions.find((option) => option.value === model);
-  const [imageOperation, setImageOperation] = useState<"generate" | "edit">(
-    "generate",
-  );
-  const isAzureImage =
-    target.kind === "provider" &&
-    target.provider === "azure" &&
-    selectedModel?.isImage;
+  const [imageOperation, setImageOperation] =
+    useState<ImageExampleOperation>("generate");
+  const selectedImageOperation = selectedModel?.isImage
+    ? (imageOperations.find((operation) => operation === imageOperation) ??
+      imageOperations[0])
+    : undefined;
+  const showImageOperationPicker =
+    selectedModel?.isImage && imageOperations.length > 1;
 
   const example =
     model &&
@@ -533,7 +530,7 @@ export function RequestExample({
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
-      imageOperation: isAzureImage ? imageOperation : undefined,
+      imageOperation: selectedImageOperation,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
@@ -541,7 +538,13 @@ export function RequestExample({
   if (!isPending && modelOptions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No runnable model example is available for this key and endpoint yet.
+        {target.kind === "model-router" &&
+        candidates.some(
+          (candidate) =>
+            candidate.isImage && routerProviders.includes(candidate.provider),
+        )
+          ? "Choose the native provider API for image generation examples."
+          : "No runnable model example is available for this key and endpoint yet."}
       </p>
     );
   }
@@ -589,7 +592,7 @@ export function RequestExample({
       <div
         className={cn(
           "grid gap-3",
-          isAzureImage ? "sm:grid-cols-2" : "sm:max-w-80",
+          showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
         )}
       >
         <div className="space-y-1.5">
@@ -621,13 +624,13 @@ export function RequestExample({
             </p>
           )}
         </div>
-        {isAzureImage && (
+        {showImageOperationPicker && (
           <div className="space-y-1.5">
             <Label htmlFor="virtual-key-image-operation">Image operation</Label>
             <Select
-              value={imageOperation}
+              value={selectedImageOperation}
               onValueChange={(value) =>
-                setImageOperation(value as "generate" | "edit")
+                setImageOperation(value as ImageExampleOperation)
               }
             >
               <SelectTrigger
@@ -637,20 +640,33 @@ export function RequestExample({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="generate">Generate an image</SelectItem>
-                <SelectItem value="edit">Edit an image</SelectItem>
+                {imageOperations.map((operation) => (
+                  <SelectItem key={operation} value={operation}>
+                    {operation === "generate"
+                      ? "Generate an image"
+                      : "Edit an image"}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         )}
       </div>
-      {isAzureImage && imageOperation === "edit" && (
+      {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the
           current directory. Use a deployment that supports image editing. cURL
           sets the multipart boundary automatically.
         </p>
       )}
+      {selectedImageOperation &&
+        target.kind === "provider" &&
+        target.provider === "gemini" && (
+          <p className="text-xs text-muted-foreground">
+            The response includes base64 image data in{" "}
+            <InlineCode>inlineData</InlineCode>.
+          </p>
+        )}
       {secret ? (
         <MaskedCodeExample
           language="cURL"

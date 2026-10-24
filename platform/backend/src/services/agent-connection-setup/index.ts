@@ -5,6 +5,7 @@ import { codexSetup } from "./agents/codex";
 import { copilotCliSetup } from "./agents/copilot-cli";
 import { cursorSetup } from "./agents/cursor";
 import { kiloSetup, opencodeSetup } from "./agents/opencode";
+import { piSetup } from "./agents/pi";
 import { buildEnding } from "./steps/ending";
 import {
   bashFooter,
@@ -59,6 +60,7 @@ const SHELL_AGENTS: Record<
   cursor: cursorSetup,
   opencode: opencodeSetup,
   kilo: kiloSetup,
+  pi: piSetup,
 };
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {

@@ -1,4 +1,5 @@
 import { priceBillingUsage } from "@/services/billable-usage";
+import { ThroughputError } from "@/services/llm-throughput";
 import { asRecord } from "@/utils/as-record";
 import type {
   BillingAttribution,
@@ -821,6 +822,18 @@ export function handleError(
    */
   translatesWireFormat?: boolean,
 ): FastifyReply | never {
+  if (error instanceof ThroughputError && !reply.raw.headersSent) {
+    if (error.quota?.retryAfter != null && !error.quota.oversized)
+      reply.header("Retry-After", error.quota.retryAfter);
+    return reply.code(error.status).send({
+      error: {
+        message: error.message,
+        type: "archestra_throughput_error",
+        code: error.code,
+        quota: error.quota,
+      },
+    });
+  }
   logger.error(error);
 
   // Extract status code from error, checking multiple common property names

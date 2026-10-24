@@ -20,6 +20,9 @@ const totals = {
   inputTokens: 1000,
   outputTokens: 500,
   cacheReadTokens: 100,
+  cacheWriteTokens: 40,
+  // Unestimated input + output + cache read + cache write, not input + output.
+  totalTokens: 1640,
   billedCost: 3.5,
   subscriptionCost: 7,
 };

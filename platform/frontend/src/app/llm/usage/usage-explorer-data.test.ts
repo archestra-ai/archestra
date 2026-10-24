@@ -6,11 +6,16 @@ import { supportsUsage, usageCube, usageSeries } from "./usage-explorer-data";
 const props = makeUsageData();
 
 describe("personal usage explorer", () => {
-  it("pivots input/output without counting cache reads in the personal token total", () => {
+  it("keeps token-type pivot totals consistent with reported input, output and both cache categories", () => {
     for (const group of ["model", "client"] as const) {
       const cube = usageCube(props, "tokens", group, true);
-      expect(cube.total).toBe(100);
-      expect(cube.rows[0].children.map((c) => c.total)).toEqual([80, 20]);
+      expect(cube.total).toBe(1110);
+      expect(cube.rows[0].children.map((c) => c.total)).toEqual([
+        80, 20, 1000, 10,
+      ]);
+      expect(cube.splitKeys.reduce((sum, item) => sum + item.total, 0)).toBe(
+        cube.total,
+      );
       expect(cube.rows[0].extras.cache).toBe(1000);
       expect(cube.rows[0].hasSeries).toBe(false);
       expect(cube.buckets).toEqual([]);
@@ -21,7 +26,7 @@ describe("personal usage explorer", () => {
       3,
     ]);
     expect(usageCube(props, "tokens", "time", false).rows[0].series).toEqual([
-      100,
+      1110,
     ]);
     expect(
       usageCube(props, "subscription", "time", false).rows[0].series,
@@ -57,13 +62,13 @@ describe("personal usage explorer", () => {
     expect(usageCube(props, "requests", "client", false).rows[0].label).toBe(
       "Not reported",
     );
-    expect(usageCube(props, "tokens", "token", false).total).toBe(1100);
+    expect(usageCube(props, "tokens", "token", false).total).toBe(1110);
   });
   it("builds independent KPI timelines without substituting currency for missing activity", () => {
     expect(usageSeries(props.statistics, "billed")).toEqual([2]);
     expect(usageSeries(props.statistics, "subscription")).toEqual([8]);
     expect(usageSeries(props.statistics, "requests")).toEqual([3]);
-    expect(usageSeries(props.statistics, "tokens")).toEqual([100]);
+    expect(usageSeries(props.statistics, "tokens")).toEqual([1110]);
     const older = {
       ...props.statistics,
       timeSeries: [{ timestamp: "2026-01-01T00:00:00Z", value: 2 }],

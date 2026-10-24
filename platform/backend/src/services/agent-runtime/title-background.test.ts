@@ -28,6 +28,7 @@ test("background drain waits for a failed launch's title request and persisted t
 }) => {
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(backend, "assertReady").mockResolvedValue();
   const org = await makeOrganization();
   const user = await makeAdmin();
   await makeMember(user.id, org.id, { role: "admin" });

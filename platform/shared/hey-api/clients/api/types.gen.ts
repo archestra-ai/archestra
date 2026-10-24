@@ -375,7 +375,7 @@ export type OpenAiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -1970,7 +1970,7 @@ export type CerebrasChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
@@ -2489,7 +2489,7 @@ export type MistralChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -2889,7 +2889,7 @@ export type PerplexityChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -3288,7 +3288,7 @@ export type GroqChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -3734,7 +3734,7 @@ export type OpenrouterChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -4146,7 +4146,7 @@ export type VllmChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -4500,7 +4500,7 @@ export type OllamaChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -4766,7 +4766,7 @@ export type ZhipuaiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
@@ -5158,7 +5158,7 @@ export type DeepSeekChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -5558,7 +5558,7 @@ export type ArchestraChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -6394,7 +6394,7 @@ export type XaiChatCompletionResponseInput = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -6862,7 +6862,7 @@ export type OpenAiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -8457,7 +8457,7 @@ export type CerebrasChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
          */
@@ -8976,7 +8976,7 @@ export type MistralChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -9376,7 +9376,7 @@ export type PerplexityChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -9775,7 +9775,7 @@ export type GroqChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -10221,7 +10221,7 @@ export type OpenrouterChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -10633,7 +10633,7 @@ export type VllmChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -10987,7 +10987,7 @@ export type OllamaChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * The assistant message in the response
          */
@@ -11253,7 +11253,7 @@ export type ZhipuaiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
@@ -11645,7 +11645,7 @@ export type DeepSeekChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -12045,7 +12045,7 @@ export type ArchestraChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -12881,7 +12881,7 @@ export type XaiChatCompletionResponse = {
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
-        logprobs: unknown;
+        logprobs?: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
@@ -31046,7 +31046,7 @@ export type AzureImageEditsWithDefaultAgentData = {
         output_format?: 'png' | 'jpeg' | 'webp' | unknown;
         response_format?: 'url' | 'b64_json' | unknown;
         user?: string;
-        safety_identifier?: string | unknown;
+        safety_identifier?: unknown;
         n?: number | unknown;
         output_compression?: number | unknown;
         input_fidelity?: 'high' | 'low' | unknown;
@@ -31181,7 +31181,7 @@ export type AzureImageEditsWithAgentData = {
         output_format?: 'png' | 'jpeg' | 'webp' | unknown;
         response_format?: 'url' | 'b64_json' | unknown;
         user?: string;
-        safety_identifier?: string | unknown;
+        safety_identifier?: unknown;
         n?: number | unknown;
         output_compression?: number | unknown;
         input_fidelity?: 'high' | 'low' | unknown;
@@ -31737,7 +31737,7 @@ export type AzureRealtimeTurnWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -32236,7 +32236,7 @@ export type AzureRealtimeTurnWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -32892,7 +32892,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -33414,7 +33414,7 @@ export type AzureChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -45256,7 +45256,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway?: string;
@@ -45522,7 +45522,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway: string | null;
@@ -45623,7 +45623,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -46903,7 +46903,7 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
@@ -47009,7 +47009,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
         }>;
     };
 };
@@ -51985,7 +51985,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -52477,7 +52477,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -59055,7 +59055,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -59865,7 +59865,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -60675,7 +60675,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -60915,7 +60915,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -61725,7 +61725,7 @@ export type GetInteractionsResponses = {
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index?: number;
-                    logprobs: unknown;
+                    logprobs?: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
@@ -63045,7 +63045,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo';
+        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi';
         /**
          * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
@@ -67347,7 +67347,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -68157,7 +68157,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -68967,7 +68967,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -69207,7 +69207,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -70017,7 +70017,7 @@ export type GetInteractionResponses = {
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index?: number;
-                logprobs: unknown;
+                logprobs?: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
@@ -75782,7 +75782,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -76274,7 +76274,7 @@ export type KimiChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -83540,7 +83540,7 @@ export type GetLimitsData = {
     query?: {
         entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId?: string;
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -83625,15 +83625,25 @@ export type GetLimitsResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        throughputUsage?: {
+            /**
+             * Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap.
+             */
+            currentUsage: number;
+            /**
+             * Minute: projected full allowance recovery without new traffic. Other intervals: next reset.
+             */
+            resetsAt: string;
+        };
         labels: Array<{
             key: string;
             value: string;
@@ -83655,12 +83665,12 @@ export type CreateLimitData = {
     body: {
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
         labels?: Array<{
             key: string;
@@ -83750,12 +83760,12 @@ export type CreateLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -83937,15 +83947,25 @@ export type GetLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        throughputUsage?: {
+            /**
+             * Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap.
+             */
+            currentUsage: number;
+            /**
+             * Minute: projected full allowance recovery without new traffic. Other intervals: next reset.
+             */
+            resetsAt: string;
+        };
         labels: Array<{
             key: string;
             value: string;
@@ -83965,12 +83985,12 @@ export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
     body: {
-        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
         labels?: Array<{
             key: string;
@@ -84062,12 +84082,12 @@ export type UpdateLimitResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
-        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -91742,7 +91762,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -92234,7 +92254,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -93934,7 +93954,7 @@ export type ModelRouterChatCompletionsWithDefaultAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -94098,7 +94118,7 @@ export type ModelRouterChatCompletionsWithAgentResponses = {
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index?: number;
-            logprobs: unknown;
+            logprobs?: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
@@ -105591,6 +105611,10 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 position?: number;
             };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
         } | null;
         modelProviderOverrides?: {
             [key: string]: {
@@ -109350,7 +109374,6 @@ export type ImportGithubPluginData = {
         githubAppConfigId?: string;
         githubPatId?: string;
         gitlabTokenId?: string;
-    } & {
         displayName: string;
         description?: string;
         clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
@@ -109650,7 +109673,6 @@ export type ApplyGithubPluginUpdateData = {
         githubAppConfigId?: string;
         githubPatId?: string;
         gitlabTokenId?: string;
-    } & {
         approvedCommitSha: string;
     };
     path: {
@@ -115151,6 +115173,7 @@ export type GetScheduleTriggerRunsData = {
         limit?: number;
         offset?: number;
         status?: 'running' | 'success' | 'failed' | 'cancelled';
+        runKind?: 'due' | 'manual';
     };
     url: '/api/schedule-triggers/{id}/runs';
 };
@@ -121491,6 +121514,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
         };
@@ -121499,6 +121524,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             timestamp: string;
@@ -121508,6 +121535,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
@@ -121517,6 +121546,8 @@ export type GetProxyCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
@@ -121536,6 +121567,8 @@ export type GetProxyCostStatisticsResponses = {
                 inputTokens: number;
                 outputTokens: number;
                 cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
                 billedCost: number;
                 subscriptionCost: number;
                 value: string | null;
@@ -121640,6 +121673,9 @@ export type GetTeamStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -121648,6 +121684,8 @@ export type GetTeamStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121746,6 +121784,8 @@ export type GetAgentStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -121754,6 +121794,8 @@ export type GetAgentStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121849,6 +121891,8 @@ export type GetModelStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
+        totalTokens: number;
         cost: number;
         percentage: number;
         timeSeries: Array<{
@@ -121858,6 +121902,8 @@ export type GetModelStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -121972,6 +122018,7 @@ export type GetUserStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
@@ -121983,6 +122030,7 @@ export type GetUserStatisticsResponses = {
                 inputTokens: number;
                 outputTokens: number;
                 cacheReadTokens: number;
+                cacheWriteTokens: number;
                 totalTokens: number;
                 percentage: number;
                 billedCost: number;
@@ -121994,6 +122042,8 @@ export type GetUserStatisticsResponses = {
                     inputTokens?: number;
                     outputTokens?: number;
                     cacheReadTokens?: number;
+                    cacheWriteTokens?: number;
+                    totalTokens?: number;
                     billedCost?: number;
                     subscriptionCost?: number;
                 }>;
@@ -122005,6 +122055,8 @@ export type GetUserStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -122108,6 +122160,7 @@ export type GetMyStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens: number;
         totalTokens: number;
         billedCost: number;
         subscriptionCost: number;
@@ -122119,6 +122172,7 @@ export type GetMyStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             percentage: number;
             billedCost: number;
@@ -122130,6 +122184,8 @@ export type GetMyStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -122141,6 +122197,8 @@ export type GetMyStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
+            totalTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -122245,6 +122303,7 @@ export type GetMyUsageBreakdownResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
             totalTokens: number;
             percentage: number;
             billedCost: number;
@@ -122690,6 +122749,8 @@ export type GetCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             cost: number;
             percentage: number;
             timeSeries: Array<{
@@ -122699,6 +122760,8 @@ export type GetCostStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
+                totalTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -123093,6 +123156,9 @@ export type GetAppUsageResponses = {
             llmRequests: number;
             inputTokens: number;
             outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            totalTokens: number;
             billedCost: number;
             subscriptionCost: number;
         }>;
@@ -125063,7 +125129,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo';
+        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi';
         /**
          * Hide built-in Archestra tools
          */

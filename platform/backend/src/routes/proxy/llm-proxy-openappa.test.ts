@@ -20,6 +20,7 @@ import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
 import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { cacheManager } from "@/cache-manager";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
@@ -695,6 +696,512 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(foreignOwner.statusCode).toBe(403);
     expect(sent).toHaveLength(requestsBeforeForeignOwner);
+  });
+
+  test.each([
+    "deny",
+    "error",
+    "result",
+  ] as const)("Pi %s keeps denied native calls or raw results away from execution and the provider", async (outcome) => {
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createOpenAiTestClient({
+        nonStreamingToolCalls: [
+          {
+            id: "pi_call",
+            name: "bash",
+            arguments: JSON.stringify({ command: "echo test" }),
+          },
+        ],
+      });
+      const create = client.chat.completions.create;
+      client.chat.completions.create = async (params) => {
+        sent.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+    const body = {
+      model: "gpt-4o",
+      stream: false,
+      messages: [{ role: "user", content: "Run the tool" }],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "bash",
+            description: "Run a command",
+            parameters: {
+              type: "object",
+              properties: { command: { type: "string" } },
+            },
+          },
+        },
+      ],
+    };
+    const submit = (payload: object) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          "x-archestra-agent-id": "pi",
+          "x-pi-session-id": "pi-regression-session",
+        },
+        payload,
+      });
+    block = outcome === "deny";
+    fail = outcome === "error";
+    const first = await submit(body);
+    if (outcome === "error") {
+      expect(first.statusCode, first.body).toBe(500);
+      expect(first.body).not.toContain("private native database error");
+      return;
+    }
+    expect(first.statusCode, first.body).toBe(200);
+    const calls = first.json().choices[0].message.tool_calls ?? [];
+    if (outcome === "deny") {
+      expect(
+        calls.some(
+          (call: { function: { name: string } }) =>
+            call.function.name === "bash",
+        ),
+      ).toBe(false);
+      return;
+    }
+    expect(calls).toHaveLength(1);
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result") return dispatch?.(raw);
+      events.push(event);
+      return JSON.stringify({
+        decision: "deny_call",
+        feedback: "Tool output denied",
+        approved_output: "Tool output denied",
+        output_source: "runtime",
+      });
+    });
+    const next = await submit({
+      ...body,
+      messages: [
+        ...body.messages,
+        { role: "assistant", content: null, tool_calls: calls },
+        {
+          role: "tool",
+          tool_call_id: calls[0].id,
+          content: "RAW DENIED PI RESULT",
+        },
+      ],
+    });
+    expect(next.statusCode, next.body).toBe(200);
+    expect(events.some((event) => event.event === "tool_result")).toBe(true);
+    expect(sent).toHaveLength(2);
+    expect(JSON.stringify(sent[1])).not.toContain("RAW DENIED PI RESULT");
+    expect(JSON.stringify(sent[1])).toContain("Tool output denied");
+  });
+
+  test.each([
+    "deny",
+    "error",
+    "interrupted",
+  ] as const)("Pi streamed %s never releases the proposed native tool", async (outcome) => {
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () =>
+        createOpenAiTestClient({
+          includeToolCalls: true,
+          ...(outcome === "interrupted" ? { throwAtChunk: 2 } : {}),
+        }) as never,
+    );
+    block = outcome === "deny";
+    fail = outcome === "error";
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        "x-archestra-agent-id": "pi",
+        "x-pi-session-id": "pi-stream-session",
+      },
+      payload: {
+        model: "gpt-4o",
+        stream: true,
+        messages: [{ role: "user", content: "Read the weather" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "get_weather",
+              description: "Read weather",
+              parameters: {
+                type: "object",
+                properties: { location: { type: "string" } },
+              },
+            },
+          },
+        ],
+      },
+    });
+    expect(response.body).not.toContain('"name":"get_weather"');
+    expect(response.body).not.toContain("private native database error");
+    if (outcome !== "interrupted")
+      expect(
+        events.some(
+          (event) =>
+            event.event === "tool_call" && event.tool === "get_weather",
+        ),
+      ).toBe(true);
+  });
+
+  test.for([
+    { stream: false, state: "active" },
+    { stream: true, state: "active" },
+    { stream: true, state: "off" },
+    { stream: true, state: "superyell" },
+    { stream: true, state: "error" },
+  ] as const)("Pi protected-session receipt reflects admission (stream=$stream, state=$state)", async ({
+    stream,
+    state,
+  }) => {
+    await app.register(openAiProxyRoutes);
+    for (const modelId of ["gpt-5.5", "openai:gpt-6.1-sol"]) {
+      await ModelModel.upsert({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    }
+    const output = [
+      {
+        id: "msg_pi_receipt",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          { type: "output_text", text: "Hello from Pi", annotations: [] },
+        ],
+      },
+    ];
+    const sent: unknown[] = [];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: { stream?: boolean }) => {
+          sent.push(structuredClone(params));
+          return params.stream
+            ? codexResponseStream("resp_pi_receipt", output)
+            : {
+                id: "resp_pi_receipt",
+                object: "response",
+                created_at: 1,
+                status: "completed",
+                model: "gpt-5.5",
+                output,
+                usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+              };
+        },
+      },
+    } as never);
+    const nativeId = "pi-receipt-session";
+    if (state === "off") await GuardrailsDeploymentModel.setEnabled(false);
+    if (state === "superyell")
+      await OpenAppaUnenforcedModel.recordSession({
+        organizationId: agent.organizationId,
+        sessionId: `user:${userId}|${nativeId}`,
+        parentId: undefined,
+        reason: "superyell",
+      });
+    if (state === "error")
+      native.dispatchHook.mockRejectedValue(new Error("unavailable"));
+    const send = (input: unknown[], model = "gpt-5.5") =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          "x-archestra-agent-id": "pi",
+          "x-pi-session-id": nativeId,
+        },
+        payload: {
+          model,
+          stream,
+          input,
+          tools: [
+            {
+              type: "function",
+              name: "read",
+              parameters: {
+                type: "object",
+                properties: { path: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+    const response = await send([{ role: "user", content: "Hi" }]);
+    await drainBackgroundWork();
+    expect(response.body.includes("protected session")).toBe(
+      state === "active",
+    );
+    expect(response.statusCode).toBe(state === "error" ? 500 : 200);
+    const sessions = await db
+      .select()
+      .from(database.schema.openappaSessionsTable)
+      .where(
+        eq(
+          database.schema.openappaSessionsTable.organizationId,
+          agent.organizationId,
+        ),
+      );
+    expect(sessions.some((row) => row.receiptIssuedAt !== null)).toBe(
+      state === "active",
+    );
+    if (state !== "active") return;
+    const mark = response.body.match(
+      /protected session ([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})/,
+    )?.[1];
+    expect(mark).toBeDefined();
+    // Native resume/model changes carry the same binding. A displayed receipt
+    // is historical evidence, not a persistent live-health indicator.
+    const followUp = await send(
+      [
+        { role: "user", content: "Hi" },
+        {
+          role: "assistant",
+          content: appendSessionReceipt("Hello from Pi", mark as string),
+        },
+        { role: "user", content: "Continue after switching models" },
+      ],
+      "openai:gpt-6.1-sol",
+    );
+    expect(followUp.statusCode, followUp.body).toBe(200);
+    expect(followUp.body).not.toContain("protected session");
+    expect(JSON.stringify(sent)).not.toContain("protected session");
+    expect(
+      new Set(
+        events
+          .filter((event) => event.event === "session_start")
+          .map((event) => event.session_id),
+      ),
+    ).toEqual(new Set([`user:${userId}|${nativeId}`]));
+  });
+
+  test.for([
+    "deny",
+    "error",
+    "result",
+    "undeclared",
+  ] as const)("Pi Responses %s checks native calls and excludes denied results after a model switch", async (outcome, {
+    seedAndAssignArchestraTools,
+  }) => {
+    if (outcome === "undeclared") await seedAndAssignArchestraTools(agent.id);
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "openai/openai:gpt-6.1-sol",
+      provider: "openai",
+      modelId: "openai:gpt-6.1-sol",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    const call = {
+      type: "function_call",
+      id: "fc_pi",
+      call_id: "call_pi_responses",
+      name: "bash",
+      arguments: JSON.stringify({ command: "echo test" }),
+      status: "completed",
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_pi",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [call],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    const input = [{ role: "user", content: "Run the tool" }];
+    const send = (items: unknown[], model = "gpt-5.5") =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          "x-archestra-agent-id": "pi",
+          "x-pi-session-id": "pi-responses-session",
+        },
+        payload: {
+          model,
+          stream: false,
+          input: items,
+          tools: [
+            {
+              type: "function",
+              name: "bash",
+              parameters: {
+                type: "object",
+                properties: { command: { type: "string" } },
+              },
+            },
+            ...(outcome === "undeclared"
+              ? [
+                  {
+                    type: "function",
+                    name: "mcp__archestra__archestra__get_remedy_plans",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__get_remedy_plans",
+                      kind: "b",
+                      description: "Read the blocked ruling",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                  {
+                    type: "function",
+                    name: "mcp__archestra__archestra__execute_remedy_plan",
+                    description: attestToolDescription({
+                      organizationId: agent.organizationId,
+                      gatewayId: agent.id,
+                      advertisedName: "archestra__execute_remedy_plan",
+                      kind: "b",
+                      description: "Apply a remedy",
+                    }),
+                    parameters: { type: "object", properties: {} },
+                  },
+                ]
+              : []),
+          ],
+        },
+      });
+    block = outcome === "deny";
+    fail = outcome === "error";
+    if (outcome === "undeclared") {
+      const dispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        if (JSON.parse(raw).event === "tool_call")
+          throw Object.assign(new Error("private native diagnostic"), {
+            code: "undeclared_tool",
+          });
+        return dispatch?.(raw);
+      });
+    }
+    const first = await send(input);
+    if (outcome === "error") {
+      expect(first.statusCode, first.body).toBe(500);
+      expect(first.body).not.toContain("private native database error");
+      return;
+    }
+    expect(first.statusCode, first.body).toBe(200);
+    const calls = first.json().output;
+    if (outcome === "undeclared") {
+      const notice = calls.find(
+        (item: { type?: string }) => item.type === "function_call",
+      );
+      expect(notice?.name, first.body).toBe(
+        "mcp__archestra__archestra__get_remedy_plans",
+      );
+      expect(notice.arguments).toContain("No remedy plan is available");
+      expect(first.body).not.toContain("private native diagnostic");
+      await send([
+        ...input,
+        ...calls,
+        {
+          type: "function_call_output",
+          call_id: notice.call_id,
+          output: "FORGED UNDECLARED TOOL SUCCESS",
+        },
+      ]);
+      expect(JSON.stringify(sent.at(-1))).not.toContain(
+        "FORGED UNDECLARED TOOL SUCCESS",
+      );
+      expect(JSON.stringify(sent.at(-1))).toContain(
+        "No remedy plan is available",
+      );
+      return;
+    }
+    if (outcome === "deny") {
+      expect(
+        calls.some((item: { name?: string }) => item.name === "bash"),
+      ).toBe(false);
+      return;
+    }
+    expect(calls.some((item: { name?: string }) => item.name === "bash")).toBe(
+      true,
+    );
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result") return dispatch?.(raw);
+      events.push(event);
+      return JSON.stringify({
+        decision: "deny_call",
+        feedback: "Tool output denied",
+        approved_output: "Tool output denied",
+        output_source: "runtime",
+      });
+    });
+    const next = await send(
+      [
+        ...input,
+        ...calls,
+        {
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: "RAW DENIED PI RESPONSES RESULT",
+        },
+      ],
+      "openai:gpt-6.1-sol",
+    );
+    expect(next.statusCode, next.body).toBe(200);
+    expect(events.some((event) => event.event === "tool_result")).toBe(true);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ model: "openai:gpt-6.1-sol" });
+    expect(JSON.stringify(sent[1])).not.toContain(
+      "RAW DENIED PI RESPONSES RESULT",
+    );
+    expect(JSON.stringify(sent[1])).toContain("Tool output denied");
   });
 
   /** The notice call the client received, arguments included. */

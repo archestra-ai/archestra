@@ -55,6 +55,18 @@ class ScreenshotPublicationTests(unittest.TestCase):
         self.commit("docs: update screenshots", ["docs/assets/example.webp"])
         self.assertEqual(self.decision("workflow_dispatch"), "true")
 
+    def test_generated_benchmark_table_does_not_start_a_capture_commit_loop(self):
+        self.commit("docs: update proxy benchmark results", [
+            "docs/pages/admin/observability/performance-benchmarks.md",
+        ])
+        self.assertEqual(self.decision(), "false")
+
+    def test_benchmark_subject_cannot_hide_a_source_change(self):
+        self.commit("docs: update proxy benchmark results", [
+            "docs/pages/admin/observability/performance-benchmarks.md", "platform/app.ts",
+        ])
+        self.assertEqual(self.decision(), "true")
+
 
 if __name__ == "__main__":
     unittest.main()

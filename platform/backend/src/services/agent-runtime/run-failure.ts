@@ -141,10 +141,12 @@ const RETRIABLE_IMAGE_ENVELOPE_CODES = new Set([
   // Claude Code StopFailure: rate limit, provider overloaded or server error.
   "claude_rate_limit",
   "claude_unavailable",
+  // Grok Build StopFailure or ACP driver failure: provider or CLI, not the model.
+  "grok_unavailable",
   // Shared initialization could not reach the platform proxy.
   "proxy_unavailable",
   // The MCP gateway tools did not load at startup.
   "mcp_startup",
-  // The task did not reach the Claude Code terminal.
+  // The task did not reach the Agent's terminal.
   "task_submission",
 ]);

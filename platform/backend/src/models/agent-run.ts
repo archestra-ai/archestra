@@ -18,6 +18,7 @@ import {
 import { actorFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
   AgentRunFailure,
@@ -105,11 +106,9 @@ class AgentRunModel {
   static async findByVirtualApiKeyId(
     virtualApiKeyId: string,
   ): Promise<AgentRunRecord | "ambiguous" | null> {
-    const rows = await db
-      .select()
-      .from(schema.agentRunsTable)
-      .where(eq(schema.agentRunsTable.virtualApiKeyId, virtualApiKeyId))
-      .limit(2);
+    const rows = await AgentRunModel.byVirtualApiKey
+      .get()
+      .execute({ virtualApiKeyId });
     if (rows.length === 1) return rows[0];
     return rows.length === 0 ? null : "ambiguous";
   }
@@ -974,6 +973,19 @@ class AgentRunModel {
       prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }
+  private static readonly byVirtualApiKey = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.agentRunsTable)
+      .where(
+        eq(
+          schema.agentRunsTable.virtualApiKeyId,
+          sql.placeholder("virtualApiKeyId"),
+        ),
+      )
+      .limit(2)
+      .prepare("archestra_agent_run_by_virtual_key"),
+  );
 }
 
 export default AgentRunModel;

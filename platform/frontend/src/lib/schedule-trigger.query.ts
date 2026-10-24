@@ -3,7 +3,12 @@ import {
   type archestraApiTypes,
   type PaginationMeta,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError } from "./utils";
 
@@ -501,3 +506,59 @@ const EMPTY_PAGINATION: PaginationMeta = {
   hasNext: false,
   hasPrev: false,
 };
+
+/** Only requested pages are fetched; filters apply across the complete history. */
+export function useInfiniteScheduleTriggerRuns(
+  triggerId: string | null,
+  filters: {
+    status?: ScheduleTriggerRunStatus;
+    runKind?: ScheduleTriggerRunKind;
+  } = {},
+) {
+  return useInfiniteQuery({
+    queryKey: [
+      ...scheduleTriggerKeys.runsPrefix(triggerId ?? ""),
+      "infinite",
+      filters,
+    ],
+    enabled: !!triggerId,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam, signal }) => {
+      const response = await getScheduleTriggerRuns({
+        path: { id: triggerId as string },
+        query: { limit: 25, offset: pageParam, ...filters },
+        signal,
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      if (!response.data) throw new Error("Run history is unavailable");
+      return response.data as PaginatedResponse<ScheduleTriggerRun>;
+    },
+    getNextPageParam: (page, _pages, offset) =>
+      page.pagination.hasNext ? offset + page.pagination.limit : undefined,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) =>
+        page.data.some((run) => run.status === "running"),
+      )
+        ? 3000
+        : false,
+  });
+}
+
+export function useAgentSchedules(agentId: string | null) {
+  return useInfiniteQuery({
+    queryKey: [...scheduleTriggerKeys.all, "agent", agentId],
+    enabled: !!agentId,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam, signal }) => {
+      const response = await getScheduleTriggers({
+        query: { agentIds: agentId as string, limit: 25, offset: pageParam },
+        signal,
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      if (!response.data) throw new Error("Schedules are unavailable");
+      return response.data as PaginatedResponse<ScheduleTrigger>;
+    },
+    getNextPageParam: (page, _pages, offset) =>
+      page.pagination.hasNext ? offset + page.pagination.limit : undefined,
+  });
+}

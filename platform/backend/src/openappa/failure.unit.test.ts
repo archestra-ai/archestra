@@ -6,9 +6,25 @@ import {
   OpenappaRootOnlyError,
   openappaFailure,
   unansweredAnnotationNotice,
+  undeclaredToolNotice,
 } from "./failure";
 
 vi.mock("@/logging");
+
+describe("undeclaredToolNotice", () => {
+  test("classifies only the typed native refusal and never exposes its diagnostic", () => {
+    const cause = runtimeFailure("undeclared_tool", "private diagnostic");
+    expect(undeclaredToolNotice(cause)).toContain("No remedy plan");
+    expect(undeclaredToolNotice(openappaFailure(cause))).toContain(
+      "No remedy plan",
+    );
+    expect(undeclaredToolNotice(cause)).not.toContain("private diagnostic");
+    expect(undeclaredToolNotice(new Error("undeclared_tool"))).toBeNull();
+    expect(
+      undeclaredToolNotice(runtimeFailure("storage", "failure")),
+    ).toBeNull();
+  });
+});
 
 const NUL_TEXT =
   "Guardrails cannot store this conversation because it contains a NUL character (U+0000), usually from a tool that printed binary data. Every retry sends the same conversation and fails the same way. Rewind the conversation to before that tool output, or start a new conversation.";

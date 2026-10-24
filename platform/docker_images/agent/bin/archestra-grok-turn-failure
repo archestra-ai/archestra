@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Fail the current Grok Build turn with an image-owned message. Shared by the
+# turn hooks (TUI runs), the ACP driver (plain runs) and the launcher.
+# Usage: archestra-grok-turn-failure <reason>
+set -uo pipefail
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+code=grok_turn_failed
+case "${1:-}" in
+  missing)
+    code=grok_missing
+    message="Grok Build is not installed in this image. Use the maintained agent-grok image, or install the grok CLI in a derived image." ;;
+  max_tokens)
+    message="Grok Build stopped because the model reached its output limit." ;;
+  max_turn_requests)
+    message="Grok Build stopped because the turn reached its request limit." ;;
+  refusal)
+    message="The model refused to complete the turn." ;;
+  cancelled)
+    message="The Grok Build turn was cancelled before it completed." ;;
+  unavailable)
+    # Retriable: the provider or the CLI failed, not the model's own decision.
+    code=grok_unavailable
+    message="Grok Build could not complete the turn because the model provider did not answer. Check the configured provider credential, model availability, and network access, then retry." ;;
+  *)
+    message="Grok Build could not complete the turn. Grok reported: ${1:-unknown}." ;;
+esac
+
+"$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" "${code}" "${message}"
+printf 'archestra: %s\n' "${message}" >&2
+mkdir -p "${runtime_dir}"
+printf '%s\n' "${message}" > "${runtime_dir}/final-answer.txt"
+touch "${runtime_dir}/turn-complete.failed"
+# archestra-tui-run publishes the turn when this marker changes.
+touch "${runtime_dir}/turn-complete"

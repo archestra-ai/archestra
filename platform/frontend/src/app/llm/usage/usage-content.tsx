@@ -109,7 +109,7 @@ export function UsageContent(props: UsageViewProps) {
       id: "tokens",
       label: "Tokens",
       value: statistics.totalTokens,
-      caption: "Input + output; excludes cache reads",
+      caption: "Reported input, output and cache usage",
     },
   ] as const;
   return (
@@ -199,7 +199,7 @@ export function UsageContent(props: UsageViewProps) {
               { id: "none", label: "None" },
               {
                 id: "token",
-                label: "Input / output",
+                label: "Token type",
                 disabled: !canSplit,
                 hint: "Available for model or client tokens",
               },

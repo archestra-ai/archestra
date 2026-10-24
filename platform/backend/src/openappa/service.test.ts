@@ -1299,6 +1299,37 @@ describe("APPA feature boundary", () => {
     ).toEqual(["call:first", "call:second"]);
   });
 
+  test("an undeclared tool becomes a planless notice while an admitted sibling stands", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).tool === "unknown_tool") {
+        throw Object.assign(new Error("private runtime diagnostic"), {
+          code: "undeclared_tool",
+        });
+      }
+      return JSON.stringify({ decision: "allow_call" });
+    });
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        { id: "allowed", name: "read_file", arguments: {} },
+        { id: "unknown", name: "unknown_tool", arguments: {} },
+      ],
+      { canonicalize: (name) => name },
+    );
+    expect(decisions).toEqual([
+      { kind: "allow" },
+      {
+        kind: "deny",
+        feedback: expect.stringContaining("No remedy plan is available"),
+        unanswered: true,
+      },
+    ]);
+    expect(JSON.stringify(decisions)).not.toContain("private runtime");
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["tool_call", "tool_call"]);
+  });
+
   test.each([
     false,
     true,

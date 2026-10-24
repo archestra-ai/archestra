@@ -2,6 +2,7 @@ import { once } from "node:events";
 import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { benchmarkPorts } from "./ports.mjs";
 
 export const MOCK_CONTENT = "archestra-benchmark-ok";
 
@@ -105,8 +106,9 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const server = createMockServer();
-  server.listen(19092, "127.0.0.1", () =>
-    console.info("Benchmark mock: http://127.0.0.1:19092"),
+  const { mock } = benchmarkPorts(process.argv[2]);
+  server.listen(mock, "127.0.0.1", () =>
+    console.info(`Benchmark mock: http://127.0.0.1:${mock}`),
   );
   for (const signal of ["SIGINT", "SIGTERM"])
     process.once(signal, () => server.close());

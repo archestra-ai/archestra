@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -376,10 +376,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: a Vertex AI location, for example `europe-west1` or `global`
   - Some regions, including `us-east1`, list an incomplete model catalog. `us-central1` and `global` list the full catalog.
 
-- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer, to the global endpoint.
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer and Nano Banana 2.1, to the global endpoint.
   - Default: `false`
   - Values: `true`, `false`
-  - While `false`, those models do not appear in the model list. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - With a regional location and this set to `false`, those models do not appear in the model list. When enabled, their discovery and requests use `global`. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - A configured location of `global` already sends all Gemini requests there, regardless of this setting.
   - Leave it `false` when your region is a data residency requirement. Google routes global-endpoint requests to any region.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to a Google Cloud service account JSON key for Gemini on Vertex AI.
@@ -946,7 +947,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
-- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
   - Set it when you mirror these images to a private registry.
 
@@ -1241,6 +1242,11 @@ These variables connect an Outlook mailbox so people can [email agents](/docs/ag
 ## ChatOps
 
 The Microsoft Teams, Slack, and Telegram variables apply only on first startup, when no channel settings exist yet. After that, change a channel in **Settings → Messaging Channels**.
+
+- **`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`** - Public base URL for Slack events, interactive actions, and slash commands when the web app is private.
+  - Default: the ngrok tunnel URL, or the frontend URL when no tunnel is active.
+  - Values: an HTTP(S) base URL, for example `https://hooks.example.com`.
+  - Used when creating or retargeting Slack apps. Existing app URLs require a separate update. Browser OAuth redirects keep using the frontend or tunnel URL.
 
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Sends a welcome message to users who are created automatically when they first message an agent.
   - Default: `true`

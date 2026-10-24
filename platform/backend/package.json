@@ -22,6 +22,8 @@
     "benchmark:queries": "vitest run --config vitest.queries.config.ts",
     "test:migration-upgrades": "node --test scripts/migration-upgrades.test.mjs scripts/migration-tag-upgrades.test.mjs scripts/create-statistics-index.test.mjs",
     "test:permission-upgrade": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx --test scripts/resource-permissions-upgrade.test.mjs",
+    "test:llm-limits:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json src/test/llm-limits/postgres.integration.ts",
+    "test:agent-transcripts:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json --test src/test/agent-transcripts.postgres.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
@@ -185,7 +187,7 @@
     "sharp": "0.35.5",
     "smol-toml": "1.9.0",
     "tiktoken": "^1.0.22",
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "ws": "^8.20.1",
     "zod": "catalog:"
   },

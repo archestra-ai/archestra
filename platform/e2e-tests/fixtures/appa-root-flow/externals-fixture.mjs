@@ -25,7 +25,9 @@
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.APPA_FIXTURE_PORT ?? 8899);
-let mode = "approve";
+const modes = new Set(["approve", "deny", "timeout", "no_answer"]);
+let mode = process.env.APPA_FIXTURE_AUTHORITY_MODE ?? "approve";
+if (!modes.has(mode)) throw new Error("Invalid fixture authority mode");
 const calls = [];
 
 const send = (response, status, body) => {
@@ -52,14 +54,15 @@ const readBody = (request) =>
     });
   });
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (url.pathname === "/mode" && request.method === "GET") {
     return send(response, 200, { mode });
   }
   if (url.pathname === "/mode" && request.method === "POST") {
     const body = await readBody(request);
-    mode = String(body.mode ?? "approve");
+    if (!modes.has(body.mode)) return send(response, 400, { error: "unknown authority mode" });
+    mode = body.mode;
     return send(response, 200, { mode });
   }
   if (url.pathname === "/calls") {
@@ -110,5 +113,5 @@ createServer(async (request, response) => {
 
   return send(response, 404, { error: "no such fixture endpoint" });
 }).listen(PORT, "127.0.0.1", () => {
-  process.stdout.write(`appa fixture externals on http://127.0.0.1:${PORT}\n`);
+  process.stdout.write(`appa fixture externals on http://127.0.0.1:${server.address().port}\n`);
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 
 class OAuthAccessTokenModel {
   static hashTokenForLookup(oauthAccessToken: string): string {
@@ -88,30 +89,9 @@ class OAuthAccessTokenModel {
    * endpoint also deletes access tokens, but this guards against edge cases).
    */
   static async getByTokenHash(tokenHash: string) {
-    const [result] = await db
-      .select({
-        id: schema.oauthAccessTokensTable.id,
-        token: schema.oauthAccessTokensTable.token,
-        clientId: schema.oauthAccessTokensTable.clientId,
-        sessionId: schema.oauthAccessTokensTable.sessionId,
-        userId: schema.oauthAccessTokensTable.userId,
-        referenceId: schema.oauthAccessTokensTable.referenceId,
-        refreshId: schema.oauthAccessTokensTable.refreshId,
-        expiresAt: schema.oauthAccessTokensTable.expiresAt,
-        createdAt: schema.oauthAccessTokensTable.createdAt,
-        scopes: schema.oauthAccessTokensTable.scopes,
-        refreshTokenRevoked: schema.oauthRefreshTokensTable.revoked,
-      })
-      .from(schema.oauthAccessTokensTable)
-      .leftJoin(
-        schema.oauthRefreshTokensTable,
-        eq(
-          schema.oauthAccessTokensTable.refreshId,
-          schema.oauthRefreshTokensTable.id,
-        ),
-      )
-      .where(eq(schema.oauthAccessTokensTable.token, tokenHash))
-      .limit(1);
+    const [result] = await OAuthAccessTokenModel.byTokenHash
+      .get()
+      .execute({ tokenHash });
     return result;
   }
 
@@ -156,6 +136,36 @@ class OAuthAccessTokenModel {
 
     return accessToken ?? null;
   }
+
+  private static readonly byTokenHash = new PreparedQuery((database) => {
+    return database
+      .select({
+        id: schema.oauthAccessTokensTable.id,
+        token: schema.oauthAccessTokensTable.token,
+        clientId: schema.oauthAccessTokensTable.clientId,
+        sessionId: schema.oauthAccessTokensTable.sessionId,
+        userId: schema.oauthAccessTokensTable.userId,
+        referenceId: schema.oauthAccessTokensTable.referenceId,
+        refreshId: schema.oauthAccessTokensTable.refreshId,
+        expiresAt: schema.oauthAccessTokensTable.expiresAt,
+        createdAt: schema.oauthAccessTokensTable.createdAt,
+        scopes: schema.oauthAccessTokensTable.scopes,
+        refreshTokenRevoked: schema.oauthRefreshTokensTable.revoked,
+      })
+      .from(schema.oauthAccessTokensTable)
+      .leftJoin(
+        schema.oauthRefreshTokensTable,
+        eq(
+          schema.oauthAccessTokensTable.refreshId,
+          schema.oauthRefreshTokensTable.id,
+        ),
+      )
+      .where(
+        eq(schema.oauthAccessTokensTable.token, sql.placeholder("tokenHash")),
+      )
+      .limit(1)
+      .prepare("archestra_oauth_access_token_by_hash");
+  });
 }
 
 export default OAuthAccessTokenModel;

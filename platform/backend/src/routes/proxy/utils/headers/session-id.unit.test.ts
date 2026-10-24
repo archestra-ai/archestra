@@ -14,6 +14,45 @@ import { extractSessionInfo } from "./session-id";
 const sessionHeaderKey = SESSION_ID_HEADER.toLowerCase();
 
 describe("extractSessionInfo", () => {
+  test("groups Pi requests by the managed policy identity", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-pi-session-id": " retained-session " },
+        body: undefined,
+        externalAgentId: "pi",
+      }),
+    ).toEqual({
+      sessionId: "retained-session",
+      sessionSource: "pi_session",
+    });
+  });
+
+  test.each([
+    undefined,
+    "opencode",
+  ])("does not apply Pi session provenance to %s", (externalAgentId) => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-pi-session-id": "retained-session" },
+        body: undefined,
+        externalAgentId,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("explicit session identity still takes priority over Pi's native header", () => {
+    expect(
+      extractSessionInfo({
+        headers: {
+          [sessionHeaderKey]: "explicit-session",
+          "x-pi-session-id": "retained-session",
+        },
+        body: undefined,
+        externalAgentId: "pi",
+      }),
+    ).toEqual({ sessionId: "explicit-session", sessionSource: "header" });
+  });
+
   test("extracts session ID from X-Archestra-Session-Id header", () => {
     const result = extractSessionInfo({
       headers: { [sessionHeaderKey]: "my-session-123" },

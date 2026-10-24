@@ -82,10 +82,13 @@ archestra:
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
+    # Provider delivery stays public through the exact-route relay; browser
+    # OAuth and ordinary app/API traffic continue to use the VPN-only origin.
+    ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL: "https://a2a-webhook-wkjbuewj5a-uc.a.run.app/staging"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
-    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://a2a-webhook-wkjbuewj5a-uc.a.run.app/staging/api/webhooks/incoming-email"
 
   diagnostics:
     enabled: true
@@ -132,7 +135,9 @@ archestra:
       cloud.google.com/neg: '{"ingress": true}'
 
   ingress:
-    enabled: true
+    # VPN-only ingress is managed by archestra-ai/infra. Do not recreate the
+    # public listener on later application releases.
+    enabled: false
     annotations:
       # GKE Ingress Controller configuration
       kubernetes.io/ingress.class: "gce"

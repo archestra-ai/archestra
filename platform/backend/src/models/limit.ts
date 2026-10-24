@@ -13,12 +13,14 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
   CredentialSpendCap,
   CredentialSpendCapInput,
+  EnvironmentDefaultUserLimit,
   LabelWithDetails,
   Limit,
   LimitCleanupInterval,
@@ -27,6 +29,7 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import { BudgetCleanupIntervalSchema, CreateLimitSchema } from "@/types";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -35,14 +38,23 @@ import { priceTokens, sumMoney } from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
+import CacheEntryModel from "./cache-entry";
 import { LimitLabelModel } from "./entity-labels";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
+import {
+  limitEntitiesCondition,
+  limitEntityParameters,
+} from "./limit-entity-scope";
+import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
+import type { ProxyRequestState } from "./proxy-request-context";
 
 type LimitsCleanupOptionsEntities = {
-  [K in Exclude<LimitEntityType, "team">]?: string;
+  [K in Exclude<LimitEntityType, "team" | "virtual_key">]?: string;
 } & {
   [K in Extract<LimitEntityType, "team">]?: string[];
+} & {
+  virtual_key?: string | string[];
 };
 
 type LimitsCleanupOptions = {
@@ -128,6 +140,16 @@ class LimitModel {
    * Create a new limit
    */
   static async create(data: CreateLimit): Promise<LimitWithLabels> {
+    if (
+      data.limitType === "requests_per_minute" ||
+      data.limitType === "tokens_per_minute" ||
+      data.limitType === "requests" ||
+      data.limitType === "tokens" ||
+      data.limitType === "token_cost" ||
+      data.cleanupInterval === "minute"
+    ) {
+      data = CreateLimitSchema.parse(data);
+    }
     const { labels, ...columns } = data;
     const [limit] = await db
       .insert(schema.limitsTable)
@@ -352,6 +374,9 @@ class LimitModel {
     }
 
     const [limit] = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`cache-entry:llm-throughput:${id}`}, 0))`,
+      );
       const [existingLimit] = await tx
         .select()
         .from(schema.limitsTable)
@@ -362,11 +387,53 @@ class LimitModel {
         return [];
       }
 
+      if (
+        [existingLimit.limitType, patchData.limitType].some(
+          (type) =>
+            type === "requests_per_minute" ||
+            type === "tokens_per_minute" ||
+            type === "requests" ||
+            type === "tokens",
+        ) ||
+        patchData.cleanupInterval === "minute" ||
+        existingLimit.cleanupInterval === "minute" ||
+        existingLimit.limitType === "token_cost"
+      ) {
+        const validated = CreateLimitSchema.safeParse({
+          ...existingLimit,
+          ...patchData,
+        });
+        if (!validated.success)
+          throw new ApiError(400, "Invalid limit configuration");
+      }
+      if (
+        patchData.limitType &&
+        patchData.limitType !== existingLimit.limitType &&
+        patchData.limitType !==
+          existingLimit.limitType.replace("_per_minute", "")
+      ) {
+        throw new ApiError(
+          400,
+          "Create a separate limit to change its throughput dimension",
+        );
+      }
+      if (
+        (patchData.entityType &&
+          patchData.entityType !== existingLimit.entityType) ||
+        (patchData.entityId && patchData.entityId !== existingLimit.entityId)
+      )
+        throw new ApiError(400, "Create a separate limit to change its scope");
+
       const shouldResetUsage =
         patchData.cleanupInterval !== undefined &&
         patchData.cleanupInterval !== existingLimit.cleanupInterval;
       const limitPatchData = shouldResetUsage
-        ? { ...patchData, lastCleanup: sql`now()` }
+        ? {
+            ...patchData,
+            // JS dates retain milliseconds. Keep interval epochs distinct even
+            // for rapid edits or a database clock moving backwards.
+            lastCleanup: sql`greatest(clock_timestamp(), ${schema.limitsTable.lastCleanup} + interval '1 millisecond')`,
+          }
         : patchData;
 
       const updatedLimits = await tx
@@ -375,7 +442,17 @@ class LimitModel {
         .where(eq(schema.limitsTable.id, id))
         .returning();
 
+      if (updatedLimits[0]) {
+        await LlmThroughputModel.reconfigure({
+          entries: new CacheEntryModel(tx),
+          limit: updatedLimits[0],
+        });
+      }
+
       if (shouldResetUsage) {
+        await tx
+          .delete(schema.limitBillingUsageTable)
+          .where(eq(schema.limitBillingUsageTable.limitId, id));
         await tx
           .update(schema.limitModelUsageTable)
           .set({
@@ -405,26 +482,24 @@ class LimitModel {
    * Delete a limit
    */
   static async delete(id: string): Promise<boolean> {
-    // First check if the limit exists
-    const existing = await LimitModel.findById(id);
-    if (!existing) {
-      return false;
-    }
-
-    await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
-
-    return true;
+    return (await LimitModel.deleteMany([id])).length > 0;
   }
 
   /** Deletes an already organization-fenced batch in one statement. */
   static async deleteMany(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return [];
 
-    const deleted = await db
-      .delete(schema.limitsTable)
-      .where(inArray(schema.limitsTable.id, ids))
-      .returning({ id: schema.limitsTable.id });
-    return deleted.map(({ id }) => id);
+    return CacheEntryModel.withLocks(
+      ids.map((id) => `llm-throughput:${id}`),
+      async (entries, tx) => {
+        const deleted = await tx
+          .delete(schema.limitsTable)
+          .where(inArray(schema.limitsTable.id, ids))
+          .returning();
+        await LlmThroughputModel.deleteCounters(entries, deleted);
+        return deleted.map(({ id }) => id);
+      },
+    );
   }
 
   /**
@@ -446,6 +521,7 @@ class LimitModel {
           eq(schema.limitsTable.entityType, params.entityType),
           inArray(schema.limitsTable.entityId, params.entityIds),
           eq(schema.limitsTable.limitType, "token_cost"),
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
           isNull(schema.limitsTable.model),
         ),
       )
@@ -481,7 +557,9 @@ class LimitModel {
       caps.set(entityId, {
         limitId: row.id,
         limitValue: row.limitValue,
-        cleanupInterval: row.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        cleanupInterval: BudgetCleanupIntervalSchema.parse(
+          row.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        ),
         currentUsage: computeModelUsageCosts(
           usagesByLimitId.get(row.id) ?? [],
           pricing,
@@ -535,14 +613,16 @@ class LimitModel {
     entityType: LimitEntityType;
     entityId: string;
   }): Promise<void> {
-    await db
-      .delete(schema.limitsTable)
+    const limits = await db
+      .select({ id: schema.limitsTable.id })
+      .from(schema.limitsTable)
       .where(
         and(
           eq(schema.limitsTable.entityType, params.entityType),
           eq(schema.limitsTable.entityId, params.entityId),
         ),
       );
+    await LimitModel.deleteMany(limits.map(({ id }) => id));
   }
 
   /**
@@ -711,7 +791,11 @@ class LimitModel {
       .select()
       .from(schema.limitsTable)
       .where(
-        and(eq(schema.limitsTable.limitType, "token_cost"), or(...conditions)),
+        and(
+          eq(schema.limitsTable.limitType, "token_cost"),
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
+          or(...conditions),
+        ),
       )
       .orderBy(schema.limitsTable.id)
       .for("no key update");
@@ -805,7 +889,7 @@ class LimitModel {
     options: LimitsCleanupOptions,
   ): Promise<void> {
     try {
-      logger.info({ options }, `[LimitsCleanup] Starting cleanup check`);
+      logger.debug({ options }, `[LimitsCleanup] Starting cleanup check`);
 
       const limitIdsToReset = await LimitModel.findLimitIdsToReset(options);
       await LimitModel.resetLimitsUsage(limitIdsToReset);
@@ -816,7 +900,7 @@ class LimitModel {
           `[LimitsCleanup] Completed cleanup of ${limitIdsToReset.length} limits`,
         );
       } else {
-        logger.info({ options }, `[LimitsCleanup] No limits need cleanup`);
+        logger.debug({ options }, `[LimitsCleanup] No limits need cleanup`);
       }
     } catch (error) {
       logger.error(
@@ -830,6 +914,18 @@ class LimitModel {
   static async findLimitIdsToReset(
     options: LimitsCleanupOptions,
   ): Promise<string[]> {
+    if (
+      options.entities !== undefined &&
+      options.entityType === undefined &&
+      options.entityId === undefined &&
+      options.limitType === undefined &&
+      options.allForOrganizationId === undefined
+    ) {
+      const parameters = limitEntityParameters(options.entities);
+      if (!Object.values(parameters).some((ids) => ids.length > 0)) return [];
+      const rows = await LimitModel.dueByEntities.get().execute(parameters);
+      return rows.map((row) => row.id);
+    }
     const filterConditions: SQL[] = [];
     if (options.entityType !== undefined) {
       filterConditions.push(
@@ -897,6 +993,8 @@ class LimitModel {
       .where(
         and(
           ...scopeConditions,
+          sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
+          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
           or(
             sql`${schema.limitsTable.lastCleanup} IS NULL`,
             buildCleanupDueCondition(),
@@ -1015,31 +1113,28 @@ class LimitModel {
     entities: { entityType: LimitEntityType; entityId: string }[],
     limitType: LimitType = "token_cost",
   ): Promise<Limit[]> {
-    const seen = new Set<string>();
-    const entityConditions: SQL[] = [];
-    for (const { entityType, entityId } of entities) {
-      const key = `${entityType}:${entityId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      entityConditions.push(
-        and(
-          eq(schema.limitsTable.entityType, entityType),
-          eq(schema.limitsTable.entityId, entityId),
-        ) as SQL,
-      );
-    }
+    if (entities.length === 0) return [];
+    const parameters = limitEntityParameters({});
+    for (const { entityType, entityId } of entities)
+      parameters[entityType].push(entityId);
+    return LimitModel.validationByEntities
+      .get()
+      .execute({ ...parameters, limitType });
+  }
 
-    if (entityConditions.length === 0) return [];
-
-    return db
-      .select()
-      .from(schema.limitsTable)
-      .where(
-        and(
-          eq(schema.limitsTable.limitType, limitType),
-          or(...entityConditions),
-        ),
-      );
+  /** Read current budgets and any scoped counters needing cleanup together. */
+  static async findProxyLimitState(
+    entities: LimitsCleanupOptionsEntities,
+    defaults: { organizationId: string | null; environmentId: string | null },
+  ) {
+    const rows = await LimitModel.proxyLimitState.get().execute({
+      ...limitEntityParameters(entities),
+      ...defaults,
+    });
+    return {
+      limits: rows.flatMap(({ limit }) => (limit ? [limit] : [])),
+      defaultUserLimit: rows[0]?.defaultUserLimit ?? null,
+    };
   }
 
   // Org-scoped audit snapshot via the entity FK.  limitsTable has no
@@ -1222,6 +1317,7 @@ class LimitModel {
           ON ${limits.entityType} = entity_refs.entity_type
           AND ${limits.entityId} = entity_refs.entity_id
         WHERE ${limits.limitType} = ${"token_cost"}
+          AND ${limits.cleanupInterval} <> 'minute'
           AND (${limits.model} ? ${model} OR ${limits.model} IS NULL)
         GROUP BY ${limits.id}
       )
@@ -1237,6 +1333,76 @@ class LimitModel {
     if (tx) await tx.execute(statement);
     else await retryOnceOnDeadlock(() => db.execute(statement));
   }
+  private static readonly dueByEntities = new PreparedQuery((database) =>
+    database
+      .select({ id: schema.limitsTable.id })
+      .from(schema.limitsTable)
+      .where(and(limitEntitiesCondition(), scopedCleanupDueCondition()))
+      .prepare("archestra_due_limits_by_entities"),
+  );
+
+  private static readonly proxyLimitState = new PreparedQuery((database) => {
+    const defaults = schema.environmentDefaultUserLimitsTable;
+    // At most one environment override, otherwise the organization's global
+    // default. A left join keeps the result even when no entity limit exists.
+    const defaultUserLimit = database
+      .select()
+      .from(defaults)
+      .where(
+        and(
+          eq(defaults.organizationId, sql.placeholder("organizationId")),
+          or(
+            eq(defaults.environmentId, sql.placeholder("environmentId")),
+            isNull(defaults.environmentId),
+          ),
+        ),
+      )
+      .orderBy(sql`${defaults.environmentId} NULLS LAST`)
+      .limit(1)
+      .as("proxy_default_user_limit");
+    return database
+      .select({
+        limit: {
+          ...getTableColumns(schema.limitsTable),
+          cleanupDue: scopedCleanupDueCondition(),
+        },
+        defaultUserLimit: {
+          id: defaultUserLimit.id,
+          organizationId: defaultUserLimit.organizationId,
+          environmentId: defaultUserLimit.environmentId,
+          limitValue: defaultUserLimit.limitValue,
+          model: defaultUserLimit.model,
+          cleanupInterval: defaultUserLimit.cleanupInterval,
+          createdAt: defaultUserLimit.createdAt,
+          updatedAt: defaultUserLimit.updatedAt,
+        },
+      })
+      .from(sql`(VALUES (1)) AS proxy_limit_context(present)`)
+      .leftJoin(
+        schema.limitsTable,
+        and(
+          limitEntitiesCondition(),
+          or(
+            eq(schema.limitsTable.limitType, "token_cost"),
+            scopedCleanupDueCondition(),
+          ),
+        ),
+      )
+      .leftJoin(defaultUserLimit, sql`true`)
+      .prepare("archestra_proxy_limit_state");
+  });
+  private static readonly validationByEntities = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.limitsTable)
+      .where(
+        and(
+          eq(schema.limitsTable.limitType, sql.placeholder("limitType")),
+          limitEntitiesCondition(),
+        ),
+      )
+      .prepare("archestra_validation_limits_by_entities"),
+  );
 }
 
 /**
@@ -1255,8 +1421,10 @@ export class LimitValidationService {
     virtualKeyId?: string;
     passthroughVirtualKeyId?: string;
     /** The agent row this request already read. */
-    agent?: { environmentId: string | null };
+    agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
+    /** Fresh rows from this request's scoped metadata query. */
+    snapshot?: Pick<ProxyRequestState, "scope" | "agentTeamIds" | "limitState">;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
     /**
@@ -1275,21 +1443,43 @@ export class LimitValidationService {
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
+      const scope = params.snapshot?.scope;
+      const snapshot =
+        scope &&
+        params.agent?.organizationId === scope.organizationId &&
+        params.agent?.environmentId === scope.environmentId &&
+        scope.agentId === agentId &&
+        scope.userId === params.userId &&
+        scope.billingTeamId === params.billingTeamId &&
+        scope.virtualKeyId === virtualKeyId &&
+        scope.passthroughVirtualKeyId === passthroughVirtualKeyId &&
+        scope.llmOauthClientId === llmOauthClientId
+          ? params.snapshot
+          : undefined;
+
       // Get the teams to cleanup and check team and organization limits: the
       // credential's billing team when it has one, otherwise the agent's teams.
       const agentTeamIds = params.billingTeamId
         ? [params.billingTeamId]
-        : params.teamSource
-          ? await params.teamSource.agentTeamIds(agentId)
-          : await AgentTeamModel.getTeamsForAgent(agentId);
+        : (snapshot?.agentTeamIds ??
+          (params.teamSource
+            ? await params.teamSource.agentTeamIds(agentId)
+            : await AgentTeamModel.getTeamsForAgent(agentId)));
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
 
-      // Get organization ID to cleanup and check organization limits (either from teams or fallback)
-      let organizationId: string | null = null;
-      let agentTeams: (typeof schema.teamsTable.$inferSelect)[] = [];
-      if (agentTeamIds.length > 0) {
+      // The proxy already resolved this agent and its team IDs. Reuse that
+      // request-local attribution rather than hydrating the same teams again.
+      let organizationId: string | null = params.agent?.organizationId ?? null;
+      let agentTeams: { id: string; organizationId: string }[] = [];
+      if (organizationId) {
+        const resolvedOrganizationId = organizationId;
+        agentTeams = agentTeamIds.map((id) => ({
+          id,
+          organizationId: resolvedOrganizationId,
+        }));
+      } else if (agentTeamIds.length > 0) {
         agentTeams = await db
           .select()
           .from(schema.teamsTable)
@@ -1298,7 +1488,9 @@ export class LimitValidationService {
           organizationId = agentTeams[0].organizationId;
         }
       } else {
-        organizationId = await AgentModel.findOrganizationId(agentId);
+        organizationId =
+          params.agent?.organizationId ??
+          (await AgentModel.findOrganizationId(agentId));
       }
 
       // Resolve the agent's environment (nullable). Used for environment-scoped
@@ -1310,8 +1502,11 @@ export class LimitValidationService {
       const entities: LimitsCleanupOptionsEntities = {
         agent: agentId,
       };
-      if (virtualKeyId) {
-        entities.virtual_key = virtualKeyId;
+      const virtualKeyIds = [virtualKeyId, passthroughVirtualKeyId].filter(
+        (id): id is string => Boolean(id),
+      );
+      if (virtualKeyIds.length > 0) {
+        entities.virtual_key = virtualKeyIds;
       }
       if (llmOauthClientId) {
         entities.llm_oauth_client = llmOauthClientId;
@@ -1327,16 +1522,6 @@ export class LimitValidationService {
       }
       if (environmentId) {
         entities.environment = environmentId;
-      }
-
-      logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
-      await LimitModel.cleanupLimitsIfNeeded({ entities });
-      if (passthroughVirtualKeyId) {
-        // Cleanup expired windows for the passthrough key too (the cleanup
-        // entities map holds a single virtual_key slot).
-        await LimitModel.cleanupLimitsIfNeeded({
-          entities: { virtual_key: passthroughVirtualKeyId },
-        });
       }
 
       // Prefetch every limit, per-model usage row, and model price the priority
@@ -1385,8 +1570,37 @@ export class LimitValidationService {
           entityId: organizationId,
         });
       }
-      const prefetch =
-        await LimitValidationService.prefetchEntityLimits(entitiesToCheck);
+      let { limits: scopedLimits, defaultUserLimit } =
+        snapshot?.limitState ??
+        (await LimitModel.findProxyLimitState(entities, {
+          organizationId,
+          environmentId,
+        }));
+      if (scopedLimits.some((limit) => limit.cleanupDue)) {
+        await LimitModel.cleanupLimitsIfNeeded({ entities });
+        // Cleanup changes usage: validation must read its committed result.
+        ({ limits: scopedLimits, defaultUserLimit } =
+          await LimitModel.findProxyLimitState(entities, {
+            organizationId,
+            environmentId,
+          }));
+      }
+      const checkedEntities = new Set(
+        entitiesToCheck.map(
+          ({ entityType, entityId }) => `${entityType}:${entityId}`,
+        ),
+      );
+      const limits = scopedLimits
+        .filter(
+          (limit) =>
+            limit.limitType === "token_cost" &&
+            checkedEntities.has(`${limit.entityType}:${limit.entityId}`),
+        )
+        .map(({ cleanupDue: _cleanupDue, ...limit }) => limit);
+      const prefetch = await LimitValidationService.prefetchEntityLimits(
+        entitiesToCheck,
+        limits,
+      );
 
       if (params.unpricedMediaModel) {
         const applies = (models?: string[] | null) =>
@@ -1397,14 +1611,7 @@ export class LimitValidationService {
           ? prefetch.limitsByEntity.get(`user:${userId}`)
           : undefined;
         if (userId && organizationId && !customUserLimits?.length) {
-          const environmentDefault = environmentId
-            ? await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
-                environmentId,
-              )
-            : null;
-          const defaultLimit =
-            environmentDefault ??
-            (await EnvironmentDefaultUserLimitModel.findGlobal(organizationId));
+          const defaultLimit = defaultUserLimit;
           budgeted ||= !!defaultLimit && applies(defaultLimit.model);
         }
         if (budgeted)
@@ -1488,6 +1695,9 @@ export class LimitValidationService {
               organizationId,
               userId,
               environmentId,
+              customUserLimits:
+                prefetch.limitsByEntity.get(`user:${userId}`) ?? [],
+              defaultLimit: defaultUserLimit,
             });
           if (defaultUserLimitViolation) {
             logger.info(
@@ -1590,7 +1800,7 @@ export class LimitValidationService {
         );
       }
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
       return null; // No limits exceeded
@@ -1614,14 +1824,19 @@ export class LimitValidationService {
    */
   private static async prefetchEntityLimits(
     entities: { entityType: LimitEntityType; entityId: string }[],
+    currentLimits?: Limit[],
   ): Promise<LimitPrefetch> {
-    const limits = await LimitModel.findLimitsForValidationForEntities(
-      entities,
-      "token_cost",
-    );
+    const limits =
+      currentLimits ??
+      (await LimitModel.findLimitsForValidationForEntities(
+        entities,
+        "token_cost",
+      ));
 
     const limitsByEntity = new Map<string, Limit[]>();
     for (const limit of limits) {
+      // Minute spend is actual-cost accounting in the shared continuous bucket.
+      if (limit.cleanupInterval === "minute") continue;
       const key = `${limit.entityType}:${limit.entityId}`;
       const existing = limitsByEntity.get(key);
       if (existing) existing.push(limit);
@@ -1738,7 +1953,7 @@ export class LimitValidationService {
       );
     }
 
-    logger.info(
+    logger.debug(
       `[LimitValidation] All ${limits.length} limits OK for ${entityType} ${entityId}`,
     );
     return null; // No limits exceeded for this entity
@@ -1748,88 +1963,60 @@ export class LimitValidationService {
     organizationId: string;
     userId: string;
     environmentId?: string | null;
+    customUserLimits?: Limit[];
+    /** Fresh default read with this request's entity limits; null means none. */
+    defaultLimit?: EnvironmentDefaultUserLimit | null;
   }): Promise<null | LimitViolationResponse> {
     try {
       // A custom per-user limit always wins and disables every default
       // (org-wide and per-environment) for that user.
-      const customUserLimits = await LimitModel.findLimitsForValidation(
-        "user",
-        params.userId,
-        "token_cost",
-      );
+      const customUserLimits =
+        params.customUserLimits ??
+        (await LimitModel.findLimitsForValidation(
+          "user",
+          params.userId,
+          "token_cost",
+        ));
       if (customUserLimits.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
         );
         return null;
       }
 
-      // A per-environment default overrides the org-wide default for requests in
-      // that environment; environments without one fall back to the org-wide
-      // default below.
-      if (params.environmentId) {
-        const envDefault =
-          await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
-            params.environmentId,
-          );
-        if (envDefault) {
-          const usage = await getDefaultUserLimitUsage({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            environmentId: params.environmentId,
-            models: normalizeLimitModels(envDefault.model),
-            cleanupInterval: envDefault.cleanupInterval,
-          });
-
-          if (usage.cost < envDefault.limitValue) {
-            return null;
-          }
-
-          return buildLimitViolationResponse({
-            entityType: "environment",
-            entityId: params.environmentId,
-            limitValue: envDefault.limitValue,
-            comparisonValue: usage.cost,
-            limitDescription: "cost_dollars",
-            totalTokensIn: usage.tokensIn,
-            totalTokensOut: usage.tokensOut,
-            cleanupInterval: envDefault.cleanupInterval,
-            models: envDefault.model,
-          });
-        }
-      }
-
-      // The organization-wide default is the NULL-environment row in the
-      // unified default-user-limits store. Its usage spans the user's whole org
-      // (no environment filter).
-      const globalDefault = await EnvironmentDefaultUserLimitModel.findGlobal(
-        params.organizationId,
-      );
-      if (!globalDefault) {
-        return null;
-      }
-
+      const defaultLimit =
+        params.defaultLimit !== undefined
+          ? params.defaultLimit
+          : ((params.environmentId
+              ? await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
+                  params.environmentId,
+                )
+              : null) ??
+            (await EnvironmentDefaultUserLimitModel.findGlobal(
+              params.organizationId,
+            )));
+      if (!defaultLimit) return null;
+      // An override counts only this environment; the global fallback counts
+      // the user's whole organization, preserving custom-user precedence.
+      const environmentId = defaultLimit.environmentId;
       const usage = await getDefaultUserLimitUsage({
         organizationId: params.organizationId,
         userId: params.userId,
-        models: normalizeLimitModels(globalDefault.model),
-        cleanupInterval: globalDefault.cleanupInterval,
+        ...(environmentId ? { environmentId } : {}),
+        models: normalizeLimitModels(defaultLimit.model),
+        cleanupInterval: defaultLimit.cleanupInterval,
       });
-
-      if (usage.cost < globalDefault.limitValue) {
-        return null;
-      }
-
+      if (usage.cost < defaultLimit.limitValue) return null;
       return buildLimitViolationResponse({
-        entityType: "user",
-        entityId: params.userId,
-        limitValue: globalDefault.limitValue,
+        entityType: environmentId ? "environment" : "user",
+        entityId: environmentId ?? params.userId,
+        limitValue: defaultLimit.limitValue,
         comparisonValue: usage.cost,
         limitDescription: "cost_dollars",
         totalTokensIn: usage.tokensIn,
         totalTokensOut: usage.tokensOut,
-        cleanupInterval: globalDefault.cleanupInterval,
-        models: globalDefault.model,
+        cleanupInterval: defaultLimit.cleanupInterval,
+        models: defaultLimit.model,
       });
     } catch (error) {
       logger.error(
@@ -1921,6 +2108,14 @@ export function buildOrganizationLimitScopeCondition(
 function llmOauthClientInOrganization(organizationId: string): SQL {
   return sql`(${schema.oauthClientsTable.metadata}->>'type' IN ('llm_oauth_client', 'managed_oauth_client')
     AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId})`;
+}
+
+export function scopedCleanupDueCondition(): SQL<boolean> {
+  return and(
+    sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
+    sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
+    or(isNull(schema.limitsTable.lastCleanup), buildCleanupDueCondition()),
+  ) as SQL<boolean>;
 }
 
 function buildCleanupDueCondition(): SQL {

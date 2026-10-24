@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type {
   CreateEnvironmentDefaultUserLimit,
   EnvironmentDefaultUserLimit,
@@ -33,16 +34,9 @@ class EnvironmentDefaultUserLimitModel {
   static async findByEnvironmentId(
     environmentId: string,
   ): Promise<EnvironmentDefaultUserLimit | null> {
-    const [row] = await db
-      .select()
-      .from(schema.environmentDefaultUserLimitsTable)
-      .where(
-        eq(
-          schema.environmentDefaultUserLimitsTable.environmentId,
-          environmentId,
-        ),
-      )
-      .limit(1);
+    const [row] = await EnvironmentDefaultUserLimitModel.byEnvironment
+      .get()
+      .execute({ environmentId });
     return row ?? null;
   }
 
@@ -50,19 +44,9 @@ class EnvironmentDefaultUserLimitModel {
   static async findGlobal(
     organizationId: string,
   ): Promise<EnvironmentDefaultUserLimit | null> {
-    const [row] = await db
-      .select()
-      .from(schema.environmentDefaultUserLimitsTable)
-      .where(
-        and(
-          eq(
-            schema.environmentDefaultUserLimitsTable.organizationId,
-            organizationId,
-          ),
-          isNull(schema.environmentDefaultUserLimitsTable.environmentId),
-        ),
-      )
-      .limit(1);
+    const [row] = await EnvironmentDefaultUserLimitModel.globalByOrganization
+      .get()
+      .execute({ organizationId });
     return row ?? null;
   }
 
@@ -135,6 +119,35 @@ class EnvironmentDefaultUserLimitModel {
       .delete(schema.environmentDefaultUserLimitsTable)
       .where(eq(schema.environmentDefaultUserLimitsTable.id, id));
   }
+  private static readonly byEnvironment = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.environmentDefaultUserLimitsTable)
+      .where(
+        eq(
+          schema.environmentDefaultUserLimitsTable.environmentId,
+          sql.placeholder("environmentId"),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_default_user_limit_by_environment"),
+  );
+  private static readonly globalByOrganization = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.environmentDefaultUserLimitsTable)
+      .where(
+        and(
+          eq(
+            schema.environmentDefaultUserLimitsTable.organizationId,
+            sql.placeholder("organizationId"),
+          ),
+          isNull(schema.environmentDefaultUserLimitsTable.environmentId),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_default_user_limit_by_organization"),
+  );
 }
 
 export default EnvironmentDefaultUserLimitModel;

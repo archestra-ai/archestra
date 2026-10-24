@@ -1,21 +1,21 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  ArrowRightLeft,
   Bot,
   Boxes,
   Building2,
   CircleDollarSign,
+  Coins,
   Edit,
   Info,
   Key,
   KeyRound,
-  ListTree,
   type LucideIcon,
   Plus,
   Trash2,
-  TriangleAlert,
   User,
   Users,
 } from "lucide-react";
@@ -30,7 +30,6 @@ import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
@@ -41,9 +40,9 @@ import { FormDialog } from "@/components/form-dialog";
 import { useSelectedLabels } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
 import {
+  type LimitCleanupInterval as BudgetCleanupInterval,
   CLEANUP_INTERVAL_LABELS,
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
-  type LimitCleanupInterval,
   LimitCleanupIntervalSelect,
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
@@ -51,7 +50,6 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RemoteUserSelect } from "@/components/remote-user-select";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
@@ -69,16 +67,21 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useLimitLabelKeys,
   useLimitLabelValues,
@@ -104,6 +107,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
+type LimitCleanupInterval = BudgetCleanupInterval | "minute";
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
 type UsageSummary = {
@@ -116,20 +120,24 @@ type UsageSummary = {
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
 type LimitFormState = {
+  limitType: "token_cost" | "requests" | "tokens";
   entityType: LimitEntityType;
   entityId: string;
   limitValue: string;
   cleanupInterval: LimitCleanupInterval;
+  hasExplicitInterval: boolean;
   models: string[];
   isAllModels: boolean;
   labels: ProfileLabel[];
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
+  limitType: "token_cost",
   entityType: "organization",
   entityId: "",
   limitValue: "",
   cleanupInterval: DEFAULT_LIMIT_CLEANUP_INTERVAL,
+  hasExplicitInterval: false,
   models: [],
   isAllModels: true,
   labels: [],
@@ -147,7 +155,7 @@ const ENTITY_TYPE_ITEMS: Array<{
   {
     value: "organization",
     label: "Organization",
-    description: "A shared budget across all LLM spend in your organization.",
+    description: "A shared spend limit across your organization.",
     icon: <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
@@ -207,16 +215,35 @@ function formatCurrency(value: number, fractionDigits = 0) {
   }).format(value);
 }
 
-function formatNumericInput(value: string) {
-  if (!value) return "";
-  return Number(value).toLocaleString("en-US");
+function getLimitValuePlaceholder(
+  unit: LimitFormState["limitType"],
+  interval: LimitCleanupInterval,
+) {
+  const examples: Record<
+    LimitCleanupInterval,
+    [spend: number, requests: number, tokens: number]
+  > = {
+    minute: [1, 60, 100_000],
+    "1h": [10, 1_000, 1_000_000],
+    "12h": [50, 5_000, 5_000_000],
+    "24h": [100, 10_000, 10_000_000],
+    calendar_day: [100, 10_000, 10_000_000],
+    "1w": [500, 50_000, 50_000_000],
+    calendar_week_sunday: [500, 50_000, 50_000_000],
+    calendar_week_monday: [500, 50_000, 50_000_000],
+    "1m": [2_000, 200_000, 200_000_000],
+    calendar_month: [2_000, 200_000, 200_000_000],
+  };
+  const [spend, requests, tokens] = examples[interval];
+  const amount =
+    unit === "token_cost" ? spend : unit === "requests" ? requests : tokens;
+  return `e.g. ${amount.toLocaleString("en-US")}`;
 }
 
 import {
   type LimitFilterModel,
   LimitModelFilter,
 } from "./_parts/limit-model-filter";
-import { type NestedLimit, nestLimits } from "./_parts/nest-limits";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
@@ -229,7 +256,7 @@ export default function LimitsPage() {
   } = useLimits();
   const { data: teams = [] } = useTeams({ includeRelations: false });
   const { data: organization } = useOrganization();
-  const { data: members = [] } = useMemberOptionsReferences({
+  const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits
       .filter((limit) => limit.entityType === "user")
       .map((limit) => limit.entityId),
@@ -243,7 +270,7 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const oauthClients = oauthClientsData?.data ?? [];
-  const { data: agents = [] } = useAgentOptionsByIds({
+  const { data: agents = EMPTY_ENTITY_OPTIONS } = useAgentOptionsByIds({
     ids: limits
       .filter((limit) => limit.entityType === "agent")
       .map((limit) => limit.entityId),
@@ -257,9 +284,29 @@ export default function LimitsPage() {
   const deleteLimit = useDeleteLimit();
   const bulkDeleteLimits = useBulkDeleteLimits();
 
-  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const {
+    searchParams,
+    updateQueryParams,
+    pageIndex,
+    pageSize,
+    setPagination,
+  } = useDataTableQueryParams({ defaultPageSize: 10 });
+  const unitsParam = searchParams.get("units");
+  const unitsFilter =
+    unitsParam === "token_cost" ||
+    unitsParam === "requests" ||
+    unitsParam === "tokens"
+      ? unitsParam
+      : "all";
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
+  const entityIdParam = searchParams.get("entityId");
+  const entityIdFilter =
+    appliedToFilter !== "all" &&
+    entityIdParam &&
+    /^[\w-]{1,128}$/.test(entityIdParam)
+      ? entityIdParam
+      : null;
   const modelFilter = searchParams.get("model") || "all";
   const labelsFilter = searchParams.get("labels") || "";
   const selectedLabels = useSelectedLabels();
@@ -284,7 +331,16 @@ export default function LimitsPage() {
   });
 
   const llmLimits = useMemo(
-    () => limits.filter((limit) => limit.limitType === "token_cost"),
+    () =>
+      limits.filter((limit) =>
+        [
+          "token_cost",
+          "requests",
+          "tokens",
+          "requests_per_minute",
+          "tokens_per_minute",
+        ].includes(limit.limitType),
+      ),
     [limits],
   );
 
@@ -353,13 +409,20 @@ export default function LimitsPage() {
 
   const buildEditFormState = useCallback((limit: LimitData): LimitFormState => {
     const models = getLimitModels(limit);
-    const isAllModels = models.length === 0 && limit.limitType === "token_cost";
+    const isAllModels = models.length === 0;
 
     return {
+      limitType:
+        limit.limitType === "requests_per_minute"
+          ? "requests"
+          : limit.limitType === "tokens_per_minute"
+            ? "tokens"
+            : (limit.limitType as LimitFormState["limitType"]),
       entityType: limit.entityType,
       entityId: limit.entityType === "organization" ? "" : limit.entityId,
       limitValue: String(limit.limitValue),
-      cleanupInterval: limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+      cleanupInterval: getLimitInterval(limit),
+      hasExplicitInterval: true,
       models: isAllModels ? [] : models,
       isAllModels,
       // A limit read before labels existed carries none; the labels field
@@ -384,7 +447,7 @@ export default function LimitsPage() {
   }, [editingLimit, buildEditFormState]);
 
   const getEntityLabel = useCallback(
-    (limit: LimitData) => {
+    (limit: Pick<LimitData, "entityType" | "entityId">) => {
       if (limit.entityType === "organization") {
         return "Organization";
       }
@@ -427,40 +490,32 @@ export default function LimitsPage() {
     [teams, members, virtualKeys, oauthClients, agents, environments],
   );
 
-  const getEntityIcon = useCallback((limit: LimitData) => {
-    const iconClassName = "h-4 w-4 shrink-0 text-muted-foreground";
-    if (limit.entityType === "organization") {
-      return <Building2 className={iconClassName} />;
-    }
-    if (limit.entityType === "team") {
-      return <Users className={iconClassName} />;
-    }
-    if (limit.entityType === "user") {
-      return <User className={iconClassName} />;
-    }
-    if (limit.entityType === "virtual_key") {
-      return <Key className={iconClassName} />;
-    }
-    if (limit.entityType === "llm_oauth_client") {
-      return <KeyRound className={iconClassName} />;
-    }
-    if (limit.entityType === "environment") {
-      return <Boxes className={iconClassName} />;
-    }
-    return (
-      <AgentIcon icon={null} fallbackType="agent" className={iconClassName} />
-    );
-  }, []);
-
   const getEntityScopeLabel = useCallback((limit: LimitData) => {
     return ENTITY_SCOPE_LABELS[limit.entityType] ?? "Limit";
   }, []);
 
+  const getEntityIcon = useCallback((limit: LimitData) => {
+    const iconClassName = "h-4 w-4 shrink-0 text-muted-foreground";
+    if (limit.entityType === "agent") {
+      return (
+        <AgentIcon icon={null} fallbackType="agent" className={iconClassName} />
+      );
+    }
+    const Icon = {
+      organization: Building2,
+      team: Users,
+      user: User,
+      virtual_key: Key,
+      llm_oauth_client: KeyRound,
+      environment: Boxes,
+    }[limit.entityType];
+    return <Icon className={iconClassName} />;
+  }, []);
+
   const getUsageStatus = useCallback((limit: LimitData): UsageSummary => {
-    const actualUsage = (limit.modelUsage ?? []).reduce(
-      (sum, usage) => sum + usage.cost,
-      0,
-    );
+    const actualUsage =
+      limit.throughputUsage?.currentUsage ??
+      (limit.modelUsage ?? []).reduce((sum, usage) => sum + usage.cost, 0);
     const actualLimit = limit.limitValue;
     const percentage = actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
     if (percentage >= 90) {
@@ -477,12 +532,19 @@ export default function LimitsPage() {
       const usageStatus = getUsageStatus(limit).status;
       const matchesStatus =
         statusFilter === "all" || usageStatus === statusFilter;
+      const matchesUnits =
+        unitsFilter === "all" ||
+        limit.limitType === unitsFilter ||
+        (unitsFilter === "requests" &&
+          limit.limitType === "requests_per_minute") ||
+        (unitsFilter === "tokens" && limit.limitType === "tokens_per_minute");
       const matchesAppliedTo =
         appliedToFilter === "all" || limit.entityType === appliedToFilter;
+      const matchesEntity =
+        !entityIdFilter || limit.entityId === entityIdFilter;
       const isAllModelsLimit =
-        limit.limitType === "token_cost" &&
-        (!limit.model ||
-          (Array.isArray(limit.model) && limit.model.length === 0));
+        !limit.model ||
+        (Array.isArray(limit.model) && limit.model.length === 0);
       const matchesModel =
         modelFilter === "all" ||
         (Array.isArray(limit.model) && limit.model.includes(modelFilter)) ||
@@ -498,44 +560,25 @@ export default function LimitsPage() {
           ),
         );
 
-      return matchesStatus && matchesAppliedTo && matchesModel && matchesLabels;
+      return (
+        matchesUnits &&
+        matchesStatus &&
+        matchesAppliedTo &&
+        matchesEntity &&
+        matchesModel &&
+        matchesLabels
+      );
     });
   }, [
     appliedToFilter,
+    entityIdFilter,
     llmLimits,
     modelFilter,
     statusFilter,
+    unitsFilter,
     getUsageStatus,
     selectedLabels,
   ]);
-
-  const nestedLimits = useMemo(
-    () =>
-      nestLimits({
-        limits: filteredLimits,
-        entityKeyOf: (limit) =>
-          limit.entityType === "organization"
-            ? "organization"
-            : `${limit.entityType}:${limit.entityId}`,
-        parentKeysOf: (limit) => {
-          if (limit.entityType === "organization") return [];
-          // A key or client nests under the team that pays for it.
-          const billingTeamId =
-            limit.entityType === "virtual_key"
-              ? virtualKeys.find((key) => key.id === limit.entityId)
-                  ?.billingTeam?.id
-              : limit.entityType === "llm_oauth_client"
-                ? oauthClients.find((client) => client.id === limit.entityId)
-                    ?.billingTeam?.id
-                : undefined;
-          return billingTeamId
-            ? [`team:${billingTeamId}`, "organization"]
-            : ["organization"];
-        },
-        prefersAsParent: (limit) => getLimitModels(limit).length === 0,
-      }),
-    [filteredLimits, virtualKeys, oauthClients],
-  );
 
   const {
     rowSelection,
@@ -550,19 +593,22 @@ export default function LimitsPage() {
     canSelect: canBulkDeleteLimit,
     filterSignature: JSON.stringify({
       statusFilter,
+      unitsFilter,
       appliedToFilter,
+      entityIdFilter,
       modelFilter,
       labelsFilter,
     }),
     matchDescription: "match the current filters",
   });
 
-  const columns = useMemo<ColumnDef<NestedLimit<LimitData>>[]>(
+  const columns = useMemo<ColumnDef<LimitData>[]>(
     () => [
-      createSelectColumn<NestedLimit<LimitData>>({
-        rowLabel: ({ limit }) => `Select ${getEntityLabel(limit)} limit`,
+      createSelectColumn<LimitData>({
+        rowLabel: (limit) =>
+          `Select ${getEntityLabel(limit)} ${limitMetricLabel(limit)} rule`,
         allLabel: "Select all limits on this page",
-        canSelect: ({ limit }) => canBulkDeleteLimit(limit),
+        canSelect: canBulkDeleteLimit,
         disabledReason: () =>
           "User limits must be deleted individually because they can span organizations",
       }),
@@ -572,18 +618,9 @@ export default function LimitsPage() {
         size: 220,
         minSize: 160,
         cell: ({ row }) => {
-          const { limit, depth } = row.original;
+          const limit = row.original;
           return (
-            <div
-              className="flex min-w-0 items-center gap-2"
-              style={{ paddingLeft: `${Math.max(depth - 1, 0) * 20}px` }}
-            >
-              {depth > 0 && (
-                <span
-                  aria-hidden
-                  className="mb-2 size-2.5 shrink-0 rounded-bl-sm border-b border-l border-muted-foreground/40"
-                />
-              )}
+            <div className="flex min-w-0 items-center gap-2">
               <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
                 {getEntityIcon(limit)}
               </span>
@@ -609,9 +646,18 @@ export default function LimitsPage() {
         minSize: 160,
         cell: ({ row }) => (
           <LimitModels
-            models={getLimitModels(row.original.limit)}
+            models={getLimitModels(row.original)}
             modelByModelId={modelByModelId}
           />
+        ),
+      },
+      {
+        id: "kind",
+        header: "Kind",
+        size: 120,
+        minSize: 110,
+        cell: ({ row }) => (
+          <LimitKindLabel limitType={row.original.limitType} />
         ),
       },
       {
@@ -621,9 +667,8 @@ export default function LimitsPage() {
         minSize: 240,
         cell: ({ row }) => (
           <LimitUsage
-            nested={row.original}
-            usage={getUsageStatus(row.original.limit)}
-            labelOf={getEntityLabel}
+            limit={row.original}
+            usage={getUsageStatus(row.original)}
           />
         ),
       },
@@ -634,17 +679,21 @@ export default function LimitsPage() {
         minSize: 80,
         cell: ({ row }) => (
           <TableRowActions
+            size="sm"
+            itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
             actions={[
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
-                onClick: () => openEditDialog(row.original.limit),
+                permissions: { llmLimit: ["update"] },
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete limit",
                 variant: "destructive",
-                onClick: () => setLimitToDelete(row.original.limit),
+                permissions: { llmLimit: ["delete"] },
+                onClick: () => setLimitToDelete(row.original),
               },
             ]}
           />
@@ -678,36 +727,29 @@ export default function LimitsPage() {
     }
     return counts;
   }, [llmLimits]);
-  const attentionLimits = useMemo(
-    () =>
-      llmLimits
-        .map((limit) => ({ limit, usage: getUsageStatus(limit) }))
-        .filter(({ usage }) => usage.status !== "safe")
-        .sort((a, b) => b.usage.percentage - a.usage.percentage),
-    [llmLimits, getUsageStatus],
-  );
 
   const hasActiveFilters =
     statusFilter !== "all" ||
+    unitsFilter !== "all" ||
     appliedToFilter !== "all" ||
+    Boolean(entityIdFilter) ||
     modelFilter !== "all" ||
     Boolean(labelsFilter);
   const clearFilters = useCallback(
     () =>
       updateQueryParams({
         status: null,
+        units: null,
         appliedTo: null,
+        entityId: null,
         model: null,
         labels: null,
+        page: null,
       }),
     [updateQueryParams],
   );
   const shouldShowDefaultUserLimitNotice =
     formState.entityType === "user" && defaultUserLimits.length > 0;
-  const limitsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformCostsAndLimits,
-    "usage-limits",
-  );
 
   function closeDialog() {
     if (editingLimit) {
@@ -718,6 +760,7 @@ export default function LimitsPage() {
   }
 
   async function handleSubmit() {
+    if (!canSubmit || createLimit.isPending || updateLimit.isPending) return;
     const finalLabels =
       labelsRef.current?.saveUnsavedLabel() ?? formState.labels;
     const body = {
@@ -726,7 +769,7 @@ export default function LimitsPage() {
         formState.entityType === "organization"
           ? (organization?.id ?? "")
           : formState.entityId,
-      limitType: "token_cost" as const,
+      limitType: formState.limitType,
       limitValue: Number(formState.limitValue),
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
@@ -756,8 +799,16 @@ export default function LimitsPage() {
     setLimitToDelete(null);
   }
 
-  const canSubmit =
+  const validAmount =
+    /^\d+$/.test(formState.limitValue) &&
+    Number.isSafeInteger(Number(formState.limitValue)) &&
     Number(formState.limitValue) > 0 &&
+    Number(formState.limitValue) <= 2147483647;
+  const canSubmit =
+    validAmount &&
+    ((formState.limitType === "token_cost" &&
+      formState.cleanupInterval !== "minute") ||
+      ["organization", "team", "virtual_key"].includes(formState.entityType)) &&
     (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
 
@@ -781,38 +832,27 @@ export default function LimitsPage() {
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <InlineNotice variant="info" className="mb-2">
-          <Info />
-          <InlineNoticeText>
-            {defaultUserLimits.length > 0
-              ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
-              : "No default user limit is set — users are only capped by the custom limits below. Set a default for every user in "}
-            <Link
-              href="/settings/llm"
-              className="font-medium underline underline-offset-4"
-            >
-              LLM settings
-            </Link>
-            .
-          </InlineNoticeText>
-        </InlineNotice>
+        <details className="mb-3 text-xs text-muted-foreground">
+          <summary className="mb-2 cursor-pointer">
+            Default user spend limits
+          </summary>
+          <InlineNotice variant="info">
+            <Info />
+            <InlineNoticeText>
+              {defaultUserLimits.length > 0
+                ? "A default user spend limit applies to every user. Custom per-user spend limits override it. Set it in "
+                : "No default user spend limit is set. Set one for every user in "}
+              <Link
+                href="/settings/llm"
+                className="font-medium underline underline-offset-4"
+              >
+                LLM settings
+              </Link>
+              .
+            </InlineNoticeText>
+          </InlineNotice>
+        </details>
       </WithPermissions>
-
-      {attentionLimits.length > 0 && (
-        <NeedsAttention
-          items={attentionLimits.map(({ limit, usage }) => ({
-            limit,
-            usage,
-            label: getEntityLabel(limit),
-            scopeLabel: getEntityScopeLabel(limit),
-            icon: getEntityIcon(limit),
-            models: getLimitModels(limit).map(
-              (model) => modelByModelId.get(model)?.displayName ?? model,
-            ),
-          }))}
-          onEdit={openEditDialog}
-        />
-      )}
 
       <BulkActionsScope>
         <CollectionFilters>
@@ -822,7 +862,10 @@ export default function LimitsPage() {
             <FilterSelect
               value={statusFilter}
               onValueChange={(value) =>
-                updateQueryParams({ status: value === "all" ? null : value })
+                updateQueryParams({
+                  status: value === "all" ? null : value,
+                  page: null,
+                })
               }
               placeholder="All statuses"
               showSearch={false}
@@ -851,7 +894,11 @@ export default function LimitsPage() {
             <FilterSelect
               value={appliedToFilter}
               onValueChange={(value) =>
-                updateQueryParams({ appliedTo: value === "all" ? null : value })
+                updateQueryParams({
+                  appliedTo: value === "all" ? null : value,
+                  entityId: null,
+                  page: null,
+                })
               }
               placeholder="All applied to"
               showSearch={false}
@@ -878,10 +925,48 @@ export default function LimitsPage() {
                 })),
               ]}
             />
+            {entityIdFilter && (
+              <FilterSelect
+                value={entityIdFilter}
+                onValueChange={(value) =>
+                  updateQueryParams({
+                    entityId: value === "all" ? null : value,
+                    page: null,
+                  })
+                }
+                placeholder="All entities"
+                ariaLabel="Filter by entity"
+                items={[
+                  { value: "all", label: "All entities" },
+                  ...Array.from(
+                    new Map([
+                      ...llmLimits
+                        .filter((limit) => limit.entityType === appliedToFilter)
+                        .map(
+                          (limit) =>
+                            [limit.entityId, getEntityLabel(limit)] as const,
+                        ),
+                      [
+                        entityIdFilter,
+                        getEntityLabel({
+                          entityType:
+                            appliedToFilter as LimitData["entityType"],
+                          entityId: entityIdFilter,
+                        }),
+                      ] as const,
+                    ]),
+                    ([value, label]) => ({ value, label }),
+                  ),
+                ]}
+              />
+            )}
             <LimitModelFilter
               value={modelFilter}
               onValueChange={(value) =>
-                updateQueryParams({ model: value === "all" ? null : value })
+                updateQueryParams({
+                  model: value === "all" ? null : value,
+                  page: null,
+                })
               }
               models={filterModels}
               limitCountByModel={limitCountByModel}
@@ -892,6 +977,39 @@ export default function LimitsPage() {
               className={filterControlClass({
                 active: Boolean(selectedLabels),
               })}
+            />
+            <FilterSelect
+              value={unitsFilter}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  units: value === "all" ? null : value,
+                  page: null,
+                })
+              }
+              placeholder="All kinds"
+              ariaLabel="Filter by limit kind"
+              showSearch={false}
+              items={[
+                { value: "all", label: "All kinds" },
+                {
+                  value: "token_cost",
+                  label: "Spend",
+                  content: <LimitKindLabel limitType="token_cost" />,
+                  selectedContent: <LimitKindLabel limitType="token_cost" />,
+                },
+                {
+                  value: "tokens",
+                  label: "Tokens",
+                  content: <LimitKindLabel limitType="tokens" />,
+                  selectedContent: <LimitKindLabel limitType="tokens" />,
+                },
+                {
+                  value: "requests",
+                  label: "Requests",
+                  content: <LimitKindLabel limitType="requests" />,
+                  selectedContent: <LimitKindLabel limitType="requests" />,
+                },
+              ]}
             />
           </FilterBar>
         </CollectionFilters>
@@ -921,8 +1039,14 @@ export default function LimitsPage() {
         </BulkActions>
         <DataTable
           columns={columns}
-          data={nestedLimits}
-          getRowId={({ limit }) => limit.id}
+          data={filteredLimits}
+          pagination={{
+            pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
+            pageSize: Number.isFinite(pageSize) ? pageSize : 10,
+            total: filteredLimits.length,
+          }}
+          onPaginationChange={setPagination}
+          getRowId={(limit) => limit.id}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
           onPageRowIdsChange={onPageRowIdsChange}
@@ -940,7 +1064,7 @@ export default function LimitsPage() {
         open={isCreateDialogOpen || !!editingLimit}
         onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Configure scoped LLM token-cost limits."
+        description="Choose an amount, limit kind and interval for each limit."
         size="medium"
       >
         <DialogForm
@@ -950,234 +1074,340 @@ export default function LimitsPage() {
             void handleSubmit();
           }}
         >
-          <DialogBody className="space-y-4">
-            <Alert variant="info">
-              <Info className="h-4 w-4" />
-              <AlertDescription className="block">
-                A limit caps token-cost spend for the selected scope over a
-                recurring window. Limits stack: when more than one applies to a
-                request, every matching limit is checked and the request is
-                blocked if any is exceeded.
-                {limitsDocsUrl && (
-                  <>
-                    {" "}
-                    <ExternalDocsLink
-                      href={limitsDocsUrl}
-                      className="text-inherit underline underline-offset-4"
-                      showIcon={false}
-                    >
-                      Learn how limits are evaluated
-                    </ExternalDocsLink>
-                    .
-                  </>
-                )}
-              </AlertDescription>
-            </Alert>
+          <DialogBody className="space-y-5">
+            <InlineNotice variant="neutral">
+              <Info aria-hidden="true" />
+              <InlineNoticeText>
+                Every matching limit must allow the request. A key's allowance
+                does not override its team or organization cap.
+              </InlineNoticeText>
+            </InlineNotice>
 
             {shouldShowDefaultUserLimitNotice && (
-              <Alert variant="info">
-                <AlertDescription>
-                  This custom user limit will override the default user limit
-                  for the selected user.
-                </AlertDescription>
-              </Alert>
+              <InlineNotice variant="info">
+                <Info aria-hidden="true" />
+                <InlineNoticeText>
+                  This custom user spend limit will override the default user
+                  spend limit for the selected user.
+                </InlineNoticeText>
+              </InlineNotice>
             )}
 
-            <div className="space-y-2">
-              <Label>Apply to</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <SearchableSelect
-                  value={formState.entityType}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({
-                      ...current,
-                      entityType: value as LimitEntityType,
-                      entityId: "",
-                    }))
-                  }
-                  placeholder="Select scope"
-                  ariaLabel="Limit scope"
-                  items={ENTITY_TYPE_ITEMS.map((item) => ({
-                    value: item.value,
-                    label: item.label,
-                    searchText: `${item.label} ${item.description}`,
-                    content: (
-                      <span className="flex flex-col gap-0.5">
+            <section
+              className="space-y-4"
+              aria-labelledby="limit-scope-heading"
+            >
+              <div className="space-y-1">
+                <h3 id="limit-scope-heading" className="text-sm font-medium">
+                  What this rule applies to
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {editingLimit
+                    ? "Limit kind and scope stay fixed. Create another rule to change them."
+                    : "Choose who the limit applies to, then set its value and interval."}
+                </p>
+              </div>
+              <fieldset disabled={Boolean(editingLimit)} className="space-y-2">
+                <Label>Apply to</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <SearchableSelect
+                    value={formState.entityType}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityType: value as LimitEntityType,
+                        entityId: "",
+                      }))
+                    }
+                    placeholder="Select scope"
+                    ariaLabel="Limit scope"
+                    disabled={Boolean(editingLimit)}
+                    items={ENTITY_TYPE_ITEMS.filter(
+                      (item) =>
+                        item.value === formState.entityType ||
+                        (formState.limitType === "token_cost" &&
+                          formState.cleanupInterval !== "minute") ||
+                        ["organization", "team", "virtual_key"].includes(
+                          item.value,
+                        ),
+                    ).map((item) => ({
+                      value: item.value,
+                      label: item.label,
+                      searchText: `${item.label} ${item.description}`,
+                      content: (
+                        <span className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-2">
+                            {item.icon}
+                            {item.label}
+                          </span>
+                          <span className="pl-6 text-xs text-muted-foreground">
+                            {formState.limitType === "token_cost"
+                              ? item.description
+                              : "Shared allowance across matching requests."}
+                          </span>
+                        </span>
+                      ),
+                      selectedContent: (
                         <span className="flex items-center gap-2">
                           {item.icon}
                           {item.label}
                         </span>
-                        <span className="pl-6 text-xs text-muted-foreground">
-                          {item.description}
-                        </span>
-                      </span>
-                    ),
-                    selectedContent: (
-                      <span className="flex items-center gap-2">
-                        {item.icon}
-                        {item.label}
-                      </span>
-                    ),
-                  }))}
-                  className="w-full sm:flex-1"
-                  showSearchIcon={false}
-                />
-
-                {formState.entityType === "team" && (
-                  <SearchableSelect
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    placeholder="Select team"
-                    items={teams.map((team) => ({
-                      value: team.id,
-                      label: team.name,
-                      description: team.description ?? undefined,
+                      ),
                     }))}
                     className="w-full sm:flex-1"
+                    showSearchIcon={false}
                   />
-                )}
 
-                {formState.entityType === "user" && (
-                  <RemoteUserSelect
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    placeholder="Select user"
-                    className="w-full sm:flex-1"
-                  />
-                )}
+                  {formState.entityType === "team" && (
+                    <SearchableSelect
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      placeholder="Select team"
+                      items={teams.map((team) => ({
+                        value: team.id,
+                        label: team.name,
+                        description: team.description ?? undefined,
+                      }))}
+                      className="w-full sm:flex-1"
+                      disabled={Boolean(editingLimit)}
+                    />
+                  )}
 
-                {formState.entityType === "virtual_key" && (
-                  <VirtualKeySearchableSelect
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    virtualKeys={virtualKeys}
-                    placeholder="Select virtual key"
-                    className="w-full sm:flex-1"
-                  />
-                )}
+                  {formState.entityType === "user" && (
+                    <RemoteUserSelect
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      placeholder="Select user"
+                      className="w-full sm:flex-1"
+                    />
+                  )}
 
-                {formState.entityType === "agent" && (
-                  <AgentSelector
-                    mode="single"
-                    flat
-                    remote={{
-                      filters: {
-                        agentType: "agent",
-                        searchMode: "name_or_description",
-                      },
-                    }}
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    placeholder="Select agent"
-                    className="w-full sm:flex-1"
-                  />
-                )}
+                  {formState.entityType === "virtual_key" && (
+                    <VirtualKeySearchableSelect
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      virtualKeys={virtualKeys}
+                      placeholder="Select virtual key"
+                      className="w-full sm:flex-1"
+                    />
+                  )}
 
-                {formState.entityType === "llm_oauth_client" && (
-                  <SearchableSelect
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    placeholder="Select OAuth client"
-                    items={oauthClients.map((client) => ({
-                      value: client.id,
-                      label: client.name,
-                      description: client.clientId,
-                    }))}
-                    className="w-full sm:flex-1"
-                  />
-                )}
+                  {formState.entityType === "agent" && (
+                    <AgentSelector
+                      mode="single"
+                      flat
+                      remote={{
+                        filters: {
+                          agentType: "agent",
+                          searchMode: "name_or_description",
+                        },
+                      }}
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      placeholder="Select agent"
+                      className="w-full sm:flex-1"
+                    />
+                  )}
 
-                {formState.entityType === "environment" && (
-                  <EnvironmentSelector
-                    mode="scope"
-                    value={formState.entityId}
-                    onChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    className="w-full sm:flex-1"
-                  />
-                )}
-              </div>
-            </div>
+                  {formState.entityType === "llm_oauth_client" && (
+                    <SearchableSelect
+                      value={formState.entityId}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      placeholder="Select OAuth client"
+                      items={oauthClients.map((client) => ({
+                        value: client.id,
+                        label: client.name,
+                        description: client.clientId,
+                      }))}
+                      className="w-full sm:flex-1"
+                    />
+                  )}
 
-            <div className="space-y-2">
-              <Label>Select models</Label>
-              <LlmModelPicker
-                multiple
-                sortDirection="desc"
-                value={formState.isAllModels ? ["all"] : formState.models}
-                onValueChange={(values) => {
-                  const isAllModels = values.includes("all");
-                  setFormState((current) => ({
-                    ...current,
-                    models: isAllModels ? [] : values,
-                    isAllModels,
-                  }));
-                }}
-                models={modelOptions}
-                editable
-                includeAllOption
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex h-5 items-center">
-                  <Label>Limit value ($)</Label>
+                  {formState.entityType === "environment" && (
+                    <EnvironmentSelector
+                      mode="scope"
+                      value={formState.entityId}
+                      onChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          entityId: value,
+                        }))
+                      }
+                      className="w-full sm:flex-1"
+                    />
+                  )}
                 </div>
-                <Input
-                  aria-label="Limit value"
-                  value={formatNumericInput(formState.limitValue)}
-                  onChange={(event) =>
+              </fieldset>
+
+              <div className="space-y-2">
+                <Label>Select models</Label>
+                <LlmModelPicker
+                  multiple
+                  sortDirection="desc"
+                  value={formState.isAllModels ? ["all"] : formState.models}
+                  onValueChange={(values) => {
+                    const isAllModels = values.includes("all");
                     setFormState((current) => ({
                       ...current,
-                      limitValue: event.target.value.replace(/[^0-9]/g, ""),
-                    }))
-                  }
-                  placeholder="1,000"
-                  inputMode="numeric"
+                      models: isAllModels ? [] : values,
+                      isAllModels,
+                    }));
+                  }}
+                  models={modelOptions}
+                  editable
+                  includeAllOption
                 />
               </div>
+            </section>
 
-              <div className="space-y-2">
-                <div className="flex h-5 items-center gap-1.5">
-                  <Label>Cleanup interval</Label>
+            <section
+              className="space-y-4 border-t pt-4"
+              aria-labelledby="limit-allowance-heading"
+            >
+              <h3 id="limit-allowance-heading" className="text-sm font-medium">
+                Limit settings
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1.4fr)]">
+                <div className="space-y-2">
+                  <div className="flex h-5 items-center">
+                    <Label htmlFor="limit-value">Limit value</Label>
+                  </div>
+                  <Input
+                    id="limit-value"
+                    aria-label="Limit value"
+                    aria-describedby="limit-value-help"
+                    aria-invalid={Boolean(formState.limitValue) && !validAmount}
+                    required
+                    value={formState.limitValue}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        limitValue: /^\d{1,3}(,\d{3})+$/.test(
+                          event.target.value,
+                        )
+                          ? event.target.value.replace(/,/g, "")
+                          : event.target.value,
+                      }))
+                    }
+                    placeholder={getLimitValuePlaceholder(
+                      formState.limitType,
+                      formState.cleanupInterval,
+                    )}
+                    inputMode="numeric"
+                  />
+                  <p
+                    id="limit-value-help"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {formState.limitValue && !validAmount
+                      ? "Enter a whole number from 1 to 2,147,483,647. Decimal and negative amounts are not supported."
+                      : "Choose a whole-number allowance for your workload and interval."}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex h-5 items-center">
+                    <Label htmlFor="limit-kind">Limit kind</Label>
+                  </div>
+                  <Select
+                    value={formState.limitType}
+                    disabled={Boolean(editingLimit)}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        limitType: value as LimitFormState["limitType"],
+                        limitValue: "",
+                        cleanupInterval: current.hasExplicitInterval
+                          ? current.cleanupInterval
+                          : value === "token_cost"
+                            ? DEFAULT_LIMIT_CLEANUP_INTERVAL
+                            : "minute",
+                      }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="limit-kind"
+                      aria-label="Limit kind"
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="token_cost">
+                        <LimitKindLabel limitType="token_cost" />
+                      </SelectItem>
+                      <SelectItem value="tokens">
+                        <LimitKindLabel limitType="tokens" />
+                      </SelectItem>
+                      <SelectItem value="requests">
+                        <LimitKindLabel limitType="requests" />
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-[auto_1fr] grid-rows-[1.25rem_auto] content-start items-center gap-x-1.5 gap-y-2">
+                  <Label htmlFor="limit-interval">Interval</Label>
+                  <div className="col-span-2 row-start-2">
+                    <LimitCleanupIntervalSelect
+                      id="limit-interval"
+                      ariaLabel="Interval"
+                      includeMinute
+                      minuteDisabled={
+                        Boolean(editingLimit) &&
+                        !["organization", "team", "virtual_key"].includes(
+                          formState.entityType,
+                        )
+                      }
+                      value={formState.cleanupInterval}
+                      onExplicitSelection={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          hasExplicitInterval: true,
+                        }))
+                      }
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          cleanupInterval: value,
+                          hasExplicitInterval: true,
+                        }))
+                      }
+                    />
+                  </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                        aria-label="Cleanup interval help"
+                        className="col-start-2 row-start-1 justify-self-start text-muted-foreground hover:text-foreground"
+                        aria-label="Interval help"
                       >
                         <Info className="h-3.5 w-3.5" />
                       </Button>
@@ -1187,22 +1417,35 @@ export default function LimitsPage() {
                       align="start"
                       className="max-w-72"
                     >
-                      Rolling resets after elapsed time. Calendar resets at the
-                      next day, week, or month boundary.
+                      Per-minute allowance recovers continuously. Rolling
+                      intervals reset after elapsed time; calendar intervals
+                      reset at the next day, week or month boundary.
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <LimitCleanupIntervalSelect
-                  value={formState.cleanupInterval}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({
-                      ...current,
-                      cleanupInterval: value,
-                    }))
-                  }
-                />
               </div>
-            </div>
+              {!(
+                formState.limitType === "token_cost" &&
+                formState.cleanupInterval !== "minute"
+              ) &&
+                !["organization", "team", "virtual_key"].includes(
+                  formState.entityType,
+                ) && (
+                  <InlineNotice variant="info">
+                    <Info />
+                    <InlineNoticeText>
+                      Choose an organization, team or virtual key for this
+                      allowance.
+                    </InlineNoticeText>
+                  </InlineNotice>
+                )}
+              {formState.limitType === "tokens" && (
+                <p className="text-sm text-muted-foreground">
+                  Counts token usage reported by the provider. Requests in
+                  flight can exceed this limit.
+                </p>
+              )}
+            </section>
 
             <AdvancedLabelsSection
               ref={labelsRef}
@@ -1277,6 +1520,7 @@ function formatNextLimitReset(
   lastCleanup: LimitData["lastCleanup"],
   cleanupInterval: LimitCleanupInterval,
 ): string {
+  if (cleanupInterval === "minute") return "";
   if (isCalendarCleanupInterval(cleanupInterval)) {
     return formatResetDate(
       getNextCalendarResetDate(new Date(), cleanupInterval),
@@ -1310,6 +1554,8 @@ function addCleanupInterval(
 ): Date {
   const next = new Date(date);
   switch (cleanupInterval) {
+    case "minute":
+      return new Date(Math.floor(date.getTime() / 60000) * 60000 + 60000);
     case "1h":
       next.setHours(next.getHours() + 1);
       return next;
@@ -1380,30 +1626,28 @@ function getNextCalendarResetDate(
 
 const USAGE_STATUSES: UsageStatus[] = ["safe", "warning", "danger"];
 
-// One row of cards at wide widths. Items come sorted, worst first.
-const NEEDS_ATTENTION_PREVIEW_COUNT = 3;
-
 // The labels keep this page's existing thresholds (see getUsageStatus).
+// Disabled reference queries keep stable defaults so dialog state changes do
+// not replace table cells and detach the button that should regain focus.
+const EMPTY_ENTITY_OPTIONS: never[] = [];
+
 const USAGE_STATUS_META: Record<
   UsageStatus,
-  { label: string; hint: string; barClassName: string; dotClassName: string }
+  { label: string; hint: string; dotClassName: string }
 > = {
   safe: {
-    label: "Safe",
+    label: "Within limit",
     hint: "Under 75% used",
-    barClassName: "bg-emerald-500",
     dotClassName: "bg-emerald-500",
   },
   warning: {
     label: "Near limit",
-    hint: "75% or more used",
-    barClassName: "bg-amber-500",
+    hint: "75% to under 90% used",
     dotClassName: "bg-amber-500",
   },
   danger: {
     label: "Critical",
     hint: "90% or more used",
-    barClassName: "bg-destructive",
     dotClassName: "bg-destructive",
   },
 };
@@ -1544,238 +1788,136 @@ function LimitModels({
   );
 }
 
-/**
- * The usage bar, colored by status, with the spend and when it resets. A
- * parent row adds how much of its limit the limits nested under it take.
- */
+/** Usage and recovery are formatted from each rule's units and interval. */
 function LimitUsage({
-  nested,
+  limit,
   usage,
-  labelOf,
 }: {
-  nested: NestedLimit<LimitData>;
+  limit: LimitData;
   usage: UsageSummary;
-  labelOf: (limit: LimitData) => string;
 }) {
-  const { limit } = nested;
-  const cleanupInterval =
-    (limit.cleanupInterval as LimitCleanupInterval | null) ??
-    DEFAULT_LIMIT_CLEANUP_INTERVAL;
+  const cleanupInterval = getLimitInterval(limit);
+  const known =
+    limit.limitType === "token_cost" || Boolean(limit.throughputUsage);
+  const status = !known
+    ? "Usage unavailable"
+    : usage.actualUsage === usage.actualLimit
+      ? "At limit"
+      : usage.actualUsage > usage.actualLimit
+        ? "Over limit"
+        : null;
   return (
     <div className="min-w-0 w-full space-y-1 overflow-hidden">
-      <UsageBar percentage={usage.percentage} status={usage.status} />
-      <div className="flex min-w-0 items-center gap-1.5 text-xs">
-        <p className="truncate">
-          <span>{formatCurrency(usage.actualUsage, 2)}</span>
+      {known && (
+        <div
+          role="progressbar"
+          aria-label={`${limitMetricLabel(limit)} usage`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.max(Math.min(usage.percentage, 100), 0)}
+          aria-valuetext={`${usage.percentage.toFixed(1)}% used`}
+          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className={cn(
+              "h-full rounded-full",
+              USAGE_STATUS_META[usage.status].dotClassName,
+            )}
+            style={{
+              width: `${Math.max(Math.min(usage.percentage, 100), 1.5)}%`,
+            }}
+          />
+        </div>
+      )}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+        <p className="truncate tabular-nums">
+          <span>
+            {known
+              ? limit.limitType === "token_cost"
+                ? formatCurrency(usage.actualUsage, 2)
+                : usage.actualUsage.toLocaleString(undefined, {
+                    maximumFractionDigits: 1,
+                  })
+              : "—"}
+          </span>
           <span className="text-muted-foreground">
-            {` of ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+            {` of ${formatLimitAmount(limit, usage.actualLimit)}${known ? ` (${usage.percentage.toFixed(1)}%)` : ""}`}
           </span>
         </p>
-        {nested.allocation && (
-          <NestedLimitsHint nested={nested} labelOf={labelOf} />
+        {status && (
+          <p
+            className={cn(
+              "text-xs",
+              usage.actualUsage >= usage.actualLimit && known
+                ? "text-destructive"
+                : "text-muted-foreground",
+            )}
+          >
+            {status}
+          </p>
         )}
       </div>
       <p className="truncate text-xs text-muted-foreground">
-        {`${CLEANUP_INTERVAL_LABELS[cleanupInterval]} · ${formatNextLimitReset(limit.lastCleanup, cleanupInterval)}`}
+        {CLEANUP_INTERVAL_LABELS[cleanupInterval]}
+        {cleanupInterval !== "minute" && (
+          <>
+            {" · "}
+            {limit.throughputUsage?.resetsAt
+              ? formatResetDate(new Date(limit.throughputUsage.resetsAt))
+              : formatNextLimitReset(limit.lastCleanup, cleanupInterval)}
+          </>
+        )}
       </p>
     </div>
   );
 }
 
-/**
- * An icon on a parent row. Its tooltip lists the limits under this one and
- * whether their caps fit inside it. It turns amber when they do not fit.
- */
-function NestedLimitsHint({
-  nested,
-  labelOf,
-}: {
-  nested: NestedLimit<LimitData>;
-  labelOf: (limit: LimitData) => string;
-}) {
-  const { limit, children, allocation } = nested;
-  if (!allocation) return null;
-  const overAllocated = allocation.total > limit.limitValue;
-  const periodOf = (candidate: LimitData) =>
-    (candidate.cleanupInterval as LimitCleanupInterval | null) ??
-    DEFAULT_LIMIT_CLEANUP_INTERVAL;
-  const samePeriod = (candidate: LimitData) =>
-    candidate.cleanupInterval === limit.cleanupInterval;
+function LimitKindLabel({ limitType }: { limitType: LimitData["limitType"] }) {
+  const isRequests =
+    limitType === "requests" || limitType === "requests_per_minute";
+  const Icon =
+    limitType === "token_cost"
+      ? CircleDollarSign
+      : isRequests
+        ? ArrowRightLeft
+        : Coins;
+  const label =
+    limitType === "token_cost" ? "Spend" : isRequests ? "Requests" : "Tokens";
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <UnstyledButton
-          aria-label={`${children.length} ${children.length === 1 ? "limit" : "limits"} under this one`}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 rounded px-1 tabular-nums hover:bg-muted",
-            overAllocated
-              ? "text-amber-600 dark:text-amber-400"
-              : "text-muted-foreground",
-          )}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {overAllocated ? (
-            <TriangleAlert className="size-3" />
-          ) : (
-            <ListTree className="size-3" />
-          )}
-          {children.length}
-        </UnstyledButton>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-80 space-y-2 p-3">
-        <p className="font-medium">Limits under this one</p>
-        <ul className="space-y-0.5">
-          {children.map((child) => (
-            <li key={child.id} className="flex justify-between gap-4">
-              <span className="truncate">{labelOf(child)}</span>
-              <span
-                className={cn(
-                  "shrink-0 tabular-nums",
-                  !samePeriod(child) && "opacity-60",
-                )}
-              >
-                {formatCurrency(child.limitValue)}
-                {!samePeriod(child) &&
-                  ` · ${CLEANUP_INTERVAL_LABELS[periodOf(child)]}`}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {allocation.count > 0 && (
-          <p>
-            {overAllocated
-              ? `Their caps add up to ${formatCurrency(allocation.total)}. This limit is ${formatCurrency(limit.limitValue)}, so it can block them before they reach their caps.`
-              : `Their caps add up to ${formatCurrency(allocation.total)} of this ${formatCurrency(limit.limitValue)} limit.`}
-          </p>
-        )}
-        {allocation.otherPeriodCount > 0 && (
-          <p className="opacity-70">
-            {allocation.otherPeriodCount === 1
-              ? "1 limit resets on another period, so it is not in the total."
-              : `${allocation.otherPeriodCount} limits reset on another period, so they are not in the total.`}
-          </p>
-        )}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function UsageBar({
-  percentage,
-  status,
-}: {
-  percentage: number;
-  status: UsageStatus;
-}) {
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-      <div
-        className={cn(
-          "h-full rounded-full",
-          USAGE_STATUS_META[status].barClassName,
-        )}
-        style={{ width: `${Math.max(Math.min(percentage, 100), 1.5)}%` }}
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <Icon
+        aria-hidden="true"
+        className="size-3.5 shrink-0 text-muted-foreground"
       />
-    </div>
+      <span>{label}</span>
+    </span>
   );
 }
 
-/** Limits at 75% or more, as cards that say what happens next. */
-function NeedsAttention({
-  items,
-  onEdit,
-}: {
-  items: Array<{
-    limit: LimitData;
-    usage: UsageSummary;
-    label: string;
-    scopeLabel: string;
-    icon: React.ReactNode;
-    models: string[];
-  }>;
-  onEdit: (limit: LimitData) => void;
-}) {
-  const [showAll, setShowAll] = useState(false);
-  const visibleItems = showAll
-    ? items
-    : items.slice(0, NEEDS_ATTENTION_PREVIEW_COUNT);
-  const hiddenCount = items.length - visibleItems.length;
-  return (
-    <section
-      aria-labelledby="limits-needs-attention"
-      className="mb-4 space-y-2"
-    >
-      <h2
-        id="limits-needs-attention"
-        className="flex items-center gap-2 text-sm font-medium"
-      >
-        Needs attention
-        <span className="text-muted-foreground tabular-nums">
-          {items.length}
-        </span>
-      </h2>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleItems.map(
-          ({ limit, usage, label, scopeLabel, icon, models }) => {
-            const cleanupInterval =
-              (limit.cleanupInterval as LimitCleanupInterval | null) ??
-              DEFAULT_LIMIT_CLEANUP_INTERVAL;
-            const reset = formatNextLimitReset(
-              limit.lastCleanup,
-              cleanupInterval,
-            );
-            const over = usage.actualUsage >= usage.actualLimit;
-            return (
-              <UnstyledButton
-                key={limit.id}
-                onClick={() => onEdit(limit)}
-                className="group space-y-2 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                data-testid={`limits-attention-${limit.id}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted [&_svg]:size-3.5">
-                    {icon}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {label}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs">
-                    <UsageStatusDot status={usage.status} />
-                    {USAGE_STATUS_META[usage.status].label}
-                  </span>
-                  <Edit
-                    aria-hidden
-                    className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  />
-                  <span className="sr-only">Edit limit</span>
-                </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {scopeLabel} ·{" "}
-                  {models.length > 0 ? models.join(", ") : "All models"}
-                </div>
-                <UsageBar percentage={usage.percentage} status={usage.status} />
-                <p className="text-xs text-muted-foreground">
-                  {over
-                    ? `Over by ${formatCurrency(usage.actualUsage - usage.actualLimit, 2)}. Requests are blocked. ${reset}.`
-                    : `${formatCurrency(usage.actualLimit - usage.actualUsage, 2)} of ${formatCurrency(usage.actualLimit)} left. ${reset}.`}
-                </p>
-              </UnstyledButton>
-            );
-          },
-        )}
-      </div>
-      {(hiddenCount > 0 || showAll) &&
-        items.length > NEEDS_ATTENTION_PREVIEW_COUNT && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setShowAll((current) => !current)}
-          >
-            {showAll ? "Show less" : `Show ${hiddenCount} more`}
-          </Button>
-        )}
-    </section>
-  );
+function limitMetricLabel(limit: LimitData) {
+  return limit.limitType === "token_cost"
+    ? "Spend"
+    : limit.limitType === "requests_per_minute" ||
+        limit.limitType === "requests"
+      ? "Requests"
+      : "Tokens";
+}
+function formatLimitAmount(
+  limit: LimitData,
+  value: number,
+  fractionDigits = 0,
+) {
+  if (limit.limitType === "token_cost")
+    return formatCurrency(value, fractionDigits);
+  return `${value.toLocaleString()} ${limitMetricLabel(limit).toLowerCase()}`;
+}
+
+function getLimitInterval(limit: LimitData): LimitCleanupInterval {
+  if (
+    limit.limitType === "requests_per_minute" ||
+    limit.limitType === "tokens_per_minute"
+  ) {
+    return "minute";
+  }
+  return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
 }

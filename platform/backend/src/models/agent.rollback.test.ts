@@ -3408,6 +3408,29 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("getDeploymentLlmProxy", () => {
+    test("provisions the first organization's proxy even when another organization already has one", async ({
+      makeOrganization,
+    }) => {
+      const first = await makeOrganization();
+      const second = await makeOrganization();
+      await db
+        .update(schema.organizationsTable)
+        .set({ createdAt: new Date("2000-01-01T00:00:00Z") })
+        .where(eq(schema.organizationsTable.id, first.id));
+      await db
+        .update(schema.organizationsTable)
+        .set({ createdAt: new Date("2001-01-01T00:00:00Z") })
+        .where(eq(schema.organizationsTable.id, second.id));
+      const other = await AgentModel.getOrgLlmProxy(second.id);
+
+      const created = await AgentModel.getDeploymentLlmProxy();
+      expect(created?.organizationId).toBe(first.id);
+      expect(created?.id).not.toBe(other.id);
+      expect((await AgentModel.getDeploymentLlmProxy())?.id).toBe(created?.id);
+    });
+  });
+
   describe("getOrgLlmProxy", () => {
     test("creates the organization's LLM Proxy on first call and returns the same row after", async ({
       makeOrganization,
@@ -3882,6 +3905,33 @@ describe("AgentModel", () => {
   });
 
   describe("findGatewayAgentById", () => {
+    test("reads changed configuration and sorted labels on the next lookup", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        agentType: "mcp_gateway",
+        passthroughHeaders: ["x-before"],
+        labels: [{ key: "environment", value: "before" }],
+      });
+      expect((await AgentModel.findGatewayAgentById(agent.id))?.labels).toEqual(
+        [expect.objectContaining({ key: "environment", value: "before" })],
+      );
+
+      await AgentModel.update(agent.id, {
+        passthroughHeaders: ["x-after"],
+        labels: [
+          { key: "zone", value: "west" },
+          { key: "environment", value: "after" },
+        ],
+      });
+      const changed = await AgentModel.findGatewayAgentById(agent.id);
+      expect(changed?.passthroughHeaders).toEqual(["x-after"]);
+      expect(changed?.labels).toEqual([
+        expect.objectContaining({ key: "environment", value: "after" }),
+        expect.objectContaining({ key: "zone", value: "west" }),
+      ]);
+    });
+
     test("returns the scalar gateway config and labels without full hydration", async ({
       makeAgent,
     }) => {

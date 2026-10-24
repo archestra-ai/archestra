@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 port_offset=0
 cpu_profile=false
+web_workers=1
 runner_args=()
 backend_args=()
 output=benchmarks/results/ci
@@ -12,9 +13,20 @@ for arg in "$@"; do
   case "$arg" in
     --port-offset=*) port_offset="${arg#*=}" ;;
     --cpu-profile) cpu_profile=true ;;
+    --web-workers=*) web_workers="${arg#*=}" ;;
     *) runner_args+=("$arg") ;;
   esac
 done
+if ! [[ "$web_workers" =~ ^[1-4]$ ]]; then
+  echo 'Web workers must be an integer from 1 to 4.' >&2
+  exit 1
+fi
+backend_args+=("--web-workers=$web_workers")
+if [[ "$web_workers" != 1 ]]; then runner_args+=("--web-workers=$web_workers"); fi
+if [[ "$cpu_profile" == true && "$web_workers" != 1 ]]; then
+  echo 'CPU profiles support one web process.' >&2
+  exit 1
+fi
 if [[ "$cpu_profile" == true ]]; then
   output=benchmarks/results/profile
   backend_args+=(--cpu-profile)
@@ -52,13 +64,18 @@ if [[ -n "$(docker compose -p "$project" "${compose_files[@]}" ps -aq)" ]]; then
   echo "A $project stack already exists; stop it before running CI locally." >&2
   exit 1
 fi
-for port in "$BENCHMARK_POSTGRES_PORT" "$backend_port" "$((19050 + port_offset))" "$mock_port"; do
+ports_to_check=("$BENCHMARK_POSTGRES_PORT" "$backend_port" "$mock_port")
+for ((worker=0; worker<web_workers; worker++)); do
+  ports_to_check+=("$((19050 + port_offset + worker * 100))")
+done
+for port in "${ports_to_check[@]}"; do
   if node -e 'const s=require("node:net").connect(Number(process.argv[1]),"127.0.0.1"); s.on("connect",()=>{s.destroy();process.exit(0)});s.on("error",()=>process.exit(1))' "$port"; then
     echo "Port $port is in use." >&2
     exit 1
   fi
 done
 trap cleanup EXIT
+rm -f "benchmarks/results/workers-$backend_port.json"
 docker compose -p "$project" "${compose_files[@]}" up -d --wait
 if [[ "$cpu_profile" == true ]]; then
   docker compose -p "$project" "${compose_files[@]}" exec -T postgres \
@@ -75,6 +92,7 @@ for ((i=0; i<120; i++)); do
     tail -40 benchmarks/results/backend.log
     exit 1
   fi
+  if [[ "$web_workers" != 1 && ! -f "benchmarks/results/workers-$backend_port.json" ]]; then sleep 1; continue; fi
   if curl -fsS "http://127.0.0.1:$backend_port/ready" > /dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done

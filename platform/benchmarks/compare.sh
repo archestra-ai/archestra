@@ -3,8 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 baseline_sha="${1:-}"
-if [[ "$#" != 1 || ! "$baseline_sha" =~ ^[a-f0-9]{40}$ ]]; then
-  echo 'Usage: bash benchmarks/compare.sh BASELINE_FULL_COMMIT_SHA' >&2
+web_workers="${2:-1}"
+if [[ "$#" -lt 1 || "$#" -gt 2 || ! "$baseline_sha" =~ ^[a-f0-9]{40}$ || ! "$web_workers" =~ ^[1-4]$ ]]; then
+  echo 'Usage: bash benchmarks/compare.sh BASELINE_FULL_COMMIT_SHA [CANDIDATE_WEB_WORKERS]' >&2
   exit 1
 fi
 candidate_sha=$(git rev-parse HEAD)
@@ -24,10 +25,10 @@ for dependency in platform/package.json platform/shared platform/archestra-rs pl
   fi
 done
 [[ -f backend/dist/server.mjs ]] || { echo 'Build the current benchmark first with benchmarks/ci.sh.' >&2; exit 1; }
-node --input-type=module - "$candidate_sha" "$(git rev-parse HEAD:platform)" <<'JS'
+node --input-type=module - "$candidate_sha" "$(git rev-parse HEAD:platform)" "$web_workers" <<'JS'
 import fs from 'node:fs';
 const report = JSON.parse(fs.readFileSync('benchmarks/results/ci/report.json', 'utf8'));
-if (report.complete !== true || report.gitCommit !== process.argv[2] || report.platformTree !== process.argv[3])
+if (report.complete !== true || report.gitCommit !== process.argv[2] || report.platformTree !== process.argv[3] || (report.webWorkers ?? 1) !== Number(process.argv[4]))
   throw Error('Run benchmarks/ci.sh at the current clean revision before comparing builds');
 JS
 comparison_builds=$(mktemp -d "${TMPDIR:-/tmp}/archestra-proxy-comparison.XXXXXX")
@@ -76,4 +77,4 @@ for (const [commit, dist] of [[process.argv[2],process.argv[3]],[process.argv[4]
 }
 JS
 node benchmarks/compare.mjs "$baseline_sha" "$candidate_sha" \
-  "$baseline_platform/backend/dist" "$comparison_builds/candidate"
+  "$baseline_platform/backend/dist" "$comparison_builds/candidate" "$web_workers"

@@ -28,11 +28,14 @@ const allowed = new Set([
   "mock-url",
   "output",
   "diagnostic",
+  "web-workers",
 ]);
 for (const key of Object.keys(options))
   if (!allowed.has(key)) throw new Error(`Unknown option: ${key}`);
 if (options.diagnostic && options.diagnostic !== "cpu-profile")
   throw new Error("Unknown diagnostic mode");
+if (options["web-workers"] && !/^[1-4]$/.test(options["web-workers"]))
+  throw new Error("Web workers must be between 1 and 4");
 const integer = (key, fallback) => {
   const value = Number(options[key] ?? fallback);
   if (!Number.isSafeInteger(value) || value < 1)
@@ -95,6 +98,9 @@ const report = {
   startedAt: new Date().toISOString(),
   metadata: {
     ...(options.diagnostic ? { diagnostic: options.diagnostic } : {}),
+    ...(options["web-workers"]
+      ? { webWorkers: integer("web-workers", 1) }
+      : {}),
     workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),
     platformTree: getGit(["rev-parse", "HEAD:platform"]),

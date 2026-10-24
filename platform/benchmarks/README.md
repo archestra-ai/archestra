@@ -86,6 +86,8 @@ For an optimization comparison on one CI runner, manually run this workflow at t
 
 For CPU diagnosis on that runner, manually select `cpu_profile` without `baseline_sha`. Locally, use `bash benchmarks/ci.sh --cpu-profile`. This starts the same production backend with Node's V8 CPU profiler, saves `results/profile/backend.cpuprofile` on graceful shutdown, and keeps diagnostic request measurements under `results/profile/`. The disposable database also enables `pg_stat_statements`; its query counts and execution times are saved after resetting seed/setup statistics. CPU profiling includes startup and shutdown. Timings include profiler overhead and cannot update release comments or docs. Always confirm improvements with an unprofiled benchmark.
 
+For a manual scaling study, select `web_workers=4`. The candidate uses four real web processes behind one shared HTTP port, with five database connections per process (20 total). The paired baseline still uses one process with 20 connections. Both run within the same runner; process count is an explicit configuration difference, not an implementation-only comparison. All workers must finish initialization before load begins. Release runs keep the default single process. Locally, pass `--web-workers=4` to `ci.sh`, then `4` as the second argument to `compare.sh`.
+
 ## Historical GCP Scripts
 
 `setup-gcp-benchmark.sh`, `cleanup-gcp-benchmark.sh`, and `.env.example` describe the older GCP/Apache Bench setup. They are retained for reference and were not used or revalidated for this baseline. The current runner no longer reads `benchmark-config.env`, `NUM_REQUESTS`, or `CONCURRENCY`. The old WireMock fixture does not implement the new runner's health and streaming contracts.

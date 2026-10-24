@@ -18,6 +18,12 @@ on:
         required: false
         default: ''
         type: string
+      web_workers:
+        description: Candidate web processes within a fixed total database pool of 20 (manual configuration experiment)
+        required: false
+        default: '1'
+        type: choice
+        options: ['1', '2', '4']
       cpu_profile:
         description: Diagnostic CPU profile only; cannot publish release results or compare revisions
         required: false
@@ -105,21 +111,31 @@ jobs:
         env:
           CPU_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile == true }}
           BASELINE_SHA: ${{ inputs.baseline_sha }}
+          WEB_WORKERS: ${{ inputs.web_workers || '1' }}
         run: |
+          if ! [[ "$WEB_WORKERS" =~ ^[124]$ ]]; then
+            echo 'Invalid worker count' >&2
+            exit 1
+          fi
           if [ "$CPU_PROFILE" = true ]; then
+            if [ "$WEB_WORKERS" != 1 ]; then
+              echo 'Profile one web process at a time.' >&2
+              exit 1
+            fi
             if [ -n "$BASELINE_SHA" ]; then
               echo 'CPU profiles are diagnostic and cannot be paired benchmark evidence.' >&2
               exit 1
             fi
             bash benchmarks/ci.sh --cpu-profile --scenarios=chat,tools --concurrency=1,10,50 --requests=1000 --repeats=3
           else
-            bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+            bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2 "--web-workers=$WEB_WORKERS"
           fi
       - name: Compare pinned revisions on the same runner
         if: github.event_name == 'workflow_dispatch' && !inputs.cpu_profile && inputs.baseline_sha != ''
         env:
           BASELINE_SHA: ${{ inputs.baseline_sha }}
-        run: bash benchmarks/compare.sh "$BASELINE_SHA"
+          WEB_WORKERS: ${{ inputs.web_workers || '1' }}
+        run: bash benchmarks/compare.sh "$BASELINE_SHA" "$WEB_WORKERS"
       - name: Publish summary
         if: always()
         run: |

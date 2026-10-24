@@ -105,8 +105,14 @@ export function createSummary(report) {
       : {}),
     gitCommit: report.metadata.gitCommit,
     platformTree: report.metadata.platformTree,
+    ...(report.metadata.webWorkers
+      ? { webWorkers: report.metadata.webWorkers }
+      : {}),
     comparison: {
       workloadVersion: report.metadata.workloadVersion,
+      ...(report.metadata.webWorkers
+        ? { webWorkers: report.metadata.webWorkers }
+        : {}),
       node: report.metadata.node,
       os: report.metadata.os,
       arch: report.metadata.arch,
@@ -220,7 +226,7 @@ export function renderSummary(summary, baseline = null) {
   }
   lines.push(
     "",
-    `One production web process; PostgreSQL; local mock upstream. Host: ${number(summary.logicalCpus, 0)} logical CPUs, ${number(summary.memoryGiB, 1)} GiB RAM.`,
+    `Production web processes: ${summary.webWorkers ?? 1}; total database pool budget: 20; PostgreSQL; local mock upstream. Host: ${number(summary.logicalCpus, 0)} logical CPUs, ${number(summary.memoryGiB, 1)} GiB RAM.`,
     `Each row pools ${number(summary.repeats, 0)} repeats at the highest tested concurrency; ${number(summary.requestsPerBlock, 0)} requests per non-streaming block and ${number(summary.streamingRequestsPerBlock, 0)} per streaming block. Warmup is excluded.`,
     "Gateway latency measures server request receipt through response serialization, before socket delivery. Overhead subtracts each request's upstream SDK-call duration before calculating percentiles; it includes authentication, routing, policies and persistence. Client latency ends at the complete response body. Streaming reports client latency and first content only (— means unmeasured).",
     "The isolated launcher validates a passthrough virtual key and persists requests; no real inference requests. Workloads run separately, with a short prompt and max_tokens=32; streaming uses 20 content events, 10 ms apart. Response caching and configured key budgets are not enabled.",

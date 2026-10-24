@@ -16,7 +16,15 @@ const output = path.join(root, "benchmarks/results/comparison");
 fs.mkdirSync(output, { recursive: true });
 const children = [],
   stacks = [];
-const variants = comparisonVariants(process.argv.slice(2));
+const candidateWorkers = process.argv[6] ?? "1";
+if (process.argv.length > 7 || !/^[1-4]$/.test(candidateWorkers))
+  throw Error("Candidate web workers must be between 1 and 4");
+const variants = comparisonVariants(process.argv.slice(2, 6)).map(
+  (variant) => ({
+    ...variant,
+    webWorkers: variant.target === "candidate" ? Number(candidateWorkers) : 1,
+  }),
+);
 const [baselineSha, candidateSha] = variants.map((variant) => variant.commit);
 
 const report = {
@@ -39,11 +47,13 @@ const report = {
     methodology:
       "Both compiled variants resident with separate disposable PostgreSQL databases and identical loopback mocks; one variant receives load at a time. Six paired trials alternate baseline/candidate and candidate/baseline order. Direct mock control before each pair. HTTP/1.1 closed loop keep-alive. Gateway overhead is measured per request. No production services, paid inference or shared data.",
   },
-  variants: variants.map(({ target, offset, commit, dist }) => ({
+  variants: variants.map(({ target, offset, commit, dist, webWorkers }) => ({
     target,
     offset,
     commit,
     dist,
+    webWorkers,
+    databasePoolPerWorker: Math.floor(20 / webWorkers),
     dependencyInputs: fs.existsSync(path.join(dist, "dependency-inputs.json"))
       ? JSON.parse(
           fs.readFileSync(path.join(dist, "dependency-inputs.json"), "utf8"),
@@ -104,10 +114,14 @@ async function unused(port) {
     s.on("error", () => resolve(true));
   });
 }
-async function ready(url, child) {
+async function ready(url, child, readyFile = null) {
   for (let i = 0; i < 120; i++) {
     if (child.exitCode !== null || child.signalCode !== null)
       throw Error("Backend exited during startup");
+    if (readyFile && !fs.existsSync(readyFile)) {
+      await sleep(500);
+      continue;
+    }
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(500) });
       if (r.ok) return;
@@ -141,7 +155,12 @@ try {
     v.postgres = 15432 + offset;
     v.metrics = 19050 + offset;
     v.project = `archestra-benchmark-comparison-${v.target}`;
-    for (const port of [v.backend, v.mock, v.postgres, v.metrics])
+    for (const port of [
+      v.backend,
+      v.mock,
+      v.postgres,
+      ...Array.from({ length: v.webWorkers }, (_, i) => v.metrics + i * 100),
+    ])
       if (!(await unused(port))) throw Error(`Port ${port} occupied`);
     const compose = [
       "compose",
@@ -192,13 +211,27 @@ try {
       env,
       `${v.target}-mock`,
     );
+    const readyFile = path.join(output, `${v.target}-workers-ready.json`);
+    fs.rmSync(readyFile, { force: true });
     const server = start(
       process.execPath,
-      [path.join(v.dist, "server.mjs")],
+      v.webWorkers > 1
+        ? [
+            "benchmarks/web-cluster.mjs",
+            path.join(v.dist, "server.mjs"),
+            String(v.webWorkers),
+            String(v.metrics),
+            readyFile,
+          ]
+        : [path.join(v.dist, "server.mjs")],
       env,
       `${v.target}-backend`,
     );
-    await ready(`http://127.0.0.1:${v.backend}/ready`, server);
+    await ready(
+      `http://127.0.0.1:${v.backend}/ready`,
+      server,
+      v.webWorkers > 1 ? readyFile : null,
+    );
     v.key = (
       await command(process.execPath, ["benchmarks/seed.mjs", String(offset)], {
         ...dockerEnv,
@@ -347,7 +380,7 @@ const lines = [
   "",
   `Baseline: \`${baselineSha}\`; candidate: \`${candidateSha}\`.`,
   "",
-  `Same runner: ${report.metadata.logicalCpus} logical CPUs, ${(report.metadata.totalMemoryBytes / 2 ** 30).toFixed(1)} GiB RAM. Two production builds resident; only one receives proxy load at a time. Authentication, persistence and pool size are identical. Six alternating 1,000-request trials per workload/variant at concurrency 50; warmup excluded.`,
+  `Same runner: ${report.metadata.logicalCpus} logical CPUs, ${(report.metadata.totalMemoryBytes / 2 ** 30).toFixed(1)} GiB RAM. Two production builds resident; only one receives proxy load at a time. Authentication and persistence are identical. Total database pool budget is 20 per variant; web workers: ${variants[0].webWorkers} baseline / ${variants[1].webWorkers} candidate. Six alternating 1,000-request trials per workload/variant at concurrency 50; warmup excluded.`,
   "",
   summary.complete
     ? "Completed successfully, including teardown."

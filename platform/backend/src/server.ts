@@ -16,6 +16,7 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { isWorker } from "node:cluster";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -1234,6 +1235,9 @@ const startWebServer = async () => {
       processedEmailCleanupIntervalId,
       activeChatRunReaperIntervalId,
     });
+    // A cluster supervisor must wait for initialization, not the temporary
+    // startup-health listener that opens this same port before seeding.
+    if (isWorker) process.send?.({ type: "archestra.web.ready" });
   } catch (err) {
     await startupHealth.close();
     fastify.log.error(err);

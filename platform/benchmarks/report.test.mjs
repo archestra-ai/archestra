@@ -99,6 +99,18 @@ test("CPU profiling stays labeled diagnostic and cannot report release deltas", 
   assert.doesNotMatch(rendered, /\(0\.0%\)/);
 });
 
+test("scaling is an explicit setup change rather than an implementation-only release delta", () => {
+  const baseline = createSummary(report());
+  const source = report();
+  source.metadata.webWorkers = 4;
+  const current = createSummary(source);
+  const rendered = renderSummary(current, comparison(baseline));
+  assert.equal(current.webWorkers, 4);
+  assert.match(rendered, /Production web processes: 4/);
+  assert.match(rendered, /N\/A: setup changed/);
+  assert.doesNotMatch(rendered, /\(0\.0%\)/);
+});
+
 test("no completed requests produces no fabricated success or latency", () => {
   const source = report();
   source.blocks = [];

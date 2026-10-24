@@ -1,5 +1,6 @@
 import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@archestra/shared";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import config from "@/config";
 import { ChatOpsConfigModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -34,6 +35,11 @@ vi.mock("@slack/web-api", () => ({
 
 const AGENT_ID = "22222222-2222-4222-8222-222222222222";
 const USER_ID = "user-1";
+const originalWebhookBaseUrl = config.chatops.webhookBaseUrl;
+
+afterEach(() => {
+  config.chatops.webhookBaseUrl = originalWebhookBaseUrl;
+});
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -71,6 +77,65 @@ async function saveToken(userId = USER_ID, refreshToken = "xoxe-1") {
 }
 
 describe("SlackAppFactory", () => {
+  test.each([
+    "agent",
+    "router",
+  ] as const)("%s app sends events to the webhook origin while OAuth stays on the frontend", async (kind) => {
+    config.frontendBaseUrl = "https://app.example.com";
+    config.chatops.webhookBaseUrl = "https://hooks.example.com";
+    await saveToken();
+    const params = {
+      appName: "example_bot",
+      connectionMode: "webhook" as const,
+      organizationId: "org-1",
+      userId: USER_ID,
+    };
+    const result =
+      kind === "agent"
+        ? await slackAppFactory.createAgentApp({ ...params, agentId: AGENT_ID })
+        : await slackAppFactory.createRouterApp(params);
+    const { manifest } = slack.create.mock.calls[0][0];
+    const webhook = `https://hooks.example.com/api/webhooks/chatops/slack${kind === "agent" ? `/agents/${AGENT_ID}` : ""}`;
+    expect(manifest.settings.event_subscriptions.request_url).toBe(webhook);
+    expect(manifest.settings.interactivity.request_url).toBe(
+      `${webhook}/interactive`,
+    );
+    if (kind === "router") {
+      expect(manifest.features.slash_commands[0].url).toBe(
+        `${webhook}/slash-command`,
+      );
+    }
+    const callback =
+      "https://app.example.com/api/webhooks/chatops/slack/oauth/callback";
+    expect(manifest.oauth_config.redirect_urls).toEqual([callback]);
+    expect(new URL(result.installUrl).searchParams.get("redirect_uri")).toBe(
+      callback,
+    );
+  });
+
+  test("retargeting an existing app uses the separate webhook origin", async () => {
+    config.chatops.webhookBaseUrl = "https://hooks.example.com";
+    await saveToken();
+    slack.exportManifest.mockResolvedValue({
+      ok: true,
+      manifest: { features: {}, settings: {} },
+    });
+    slack.update.mockResolvedValue({ ok: true });
+    await slackAppFactory.retargetAppToAgent({
+      appId: "A_EXISTING",
+      agentId: AGENT_ID,
+      connectionMode: "webhook",
+      userId: USER_ID,
+    });
+    const { manifest } = slack.update.mock.calls[0][0];
+    expect(manifest.settings.event_subscriptions.request_url).toBe(
+      `https://hooks.example.com/api/webhooks/chatops/slack/agents/${AGENT_ID}`,
+    );
+    expect(manifest.settings.interactivity.request_url).toBe(
+      `https://hooks.example.com/api/webhooks/chatops/slack/agents/${AGENT_ID}/interactive`,
+    );
+  });
+
   test("saving a token renews it at once, keeping the new refresh token", async () => {
     await saveToken();
 

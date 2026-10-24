@@ -119,6 +119,26 @@ export function parseFrontendBaseUrl(rawValue: string | undefined): string {
 const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
+
+/** @public — validates an operator-provided webhook base URL. */
+export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
+  const trimmed = rawValue?.trim();
+  if (!trimmed) return undefined;
+  const url = new URL(trimmed);
+  if (
+    !["https:", "http:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(
+      "ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL must be an HTTP(S) base URL without credentials, query or fragment",
+    );
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -3864,6 +3884,11 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
+    // Provider-to-server delivery can use a public listener while the UI and
+    // browser OAuth callback stay on the frontend origin.
+    webhookBaseUrl: parseChatopsWebhookBaseUrl(
+      process.env.ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL,
+    ),
     // The Telegram integration is generally available: on by default, with
     // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
     // Off = the provider never starts (even with a token saved in the DB),

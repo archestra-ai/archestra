@@ -36,6 +36,7 @@ import config, {
   parseAnthropicWifConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
+  parseChatopsWebhookBaseUrl,
   parseChatRateMeteredMaxOutputTokens,
   parseClampedFloat,
   parseClampedInt,
@@ -437,6 +438,29 @@ describe("parseFrontendBaseUrl", () => {
     expect(parseFrontendBaseUrl(" https://app.example.com// ")).toBe(
       "https://app.example.com",
     );
+  });
+});
+
+describe("parseChatopsWebhookBaseUrl", () => {
+  test("leaves existing URL selection in place when unset", () => {
+    expect(parseChatopsWebhookBaseUrl(undefined)).toBeUndefined();
+    expect(parseChatopsWebhookBaseUrl("  ")).toBeUndefined();
+  });
+
+  test("normalizes whitespace and trailing slashes", () => {
+    expect(
+      parseChatopsWebhookBaseUrl(" https://hooks.example.com/base/// "),
+    ).toBe("https://hooks.example.com/base");
+  });
+
+  test.each([
+    "not a URL",
+    "file:///tmp/hooks",
+    "https://user:password@example.com",
+    "https://hooks.example.com/?token=example",
+    "https://hooks.example.com/#part",
+  ])("rejects an unsafe base URL: %s", (url) => {
+    expect(() => parseChatopsWebhookBaseUrl(url)).toThrow();
   });
 });
 

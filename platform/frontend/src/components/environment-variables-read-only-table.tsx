@@ -1,7 +1,6 @@
 "use client";
 
-import { parseVaultReference } from "@archestra/shared";
-import { Check, KeyRound, Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
 import type {
   FieldArrayWithId,
   FieldPath,
@@ -20,7 +19,7 @@ interface EnvironmentVariablesReadOnlyTableProps<
   fields: FieldArrayWithId<TFieldValues, any, "id">[];
   rowIndexes: number[];
   fieldNamePrefix: string;
-  useExternalSecretsManager?: boolean;
+
   secretKeysWithStoredValue?: Set<string>;
   credentialLabels?: Record<string, string>;
   showType?: boolean;
@@ -45,7 +44,7 @@ export interface EnvironmentVariableTableRow {
 interface EnvironmentVariablesTableProps {
   credentialSources?: Record<string, { icon?: string | null; label?: string }>;
   rows: EnvironmentVariableTableRow[];
-  useExternalSecretsManager?: boolean;
+
   credentialLabels?: Record<string, string>;
   showType?: boolean;
   keyLabel?: string;
@@ -74,7 +73,7 @@ export function EnvironmentVariablesReadOnlyTable<
   fields,
   rowIndexes,
   fieldNamePrefix,
-  useExternalSecretsManager = false,
+
   secretKeysWithStoredValue,
   credentialLabels,
   showType = true,
@@ -135,7 +134,6 @@ export function EnvironmentVariablesReadOnlyTable<
     <EnvironmentVariablesTable
       rows={rows}
       credentialLabels={credentialLabels}
-      useExternalSecretsManager={useExternalSecretsManager}
       showType={showType}
       keyLabel={keyLabel}
       removeAriaLabel={removeAriaLabel}
@@ -148,7 +146,7 @@ export function EnvironmentVariablesReadOnlyTable<
 export function EnvironmentVariablesTable({
   credentialSources,
   rows,
-  useExternalSecretsManager = false,
+
   credentialLabels,
   showType = true,
   keyLabel = "Key",
@@ -228,7 +226,6 @@ export function EnvironmentVariablesTable({
                 type={row.type}
                 value={row.value}
                 hasStoredSecret={row.hasStoredSecret === true}
-                useExternalSecretsManager={useExternalSecretsManager}
                 promptedValueLabel={promptedValueLabel}
               />
             )}
@@ -260,30 +257,18 @@ function ValueCell({
   type,
   value,
   hasStoredSecret,
-  useExternalSecretsManager,
+
   promptedValueLabel,
 }: {
   scope: FieldScopeValue;
   type: string;
   value: string | undefined;
   hasStoredSecret: boolean;
-  useExternalSecretsManager: boolean;
+
   promptedValueLabel: string;
 }) {
   if (scope === "installation") {
     return <span className="text-muted-foreground">{promptedValueLabel}</span>;
-  }
-
-  if (useExternalSecretsManager && type === "secret" && value) {
-    const parsed = parseVaultReference(value);
-    if (parsed.key) {
-      return (
-        <span className="inline-flex items-center gap-1 font-mono text-green-600">
-          <KeyRound className="h-3 w-3" />
-          <span className="truncate">{parsed.key}</span>
-        </span>
-      );
-    }
   }
 
   if (type === "secret") {

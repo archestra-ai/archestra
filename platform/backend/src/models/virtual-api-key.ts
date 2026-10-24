@@ -51,7 +51,6 @@ const TOKEN_RANDOM_LENGTH = 32;
 /** Length of token start to store (for display) */
 const TOKEN_START_LENGTH = 14;
 
-/** Always use DB storage (not BYOS Vault compatible) */
 const FORCE_DB = true;
 
 /**

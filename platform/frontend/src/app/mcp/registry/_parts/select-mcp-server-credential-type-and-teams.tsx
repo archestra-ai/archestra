@@ -201,7 +201,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   // WHY: During reinstall/re-auth, lock scope to existing value (can't change
   // ownership). Personal is disabled if: reinstalling/re-authing a non-personal
-  // server, or (for new install) already has personal or BYOS enabled.
   const isPersonalDisabled =
     teamOnly || orgOnly
       ? true

@@ -35,7 +35,7 @@ Startup refuses a key that cannot decrypt existing secrets. Preserve the old key
 
 <span id="hashicorp-vault"></span>
 
-HashiCorp Vault stores secret values externally instead of in the database. Only references to Vault secret paths are stored in PostgreSQL.
+HashiCorp Vault stores secret values externally instead of in the database. PostgreSQL stores each secret's metadata.
 
 Set [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER), [`ARCHESTRA_HASHICORP_VAULT_ADDR`](/docs/admin/deployment/configuration#ARCHESTRA_HASHICORP_VAULT_ADDR), and an [Enterprise license](/docs/get-started/pricing-model). Missing required configuration logs a warning and falls back to database storage. After rollout, confirm that **Settings → Secrets** appears and reports **Connection Successful**.
 

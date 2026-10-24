@@ -16,8 +16,6 @@ export type ErrorExtended = {
 export enum SecretsManagerType {
   DB = "DB",
   Vault = "Vault",
-  /** BYOS (Bring Your Own Secrets) - Vault with external team folder support */
-  BYOS_VAULT = "BYOS_VAULT",
 }
 
 export const ApiErrorTypeSchema = z.enum([

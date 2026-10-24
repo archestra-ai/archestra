@@ -44,7 +44,7 @@ import {
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
   isPredefinedAdmin,
@@ -396,8 +396,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
-          // When true, environmentValues and userConfigValues contain vault references in "path#key" format
-          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -408,7 +406,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentIds,
         secretId,
         accessToken,
-        isByosVault,
+
         userConfigValues,
         environmentValues,
         ...restDataFromRequestBody
@@ -649,41 +647,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
         });
 
-        // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && installUserConfigValues && !secretId) {
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
-          // userConfigValues already contains vault references in "path#key" format
-          const secret = await secretManager().createSecret(
-            {
-              ...catalogStaticUserConfigValues,
-              ...installUserConfigValues,
-            } as Record<string, unknown>,
-            `${serverData.name}-vault-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-          logger.info(
-            { keyCount: Object.keys(installUserConfigValues).length },
-            "Created Readonly Vault secret with per-field references for remote server",
-          );
-        }
-
         // If accessToken is provided (PAT flow), create a secret for it
-        // Not allowed when Readonly Vault is enabled - use vault secrets instead
         if (accessToken && !secretId) {
-          if (isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
-          }
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
@@ -810,57 +775,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
-        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
-          // Collect secret env vars with vault references from environmentValues
-          const secretEnvVars: Record<string, string> = {
-            ...catalogStaticUserConfigValues,
-          };
-          for (const envDef of catalogItem.localConfig.environment) {
-            if (envDef.type === "secret" && !envDef.credentialId) {
-              const value = envDef.promptOnInstallation
-                ? environmentValues?.[envDef.key]
-                : envDef.value;
-              if (value) {
-                // Value should already be in "path#key" format from frontend
-                secretEnvVars[envDef.key] = value;
-              }
-            }
-          }
-
-          if (installUserConfigValues) {
-            Object.assign(secretEnvVars, installUserConfigValues);
-          }
-
-          if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager().createSecret(
-              secretEnvVars,
-              `${serverData.name}-vault-secret`,
-            );
-            secretId = secret.id;
-            createdSecretId = secret.id;
-            logger.info(
-              { keyCount: Object.keys(secretEnvVars).length },
-              "Created Readonly Vault secret with per-field references for local server",
-            );
-          }
-        } else if (!secretId) {
+        if (!secretId) {
           // Collect and store static catalog headers, prompted header values, and secret-type env vars.
-          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
-          // User-prompted secrets must use Vault references via the isByosVault flow above.
           const secretEnvVars: Record<string, string> = {
             ...catalogStaticUserConfigValues,
             ...(installUserConfigValues ?? {}),
           };
-          let hasPromptedSecrets = false;
 
           // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
@@ -870,9 +790,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (envDef.promptOnInstallation) {
                 // Prompted during installation - get from environmentValues
                 value = environmentValues?.[envDef.key];
-                if (value) {
-                  hasPromptedSecrets = true;
-                }
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -884,14 +801,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
 
-          // Block user-prompted secrets when Readonly Vault is enabled (they should use Vault)
           // Static secrets from catalog are allowed since they're not manual user input
-          if (hasPromptedSecrets && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
-          }
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
@@ -1410,7 +1320,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: z.string().optional(),
           userConfigValues: z.record(z.string(), z.string()).optional(),
           environmentValues: z.record(z.string(), z.string()).optional(),
-          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -1423,7 +1332,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken,
           userConfigValues,
           environmentValues,
-          isByosVault,
         },
         user,
         headers,
@@ -1523,12 +1431,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (accessToken) {
           // PAT token flow
-          if (isByosVault && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual PAT token input is not allowed when Readonly Vault is enabled",
-            );
-          }
+
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
@@ -1536,22 +1439,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           newSecretId = secret.id;
         } else if (installUserConfigValues) {
           // Remote server user config fields
-          if (isByosVault) {
-            if (!isByosEnabled()) {
-              throw new ApiError(
-                400,
-                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-              );
-            }
-          }
+
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
               ...installUserConfigValues,
             } as Record<string, unknown>,
-            isByosVault
-              ? `${mcpServer.name}-vault-secret`
-              : `${mcpServer.name}-secret`,
+            `${mcpServer.name}-secret`,
           );
           newSecretId = secret.id;
 
@@ -1597,24 +1491,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userConfig: catalogItem?.userConfig,
             userConfigValues,
           });
-          if (isByosVault) {
-            if (!isByosEnabled()) {
-              throw new ApiError(
-                400,
-                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-              );
-            }
-            // Vault references for secret env vars
-            const secret = await secretManager().createSecret(
-              {
-                ...catalogStaticUserConfigValues,
-                ...(environmentValues ?? {}),
-                ...(localInstallUserConfigValues ?? {}),
-              },
-              `${mcpServer.name}-vault-secret`,
-            );
-            newSecretId = secret.id;
-          } else if (catalogItem?.localConfig?.environment) {
+          if (catalogItem?.localConfig?.environment) {
             // Collect only secret-type env vars
             const secretEnvVars: Record<string, string> = {
               ...catalogStaticUserConfigValues,
@@ -2349,8 +2226,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Environment values for local servers (when new prompted env vars were added)
           environmentValues: z.record(z.string(), z.string()).optional(),
           userConfigValues: z.record(z.string(), z.string()).optional(),
-          // Whether environmentValues contains vault references in path#key format
-          isByosVault: z.boolean().optional(),
+
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2365,7 +2241,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const {
         environmentValues,
         userConfigValues,
-        isByosVault,
+
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2504,23 +2380,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Fetch the existing secret bag once so validation and the non-BYOS
-      // merge below can both consult it. BYOS replaces the bag wholesale
-      // (vault references are re-supplied per request), so it doesn't need
-      // the existing state.
-      const existingSecrets: Record<string, unknown> =
-        !isByosVault && mcpServer.secretId
-          ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ??
-            {})
-          : {};
+      // Reuse the stored bag for validation and partial credential updates.
+      const existingSecrets: Record<string, unknown> = mcpServer.secretId
+        ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ?? {})
+        : {};
 
       // Validate required env vars against the effective post-merge state
       // regardless of whether the body carried values — an empty reinstall
       // body must still 400 when a newly-added required var is unsatisfied
-      // rather than failing later at pod start. Plain types come from
-      // `mergedPlainEnv` (column + body, empty = clear); non-BYOS secret types
-      // are satisfied by the existing bag when the body omits them; BYOS
-      // requires the body alone.
+      // rather than failing later at pod start. Plain values come from the
+      // merged environment; omitted secret values reuse the stored bag.
       if (catalogItem.localConfig?.environment) {
         const requiredEnvVars = catalogItem.localConfig.environment.filter(
           (env) =>
@@ -2530,9 +2399,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const missingEnvVars = requiredEnvVars.filter((env) => {
           if (env.type === "secret") {
             const submitted = submittedEnv[env.key];
-            if (isByosVault) {
-              return !submitted?.trim();
-            }
+
             if (submitted === "") {
               return true;
             }
@@ -2559,12 +2426,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate required userConfig (connection-setting) fields on the same
-      // terms as env vars above. For non-BYOS a field already on the install's
-      // bag stays satisfied when the body omits it, so a partial reinstall that
-      // only touches env doesn't 400 on an unchanged stored header; "" is an
-      // explicit clear. BYOS validates against the body alone since vault
-      // references are re-supplied on every reinstall.
+      // Validate connection settings against the same merged state. An omitted
+      // field preserves its stored value; an empty string explicitly clears it.
       if (catalogItem.userConfig) {
         const requiredUserConfigFields = Object.entries(
           catalogItem.userConfig,
@@ -2575,9 +2438,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const missingUserConfigFields = requiredUserConfigFields.filter(
           ([fieldName]) => {
             const submitted = userConfigValues?.[fieldName];
-            if (isByosVault) {
-              return !submitted?.trim();
-            }
+
             if (submitted === "") {
               return true;
             }
@@ -2626,94 +2487,45 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         // Update or create secret with new values
-        if (isByosVault) {
-          // BYOS mode: values are vault references
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
 
-          // BYOS vault bags hold only vault references. Plain (non-secret) env
-          // values are literals that belong on the install row's column
-          // (persisted below); spreading them here would have vault resolution
-          // misread a literal as a `path#key` reference. Restrict the env
-          // contribution to secret-typed keys.
-          const secretEnvKeys = new Set(
-            (catalogItem.localConfig?.environment ?? [])
-              .filter((envDef) => envDef.type === "secret")
-              .map((envDef) => envDef.key),
-          );
-          const submittedSecretEnv: Record<string, string> = {};
-          for (const [key, value] of Object.entries(submittedEnv)) {
-            if (secretEnvKeys.has(key)) {
-              submittedSecretEnv[key] = value;
-            }
+        // Merge new values with the existing bag. An empty string is
+        // an explicit clear and an omitted field preserves the stored value;
+        // static catalog-only headers are owned by the catalog static spread
+        // and can't be overridden by an installer request.
+        const mergedSecrets: Record<string, unknown> = {
+          ...existingSecrets,
+          ...catalogStaticUserConfigValues,
+          ...submittedEnv,
+        };
+        for (const [fieldName, fieldConfig] of Object.entries(
+          catalogItem.userConfig ?? {},
+        )) {
+          if (
+            fieldConfig?.headerName &&
+            fieldConfig?.promptOnInstallation === false
+          ) {
+            continue;
           }
+          const submitted = userConfigValues?.[fieldName];
+          if (submitted === "") {
+            // Explicit clear.
+            delete mergedSecrets[fieldName];
+          } else if (typeof submitted === "string" && submitted.trim()) {
+            mergedSecrets[fieldName] = submitted;
+          }
+          // A whitespace-only submission is treated as "no change" (matching
+          // validation's existing-bag fallback) so an accidental blank can't
+          // clobber a valid stored header.
+        }
 
-          if (mcpServer.secretId) {
-            await secretManager().updateSecret(mcpServer.secretId, {
-              ...catalogStaticUserConfigValues,
-              ...submittedSecretEnv,
-              ...(installUserConfigValues ?? {}),
-            });
-          } else {
-            const secret = await secretManager().createSecret(
-              {
-                ...catalogStaticUserConfigValues,
-                ...submittedSecretEnv,
-                ...(installUserConfigValues ?? {}),
-              },
-              `${mcpServer.name}-vault-secret`,
-            );
-            await McpServerModel.update(id, { secretId: secret.id });
-          }
+        if (mcpServer.secretId) {
+          await secretManager().updateSecret(mcpServer.secretId, mergedSecrets);
         } else {
-          // Non-BYOS: merge new values with the existing bag (fetched above for
-          // validation). userConfig is applied per field so an empty string is
-          // an explicit clear and an omitted field preserves the stored value;
-          // static catalog-only headers are owned by the catalog static spread
-          // and can't be overridden by an installer request.
-          const mergedSecrets: Record<string, unknown> = {
-            ...existingSecrets,
-            ...catalogStaticUserConfigValues,
-            ...submittedEnv,
-          };
-          for (const [fieldName, fieldConfig] of Object.entries(
-            catalogItem.userConfig ?? {},
-          )) {
-            if (
-              fieldConfig?.headerName &&
-              fieldConfig?.promptOnInstallation === false
-            ) {
-              continue;
-            }
-            const submitted = userConfigValues?.[fieldName];
-            if (submitted === "") {
-              // Explicit clear.
-              delete mergedSecrets[fieldName];
-            } else if (typeof submitted === "string" && submitted.trim()) {
-              mergedSecrets[fieldName] = submitted;
-            }
-            // A whitespace-only submission is treated as "no change" (matching
-            // validation's existing-bag fallback) so an accidental blank can't
-            // clobber a valid stored header.
-          }
-
-          if (mcpServer.secretId) {
-            await secretManager().updateSecret(
-              mcpServer.secretId,
-              mergedSecrets,
-            );
-          } else {
-            const secret = await secretManager().createSecret(
-              mergedSecrets,
-              `mcp-server-${mcpServer.name}-env`,
-            );
-            await McpServerModel.update(id, { secretId: secret.id });
-          }
+          const secret = await secretManager().createSecret(
+            mergedSecrets,
+            `mcp-server-${mcpServer.name}-env`,
+          );
+          await McpServerModel.update(id, { secretId: secret.id });
         }
 
         logger.info(
@@ -3847,13 +3659,6 @@ function getCatalogStaticUserConfigValues(
   );
 }
 
-/**
- * Select the prompted config values an environment's allowlist regex governs:
- * non-secret, free-text fields (userConfig string/directory/file; env
- * plain_text). Secret fields — including BYOS vault references, which live on
- * secret-typed fields — and typed boolean/number fields are excluded, since the
- * rule targets free-text values. Mirrors the frontend's per-field filtering.
- */
 function collectValidatableInstallValues(params: {
   catalogItem: {
     userConfig?: Record<string, { type?: string; sensitive?: boolean }> | null;

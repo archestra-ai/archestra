@@ -11,11 +11,6 @@ import type {
   UpdateTeamToken,
 } from "@/types";
 
-/**
- * Team tokens always use DB storage (forceDB: true) because:
- * 1. They are seeded on archestra startup
- * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
- */
 const FORCE_DB = true;
 
 /**

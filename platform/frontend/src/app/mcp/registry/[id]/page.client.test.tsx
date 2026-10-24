@@ -746,7 +746,6 @@ describe("McpCatalogItemDetailPage overview", () => {
         name: "internal-tools",
         environmentValues: { API_TOKEN: "new-token" },
         userConfigValues: {},
-        isByosVault: false,
       }),
     );
     expect(replace).toHaveBeenCalledWith(

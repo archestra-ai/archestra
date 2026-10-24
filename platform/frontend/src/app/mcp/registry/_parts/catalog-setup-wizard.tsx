@@ -213,7 +213,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       catalogId: result.catalogId,
       environmentValues: result.environmentValues,
       userConfigValues: result.userConfigValues,
-      isByosVault: result.isByosVault,
+
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,

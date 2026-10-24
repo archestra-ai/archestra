@@ -37,7 +37,6 @@ import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useGitCredentials } from "@/lib/git-credentials.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -95,7 +94,7 @@ export function RuntimeCredentialsSection({
       ),
     [gitCredentials.data],
   );
-  const byosEnabled = useFeature("byosEnabled");
+
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
   >(null);
@@ -402,7 +401,6 @@ export function RuntimeCredentialsSection({
         <RuntimeCredentialConnectionDialog
           definition={connecting}
           scope={connecting.allowOrganization ? "organization" : "personal"}
-          useExternalSecretsManager={byosEnabled}
           onClose={() => setConnecting(null)}
         />
       )}

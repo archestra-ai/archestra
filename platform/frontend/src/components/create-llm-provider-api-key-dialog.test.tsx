@@ -120,8 +120,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       shared: true,
       initialGrants: [],
       isPrimary: false,
-      vaultSecretPath: undefined,
-      vaultSecretKey: undefined,
+
       awsAccessKeyId: undefined,
       awsSecretAccessKey: undefined,
       awsSessionToken: undefined,

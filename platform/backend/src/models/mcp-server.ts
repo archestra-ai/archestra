@@ -623,7 +623,6 @@ class McpServerModel {
         catalogName: schema.internalMcpCatalogTable.name,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -748,7 +747,6 @@ class McpServerModel {
       const secretStorageType = computeSecretStorageType(
         row.server.secretId,
         row.secretIsVault,
-        row.secretIsByosVault,
       );
 
       serversMap.set(row.server.id, {
@@ -1523,7 +1521,6 @@ class McpServerModel {
         ownerEmail: schema.usersTable.email,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -1567,7 +1564,6 @@ class McpServerModel {
     const secretStorageType = computeSecretStorageType(
       result.server.secretId,
       result.secretIsVault,
-      result.secretIsByosVault,
     );
 
     return {
@@ -2147,18 +2143,7 @@ class McpServerModel {
    * Best-effort per install: a failed K8s teardown or secret delete is logged
    * and the purge continues, so one wedged install can't block the deletion.
    */
-  /**
-   * Transaction-scoped variant of {@link purgePersonalServersForUser} for
-   * callers already inside a database transaction (temp-user cleanup in auth
-   * flows). SQL only, on the caller's executor: base-db queries under an open
-   * transaction deadlock the single-connection test database, and the full
-   * purge's runtime/secret-manager side effects cannot join a transaction
-   * anyway. Mirrors the backfill migration's semantics — install rows go,
-   * plain secret rows go with them, Vault/BYOS secret rows are RETAINED (SQL
-   * cannot reach the backing store; the row is the only pointer left for a
-   * manual sweep). No K8s teardown: these auth-flow shell users cannot have
-   * running local installs.
-   */
+
   static async purgePersonalServersForUserInTransaction(
     userId: string,
     tx: Transaction,
@@ -2168,7 +2153,6 @@ class McpServerModel {
         id: schema.mcpServersTable.id,
         secretId: schema.mcpServersTable.secretId,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -2196,10 +2180,7 @@ class McpServerModel {
     );
 
     const plainSecretIds = servers
-      .filter(
-        (server) =>
-          server.secretId && !server.secretIsVault && !server.secretIsByosVault,
-      )
+      .filter((server) => server.secretId && !server.secretIsVault)
       .map((server) => server.secretId as string);
     if (plainSecretIds.length > 0) {
       await tx
@@ -2791,13 +2772,6 @@ class McpServerModel {
     }));
   }
 
-  /**
-   * Shared body of the personal-install purges: tear down the K8s deployment
-   * for local installs, hard-delete each row, and delete its credential secret
-   * through the secret manager (so Vault/BYOS-backed material is removed from
-   * the backing store too). Best-effort per install — a wedged deployment or
-   * secret must not block the rest of the purge.
-   */
   private static async purgeInstallRows(
     userId: string,
     servers: {

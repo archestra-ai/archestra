@@ -52,19 +52,13 @@ export function useClaudeCodeSignIn(agentId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (
-      body:
-        | archestraApiTypes.CompleteClaudeCodeSignInData["body"]
-        | archestraApiTypes.StartClaudeCodeSignInData["body"]
-        | undefined,
+      body: archestraApiTypes.CompleteClaudeCodeSignInData["body"] | undefined,
     ) => {
       const request = { path: { id: agentId } };
       const { data, error } =
         body && "flowId" in body
           ? await archestraApiSdk.completeClaudeCodeSignIn({ ...request, body })
-          : await archestraApiSdk.startClaudeCodeSignIn({
-              ...request,
-              body: body ?? {},
-            });
+          : await archestraApiSdk.startClaudeCodeSignIn(request);
       if (error) throw reportApiError(error);
       return data;
     },

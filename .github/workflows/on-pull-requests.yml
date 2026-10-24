@@ -636,6 +636,14 @@ jobs:
           ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
         run: pnpm --dir backend db:migrate
 
+      - name: Real PostgreSQL recording replacement tests
+        working-directory: ./platform/backend
+        env:
+          NODE_ENV: test
+          ARCHESTRA_DATABASE_POOL_MAX: "16"
+          ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm test:agent-transcripts:postgres
+
       - name: Build the native addon
         run: pnpm exec turbo build --filter=@archestra/openappa-rs
 

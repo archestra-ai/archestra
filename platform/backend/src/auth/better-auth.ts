@@ -1186,8 +1186,34 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
-  if (beforeRequest && isSsoCallbackPath(path))
-    ssoCallbackStartedAt.set(beforeRequest, new Date());
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (path === "/sso/register" && method === "POST" && !body.organizationId) {
+    throw new APIError("FORBIDDEN", {
+      message: "An organization is required for identity provider registration",
+    });
+  }
+  if (isSsoCallbackPath(path)) {
+    if (beforeRequest) ssoCallbackStartedAt.set(beforeRequest, new Date());
+    const providerId = getSsoCallbackProviderId({
+      path,
+      requestUrl: beforeRequest?.url,
+    });
+    if (providerId) {
+      const { default: IdentityProviderModel } = await import(
+        // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+        "@/models/identity-provider.ee"
+      );
+      const provider = await IdentityProviderModel.findByProviderId(providerId);
+      if (provider && !provider.organizationId) {
+        throw new APIError("FORBIDDEN", {
+          message: "Identity provider is not associated with an organization",
+        });
+      }
+    }
+  }
+  // SPDX-SnippetEnd
   if (
     (path === "/organization/update-member-role" ||
       path === "/organization/invite-member") &&
@@ -2460,35 +2486,34 @@ function getSsoCallbackProviderId(params: {
   path: string;
   requestUrl?: string;
 }): string | undefined {
-  const callbackPrefix = "/sso/callback/";
+  const callbackPrefixes = [
+    "/sso/callback/",
+    "/sso/saml2/callback/",
+    "/sso/saml2/sp/acs/",
+  ];
+
+  const providerFromPath = (pathname: string) => {
+    for (const prefix of callbackPrefixes) {
+      const callbackIndex = pathname.indexOf(prefix);
+      if (callbackIndex < 0) continue;
+      const providerId = pathname
+        .slice(callbackIndex + prefix.length)
+        .split("/")[0];
+      if (providerId && !providerId.startsWith(":")) return providerId;
+    }
+    return undefined;
+  };
 
   if (params.requestUrl) {
     try {
-      const callbackPath = new URL(params.requestUrl).pathname;
-      const callbackIndex = callbackPath.indexOf(callbackPrefix);
-      if (callbackIndex >= 0) {
-        const providerId = callbackPath
-          .slice(callbackIndex + callbackPrefix.length)
-          .split("/")[0];
-        if (providerId) {
-          return providerId;
-        }
-      }
+      const providerId = providerFromPath(new URL(params.requestUrl).pathname);
+      if (providerId) return providerId;
     } catch {
       // Fall back to the normalized route path below.
     }
   }
 
-  if (!params.path.startsWith(callbackPrefix)) {
-    return undefined;
-  }
-
-  const providerId = params.path.slice(callbackPrefix.length).split("/")[0];
-  if (providerId.startsWith(":")) {
-    return undefined;
-  }
-
-  return providerId || undefined;
+  return providerFromPath(params.path);
 }
 
 async function assertSsoEmailDomainAllowed(params: {
@@ -2497,10 +2522,6 @@ async function assertSsoEmailDomainAllowed(params: {
   userId: string;
   sessionId: string;
 }) {
-  if (!enterpriseTier.isCoreActive()) {
-    return;
-  }
-
   const { default: IdentityProviderModel } = await import(
     // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
     "@/models/identity-provider.ee"
@@ -2509,15 +2530,15 @@ async function assertSsoEmailDomainAllowed(params: {
     params.providerId,
   );
 
-  if (!provider?.domain) {
-    return;
-  }
-
+  if (!provider) return;
   if (
-    emailMatchesAllowedIdentityProviderDomains(
-      params.userEmail,
-      provider.domain,
-    )
+    provider.organizationId &&
+    (!enterpriseTier.isCoreActive() ||
+      !provider.domain ||
+      emailMatchesAllowedIdentityProviderDomains(
+        params.userEmail,
+        provider.domain,
+      ))
   ) {
     return;
   }

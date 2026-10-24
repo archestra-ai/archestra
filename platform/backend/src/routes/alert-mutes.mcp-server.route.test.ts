@@ -8,7 +8,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { MemberModel } from "@/models";
 import McpServerModel from "@/models/mcp-server";
 import McpServerAlertMuteModel from "@/models/mcp-server-alert-mute";
-import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
@@ -395,14 +394,10 @@ describe("MCP server alert mute routes", () => {
     // and installation administration (`update` on every registry entry).
     await MemberModel.updateRole(user.id, organizationId, "admin");
     grantEverywhere(["mcpRegistry"]);
-    const newSecret = await secretManager().createSecret(
-      { access_token: "fresh", refresh_token: "fresh-refresh" },
-      "alert-mute-reauth-secret",
-    );
     const reauth = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${server.id}/reauthenticate`,
-      payload: { secretId: newSecret.id },
+      payload: { accessToken: "fresh" },
     });
     expect(reauth.statusCode).toBe(200);
 

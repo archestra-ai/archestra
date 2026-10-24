@@ -1,0 +1,68 @@
+{
+  "name": "mohammadhijjawi97__since-cutoff",
+  "display_name": "since-cutoff",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idCI+CiAgPHRpdGxlIGlkPSJ0Ij5zaW5jZS1jdXRvZmYgbG9nbzogYSBjbG9jayB3aG9zZSBsZWZ0IGhhbGYgaXMgc29saWQgKHdoYXQgdGhlIG1vZGVsIHNhdykgYW5kIHdob3NlIHJpZ2h0IGhhbGYgaXMgZGFzaGVkICh3aGF0IGNoYW5nZWQgYWZ0ZXIgaXRzIHRyYWluaW5nIGN1dG9mZiksIHNwbGl0IGJ5IHRoZSBjdXRvZmYgbGluZTwvdGl0bGU+CiAgPHBhdGggZD0iTTMyIDEwIEEyMiAyMiAwIDAgMCAzMiA1NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYmM0YzAwIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0zMiAxMCBBMjIgMjIgMCAwIDEgMzIgNTQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2JjNGMwMCIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtZGFzaGFycmF5PSI2LjIgNS4zIiBzdHJva2UtZGFzaG9mZnNldD0iLTMiIG9wYWNpdHk9IjAuNTUiLz4KICA8bGluZSB4MT0iMjEiIHkxPSIyNSIgeDI9IjMyIiB5Mj0iMzIiIHN0cm9rZT0iI2JjNGMwMCIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8bGluZSB4MT0iMzIiIHkxPSIzLjUiIHgyPSIzMiIgeTI9IjYwLjUiIHN0cm9rZT0iIzFmMjMyOCIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSI0IiBmaWxsPSIjMWYyMzI4Ii8+Cjwvc3ZnPg==",
+  "description": "Local stdio MCP server that reports what changed in a Python library's public API since a coding model's training cutoff (static griffe diff between the version at the cutoff and the pinned or latest version). No API key needed.",
+  "long_description": "since-cutoff finds which APIs of your pinned Python dependencies changed after your coding model's training cutoff, and gives the agent short AGENTS.md / CLAUDE.md notes from a static API diff without model calls or running untrusted code.",
+  "author": {
+    "name": "Mohammad Hijjawi",
+    "url": "https://github.com/MohammadHijjawi97"
+  },
+  "homepage": "https://mohammadhijjawi97.github.io/since-cutoff/",
+  "documentation": "https://mohammadhijjawi97.github.io/since-cutoff/",
+  "support": "https://github.com/MohammadHijjawi97/since-cutoff/issues",
+  "instructions": null,
+  "tools": [
+    {
+      "name": "project_changes",
+      "description": "Check every dependency of a Python project for API changes since a training cutoff. One call covers every direct dependency at the version the project pins."
+    },
+    {
+      "name": "api_changes",
+      "description": "List the public API changes of one PyPI package since a model's training cutoff. Compares the newest release on or before the cutoff with the pinned or latest version."
+    },
+    {
+      "name": "model_cutoff",
+      "description": "Look up a model's training cutoff date: library releases after it may be missing from its training data."
+    }
+  ],
+  "prompts": [],
+  "keywords": ["python", "dependencies", "api-changes", "knowledge-cutoff", "agents-md"],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "archestra_config": {
+    "client_config_permutations": {
+      "since-cutoff": {
+        "command": "uvx",
+        "args": ["since-cutoff", "mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "server": {
+    "type": "local",
+    "command": "uvx",
+    "args": ["since-cutoff", "mcp"],
+    "env": {}
+  },
+  "github_info": {
+    "owner": "MohammadHijjawi97",
+    "repo": "since-cutoff",
+    "url": "https://github.com/MohammadHijjawi97/since-cutoff",
+    "name": "mohammadhijjawi97__since-cutoff",
+    "stars": 4,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null,
+    "path": null
+  },
+  "programming_language": "Python"
+}

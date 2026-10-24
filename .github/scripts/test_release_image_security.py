@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +36,37 @@ def step_source(source, name):
 
 
 class ReleasePolicyTests(unittest.TestCase):
+    def test_queue_classification_reads_actual_combined_commits_including_a_mixed_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.check_output(["git", "-C", directory, *args], text=True).strip()
+            git("init", "-q")
+            git("config", "user.name", "CI fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            manifest = root / ".github/release-please/.release-please-manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"platform":"1.4.0"}')
+            git("add", ".")
+            git("commit", "-qm", "base")
+            base = git("rev-parse", "HEAD")
+            manifest.write_text('{"platform":"1.4.1"}')
+            git("commit", "-qam", "release version")
+            (root / "feature").write_text("ordinary PR in the same queue group")
+            git("add", ".")
+            git("commit", "-qm", "ordinary feature")
+            group = {"base_ref": "refs/heads/release/1.4", "base_sha": base,
+                     "head_sha": git("rev-parse", "HEAD"),
+                     "head_ref": "refs/heads/gh-readonly-queue/release/1.4/pr-99-feature"}
+            # Exercise real git object reads, stubbing only the checkout location.
+            original = subprocess.check_output
+            def in_fixture(args, **kwargs):
+                return original(args, cwd=directory, **kwargs)
+            with patch.object(POLICY.subprocess, "check_output", side_effect=in_fixture):
+                self.assertTrue(POLICY.requires_scan("merge_group", {"merge_group": group}, REPOSITORY))
+                group["base_sha"] = git("rev-parse", "HEAD^")
+                self.assertFalse(POLICY.requires_scan("merge_group", {"merge_group": group}, REPOSITORY))
+
     def test_scan_inventory_covers_every_published_agent_and_sandbox(self):
         images = POLICY.candidate_matrix(ROOT)["include"]
         by_image = {image["image"]: image for image in images}
@@ -89,7 +121,8 @@ class ReleasePolicyTests(unittest.TestCase):
                         "GITHUB_EVENT_NAME": "pull_request", "GITHUB_REPOSITORY": REPOSITORY}, check=True)
                 values = dict(line.split("=", 1) for line in output.read_text().splitlines())
                 self.assertEqual(values["scan"], str(branch != "feature").lower())
-                self.assertEqual(json.loads(values["matrix"]), POLICY.candidate_matrix(ROOT))
+                self.assertEqual(json.loads(values["matrix"]), {"include": [row | {"arch": arch}
+                    for row in POLICY.candidate_matrix(ROOT)["include"] for arch in ("amd64", "arm64")]})
 
     def test_main_and_stable_release_updates_always_scan_without_labels(self):
         for branch in ("main", "release/1.4", "release/12.30"):
@@ -99,7 +132,7 @@ class ReleasePolicyTests(unittest.TestCase):
                         "action": action, "pull_request": release_pr(branch),
                     }, REPOSITORY))
 
-    def test_feature_fork_label_and_merge_queue_do_not_build_scan_candidates(self):
+    def test_feature_fork_label_and_manual_events_do_not_build_scan_candidates(self):
         pr = release_pr()
         pr["head"]["ref"] = "feature"
         for repo in (REPOSITORY, "contributor/fork"):
@@ -107,10 +140,38 @@ class ReleasePolicyTests(unittest.TestCase):
             self.assertFalse(POLICY.requires_scan("pull_request", {
                 "pull_request": pr, "label": {"name": "run-docker-scan"},
             }, REPOSITORY))
-        for event in ("merge_group", "workflow_dispatch"):
+        for event in ("workflow_dispatch",):
             self.assertFalse(POLICY.requires_scan(event, {}, REPOSITORY))
         with self.assertRaises(ValueError):
             POLICY.requires_scan("push", {}, REPOSITORY)
+
+    def test_queue_release_and_mixed_groups_scan_the_complete_combined_revision(self):
+        group = {"base_ref": "refs/heads/main", "head_ref": "refs/heads/gh-readonly-queue/main/pr-99-test",
+                 "head_sha": "c" * 40, "base_sha": "b" * 40}
+        for branch in ("main", "release/1.4"):
+            group.update(base_ref=f"refs/heads/{branch}", head_ref=f"refs/heads/gh-readonly-queue/{branch}/pr-99-test")
+            for before, after, required in (("1.4.0", "1.4.1", True), ("1.4.0", "1.4.0", False)):
+                with patch.object(POLICY, "queue_versions", return_value=[before, after]):
+                    event = {"merge_group": group}
+                    self.assertEqual(POLICY.requires_scan("merge_group", event, REPOSITORY), required)
+                    POLICY.validate_gate("merge_group", event, REPOSITORY, "success", str(required).lower(),
+                                         "success" if required else "skipped", group["head_sha"], group["head_sha"])
+                    if required:
+                        for scan in ("failure", "cancelled", "skipped", "", "neutral"):
+                            with self.assertRaises(ValueError):
+                                POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
+                                                     scan, group["head_sha"], group["head_sha"])
+                        for live, workflow in (("d" * 40, "c" * 40), ("c" * 40, "d" * 40), (None, "c" * 40)):
+                            with self.assertRaises(ValueError):
+                                POLICY.validate_gate("merge_group", event, REPOSITORY, "success", "true",
+                                                     "success", live, workflow)
+        for key, value in (("base_sha", ""), ("head_sha", "bad"), ("head_ref", "refs/heads/feature")):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                POLICY.requires_scan("merge_group", {"merge_group": group | {key: value}}, REPOSITORY)
+        with patch.object(POLICY, "queue_versions", side_effect=ValueError("missing manifest")), self.assertRaises(ValueError):
+            POLICY.requires_scan("merge_group", {"merge_group": group}, REPOSITORY)
+        group["base_ref"] = "refs/heads/feature"
+        self.assertFalse(POLICY.requires_scan("merge_group", {"merge_group": group}, REPOSITORY))
 
     def test_unexpected_release_branches_and_fork_spoofs_fail_closed(self):
         for path, value in (
@@ -129,6 +190,20 @@ class ReleasePolicyTests(unittest.TestCase):
                 obj[path[-1]] = value
                 with self.assertRaises(ValueError):
                     POLICY.requires_scan("pull_request", {"pull_request": pr}, REPOSITORY)
+
+    def test_queue_cannot_green_a_different_release_publication_tree(self):
+        event = {"merge_group": {"base_sha": "b" * 40}}
+        pr = release_pr()
+        POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
+        for prs, tree, group_tree in (([], None, "a" * 40), ([pr, pr], "a" * 40, "a" * 40),
+                                     ([pr], "d" * 40, "a" * 40), ([pr], None, "a" * 40),
+                                     ([pr | {"state": "closed"}], "a" * 40, "a" * 40)):
+            with self.assertRaises(ValueError):
+                POLICY.validate_queue_release_source(event, REPOSITORY, prs, tree, group_tree)
+        pr = deepcopy(pr)
+        pr["base"]["sha"] = "e" * 40
+        with self.assertRaises(ValueError):
+            POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
 
     def gate(self, **overrides):
         pr = release_pr()
@@ -172,7 +247,7 @@ class ReleasePolicyTests(unittest.TestCase):
         self.gate(event={"pull_request": stale})
 
     def test_nonrelease_pass_requires_an_explicit_successful_classification(self):
-        for event in ("merge_group", "workflow_dispatch"):
+        for event in ("workflow_dispatch",):
             self.gate(event_name=event, event={}, current=None, decision="false", scan_result="skipped")
             with self.assertRaises(ValueError):
                 self.gate(event_name=event, event={}, current=None, decision="", scan_result="skipped")
@@ -197,7 +272,8 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_gate_binds_scans_to_the_live_merge_candidate(self):
         live = "#!/bin/sh\ncat {current}\n"
         result = self.run_gate("c" * 40, live)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("EVIDENCE_DIR", result.stderr)
         for sha, gh in (("d" * 40, live), ("c" * 40, "#!/bin/sh\nexit 23\n")):
             with self.subTest(sha=sha, gh=gh):
                 result = self.run_gate(sha, gh)

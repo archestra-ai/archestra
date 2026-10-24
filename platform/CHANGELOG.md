@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0-rc.8](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.7...platform-v1.5.0-rc.8) (2026-10-24)
+
+
+### Performance Improvements
+
+* **proxy:** reduce fresh authentication and runtime reads ([#9626](https://github.com/archestra-ai/archestra/issues/9626)) ([e2fbf67](https://github.com/archestra-ai/archestra/commit/e2fbf67798e590b19f91114e8ffc61d550ea2c57))
+
 ## [1.5.0-rc.7](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.6...platform-v1.5.0-rc.7) (2026-10-24)
 
 

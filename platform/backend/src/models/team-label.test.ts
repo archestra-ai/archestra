@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@/test";
 import AgentLabelModel from "./agent-label";
+import TeamModel from "./team";
 import TeamLabelModel from "./team-label";
 
 const label = (key: string, value: string) => ({
@@ -10,6 +11,44 @@ const label = (key: string, value: string) => ({
 });
 
 describe("TeamLabelModel", () => {
+  test("trace teams retain current labels and membership within the requested organization", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const first = await makeOrganization();
+    const second = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(first.id, user.id);
+    const foreign = await makeTeam(second.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    await makeTeamMember(foreign.id, user.id);
+    await TeamLabelModel.syncTeamLabels(team.id, [label("zone", "first")]);
+    await TeamLabelModel.syncTeamLabels(foreign.id, [label("zone", "second")]);
+    const scope = { userId: user.id, organizationId: first.id };
+    expect(await TeamModel.getTeamLabelInfoForUser(scope)).toEqual([
+      {
+        id: team.id,
+        name: team.name,
+        labels: await TeamLabelModel.getLabelsForTeam(team.id),
+      },
+    ]);
+    await TeamLabelModel.syncTeamLabels(team.id, [label("zone", "changed")]);
+    expect(
+      (await TeamModel.getTeamLabelInfoForUser(scope))[0].labels[0].value,
+    ).toBe("changed");
+    await TeamModel.removeMember(team.id, user.id);
+    expect(await TeamModel.getTeamLabelInfoForUser(scope)).toEqual([]);
+    expect(
+      (
+        await TeamModel.getTeamLabelInfoForUser({
+          ...scope,
+          organizationId: second.id,
+        })
+      )[0].id,
+    ).toBe(foreign.id);
+  });
   describe("syncTeamLabels", () => {
     test("syncs labels for a team", async ({
       makeOrganization,

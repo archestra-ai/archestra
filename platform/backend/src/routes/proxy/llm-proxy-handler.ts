@@ -1257,7 +1257,7 @@ export async function handleLLMProxy<
     );
 
     // Ensure a model entry exists for cost tracking
-    const catalogModel = await ModelModel.findByProviderAndModelId(
+    const catalogModel = await ModelModel.findIdentityByProviderAndModelId(
       providerName,
       actualModel,
     );
@@ -2389,9 +2389,8 @@ async function handleStreaming<
       authenticatedApp,
       source,
       serverAddress: provider.getBaseUrl(),
-      promptMessages: provider
-        .createRequestAdapter(originalRequest)
-        .getProviderMessages(),
+      getPromptMessages: () =>
+        provider.createRequestAdapter(originalRequest).getProviderMessages(),
       suppressContent,
       parentContext,
       user: toSpanUserInfo(resolvedUser),
@@ -3118,9 +3117,8 @@ async function handleNonStreaming<
     authenticatedApp,
     source,
     serverAddress: provider.getBaseUrl(),
-    promptMessages: provider
-      .createRequestAdapter(originalRequest)
-      .getProviderMessages(),
+    getPromptMessages: () =>
+      provider.createRequestAdapter(originalRequest).getProviderMessages(),
     suppressContent,
     parentContext,
     user: toSpanUserInfo(resolvedUser),

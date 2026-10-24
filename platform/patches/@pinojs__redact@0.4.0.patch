@@ -1,0 +1,44 @@
+diff --git a/index.js b/index.js
+index c2f5f959f23b232cd40df86f82046534159ab9b1..18eb519d544421488ad7fec86647d03765536823 100644
+--- a/index.js
++++ b/index.js
+@@ -197,10 +197,8 @@ function getValue (obj, parts) {
+ }
+ 
+ function redactPaths (obj, paths, censor, remove = false) {
+-  for (const path of paths) {
+-    const parts = parsePath(path)
+-
+-    if (parts.includes('*')) {
++  for (const { path, parts, wildcard } of paths) {
++    if (wildcard) {
+       redactWildcardPath(obj, parts, censor, path, remove)
+     } else {
+       if (remove) {
+@@ -489,8 +487,17 @@ function slowRedact (options = {}) {
+ 
+   // Build path structure once during setup, not on every call
+   const pathStructure = buildPathStructure(paths)
++  const parsedPaths = paths.map(path => {
++    const parts = parsePath(path)
++    return { path, parts, wildcard: parts.includes('*') }
++  })
+ 
+   return function redact (obj) {
++    // Nested paths cannot match a primitive; preserve the configured serializer.
++    if ((obj === null || typeof obj !== 'object') && typeof serialize === 'function') {
++      return serialize(obj)
++    }
++
+     if (strict && (obj === null || typeof obj !== 'object')) {
+       if (obj === null || obj === undefined) {
+         return serialize ? serialize(obj) : obj
+@@ -509,7 +516,7 @@ function slowRedact (options = {}) {
+       actualCensor = censor
+     }
+ 
+-    redactPaths(cloned, paths, actualCensor, remove)
++    redactPaths(cloned, parsedPaths, actualCensor, remove)
+ 
+     if (serialize === false) {
+       cloned.restore = function () {

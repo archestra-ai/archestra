@@ -311,6 +311,17 @@ class ModelModel {
     return result || null;
   }
 
+  /** Proxy discovery and authorization need identity, not pricing/capability payloads. */
+  static async findIdentityByProviderAndModelId(
+    provider: SupportedProvider,
+    modelId: string,
+  ) {
+    const [model] = await ModelModel.identityByProviderAndModel
+      .get()
+      .execute({ provider, modelId });
+    return model ?? null;
+  }
+
   /**
    * Find models for multiple provider:modelId combinations
    */
@@ -1409,6 +1420,24 @@ class ModelModel {
         ),
       )
       .prepare("archestra_model_by_provider_and_model"),
+  );
+
+  private static readonly identityByProviderAndModel = new PreparedQuery(
+    (database) =>
+      database
+        .select({
+          id: schema.modelsTable.id,
+          provider: schema.modelsTable.provider,
+          modelId: schema.modelsTable.modelId,
+        })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, sql.placeholder("provider")),
+            eq(schema.modelsTable.modelId, sql.placeholder("modelId")),
+          ),
+        )
+        .prepare("archestra_proxy_model_identity"),
   );
 }
 

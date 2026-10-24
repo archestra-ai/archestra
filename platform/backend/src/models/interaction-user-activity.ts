@@ -19,13 +19,10 @@ export default class InteractionUserActivityModel {
     values: typeof schema.interactionsTable.$inferInsert,
     tx?: Transaction,
   ) {
-    const columns = getTableColumns(schema.interactionsTable);
+    const columns = interactionColumns;
     const payload: Record<string, string | null> = {};
-    for (const [key, column] of Object.entries(columns)) {
-      if (
-        values[key as keyof typeof values] === undefined &&
-        (column.defaultFn || (!column.default && column.onUpdateFn))
-      ) {
+    for (const key of runtimeDefaultColumns) {
+      if (values[key as keyof typeof values] === undefined) {
         throw new Error(`Unsupported interaction runtime default: ${key}`);
       }
     }
@@ -696,3 +693,11 @@ function aggregate(source: SQL) {
     GROUP BY 1,input.user_id ORDER BY 1,input.user_id
   `;
 }
+
+// Schema encoders are immutable metadata; payloads and database results stay fresh.
+const interactionColumns = getTableColumns(schema.interactionsTable);
+const runtimeDefaultColumns = Object.entries(interactionColumns)
+  .filter(
+    ([, column]) => column.defaultFn || (!column.default && column.onUpdateFn),
+  )
+  .map(([key]) => key);

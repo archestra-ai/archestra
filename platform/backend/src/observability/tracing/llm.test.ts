@@ -1,5 +1,6 @@
 import { type TracerProvider, trace } from "@opentelemetry/api";
 import {
+  AlwaysOffSampler,
   BasicTracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
@@ -68,4 +69,39 @@ test("exports OAuth application attribution with no virtual-key identity", async
     "archestra.app.name": "Build service",
   });
   expect(span.attributes["archestra.virtual_key.id"]).toBeUndefined();
+});
+
+test("unsampled spans propagate identity and execute the request without materializing content", async () => {
+  const unsampled = new BasicTracerProvider({
+    sampler: new AlwaysOffSampler(),
+  });
+  trace.disable();
+  trace.setGlobalTracerProvider(unsampled);
+  let called = false;
+  try {
+    const result = await startActiveLlmSpan({
+      operationName: "chat",
+      provider: "openai",
+      model: "synthetic-model",
+      stream: false,
+      getPromptMessages: () => {
+        throw new Error(
+          "Content must not be materialized for an unsampled span",
+        );
+      },
+      callback: async (span) => {
+        called = true;
+        expect(span.isRecording()).toBe(false);
+        expect(span.spanContext().traceId).toMatch(/^[0-9a-f]{32}$/);
+        return "completed";
+      },
+    });
+    expect(result).toBe("completed");
+    expect(called).toBe(true);
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
+  } finally {
+    await unsampled.shutdown();
+    trace.disable();
+    trace.setGlobalTracerProvider(provider);
+  }
 });

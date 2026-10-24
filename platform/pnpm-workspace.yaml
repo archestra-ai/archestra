@@ -274,6 +274,10 @@ patchedDependencies:
   '@better-auth/sso@1.6.22': patches/ee/@better-auth__sso@1.6.22.patch
   # Keep the SDK's string-keyed semantic-action records under Zod 4.
   '@microsoft/agents-activity@1.9.1': patches/@microsoft__agents-activity@1.9.1.patch
+  # Compile fixed redaction paths once and skip nested traversal for primitives.
+  # Keep all credential rules; remove after an upstream upgrade passes logging
+  # redaction coverage without parsing paths on every record.
+  '@pinojs/redact@0.4.0': patches/@pinojs__redact@0.4.0.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
   confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,

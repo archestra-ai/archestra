@@ -53,4 +53,4 @@ jobs:
     # GitHub resolves this lookup before starting the called job; only the
     # matching token is passed, not the caller's complete secrets context.
     secrets:
-      ARCHESTRA_TOKEN: ${{ secrets[needs.actor.outputs.secret_name] }} # zizmor: ignore[overprovisioned-secrets,obfuscation]
+      ARCHESTRA_TOKEN: transport-smoke-invalid-not-a-credential # Temporary negative-auth transport test.

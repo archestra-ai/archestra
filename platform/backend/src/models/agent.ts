@@ -76,6 +76,7 @@ import {
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
   type InsertAgent,
+  type LabelGetResponse,
   type McpServerAgentUsage,
   type ReadinessAgent,
   type SortingQuery,
@@ -3587,7 +3588,7 @@ class AgentModel {
    * resolved-LLM hydration {@link findById} performs. The gateway loads the
    * agent on every JSON-RPC request only for scalar config (agent type, tool
    * exposure, passthrough headers, identity provider) and trace-span labels,
-   * so this must stay at two index lookups.
+   * so configuration and labels are loaded together in one statement.
    */
   static async findGatewayAgentById(id: string): Promise<GatewayAgent | null> {
     const [agent] = await AgentModel.gatewayById.get().execute({ id });
@@ -3596,8 +3597,7 @@ class AgentModel {
       return null;
     }
 
-    const labels = await AgentLabelModel.getLabelsForAgent(id);
-    return { ...agent, labels };
+    return agent;
   }
 
   /**
@@ -3610,8 +3610,7 @@ class AgentModel {
   static async getOrgLlmProxy(organizationId: string): Promise<GatewayAgent> {
     const existing = await AgentModel.findOrgLlmProxyRow(organizationId);
     if (existing) {
-      const labels = await AgentLabelModel.getLabelsForAgent(existing.id);
-      return { ...existing, labels };
+      return existing;
     }
 
     await db
@@ -3639,8 +3638,7 @@ class AgentModel {
         `Failed to ensure the LLM Proxy for organization ${organizationId}`,
       );
     }
-    const labels = await AgentLabelModel.getLabelsForAgent(row.id);
-    return { ...row, labels };
+    return row;
   }
 
   /**
@@ -3692,6 +3690,9 @@ class AgentModel {
    * when no organization exists yet.
    */
   static async getDeploymentLlmProxy(): Promise<GatewayAgent | null> {
+    const [existing] = await AgentModel.deploymentProxy.get().execute();
+    if (existing) return existing;
+
     const [firstOrg] = await AgentModel.firstOrganization.get().execute();
     if (!firstOrg) {
       return null;
@@ -6114,7 +6115,7 @@ class AgentModel {
 
   private static readonly gatewayById = new PreparedQuery((database) =>
     database
-      .select()
+      .select(AgentModel.gatewaySelection())
       .from(schema.agentsTable)
       .where(
         and(
@@ -6128,7 +6129,7 @@ class AgentModel {
 
   private static readonly organizationProxy = new PreparedQuery((database) =>
     database
-      .select()
+      .select(AgentModel.gatewaySelection())
       .from(schema.agentsTable)
       .where(
         and(
@@ -6144,6 +6145,50 @@ class AgentModel {
       .limit(1)
       .prepare("archestra_organization_llm_proxy"),
   );
+
+  private static readonly deploymentProxy = new PreparedQuery((database) =>
+    database
+      .select(AgentModel.gatewaySelection())
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(
+            schema.agentsTable.organizationId,
+            database
+              .select({ id: schema.organizationsTable.id })
+              .from(schema.organizationsTable)
+              .orderBy(asc(schema.organizationsTable.createdAt))
+              .limit(1),
+          ),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1)
+      .prepare("archestra_deployment_llm_proxy"),
+  );
+
+  /** Fresh labels in the same database snapshot as the gateway configuration. */
+  private static gatewaySelection() {
+    return {
+      ...getTableColumns(schema.agentsTable),
+      labels: sql<LabelGetResponse[]>`coalesce((
+        SELECT jsonb_agg(jsonb_build_object(
+          'keyId', ${qualified(schema.agentLabelsTable.keyId)},
+          'valueId', ${qualified(schema.agentLabelsTable.valueId)},
+          'key', coalesce(${qualified(schema.labelKeysTable.key)}, ''),
+          'value', coalesce(${qualified(schema.labelValuesTable.value)}, '')
+        ) ORDER BY ${qualified(schema.labelKeysTable.key)})
+        FROM ${schema.agentLabelsTable}
+        LEFT JOIN ${schema.labelKeysTable}
+          ON ${qualified(schema.agentLabelsTable.keyId)} = ${qualified(schema.labelKeysTable.id)}
+        LEFT JOIN ${schema.labelValuesTable}
+          ON ${qualified(schema.agentLabelsTable.valueId)} = ${qualified(schema.labelValuesTable.id)}
+        WHERE ${qualified(schema.agentLabelsTable.agentId)} = ${qualified(schema.agentsTable.id)}
+      ), '[]'::jsonb)`,
+    };
+  }
 
   private static readonly firstOrganization = new PreparedQuery((database) =>
     database

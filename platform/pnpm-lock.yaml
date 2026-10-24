@@ -116,7 +116,7 @@ patchedDependencies:
   '@ai-sdk/xai@3.0.67': abe0d8843e57fd85038638f58712bf3fa3e9a34d421089a226574951e9f42941
   '@better-auth/sso@1.6.22': f83af50d9872ec2d3740d10d7508a5d129ec740360da3d3542ef21f61e8ea177
   '@microsoft/agents-activity@1.9.1': d03d563c339a9e5a88627a244489a2412a69dc7b414d90790736b3dd2291c7e0
-  '@pinojs/redact@0.4.0': 5e90182734f5a5db9aaf892771f6e99d4077f7287f459b9e66e5eaa2b3327a5a
+  '@pinojs/redact@0.4.0': 44a00890798039521356d693d0fc19fbe301cc8fbdbd9dc54e0ec581a9f2c1a3
   confluence.js@2.1.0: 6ddd735c03b97cf38284b5ff325bccae807c400cc90be13bdca421365099f40f
   ollama-ai-provider-v2@3.6.0: 98b56e2b73bf66546c2a30b64828a038f17206a826311e6249b506fe4488a5ca
 
@@ -14465,7 +14465,7 @@ snapshots:
     dependencies:
       pako: 1.0.11
 
-  '@pinojs/redact@0.4.0(patch_hash=5e90182734f5a5db9aaf892771f6e99d4077f7287f459b9e66e5eaa2b3327a5a)': {}
+  '@pinojs/redact@0.4.0(patch_hash=44a00890798039521356d693d0fc19fbe301cc8fbdbd9dc54e0ec581a9f2c1a3)': {}
 
   '@playwright/test@1.58.2':
     dependencies:
@@ -20274,7 +20274,7 @@ snapshots:
 
   pino@10.3.1:
     dependencies:
-      '@pinojs/redact': 0.4.0(patch_hash=5e90182734f5a5db9aaf892771f6e99d4077f7287f459b9e66e5eaa2b3327a5a)
+      '@pinojs/redact': 0.4.0(patch_hash=44a00890798039521356d693d0fc19fbe301cc8fbdbd9dc54e0ec581a9f2c1a3)
       atomic-sleep: 1.0.0
       on-exit-leak-free: 2.1.2
       pino-abstract-transport: 3.0.0

@@ -1,8 +1,8 @@
 diff --git a/index.js b/index.js
-index c2f5f959f23b232cd40df86f82046534159ab9b1..18eb519d544421488ad7fec86647d03765536823 100644
+index c2f5f959f23b232cd40df86f82046534159ab9b1..827733d819bf310d031853618f26d9c82584423f 100644
 --- a/index.js
 +++ b/index.js
-@@ -197,10 +197,8 @@ function getValue (obj, parts) {
+@@ -197,10 +197,10 @@ function getValue (obj, parts) {
  }
  
  function redactPaths (obj, paths, censor, remove = false) {
@@ -10,12 +10,14 @@ index c2f5f959f23b232cd40df86f82046534159ab9b1..18eb519d544421488ad7fec86647d037
 -    const parts = parsePath(path)
 -
 -    if (parts.includes('*')) {
-+  for (const { path, parts, wildcard } of paths) {
++  for (const { path, parts: compiledParts, wildcard } of paths) {
++    // Function censors receive a fresh mutable path, as before compilation.
++    const parts = typeof censor === 'function' ? [...compiledParts] : compiledParts
 +    if (wildcard) {
        redactWildcardPath(obj, parts, censor, path, remove)
      } else {
        if (remove) {
-@@ -489,8 +487,17 @@ function slowRedact (options = {}) {
+@@ -489,8 +489,17 @@ function slowRedact (options = {}) {
  
    // Build path structure once during setup, not on every call
    const pathStructure = buildPathStructure(paths)
@@ -33,7 +35,7 @@ index c2f5f959f23b232cd40df86f82046534159ab9b1..18eb519d544421488ad7fec86647d037
      if (strict && (obj === null || typeof obj !== 'object')) {
        if (obj === null || obj === undefined) {
          return serialize ? serialize(obj) : obj
-@@ -509,7 +516,7 @@ function slowRedact (options = {}) {
+@@ -509,7 +518,7 @@ function slowRedact (options = {}) {
        actualCensor = censor
      }
  

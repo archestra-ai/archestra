@@ -191,12 +191,34 @@ class GateIntegrationTests(unittest.TestCase):
             manifest.write_text('{"platform":"1.4.0"}')
             git("add", ".")
             git("commit", "-qm", "base")
-            base = git("rev-parse", "HEAD")
+            initial_base = git("rev-parse", "HEAD")
             manifest.write_text('{"platform":"1.4.1"}')
             git("commit", "-qam", "release")
-            sha, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
+            release_head = git("rev-parse", "HEAD")
+            # The target can advance after Release Please creates its head.
+            # A squash queue commit must match the merge of both exact inputs,
+            # without relying on GitHub's asynchronously computed test merge.
+            git("checkout", "-qb", "target", initial_base)
+            (directory / "ci-policy").write_text("later base change")
+            git("add", ".")
+            git("commit", "-qm", "advance target")
+            base = git("rev-parse", "HEAD")
+            tree = git("merge-tree", "--write-tree", base, release_head)
+            sha = subprocess.check_output(["git", "-C", temp, "commit-tree", tree, "-p", base],
+                                          input="queue release\n", text=True).strip()
+            git("checkout", "-q", "--detach", sha)
+            (directory / "feature").write_text("extra queued source must not pass for the release")
+            git("add", ".")
+            git("commit", "-qm", "mixed source")
+            mixed_head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", release_head)
+            (directory / "ci-policy").write_text("conflicting release change")
+            git("add", ".")
+            git("commit", "-qm", "conflicting source")
+            conflicting_head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", sha)
             pr = {"number": 42, "state": "open", "merge_commit_sha": sha,
-                  "head": {"ref": "release-please--branches--main--components--platform", "sha": sha,
+                  "head": {"ref": "release-please--branches--main--components--platform", "sha": release_head,
                            "repo": {"full_name": IDENTITY["repository"]}},
                   "base": {"ref": "main", "sha": base, "repo": {"full_name": IDENTITY["repository"]}}}
             (directory / "current.json").write_text(json.dumps(pr))
@@ -206,6 +228,17 @@ class GateIntegrationTests(unittest.TestCase):
                 "import json, os, sys\n" +
                 f"pr=json.load(open({str(directory / 'current.json')!r}))\n" +
                 "path=sys.argv[2]\n" +
+                "if '/pulls/' in path and os.environ.get('RECHECK_HEAD'):\n" +
+                "    pr['head']['sha']=os.environ['RECHECK_HEAD']\n" +
+                "if '/pulls/' in path and os.environ.get('RECHECK_BASE'):\n" +
+                "    pr['base']['sha']=os.environ['RECHECK_BASE']\n" +
+                f"counter={str(directory / 'ref-count')!r}\n" +
+                "if '/git/ref/' in path:\n" +
+                "    from pathlib import Path\n" +
+                "    count=int(Path(counter).read_text())+1 if Path(counter).exists() else 1\n" +
+                "    Path(counter).write_text(str(count))\n" +
+                "    if count > 1 and os.environ.get('RECHECK_QUEUE'):\n" +
+                "        print(json.dumps({'object':{'sha':os.environ['RECHECK_QUEUE']}})); sys.exit()\n" +
                 "value=({'object':{'sha':os.environ['GITHUB_SHA']}} if '/git/ref/' in path else\n" +
                 "       {'tree':{'sha':os.environ['API_TREE']}} if '/git/commits/' in path else\n" +
                 "       [pr] if '/pulls?' in path else pr)\nprint(json.dumps(value))\n")
@@ -225,6 +258,8 @@ class GateIntegrationTests(unittest.TestCase):
                 "API_TREE": tree,
                 "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
             def gate(overrides=None):
+                (directory / "release-candidate-index.json").unlink(missing_ok=True)
+                (directory / "ref-count").unlink(missing_ok=True)
                 return subprocess.run(["python3", str(policy_path), "gate"], cwd=directory,
                                       env=env | (overrides or {}), capture_output=True, text=True, timeout=10)
             for event_name in ("pull_request", "merge_group"):
@@ -233,6 +268,16 @@ class GateIntegrationTests(unittest.TestCase):
                     "head_ref": "refs/heads/gh-readonly-queue/main/pr-42-test"}}
                 (directory / "event.json").write_text(json.dumps(payload))
                 env["GITHUB_EVENT_NAME"] = event_name
+                if event_name == "pull_request":
+                    env["SCAN_REQUIRED"] = "false"
+                    env["SCAN_RESULT"] = "skipped"
+                    result = gate()
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertFalse((directory / "release-candidate-index.json").exists())
+                    self.assertNotEqual(gate({"SCAN_RESULT": "success"}).returncode, 0)
+                    continue
+                env["SCAN_REQUIRED"] = "true"
+                env["SCAN_RESULT"] = "success"
                 result = gate()
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 index = json.loads((directory / "release-candidate-index.json").read_text())
@@ -242,7 +287,57 @@ class GateIntegrationTests(unittest.TestCase):
                     self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
                 self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)
                 if event_name == "merge_group":
-                    self.assertIn("Mixed queue group", gate({"API_TREE": "f" * 40}).stderr)
+                    # Missing, stale and unavailable cached test merges cannot
+                    # reject an otherwise exact queue source reconstruction.
+                    for cached_merge in (None, base, "f" * 40):
+                        (directory / "current.json").write_text(json.dumps(pr | {"merge_commit_sha": cached_merge}))
+                        result = gate({"API_TREE": git("rev-parse", f"{base}^{{tree}}")})
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        index = json.loads((directory / "release-candidate-index.json").read_text())
+                        self.assertEqual(index["queue_release_source"], {"number": 42,
+                            "head_sha": release_head, "base_sha": base, "tree": tree})
+                    # REST base.sha can lag the actual queue base during high
+                    # volume merges. The queue event's immutable base wins.
+                    for cached_base in (initial_base, None):
+                        stale = json.loads(json.dumps(pr))
+                        stale["base"]["sha"] = cached_base
+                        (directory / "current.json").write_text(json.dumps(stale))
+                        result = gate({"RECHECK_BASE": initial_base if cached_base is None else base})
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        index = json.loads((directory / "release-candidate-index.json").read_text())
+                        self.assertEqual(index["queue_release_source"]["base_sha"], base)
+                    (directory / "current.json").write_text(json.dumps(pr))
+                    for overrides, message in (({"RECHECK_HEAD": mixed_head}, "Release PR changed"),
+                                               ({"RECHECK_QUEUE": "e" * 40}, "Merge group changed")):
+                        result = gate(overrides)
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(message, result.stderr)
+                        self.assertFalse((directory / "release-candidate-index.json").exists())
+                    for head, message in ((mixed_head, "Mixed queue group"),
+                                          (conflicting_head, "Cannot reconstruct release PR"),
+                                          ("e" * 40, "Cannot reconstruct release PR")):
+                        changed = json.loads(json.dumps(pr))
+                        changed["head"]["sha"] = head
+                        (directory / "current.json").write_text(json.dumps(changed))
+                        result = gate()
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(message, result.stderr)
+                        self.assertFalse((directory / "release-candidate-index.json").exists())
+                    (directory / "current.json").write_text(json.dumps(pr))
+                    # A genuine mixed group must still fail even when its own
+                    # scan jobs report success. Do not substitute its bytes for
+                    # the release-only commit that would actually publish.
+                    git("checkout", "-q", "--detach", mixed_head)
+                    mixed_event = json.loads(json.dumps(payload))
+                    mixed_event["merge_group"]["head_sha"] = mixed_head
+                    (directory / "event.json").write_text(json.dumps(mixed_event))
+                    result = gate({"GITHUB_SHA": mixed_head})
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Mixed queue group", result.stderr)
+                    self.assertIn(f"release_tree={tree}", result.stderr)
+                    self.assertFalse((directory / "release-candidate-index.json").exists())
+                    git("checkout", "-q", "--detach", sha)
+                    (directory / "event.json").write_text(json.dumps(payload))
                 missing = next(evidence.iterdir())
                 original = missing.read_text()
                 missing.unlink()

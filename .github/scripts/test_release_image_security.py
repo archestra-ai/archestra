@@ -120,15 +120,16 @@ class ReleasePolicyTests(unittest.TestCase):
                     env=os.environ | {"GITHUB_EVENT_PATH": str(event), "GITHUB_OUTPUT": str(output),
                         "GITHUB_EVENT_NAME": "pull_request", "GITHUB_REPOSITORY": REPOSITORY}, check=True)
                 values = dict(line.split("=", 1) for line in output.read_text().splitlines())
-                self.assertEqual(values["scan"], str(branch != "feature").lower())
+                self.assertEqual(values["scan"], "false")
                 self.assertEqual(json.loads(values["matrix"]), {"include": [row | {"arch": arch}
                     for row in POLICY.candidate_matrix(ROOT)["include"] for arch in ("amd64", "arm64")]})
 
-    def test_main_and_stable_release_updates_always_scan_without_labels(self):
+    def test_main_and_stable_release_prs_only_scan_in_the_queue(self):
         for branch in ("main", "release/1.4", "release/12.30"):
             for action in ("opened", "synchronize", "reopened", "edited"):
                 with self.subTest(branch=branch, action=action):
-                    self.assertTrue(POLICY.requires_scan("pull_request", {
+                    self.assertTrue(POLICY.is_release_pr(release_pr(branch), REPOSITORY))
+                    self.assertFalse(POLICY.requires_scan("pull_request", {
                         "action": action, "pull_request": release_pr(branch),
                     }, REPOSITORY))
 
@@ -192,7 +193,7 @@ class ReleasePolicyTests(unittest.TestCase):
                     POLICY.requires_scan("pull_request", {"pull_request": pr}, REPOSITORY)
 
     def test_queue_cannot_green_a_different_release_publication_tree(self):
-        event = {"merge_group": {"base_sha": "b" * 40}}
+        event = {"merge_group": {"base_sha": "b" * 40, "base_ref": "refs/heads/main"}}
         pr = release_pr()
         POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
         for prs, tree, group_tree in (([], None, "a" * 40), ([pr, pr], "a" * 40, "a" * 40),
@@ -202,82 +203,50 @@ class ReleasePolicyTests(unittest.TestCase):
                 POLICY.validate_queue_release_source(event, REPOSITORY, prs, tree, group_tree)
         pr = deepcopy(pr)
         pr["base"]["sha"] = "e" * 40
+        POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
+        pr["base"]["ref"] = "release/1.4"
         with self.assertRaises(ValueError):
             POLICY.validate_queue_release_source(event, REPOSITORY, [pr], "a" * 40, "a" * 40)
 
-    def gate(self, **overrides):
-        pr = release_pr()
-        args = dict(event_name="pull_request", event={"pull_request": pr},
-                    repository=REPOSITORY, classify_result="success", decision="true",
-                    scan_result="success", current=deepcopy(pr), workflow_sha="c" * 40) | overrides
+    def test_skipped_pr_scan_still_requires_a_consistent_successful_gate(self):
+        args = dict(event_name="pull_request", event={"pull_request": release_pr()},
+                    repository=REPOSITORY, classify_result="success", decision="false",
+                    scan_result="skipped", workflow_sha="c" * 40)
         POLICY.validate_gate(**args)
+        for field, values in (("classify_result", ("failure", "cancelled", "")),
+                              ("decision", ("true", "", "unknown")),
+                              ("scan_result", ("success", "failure", "cancelled", ""))):
+            for value in values:
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    POLICY.validate_gate(**(args | {field: value}))
 
-    def test_every_failed_cancelled_skipped_or_missing_result_blocks_release(self):
-        self.gate()
-        for value in ("failure", "cancelled", "skipped", "", "neutral"):
-            for field in ("classify_result", "scan_result"):
-                with self.subTest(value=value, field=field), self.assertRaises(ValueError):
-                    self.gate(**{field: value})
-        for value in ("", "false", "unknown"):
-            with self.assertRaises(ValueError):
-                self.gate(decision=value)
-
-    def test_pr_updates_base_changes_retargeting_and_closed_prs_invalidate_scan(self):
-        for field, key, value in (
-            ("head", "sha", "d" * 40), ("base", "sha", "e" * 40),
-            ("head", "ref", "feature"), ("base", "ref", "release/1.4"),
-        ):
-            with self.subTest(field=field, key=key), self.assertRaises(ValueError):
-                pr = release_pr()
-                pr[field][key] = value
-                self.gate(current=pr)
-        for key, value in (("state", "closed"), ("number", 43), ("merge_commit_sha", "d" * 40)):
-            with self.subTest(key=key), self.assertRaises(ValueError):
-                self.gate(current=release_pr() | {key: value})
+    def test_manual_pass_requires_an_explicit_successful_classification(self):
+        args = dict(event_name="workflow_dispatch", event={}, repository=REPOSITORY,
+                    classify_result="success", decision="false", scan_result="skipped")
+        POLICY.validate_gate(**args)
         with self.assertRaises(ValueError):
-            self.gate(current=None)
-        for sha in (None, "", "d" * 40):
-            with self.subTest(workflow_sha=sha), self.assertRaises(ValueError):
-                self.gate(workflow_sha=sha)
+            POLICY.validate_gate(**(args | {"decision": ""}))
 
-    def test_stale_event_merge_sha_passes_when_live_candidate_matches_scanned_commit(self):
-        stale = release_pr() | {"merge_commit_sha": "0" * 40}
-        self.gate(event={"pull_request": stale})
-        stale["merge_commit_sha"] = None
-        self.gate(event={"pull_request": stale})
-
-    def test_nonrelease_pass_requires_an_explicit_successful_classification(self):
-        for event in ("workflow_dispatch",):
-            self.gate(event_name=event, event={}, current=None, decision="false", scan_result="skipped")
-            with self.assertRaises(ValueError):
-                self.gate(event_name=event, event={}, current=None, decision="", scan_result="skipped")
-
-    def run_gate(self, github_sha, gh_script):
+    def run_gate(self, **overrides):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             event = root / "event.json"
-            # GitHub can deliver the previous test merge in the event payload.
-            event.write_text(json.dumps({"pull_request": release_pr() | {"merge_commit_sha": "0" * 40}}))
-            (root / "current.json").write_text(json.dumps(release_pr()))
+            event.write_text(json.dumps({"pull_request": release_pr()}))
             gh = root / "gh"
-            gh.write_text(gh_script.format(current=root / "current.json"))
+            gh.write_text("#!/bin/sh\nexit 23\n")
             gh.chmod(0o755)
             env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}",
                 "GITHUB_EVENT_PATH": str(event), "GITHUB_EVENT_NAME": "pull_request",
-                "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": github_sha,
-                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
+                "GITHUB_REPOSITORY": REPOSITORY, "GITHUB_SHA": "c" * 40,
+                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "false", "SCAN_RESULT": "skipped"}
             return subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "gate"],
-                env=env, text=True, capture_output=True)
+                env=env | overrides, text=True, capture_output=True)
 
-    def test_gate_binds_scans_to_the_live_merge_candidate(self):
-        live = "#!/bin/sh\ncat {current}\n"
-        result = self.run_gate("c" * 40, live)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("EVIDENCE_DIR", result.stderr)
-        for sha, gh in (("d" * 40, live), ("c" * 40, "#!/bin/sh\nexit 23\n")):
-            with self.subTest(sha=sha, gh=gh):
-                result = self.run_gate(sha, gh)
-                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+    def test_pr_gate_cli_needs_no_scan_evidence_or_live_merge_candidate(self):
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotEqual(self.run_gate(SCAN_RESULT="failure").returncode, 0)
+        self.assertNotEqual(self.run_gate(SCAN_REQUIRED="true").returncode, 0)
 
 
 class ReleaseDigestTests(unittest.TestCase):

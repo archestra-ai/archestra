@@ -1,0 +1,103 @@
+{
+  "name": "relvato__remote-mcp",
+  "display_name": "Relvato MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48cmVjdCB4PSI0IiB5PSI0IiB3aWR0aD0iNTYiIGhlaWdodD0iNTYiIHJ4PSIxNiIgZmlsbD0iIzMxNjI2MyIvPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAuMjUgLTIuMjUpIj48cGF0aCBkPSJNIDE1IDQ2IEggMjUgViAzNiBIIDM1IFYgMjYgSCAzOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjNmN2Y1IiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjQ1IiBjeT0iMjYiIHI9IjYuNSIgZmlsbD0iI2YzZjdmNSIvPjxjaXJjbGUgY3g9IjQ1IiBjeT0iMjYiIHI9IjIuOCIgZmlsbD0iIzMxNjI2MyIvPjwvZz48L3N2Zz4=",
+  "description": "Relvato's hosted MCP server for its continuous website-monitoring service. An AI assistant can list your monitored sites and their checks, add sites and checks, start a scan, and read run results, including a ready-to-use fix prompt for a failed check. It works with the websites in your Relvato account.",
+  "long_description": "Relvato monitors websites by running real checks against them (uptime, SSL, errors, SEO, visual regression, checkout, and core web vitals) and re-running them when the site changes. This remote MCP server connects AI agents to site monitoring and diagnostics.",
+  "author": {
+    "name": "Relvato",
+    "url": "https://www.relvato.com"
+  },
+  "homepage": "https://www.relvato.com",
+  "documentation": "https://www.relvato.com/developers",
+  "support": "https://www.relvato.com/contact",
+  "instructions": "Create a Relvato account at https://www.relvato.com and generate an API key under Settings -> API keys. Enter the raw API key in Access Token without the Bearer prefix; Archestra adds Authorization: Bearer when connecting over Streamable HTTP. This service uses static Bearer authentication, not an OAuth flow. Tool inputs are sent to Relvato to inspect websites configured in your account. Connection from the Archestra application has not been independently verified for this entry.",
+  "tools": [
+    {
+      "name": "list_sites",
+      "description": "List the websites in this Relvato account, with whether each is ready to run checks."
+    },
+    {
+      "name": "add_site",
+      "description": "Start monitoring a website. Returns the site and the setup step the owner must complete before any check runs: connect the WordPress plugin, or verify the domain (the only option for non-WordPress sites). If the account already has a site on the same domain, that site is returned instead of a duplicate."
+    },
+    {
+      "name": "verify_site",
+      "description": "Check whether the site's ownership is proven: probes the WordPress plugin connection and/or looks for the domain-verification DNS TXT record / meta tag. Returns the updated setup state."
+    },
+    {
+      "name": "site_overview",
+      "description": "Plain-language health verdict for a site: what needs attention (real issues vs likely false positives), each check with its latest run and schedule, setup state, recommended checks not yet added, and the account's run usage."
+    },
+    {
+      "name": "list_checks",
+      "description": "The checks that can be added to a site: key, what it catches, whether the current plan allows it, whether it's recommended for this site, and whether it's already added."
+    },
+    {
+      "name": "add_checks",
+      "description": "Add checks to a site by key (from list_checks). Each key reports added / exists / rejected with the reason (plan, active-check limit, needs the WordPress plugin). New checks run on their default triggers: a weekly (some daily) schedule, plus a re-run when the site changes (WordPress plugin updates, or pushes via the GitHub App)."
+    },
+    {
+      "name": "update_check",
+      "description": "Turn a check on or off, or change its schedule. Only the fields you pass change. Schedules faster than daily need a paid plan."
+    },
+    {
+      "name": "trigger_scan",
+      "description": "Run a site's enabled checks now — or one check with checkId, even if it's turned off. Each run counts toward the monthly run quota. Returns the runIds to follow with get_run."
+    },
+    {
+      "name": "list_runs",
+      "description": "Recent runs, newest first — optionally for one site. Each has the check (checkId, its key as journey, checkName), status, trigger, timing and its error / warning; get_run has the detail."
+    },
+    {
+      "name": "get_run",
+      "description": "One run in detail: status, error and warnings (ignored ones marked), each step, visual comparisons, metrics, and the dashboard link where the user can review or accept changes. Large metrics are compacted, never the findings: daily series become summaries and what was left out is listed in metricsTrimmed."
+    },
+    {
+      "name": "get_fix_prompt",
+      "description": "For a run that failed or found a problem: the same brief Relvato's own AI answers when the user clicks \"Suggest a fix\" — the site's detected stack, what the check verifies, what changed on the site just before, the exact error and findings, whether it was already failing earlier, and for Google / Bing Search the evidence that rules causes out. Use it as context to explain the likely cause and fixes; applying a fix stays with the user."
+    },
+    {
+      "name": "get_alert_settings",
+      "description": "Who is told about what: how often (instant, daily / weekly digest), the minimum severity, each channel (email, Slack, webhook — whether the plan includes it, whether it's set up, paused, and `on` = alerts actually go out on it), which sites are muted and which check types go to which channel (only channels that are on). Never includes webhook URLs or secrets. Changing them is done by the user in Alert settings."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "website monitoring",
+    "uptime",
+    "regression testing",
+    "wordpress",
+    "woocommerce",
+    "checkout monitoring",
+    "core web vitals",
+    "security",
+    "seo"
+  ],
+  "user_config": {
+    "access_token": {
+      "type": "string",
+      "title": "Access Token",
+      "description": "Your Relvato API key (starts with rlv_), without the Bearer prefix. Create in Relvato under Settings -> API keys.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": null,
+  "category": "Monitoring",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://app.relvato.com/api/mcp",
+    "docs_url": "https://www.relvato.com/developers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

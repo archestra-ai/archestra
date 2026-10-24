@@ -18,7 +18,7 @@ FROM ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim@sha256:d935373e69f9507
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 unzip zip \
- && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \

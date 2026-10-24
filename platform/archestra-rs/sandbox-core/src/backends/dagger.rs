@@ -55,7 +55,7 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     "npm",
     // Debian's nodejs and curl decode Brotli through the shared libbrotli1. The
     // base image already ships it, so it must be named here to be upgraded to
-    // the trixie-security build (CVE-2026-111497).
+    // the bookworm-security build (CVE-2026-111497).
     "libbrotli1",
     "unzip",
     "zip",

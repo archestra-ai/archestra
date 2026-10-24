@@ -30,13 +30,19 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
+  return getGuardrailsDeploymentFromSnapshot();
+}
+
+export async function getGuardrailsDeploymentFromSnapshot(
+  snapshot?: Parameters<typeof GuardrailsDeploymentModel.get>[0],
+) {
   const {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
     annotatorModelId,
     annotatorLlmApiKeyId,
-  } = await GuardrailsDeploymentModel.get();
+  } = await GuardrailsDeploymentModel.get(snapshot);
   return {
     enabled,
     unsupportedClientAction,

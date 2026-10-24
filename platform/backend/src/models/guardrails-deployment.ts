@@ -6,8 +6,10 @@ import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 const table = schema.guardrailsDeploymentTable;
 const id = "global";
 class GuardrailsDeploymentModel {
-  static async get() {
-    const [row] = await GuardrailsDeploymentModel.read.get().execute();
+  static async get(snapshot?: { row: typeof table.$inferSelect | null }) {
+    const row = snapshot
+      ? snapshot.row
+      : (await GuardrailsDeploymentModel.read.get().execute())[0];
     return (
       row ?? {
         id,

@@ -64,10 +64,10 @@ import {
   LlmProviderApiKeyModel,
   ModelModel,
   OrganizationModel,
-  TeamModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import ProxyRequestContextModel from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
@@ -114,7 +114,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
-import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -1090,11 +1090,33 @@ export async function handleLLMProxy<
   const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
     isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
+  const actualModel = stripClaudeContextVariantSuffix(
+    requestAdapter.getModel(),
+  );
+  const requestContext = await ProxyRequestContextModel.read({
+    organizationId: resolvedAgent.organizationId,
+    provider: providerName,
+    modelId: actualModel,
+    userId,
+    billingTeamId,
+    virtualKeyId:
+      authMethod === "virtual_key"
+        ? virtualKeyId
+        : authMethod === "passthrough_virtual_key"
+          ? passthroughVirtualKeyId
+          : undefined,
+    oauthClientId:
+      authMethod === "oauth_client_credentials"
+        ? authenticatedApp?.id
+        : undefined,
+  });
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-  } = await getGuardrailsDeployment();
+  } = await getGuardrailsDeploymentFromSnapshot({
+    row: requestContext.guardrails,
+  });
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
@@ -1248,19 +1270,9 @@ export async function handleLLMProxy<
       }
     }
 
-    // A client may mark a Claude id with a context variant (`…[1m]`). It names
-    // the same model at the same price, so it is dropped for bookkeeping —
-    // otherwise the request records a model no catalog lists, which can never be
-    // priced. The request itself is forwarded with the id the client sent.
-    const actualModel = stripClaudeContextVariantSuffix(
-      requestAdapter.getModel(),
-    );
-
-    // Ensure a model entry exists for cost tracking
-    const catalogModel = await ModelModel.findIdentityByProviderAndModelId(
-      providerName,
-      actualModel,
-    );
+    // The catalog identity and independent metadata were read together after
+    // authentication. A first sighting still creates/enriches the model here.
+    const catalogModel = requestContext.model;
     const discovered = catalogModel
       ? []
       : [await ModelModel.ensureModelExists(actualModel, providerName)].filter(
@@ -1316,13 +1328,7 @@ export async function handleLLMProxy<
       lookups,
     );
 
-    // Fetch the requesting user's teams (with labels) for trace span attributes.
-    const userTeams = userId
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId,
-          organizationId: resolvedAgent.organizationId,
-        })
-      : [];
+    const userTeams = requestContext.userTeams;
 
     // Enforce model permissions before any upstream call. Checked on the model
     // actually being invoked (post cost-optimization rewrite), and against the
@@ -1334,6 +1340,13 @@ export async function handleLLMProxy<
       organizationId: resolvedAgent.organizationId,
       authenticatedUserId,
       catalogModel: catalogModel ?? undefined,
+      policySnapshot: catalogModel
+        ? {
+            organizationId: resolvedAgent.organizationId,
+            modelId: catalogModel.id,
+            policies: requestContext.modelPolicies,
+          }
+        : undefined,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
@@ -1737,14 +1750,17 @@ export async function handleLLMProxy<
         entity,
       ]),
     );
-    attributionLabels = await resolveRequestAttributionLabels({
-      organizationId: resolvedAgent.organizationId,
-      authMethod,
-      virtualKeyId,
-      passthroughVirtualKeyId,
-      oauthClientId: authenticatedApp?.id,
-      billingTeamId,
-    });
+    attributionLabels = await resolveRequestAttributionLabels(
+      {
+        organizationId: resolvedAgent.organizationId,
+        authMethod,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        oauthClientId: authenticatedApp?.id,
+        billingTeamId,
+      },
+      requestContext.attributionRows,
+    );
     const ctx: LLMProxyContext<TRequest> = {
       attributionLabels,
       throughput: new LlmThroughput({

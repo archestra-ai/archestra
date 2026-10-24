@@ -10,6 +10,10 @@ on:
     - cron: "0 3 * * *" # daily 03:00 UTC
   workflow_dispatch:
     inputs:
+      check_gke_access_only:
+        description: "Check CI DNS access to GKE without running a benchmark or deployment"
+        type: boolean
+        default: false
       envs:
         description: "Comma-separated env ids to run (empty = the daily default)"
         required: false
@@ -31,10 +35,46 @@ env:
   GCS_BUCKET: gs://archestra-bench-history
 
 jobs:
+  check-gke-access:
+    name: Check GKE DNS access
+    if: github.event_name == 'workflow_dispatch' && inputs.check_gke_access_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Shared Google authentication action.
+      id-token: write # Existing Workload Identity Federation identity.
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          setup_gcloud: "true"
+
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Verify kubectl and Helm through DNS
+        env:
+          GKE_USE_DNS_ENDPOINT: ${{ vars.GKE_USE_DNS_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          test "$GKE_USE_DNS_ENDPOINT" = true
+          gcloud container clusters get-credentials "$GKE_CLUSTER" \
+            --zone "$GKE_ZONE" --project "$GKE_PROJECT" --dns-endpoint
+          server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+          [[ "$server" == https://*.gke.goog ]]
+          kubectl get deployment archestra-platform -n archestra -o name --request-timeout=20s
+          kubectl get deployment archestra-demo -n archestra-demo -o name --request-timeout=20s
+          helm status archestra-platform -n archestra >/dev/null
+          helm status archestra-demo -n archestra-demo >/dev/null
+          test "$(kubectl auth can-i create pods/exec -n archestra || true)" = no
+          test "$(kubectl auth can-i get secrets -n kube-system || true)" = no
+
   benchmark:
     name: Run benchmark
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && !inputs.check_gke_access_only) ||
       github.event_name == 'schedule'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:

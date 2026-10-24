@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type { Limit, LimitEntityType } from "@/types/limit";
 import {
   readBucket,
@@ -8,6 +9,10 @@ import {
   type ThroughputBucket,
 } from "@/utils/throughput-bucket";
 import CacheEntryModel from "./cache-entry";
+import {
+  limitEntitiesCondition,
+  limitEntityParameters,
+} from "./limit-entity-scope";
 
 /** Once-only accounting receipt; only request-count capacity is reserved. */
 export type ThroughputReceipt = {
@@ -332,6 +337,12 @@ class LlmThroughputModel {
     connection: Transaction | typeof db = db,
   ) {
     if (!entities.length) return [];
+    if (connection === db) {
+      const parameters = limitEntityParameters({});
+      for (const { entityType, entityId } of entities)
+        parameters[entityType].push(entityId);
+      return LlmThroughputModel.rulesByEntities.get().execute(parameters);
+    }
     return connection
       .select()
       .from(schema.limitsTable)
@@ -350,6 +361,15 @@ class LlmThroughputModel {
       )
       .orderBy(schema.limitsTable.id);
   }
+
+  private static readonly rulesByEntities = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.limitsTable)
+      .where(and(sharedRuleCondition(), limitEntitiesCondition()))
+      .orderBy(schema.limitsTable.id)
+      .prepare("archestra_throughput_rules_by_entities"),
+  );
 }
 
 export default LlmThroughputModel;

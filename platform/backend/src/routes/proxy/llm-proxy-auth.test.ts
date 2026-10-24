@@ -1480,6 +1480,11 @@ describe("validatePassthroughVirtualKey", () => {
       agent: proxy,
     });
     expect(result.userId).toBe(owner.id);
+    expect(result.user).toEqual({
+      id: owner.id,
+      email: owner.email,
+      name: owner.name,
+    });
   });
 
   test("403 when the owner cannot access the proxy", async ({

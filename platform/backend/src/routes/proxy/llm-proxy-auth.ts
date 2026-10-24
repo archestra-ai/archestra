@@ -35,6 +35,7 @@ import {
   OAuthAccessTokenModel,
   OAuthClientModel,
   OrganizationModel,
+  UserModel,
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -132,6 +133,7 @@ export interface VirtualKeyValidationResult {
 export interface PassthroughVirtualKeyResult {
   /** Owner of the passthrough key — the acting Archestra user. */
   userId: string;
+  user: NonNullable<Awaited<ReturnType<typeof UserModel.getProxyIdentity>>>;
   passthroughVirtualKeyId: string;
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
@@ -360,11 +362,11 @@ export async function validatePassthroughVirtualKey(params: {
   // proxy's organization — keys are not purged on membership removal, and the
   // agent-access check below passes for any org-scoped agent regardless of
   // membership.
-  const member = await MemberModel.getByUserId(
+  const user = await UserModel.getProxyIdentity(
     virtualKey.authorId,
     agent.organizationId,
   );
-  if (!member) {
+  if (!user) {
     throw noAccessError;
   }
 
@@ -393,6 +395,7 @@ export async function validatePassthroughVirtualKey(params: {
 
   return {
     userId: virtualKey.authorId,
+    user,
     passthroughVirtualKeyId: virtualKey.id,
     billingTeamId: virtualKey.billingTeamId ?? undefined,
   };

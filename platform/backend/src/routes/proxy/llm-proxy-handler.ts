@@ -503,7 +503,9 @@ export async function handleLLMProxy<
   let serviceAccountId = authOverride?.serviceAccountId;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
-  let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let resolvedUser: LLMProxyContext<TRequest>["resolvedUser"] = userId
+    ? await UserModel.getById(userId)
+    : null;
   let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
   // The first credential that names a billing team pays; the passthrough key
@@ -653,7 +655,7 @@ export async function handleLLMProxy<
       billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
-      resolvedUser = await UserModel.getById(userId);
+      resolvedUser = passthroughResult.user;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure({

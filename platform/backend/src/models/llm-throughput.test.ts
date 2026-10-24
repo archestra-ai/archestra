@@ -6,6 +6,42 @@ import LimitModel from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
 describe("shared LLM throughput admission", () => {
+  test("observes rules added and deleted after an empty lookup without leaking between entity scopes", async ({
+    makeOrganization,
+  }) => {
+    const first = await makeOrganization();
+    const other = await makeOrganization();
+    const scope = (organizationId: string) => ({
+      entities: [
+        { entityType: "organization" as const, entityId: organizationId },
+      ],
+      model: "a",
+    });
+    await expect(LlmThroughputModel.admit(scope(first.id))).resolves.toEqual({
+      reservation: null,
+    });
+    const rule = await LimitModel.create({
+      entityType: "organization",
+      entityId: first.id,
+      limitType: "requests",
+      cleanupInterval: "calendar_day",
+      limitValue: 1,
+    });
+    await LlmThroughputModel.admit(scope(first.id));
+    await expect(
+      LlmThroughputModel.admit(scope(first.id)),
+    ).resolves.toMatchObject({
+      denied: { entityType: "organization", limitType: "requests" },
+    });
+    await expect(LlmThroughputModel.admit(scope(other.id))).resolves.toEqual({
+      reservation: null,
+    });
+    await LimitModel.delete(rule.id);
+    await expect(LlmThroughputModel.admit(scope(first.id))).resolves.toEqual({
+      reservation: null,
+    });
+  });
+
   test("ignores old forecast counters and admits huge output bounds without prediction", async ({
     makeOrganization,
   }) => {

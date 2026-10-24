@@ -29,7 +29,6 @@ import type {
   UpdateLimit,
 } from "@/types";
 import { BudgetCleanupIntervalSchema, CreateLimitSchema } from "@/types";
-import { LimitEntityTypeSchema } from "@/types/limit";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -41,6 +40,10 @@ import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
 import CacheEntryModel from "./cache-entry";
 import { LimitLabelModel } from "./entity-labels";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
+import {
+  limitEntitiesCondition,
+  limitEntityParameters,
+} from "./limit-entity-scope";
 import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
 
@@ -2464,28 +2467,3 @@ function normalizeLimitModels(models: string[] | null | undefined) {
 }
 
 export default LimitModel;
-
-/** Stable bind shape for every entity set; only compiled SQL is reused. */
-function limitEntityParameters(
-  entities: Partial<Record<LimitEntityType, string | readonly string[]>>,
-) {
-  return Object.fromEntries(
-    LimitEntityTypeSchema.options.map((type) => {
-      const ids = entities[type];
-      return [
-        type,
-        ids === undefined ? [] : typeof ids === "string" ? [ids] : [...ids],
-      ];
-    }),
-  ) as Record<LimitEntityType, string[]>;
-}
-function limitEntitiesCondition(): SQL {
-  return or(
-    ...LimitEntityTypeSchema.options.map((type) =>
-      and(
-        eq(schema.limitsTable.entityType, type),
-        sql`${schema.limitsTable.entityId} = ANY(${sql.placeholder(type)}::text[])`,
-      ),
-    ),
-  ) as SQL;
-}

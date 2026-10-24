@@ -66,9 +66,9 @@ COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpic
 # Bookworm seeds new venvs from an old setuptools wheel. Keep the bootstrap
 # wheel and system pip on fixed, checksum-verified versions.
 RUN curl -fsSL \
-      "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl" \
-      -o /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl \
- && echo "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922  /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl" | sha256sum -c - \
+      "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl" \
+      -o /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl \
+ && echo "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670  /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl" | sha256sum -c - \
  && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
  && curl -fsSL \
       "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
@@ -81,7 +81,7 @@ RUN curl -fsSL \
  && chmod 0755 /usr/local/bin/pip \
  && ln -s pip /usr/local/bin/pip3 \
  && python3 -m venv /tmp/agent-python-check \
- && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '80.9.0'" \
+ && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '84.0.0'" \
  && rm -rf /tmp/agent-python-check
 
 # Tool environments and browsers stay outside HOME so a workspace mount cannot

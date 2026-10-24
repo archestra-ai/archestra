@@ -3,7 +3,7 @@ import logger from "@/logging";
 import LlmThroughputModel, {
   type ThroughputReceipt,
 } from "@/models/llm-throughput";
-import type { LimitEntityType } from "@/types/limit";
+import type { Limit, LimitEntityType } from "@/types/limit";
 import type { UsageView } from "@/types/llm-provider";
 
 export class ThroughputError extends Error {
@@ -40,6 +40,7 @@ export class LlmThroughput {
       model: string;
       provider?: SupportedProvider;
       subscription?: boolean;
+      rules?: Limit[];
     },
   ) {}
 

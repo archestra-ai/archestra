@@ -266,8 +266,8 @@ describe("withKbObservability", () => {
     expect(await kbInteractions("knowledge:embedding")).toHaveLength(0);
   });
 
-  it("still returns result when InteractionModel.create fails", async () => {
-    vi.spyOn(InteractionModel, "create").mockRejectedValueOnce(
+  it("still returns result when InteractionModel.record fails", async () => {
+    vi.spyOn(InteractionModel, "record").mockRejectedValueOnce(
       new Error("DB error"),
     );
 

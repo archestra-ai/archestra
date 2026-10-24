@@ -33,6 +33,7 @@ import sentryClient from "@/observability/sentry";
 import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
 import { getHttpInstrumentationConfig } from "./http-instrumentation";
+import { infrastructureSpansEnabled } from "./infrastructure-spans";
 
 const {
   api: { name, version },
@@ -57,7 +58,7 @@ const {
  * When Sentry is not configured, auto-instrumentations are only enabled if
  * ARCHESTRA_OTEL_VERBOSE_TRACING=true.
  */
-const enableAutoInstrumentations = sentryEnabled || verboseTracing;
+const enableAutoInstrumentations = infrastructureSpansEnabled();
 
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
 const traceExporter = new OTLPTraceExporter(traceExporterConfig);

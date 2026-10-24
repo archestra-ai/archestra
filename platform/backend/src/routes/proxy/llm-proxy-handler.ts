@@ -1785,6 +1785,7 @@ export async function handleLLMProxy<
         model: actualModel,
         provider: providerName,
         subscription: billingMode === "subscription",
+        rules: requestContext.throughputRules,
       }),
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
@@ -4211,7 +4212,7 @@ async function persistProxyInteraction({
     attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };
-  await InteractionModel.create(
+  await InteractionModel.record(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
       : record,

@@ -1,0 +1,54 @@
+diff --git a/lib/cloudAdapter.js b/lib/cloudAdapter.js
+--- a/lib/cloudAdapter.js
++++ b/lib/cloudAdapter.js
+@@ -47,7 +47,7 @@
+ const botframework_connector_1 = require("botframework-connector");
+ const botframework_streaming_1 = require("botframework-streaming");
+ // Note: this is _okay_ because we pass the result through `validateAndFixActivity`. Should not be used otherwise.
+-const ActivityT = z.custom((val) => z.record(z.unknown()).safeParse(val).success, { message: 'Activity' });
++const ActivityT = z.custom((val) => z.record(z.string(), z.unknown()).safeParse(val).success, { message: 'Activity' });
+ /**
+  * An adapter that implements the Bot Framework Protocol and can be hosted in different cloud environmens both public and private.
+  */
+@@ -89,7 +89,7 @@
+             // Ensure we have a parsed request body already. We rely on express/restify middleware to parse
+             // request body and azure functions, which does it for us before invoking our code. Warn the user
+             // to update their code and return an error.
+-            if (!z.record(z.unknown()).safeParse(req.body).success) {
++            if (!z.record(z.string(), z.unknown()).safeParse(req.body).success) {
+                 return end(botbuilder_core_1.StatusCodes.BAD_REQUEST, '`req.body` not an object, make sure you are using middleware to parse incoming requests.');
+             }
+             const activity = (0, activityValidator_1.validateAndFixActivity)(ActivityT.parse(req.body));
+diff --git a/lib/teamsActivityHandler.js b/lib/teamsActivityHandler.js
+--- a/lib/teamsActivityHandler.js
++++ b/lib/teamsActivityHandler.js
+@@ -52,7 +52,7 @@
+     Title: z.string(),
+     StartTime: z.string(),
+ })
+-    .nonstrict();
++    .passthrough();
+ const TeamsMeetingEndT = z
+     .object({
+     Id: z.string(),
+@@ -61,7 +61,7 @@
+     Title: z.string(),
+     EndTime: z.string(),
+ })
+-    .nonstrict();
++    .passthrough();
+ /**
+  * Adds support for Microsoft Teams specific events and interactions.
+  *
+diff --git a/lib/setSpeakMiddleware.js b/lib/setSpeakMiddleware.js
+--- a/lib/setSpeakMiddleware.js
++++ b/lib/setSpeakMiddleware.js
+@@ -46,7 +46,7 @@
+         const itemParsed = z
+             .object({ tagName: z.string(), children: z.array(z.unknown()) })
+             .partial()
+-            .nonstrict()
++            .passthrough()
+             .safeParse(item);
+         if (itemParsed.success) {
+             if (itemParsed.data.tagName === tag) {

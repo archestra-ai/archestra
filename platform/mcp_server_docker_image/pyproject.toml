@@ -29,4 +29,6 @@ dependencies = [
   "cryptography>=50.0.0",
   # click < 8.3.3: CVE-2026-7246 (pulled in via typer and uvicorn)
   "click>=8.3.3",
+  # certifi < 2026.10.19: GHSA-6q48-6c7w-9gw2 (certificate validation).
+  "certifi>=2026.10.19",
 ]

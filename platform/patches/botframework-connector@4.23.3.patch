@@ -1,0 +1,45 @@
+diff --git a/lib/auth/botFrameworkClientImpl.js b/lib/auth/botFrameworkClientImpl.js
+--- a/lib/auth/botFrameworkClientImpl.js
++++ b/lib/auth/botFrameworkClientImpl.js
+@@ -70,7 +70,7 @@
+     });
+     return (input, init) => __awaiter(void 0, void 0, void 0, function* () {
+         const url = z.string().parse(input);
+-        const { body, headers } = z.object({ body: z.string(), headers: z.record(z.string()).optional() }).parse(init);
++        const { body, headers } = z.object({ body: z.string(), headers: z.record(z.string(), z.string()).optional() }).parse(init);
+         const response = yield axiosInstance.post(url, body, {
+             headers,
+         });
+@@ -124,7 +124,7 @@
+                 toUrl: z.string(),
+                 serviceUrl: z.string(),
+                 conversationId: z.string(),
+-                activity: z.record(z.unknown()),
++                activity: z.record(z.string(), z.unknown()),
+             }).parse({
+                 fromBotId,
+                 toBotId,
+diff --git a/lib/auth/userTokenClient.js b/lib/auth/userTokenClient.js
+--- a/lib/auth/userTokenClient.js
++++ b/lib/auth/userTokenClient.js
+@@ -44,7 +44,7 @@
+         z.object({
+             appId: z.string(),
+             connectionName: z.string(),
+-            activity: z.record(z.unknown()),
++            activity: z.record(z.string(), z.unknown()),
+         }).parse({
+             appId,
+             connectionName,
+diff --git a/lib/auth/userTokenClientImpl.js b/lib/auth/userTokenClientImpl.js
+--- a/lib/auth/userTokenClientImpl.js
++++ b/lib/auth/userTokenClientImpl.js
+@@ -89,7 +89,7 @@
+     getSignInResource(connectionName, activity, finalRedirect) {
+         return __awaiter(this, void 0, void 0, function* () {
+             z.object({
+-                activity: z.record(z.unknown()),
++                activity: z.record(z.string(), z.unknown()),
+                 connectionName: z.string(),
+             }).parse({
+                 activity,

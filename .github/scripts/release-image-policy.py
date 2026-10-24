@@ -184,8 +184,15 @@ def main():
             spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("release-candidate.py"))
             candidate = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(candidate)
-            candidate.validate_evidence(Path(os.environ["EVIDENCE_DIR"]),
-                                        candidate_matrix(Path(__file__).resolve().parents[2]))
+            records = candidate.validate_evidence(Path(os.environ["EVIDENCE_DIR"]),
+                                                 candidate_matrix(Path(__file__).resolve().parents[2]))
+            branch = (event["merge_group"]["base_ref"].removeprefix("refs/heads/") if event_name == "merge_group"
+                      else event["pull_request"]["base"]["ref"])
+            index = {"schema": 1, **candidate.identity(), "branch": branch, "records": records,
+                     "created_at": candidate.dt.datetime.now(candidate.dt.timezone.utc).isoformat()}
+            output = Path(os.environ["CANDIDATE_INDEX"])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(index))
         print("Release images scanned for the current candidate." if required else
               "No release image scan required for this event; publication scans its own artifacts.")
     else:

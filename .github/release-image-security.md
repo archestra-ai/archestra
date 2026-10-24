@@ -53,40 +53,79 @@ failed/skipped/cancelled/neutral scan block all compatibility contexts. Job
 success alone cannot supply missing evidence; records from earlier rerun attempts
 are not selected.
 
-## Immutable promotion remains a limitation
+## Immutable publication handoff
 
-Publication still **rebuilds** images. The saved archives establish which bytes
-passed candidate scans, but this change does not promote them across runs.
-Matching source and explicit inputs cannot make a networked Docker build
-reproducible: package repositories, external downloads, cache state, generated
-IDs and the difference between a queue/test-merge commit and its eventual merge
-can still change the output. New advisories can also appear after a scan even
-when the image bytes remain identical.
+Publication uses the retained Docker archives; it does not rebuild release
+images. The existing release job selects the latest queue scan of the exact
+release tree on the correct branch. A failed, pending, cancelled, incomplete,
+expired or unavailable latest matching run cannot fall back to an older success.
+PR and manual-dispatch runs are not publication evidence.
 
-Safe reuse would require a trusted handoff that verifies the source **tree**
-(synthetic and final commit IDs may differ), release version, complete image and
-architecture inventory, build inputs, successful latest workflow attempt, age,
-archive checksum and loaded image identity. Publication must re-scan those exact
-bytes against current advisories before assigning version tags. Expired, missing,
-unavailable or mismatched archives must fail, never fall back to an unverified
-rebuild or an older successful run.
+The gate uploads a complete candidate index only after every native leg and the
+revision/input checks pass. Selection verifies repository, workflow path, queue
+branch, source SHA/tree, latest run attempt, gate and leg results, all inventory
+entries, age and GitHub artifact checksums. Each image archive must also match
+its recorded payload checksum and build metadata. Synthetic and final commit IDs
+can differ; their trees and explicit build inputs must agree.
 
-The current image jobs do not declare the `actions: read` permission required for
-[cross-run artifact downloads](https://docs.github.com/en/rest/actions/artifacts#download-an-artifact).
-This task prohibits expanding permissions. The existing release App token's
-artifact authority is not assumed or propagated to image jobs. A trusted
-cross-run promotion design under the existing permission constraint remains
-unfinished; these PRs are a coverage/parity improvement, not that stronger
-guarantee. Independent publication scans and final release gates remain in place.
+The existing `archestra-ci` release App already has `actions: read`. This was
+confirmed using read-only installation metadata (App ID 1667068, matching the
+release PR author), not by changing the installation or requesting extra token
+permissions. Its token remains in the original release job. That job relays one
+verified architecture archive at a time into same-run artifacts, limiting disk
+usage and keeping App credentials out of publisher jobs, outputs and artifacts.
+Publisher token permissions are unchanged. Relay, digest and image-reference
+artifact names include the publication attempt, so a new attempt cannot mix
+earlier transfer or publication results; it must relay the complete set again.
 
-## Verification still required
+Publisher jobs verify the relayed archive, source tree, version and previous
+asset inputs, load it, and check the original image config ID and architecture.
+They push a run/attempt-specific intermediate reference, verify the registry
+config ID, and pass the resulting immutable architecture index to the existing
+publication scans. Both architecture scans must pass before a version image tag
+is assigned. There is no missing-artifact or legacy-release rebuild fallback.
+Older interrupted releases without this evidence fail closed; this work does
+not run or repair those releases.
 
-The deterministic policy fixtures exercise mixed queue groups, stale/live
-revisions, complete inventories, both architectures and failure results without
-building vulnerable images or reproducing exploits. Ordinary draft-PR hosted
-checks run those fixtures but intentionally skip expensive candidate builds.
-A real release-PR/queue run is still required to establish native build/scan
-duration and artifact retention behavior. Both live queues currently allow 30
-minutes for required checks; runner capacity or larger builds can fail closed on
-that timeout. No live rules, pending releases, aliases or release approvals were
-changed to test this work.
+The guarantee is identity of the scanned runtime config and rootfs layers.
+Docker archives and registry manifests have different encodings and digests;
+config/rootfs identity, archive checksums and registry digests are checked at
+their respective boundaries. Docker save does not retain Buildx's optional OCI
+attestation manifests. The complete authenticated Actions candidate index is
+retained as the handoff audit record; consumers requiring Buildx attestation
+manifests need an OCI-preserving extension before adopting this publication path.
+No attestation is fabricated or claimed to have been verified.
+
+New advisories after the candidate scan can still make publication fail even
+with identical image bytes. Artifact expiration, registry failures, runner
+capacity and access errors can also fail closed. Green candidate checks are not
+a promise of successful publication under every later condition.
+
+## Verification and rollout
+
+The deterministic fixtures execute the actual release-PR and merge-group gate
+CLI against local Git commits and controlled GitHub responses. Handoff fixtures
+exercise selection, complete inventories, both architecture archives, synthetic
+versus final commit IDs, checksum and metadata tampering, rerun attempts, latest
+failures, wrong workflow/event/repository/branch, and same-run transfer and image
+identity checks. Docker/registry operations are stubbed at their external boundary;
+these tests never build vulnerable images, reproduce exploits, or push images.
+
+Regular feature and fork PRs skip candidate Docker CVE scans. Their hosted policy
+jobs exercise these fixtures, and workflow-input changes can independently run
+catalog build validation. Neither is a release execution.
+
+A bounded hosted rehearsal creates tiny marker-only scratch images on the two
+work branches. Explicit handoff-fixture dispatch skips every production step,
+mints a read-only token in the existing App job, relays the fixture across runs,
+and loads both archives in a consumer without the App token. It does not scan
+CVEs, push images, create tags or publish releases. Fixture artifacts cannot be
+selected as production scan evidence.
+
+Real catalog archive size, native build/scan duration, relay throughput and
+registry transport still need operational review before marking these drafts
+ready. Both live queues allow 30 minutes for required
+checks; runner capacity or larger builds can fail closed at that timeout. No live
+rules, credentials, pending releases, aliases or approvals are changed for this
+verification. Both PRs should remain draft until those operational checks and the
+attestation-format change have been reviewed.

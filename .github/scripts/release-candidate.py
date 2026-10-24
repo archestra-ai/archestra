@@ -101,6 +101,7 @@ def validate_evidence(directory, matrix):
         actual.add(pair)
     if actual != expected:
         raise ValueError(f"Incomplete scan inventory: missing {sorted(expected - actual)}")
+    return [json.loads(path.read_text()) for path in sorted(directory.iterdir())]
 
 
 def main():

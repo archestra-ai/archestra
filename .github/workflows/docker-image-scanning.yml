@@ -149,8 +149,18 @@ jobs:
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
           SCAN_RESULT: ${{ needs.scan-release-images.result }}
           EVIDENCE_DIR: ${{ runner.temp }}/release-evidence
+          CANDIDATE_INDEX: ${{ runner.temp }}/release-candidate-index.json
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/release-image-policy.py gate
+
+      - name: Retain complete successful candidate index
+        if: ${{ needs.classify.outputs.scan == 'true' }}
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-candidate-index-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate-index.json
+          if-no-files-found: error
+          retention-days: 1
 
   # Compatibility bridge for current main/release rulesets. These jobs depend on
   # the fail-closed gate, so a skipped/failed scan cannot turn a release PR green.
@@ -201,3 +211,28 @@ jobs:
           image-sha: ${{ inputs.image-sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+
+  handoff-fixture:
+    name: Build non-publishing handoff fixture
+    if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout fixture policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build harmless scratch-image archives
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture
+          FIXTURE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/release-handoff-fixture.py create
+      - name: Retain non-publishing fixture
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-handoff-fixture-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/handoff-fixture/*
+          if-no-files-found: error
+          retention-days: 1

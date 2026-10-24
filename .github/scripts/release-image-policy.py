@@ -128,15 +128,61 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
         raise ValueError("Scans are not associated with the release PR's current merge candidate")
 
 
-def validate_queue_release_source(event, repository, prs, release_tree, group_tree):
+def queue_release_pr(event, repository, prs):
     group = event["merge_group"]
     if len(prs) != 1 or not requires_scan("pull_request", {"pull_request": prs[0]}, repository):
         raise ValueError("Queue version change requires exactly one open Release Please PR")
     pr = prs[0]
-    if pr["state"] != "open" or pr["base"]["sha"] != group["base_sha"]:
+    if (pr["state"] != "open" or pr["base"]["sha"] != group["base_sha"]
+            or group["base_ref"] != f"refs/heads/{pr['base']['ref']}"):
         raise ValueError("Release PR base changed during queue scanning")
+    return pr
+
+
+def queue_release_tree(event, repository, prs):
+    pr = queue_release_pr(event, repository, prs)
+    # GitHub computes merge_commit_sha asynchronously. It may be absent or refer
+    # to an older test merge even when head/base are current. Reconstruct from
+    # those immutable commits without touching the checked-out/scanned files.
+    try:
+        tree = subprocess.check_output(
+            ["git", "merge-tree", "--write-tree", pr["base"]["sha"], pr["head"]["sha"]],
+            text=True, stderr=subprocess.PIPE,
+        ).strip()
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"Cannot reconstruct release PR #{pr['number']} from base "
+                         f"{pr['base']['sha']} and head {pr['head']['sha']}; "
+                         "merge conflicts or missing Git objects") from error
+    if not SHA.fullmatch(tree):
+        raise ValueError("Release merge reconstruction did not return one immutable tree")
+    return tree
+
+
+def validate_queue_release_source(event, repository, prs, release_tree, group_tree):
+    pr = queue_release_pr(event, repository, prs)
     if not SHA.fullmatch(release_tree or "") or release_tree != group_tree:
-        raise ValueError("Mixed queue group differs from the release merge candidate; validate the release in its own group")
+        raise ValueError("Mixed queue group differs from the release merge candidate; "
+                         f"PR #{pr['number']} base={pr['base']['sha']} head={pr['head']['sha']} "
+                         f"release_tree={release_tree} group_tree={group_tree}; "
+                         "validate the release in its own group")
+
+
+def recheck_queue_release_source(event, repository, expected):
+    current = json.loads(subprocess.check_output(
+        ["gh", "api", f"repos/{repository}/pulls/{int(expected['number'])}"], text=True,
+    ))
+    queue_release_pr(event, repository, [current])
+    if current["number"] != expected["number"] or any(
+        current[field][key] != expected[field][key]
+        for field in ("head", "base") for key in ("sha", "ref")
+    ):
+        raise ValueError("Release PR changed during queue source validation")
+    ref = event["merge_group"]["head_ref"].removeprefix("refs/")
+    live = json.loads(subprocess.check_output(
+        ["gh", "api", f"repos/{repository}/git/ref/{ref}"], text=True,
+    ))["object"]["sha"]
+    if live != event["merge_group"]["head_sha"]:
+        raise ValueError("Merge group changed during queue source validation")
 
 
 def main():
@@ -154,6 +200,7 @@ def main():
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None
+        queue_source = None
         if required and os.environ["SCAN_RESULT"] == "success":
             if event_name == "merge_group":
                 ref = event["merge_group"]["head_ref"].removeprefix("refs/")
@@ -172,13 +219,13 @@ def main():
             head = f"{repository.split('/')[0]}:release-please--branches--{branch}--components--platform"
             query = urlencode({"state": "open", "base": branch, "head": head, "per_page": 100})
             prs = json.loads(subprocess.check_output(["gh", "api", f"repos/{repository}/pulls?{query}"], text=True))
-            release_tree = None
-            if len(prs) == 1 and SHA.fullmatch(prs[0].get("merge_commit_sha") or ""):
-                commit = json.loads(subprocess.check_output(
-                    ["gh", "api", f"repos/{repository}/git/commits/{prs[0]['merge_commit_sha']}"], text=True))
-                release_tree = commit["tree"]["sha"]
+            release_tree = queue_release_tree(event, repository, prs)
             group_tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
             validate_queue_release_source(event, repository, prs, release_tree, group_tree)
+            queue_source = prs[0]
+            print(f"Queue release source: PR #{queue_source['number']} "
+                  f"base={queue_source['base']['sha']} head={queue_source['head']['sha']} "
+                  f"release_tree={release_tree} group_tree={group_tree}")
         if required:
             import importlib.util
             spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("release-candidate.py"))
@@ -186,10 +233,16 @@ def main():
             spec.loader.exec_module(candidate)
             records = candidate.validate_evidence(Path(os.environ["EVIDENCE_DIR"]),
                                                  candidate_matrix(Path(__file__).resolve().parents[2]))
+            if queue_source is not None:
+                recheck_queue_release_source(event, repository, queue_source)
             branch = (event["merge_group"]["base_ref"].removeprefix("refs/heads/") if event_name == "merge_group"
                       else event["pull_request"]["base"]["ref"])
             index = {"schema": 1, **candidate.identity(), "branch": branch, "records": records,
                      "created_at": candidate.dt.datetime.now(candidate.dt.timezone.utc).isoformat()}
+            if queue_source is not None:
+                index["queue_release_source"] = {"number": queue_source["number"],
+                    "head_sha": queue_source["head"]["sha"], "base_sha": queue_source["base"]["sha"],
+                    "tree": release_tree}
             output = Path(os.environ["CANDIDATE_INDEX"])
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(index))

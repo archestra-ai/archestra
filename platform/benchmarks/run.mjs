@@ -5,7 +5,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { runBlock } from "./measure.mjs";
-import { MOCK_CONTENT } from "./mock-upstream.mjs";
+import { MOCK_CONTENT, MOCK_MCP_TOOL } from "./mock-upstream.mjs";
 import { createSummary, renderSummary } from "./report.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -151,17 +151,16 @@ const report = {
 let failed = false;
 try {
   for (const scenario of scenarios) {
+    // The gateway exposes the mock's tool under its server-prefixed name.
+    const toolCall = (name) => ({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: { name: "widget" } },
+    });
     const body =
       scenario === "mcp"
-        ? {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: {
-              name: options["mcp-tool"],
-              arguments: { name: "widget" },
-            },
-          }
+        ? toolCall(options["mcp-tool"])
         : {
             model: "gpt-4o-mini",
             messages: [
@@ -193,12 +192,16 @@ try {
     const targets =
       scenario === "mcp"
         ? {
-            direct: { url: mcpMockUrl, headers: mcpHeaders },
-            proxy: { url: mcpUrl, headers: mcpGatewayHeaders },
+            direct: {
+              url: mcpMockUrl,
+              headers: mcpHeaders,
+              body: toolCall(MOCK_MCP_TOOL),
+            },
+            proxy: { url: mcpUrl, headers: mcpGatewayHeaders, body },
           }
         : {
-            direct: { url: mockUrl, headers: {} },
-            proxy: { url: proxyUrl, headers },
+            direct: { url: mockUrl, headers: {}, body },
+            proxy: { url: proxyUrl, headers, body },
           };
     const expectedContent =
       scenario === "stream"
@@ -211,7 +214,6 @@ try {
           : ["proxy", "direct"]) {
           const result = await runBlock({
             ...targets[target],
-            body,
             requireGatewayTiming: target === "proxy" && scenario !== "stream",
             expectedContent,
             count: scenario === "stream" ? streamCount : count,
@@ -223,7 +225,9 @@ try {
             concurrency,
             repeat,
             target,
-            requestBytes: Buffer.byteLength(JSON.stringify(body)),
+            requestBytes: Buffer.byteLength(
+              JSON.stringify(targets[target].body),
+            ),
             ...result,
           });
           await writeFile(

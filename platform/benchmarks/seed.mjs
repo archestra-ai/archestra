@@ -61,7 +61,8 @@ if (
     const { agentId, tool, token } = await createBenchmarkMcpGateway(
       process.argv[2],
     );
-    process.stdout.write(`${agentId} ${tool} ${token}`);
+    // One line, newline-terminated, for the launcher's `read`.
+    process.stdout.write(`${agentId} ${tool} ${token}\n`);
   } else {
     process.stdout.write(await createBenchmarkVirtualKey(process.argv[2]));
   }

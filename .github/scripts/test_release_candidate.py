@@ -230,6 +230,8 @@ class GateIntegrationTests(unittest.TestCase):
                 "path=sys.argv[2]\n" +
                 "if '/pulls/' in path and os.environ.get('RECHECK_HEAD'):\n" +
                 "    pr['head']['sha']=os.environ['RECHECK_HEAD']\n" +
+                "if '/pulls/' in path and os.environ.get('RECHECK_BASE'):\n" +
+                "    pr['base']['sha']=os.environ['RECHECK_BASE']\n" +
                 f"counter={str(directory / 'ref-count')!r}\n" +
                 "if '/git/ref/' in path:\n" +
                 "    from pathlib import Path\n" +
@@ -266,6 +268,16 @@ class GateIntegrationTests(unittest.TestCase):
                     "head_ref": "refs/heads/gh-readonly-queue/main/pr-42-test"}}
                 (directory / "event.json").write_text(json.dumps(payload))
                 env["GITHUB_EVENT_NAME"] = event_name
+                if event_name == "pull_request":
+                    env["SCAN_REQUIRED"] = "false"
+                    env["SCAN_RESULT"] = "skipped"
+                    result = gate()
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertFalse((directory / "release-candidate-index.json").exists())
+                    self.assertNotEqual(gate({"SCAN_RESULT": "success"}).returncode, 0)
+                    continue
+                env["SCAN_REQUIRED"] = "true"
+                env["SCAN_RESULT"] = "success"
                 result = gate()
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 index = json.loads((directory / "release-candidate-index.json").read_text())
@@ -284,6 +296,16 @@ class GateIntegrationTests(unittest.TestCase):
                         index = json.loads((directory / "release-candidate-index.json").read_text())
                         self.assertEqual(index["queue_release_source"], {"number": 42,
                             "head_sha": release_head, "base_sha": base, "tree": tree})
+                    # REST base.sha can lag the actual queue base during high
+                    # volume merges. The queue event's immutable base wins.
+                    for cached_base in (initial_base, None):
+                        stale = json.loads(json.dumps(pr))
+                        stale["base"]["sha"] = cached_base
+                        (directory / "current.json").write_text(json.dumps(stale))
+                        result = gate({"RECHECK_BASE": initial_base if cached_base is None else base})
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        index = json.loads((directory / "release-candidate-index.json").read_text())
+                        self.assertEqual(index["queue_release_source"]["base_sha"], base)
                     (directory / "current.json").write_text(json.dumps(pr))
                     for overrides, message in (({"RECHECK_HEAD": mixed_head}, "Release PR changed"),
                                                ({"RECHECK_QUEUE": "e" * 40}, "Merge group changed")):

@@ -71,14 +71,7 @@ def candidate_matrix(root):
     return {"include": images}
 
 
-def requires_scan(event_name, event, repository):
-    if event_name == "merge_group":
-        return queue_candidate(event)
-    if event_name == "workflow_dispatch":
-        return False
-    if event_name != "pull_request":
-        raise ValueError(f"Unsupported event: {event_name}")
-    pr = event["pull_request"]
+def is_release_pr(pr, repository):
     head, base = pr["head"], pr["base"]
     if not head["ref"].startswith("release-please--"):
         return False
@@ -88,9 +81,22 @@ def requires_scan(event_name, event, repository):
         raise ValueError("Unexpected Release Please branch")
     if head["repo"]["full_name"] != repository or base["repo"]["full_name"] != repository:
         raise ValueError("Release PR must originate in this repository")
-    if not all(SHA.fullmatch(ref["sha"]) for ref in (head, base)):
-        raise ValueError("Missing exact release PR revisions")
+    if not SHA.fullmatch(head["sha"]):
+        raise ValueError("Missing exact release PR head revision")
     return True
+
+
+def requires_scan(event_name, event, repository):
+    if event_name == "merge_group":
+        return queue_candidate(event)
+    if event_name == "workflow_dispatch":
+        return False
+    if event_name != "pull_request":
+        raise ValueError(f"Unsupported event: {event_name}")
+    is_release_pr(event["pull_request"], repository)
+    # The required PR contexts remain present, but only the immutable merge
+    # group builds and scans release candidates for publication.
+    return False
 
 
 def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None,
@@ -108,34 +114,18 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
         return
     if scan_result != "success":
         raise ValueError(f"Every release image scan must succeed (got {scan_result!r})")
-    if event_name == "merge_group":
-        group = event["merge_group"]
-        if workflow_sha != group["head_sha"] or current != group["head_sha"]:
-            raise ValueError("Merge group changed or scans belong to another queue revision")
-        return
-    expected = event["pull_request"]
-    if current is None or current["state"] != "open" or current["number"] != expected["number"]:
-        raise ValueError("Release PR is no longer open or could not be verified")
-    if not requires_scan("pull_request", {"pull_request": current}, repository):
-        raise ValueError("Current PR is no longer a release PR")
-    for field in ("head", "base"):
-        for key in ("sha", "ref"):
-            if current[field][key] != expected[field][key]:
-                raise ValueError("Release PR or base changed during scanning; rerun on the current revision")
-    # The event payload's merge_commit_sha can predate GitHub's recomputed test
-    # merge, so bind the scanned commit to the PR's live merge candidate instead.
-    if not SHA.fullmatch(workflow_sha or "") or current["merge_commit_sha"] != workflow_sha:
-        raise ValueError("Scans are not associated with the release PR's current merge candidate")
+    group = event["merge_group"]
+    if workflow_sha != group["head_sha"] or current != group["head_sha"]:
+        raise ValueError("Merge group changed or scans belong to another queue revision")
 
 
 def queue_release_pr(event, repository, prs):
     group = event["merge_group"]
-    if len(prs) != 1 or not requires_scan("pull_request", {"pull_request": prs[0]}, repository):
+    if len(prs) != 1 or not is_release_pr(prs[0], repository):
         raise ValueError("Queue version change requires exactly one open Release Please PR")
     pr = prs[0]
-    if (pr["state"] != "open" or pr["base"]["sha"] != group["base_sha"]
-            or group["base_ref"] != f"refs/heads/{pr['base']['ref']}"):
-        raise ValueError("Release PR base changed during queue scanning")
+    if pr["state"] != "open" or group["base_ref"] != f"refs/heads/{pr['base']['ref']}":
+        raise ValueError("Release PR target changed during queue scanning")
     return pr
 
 
@@ -146,12 +136,12 @@ def queue_release_tree(event, repository, prs):
     # those immutable commits without touching the checked-out/scanned files.
     try:
         tree = subprocess.check_output(
-            ["git", "merge-tree", "--write-tree", pr["base"]["sha"], pr["head"]["sha"]],
+            ["git", "merge-tree", "--write-tree", event["merge_group"]["base_sha"], pr["head"]["sha"]],
             text=True, stderr=subprocess.PIPE,
         ).strip()
     except subprocess.CalledProcessError as error:
         raise ValueError(f"Cannot reconstruct release PR #{pr['number']} from base "
-                         f"{pr['base']['sha']} and head {pr['head']['sha']}; "
+                         f"{event['merge_group']['base_sha']} and head {pr['head']['sha']}; "
                          "merge conflicts or missing Git objects") from error
     if not SHA.fullmatch(tree):
         raise ValueError("Release merge reconstruction did not return one immutable tree")
@@ -162,7 +152,7 @@ def validate_queue_release_source(event, repository, prs, release_tree, group_tr
     pr = queue_release_pr(event, repository, prs)
     if not SHA.fullmatch(release_tree or "") or release_tree != group_tree:
         raise ValueError("Mixed queue group differs from the release merge candidate; "
-                         f"PR #{pr['number']} base={pr['base']['sha']} head={pr['head']['sha']} "
+                         f"PR #{pr['number']} base={event['merge_group']['base_sha']} head={pr['head']['sha']} "
                          f"release_tree={release_tree} group_tree={group_tree}; "
                          "validate the release in its own group")
 
@@ -174,7 +164,7 @@ def recheck_queue_release_source(event, repository, expected):
     queue_release_pr(event, repository, [current])
     if current["number"] != expected["number"] or any(
         current[field][key] != expected[field][key]
-        for field in ("head", "base") for key in ("sha", "ref")
+        for field, key in (("head", "sha"), ("head", "ref"), ("base", "ref"))
     ):
         raise ValueError("Release PR changed during queue source validation")
     ref = event["merge_group"]["head_ref"].removeprefix("refs/")
@@ -224,7 +214,7 @@ def main():
             validate_queue_release_source(event, repository, prs, release_tree, group_tree)
             queue_source = prs[0]
             print(f"Queue release source: PR #{queue_source['number']} "
-                  f"base={queue_source['base']['sha']} head={queue_source['head']['sha']} "
+                  f"base={event['merge_group']['base_sha']} head={queue_source['head']['sha']} "
                   f"release_tree={release_tree} group_tree={group_tree}")
         if required:
             import importlib.util
@@ -241,7 +231,7 @@ def main():
                      "created_at": candidate.dt.datetime.now(candidate.dt.timezone.utc).isoformat()}
             if queue_source is not None:
                 index["queue_release_source"] = {"number": queue_source["number"],
-                    "head_sha": queue_source["head"]["sha"], "base_sha": queue_source["base"]["sha"],
+                    "head_sha": queue_source["head"]["sha"], "base_sha": event["merge_group"]["base_sha"],
                     "tree": release_tree}
             output = Path(os.environ["CANDIDATE_INDEX"])
             output.parent.mkdir(parents=True, exist_ok=True)

@@ -124,7 +124,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: ubuntu-latest
+            runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             artifact-name: mcp-server-base-docker-image

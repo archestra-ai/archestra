@@ -7,6 +7,7 @@ import {
   AgentWorkspaceModel,
   OpenAppaSessionModel,
 } from "@/models";
+import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
 import { type AgentRunActorKind, type AgentRunRecord, ApiError } from "@/types";
@@ -259,6 +260,7 @@ async function resolveRuntimeIdentityByVirtualKey(params: {
 export async function resolveRuntimeIdentityByVirtualKeys(params: {
   virtualKeyIds: Array<string | undefined>;
   organizationId: string;
+  snapshot?: RuntimeIdentitySnapshot;
 }): Promise<RuntimeIdentityLookup> {
   const ids = [
     ...new Set(
@@ -267,12 +269,31 @@ export async function resolveRuntimeIdentityByVirtualKeys(params: {
       ),
     ),
   ];
+  const snapshot =
+    params.snapshot?.organizationId === params.organizationId &&
+    params.snapshot.virtualKeyIds.length === ids.length &&
+    ids.every((id) => params.snapshot?.virtualKeyIds.includes(id))
+      ? params.snapshot
+      : undefined;
   const found: VerifiedRuntimeAssociation[] = [];
   for (const virtualKeyId of ids) {
-    const identity = await resolveRuntimeIdentityByVirtualKey({
-      virtualKeyId,
-      organizationId: params.organizationId,
-    });
+    let identity: VerifiedRuntimeAssociation | null;
+    if (snapshot) {
+      const candidates = snapshot.candidates.filter(
+        (row) => row.virtualKeyId === virtualKeyId,
+      );
+      const candidate = candidates.length === 1 ? candidates[0] : undefined;
+      identity =
+        candidate?.run.organizationId === params.organizationId &&
+        candidate.workspace?.organizationId === params.organizationId
+          ? associationFrom(candidate.workspace, candidate.run)
+          : null;
+    } else {
+      identity = await resolveRuntimeIdentityByVirtualKey({
+        virtualKeyId,
+        organizationId: params.organizationId,
+      });
+    }
     if (identity) found.push(identity);
   }
   if (found.length === 0) return { status: "unbound" };
@@ -465,8 +486,26 @@ async function associationForCurrentTurn(
 }
 
 function associationFrom(
-  workspace: AgentWorkspace,
-  run: AgentRunRecord,
+  workspace: Pick<
+    AgentWorkspace,
+    | "id"
+    | "organizationId"
+    | "agentId"
+    | "actorKind"
+    | "actorId"
+    | "workloadName"
+    | "state"
+  >,
+  run: Pick<
+    AgentRunRecord,
+    | "organizationId"
+    | "agentId"
+    | "actorKind"
+    | "actorId"
+    | "actorUserId"
+    | "taskId"
+    | "workloadName"
+  >,
 ): VerifiedRuntimeAssociation | null {
   if (
     workspace.organizationId !== run.organizationId ||

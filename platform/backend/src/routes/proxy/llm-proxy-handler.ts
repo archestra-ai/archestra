@@ -53,6 +53,7 @@ import {
   ENCRYPTED_CHAT_KEY_HEADER,
   parseEncryptedChatDekHeader,
 } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
@@ -1099,6 +1100,7 @@ export async function handleLLMProxy<
     limitVirtualKeyId: virtualKeyId,
     passthroughVirtualKeyId,
     llmOauthClientId: authenticatedApp?.id,
+    includeRuntime: hasProxyPlugins && enterpriseTier.isOpenappaActive(),
     userId,
     billingTeamId,
     virtualKeyId:
@@ -1409,6 +1411,7 @@ export async function handleLLMProxy<
         installerSetupBypass,
         ingress: appaIngress,
         toolIdentity,
+        runtimeSnapshot: requestContext.runtimeSnapshot,
       });
       pluginContext = {
         requestId: request.id,

@@ -691,7 +691,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
 
 ### Active Run Updates
 
-Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across replicas, with polling as a fallback. Change these only to tune database load or to work behind a connection pooler.
+Chat streams, A2A task streams and LLM proxy settings stay in sync across replicas through PostgreSQL `LISTEN/NOTIFY`, with polling as a fallback. While notifications arrive, the LLM proxy keeps gateway, credential and limit settings in memory, so a revoked key or a changed limit reaches every replica within seconds. Change these only to tune database load or to work behind a connection pooler.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - How often a reconnecting client checks for new events of a running chat, in milliseconds.
   - Default: `500`
@@ -703,7 +703,7 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL)
   - Set it when regular traffic uses PgBouncer transaction pooling, which cannot hold a listener. Point it at a direct or session-pooled connection.
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only and the LLM proxy reads its settings from the database on every request.
   - Default: `false`
   - Values: `true`, `false`
   - Archestra detects an endpoint that cannot deliver notifications and polls faster on its own. Set this only to avoid opening a listener connection that cannot work.

@@ -168,7 +168,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+          fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || inputs.checkout_fetch_depth }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Authenticate to Google Artifact Registry
@@ -209,6 +209,22 @@ jobs:
             echo "cache-to=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve exact release build inputs
+        id: release-inputs
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_ARCH: ${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
+          CANDIDATE_DIR: ${{ runner.temp }}/candidate
+          EXPECTED_VERSION: ${{ inputs.version }}
+          POLICY_SHA: ${{ github.workflow_sha }}
+        run: |
+          # A recovered release can predate this policy. Read the trusted policy
+          # from the running workflow, and its inputs from the checked-out release.
+          [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git show "$POLICY_SHA:.github/scripts/release-candidate.py" > "$RUNNER_TEMP/release-candidate.py"
+          python3 "$RUNNER_TEMP/release-candidate.py" inputs
+
       - name: Build Docker image
         id: build
         uses: ./.github/actions/build-docker-image
@@ -220,7 +236,8 @@ jobs:
           platforms: ${{ matrix.os_and_arch }}
           outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true{2}', inputs.image_registry, inputs.image_name, inputs.zstd_compression && ',compression=zstd,compression-level=1,force-compression=true,oci-mediatypes=true' || '') || '' }}
           version: ${{ inputs.version }}
-          previous-image: ${{ inputs.previous_image }}
+          previous-image: ${{ startsWith(inputs.checkout_ref, 'platform-v') && steps.release-inputs.outputs.previous-image || inputs.previous_image }}
+          require-previous-assets: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}

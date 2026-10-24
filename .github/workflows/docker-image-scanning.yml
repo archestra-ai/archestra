@@ -1,7 +1,8 @@
 name: Docker Image Scanning
 
 # Keep required contexts present on every PR/queue SHA. Only Release Please
-# PRs build scan candidates; release publication independently scans its bytes.
+# PRs and version-changing queue groups build candidates on both architectures.
+# Publication independently scans its bytes; see ../release-image-security.md.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
@@ -33,22 +34,27 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Classify event
         id: policy
         run: python3 .github/scripts/release-image-policy.py classify
 
   scan-release-images:
-    name: Scan release candidate (${{ matrix.image }})
+    name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 45
     permissions:
-      contents: read # Required to checkout scan policy and image sources.
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
+    env:
+      IMAGE_NAME: ${{ matrix.image }}
+      IMAGE_ARCH: ${{ matrix.arch }}
+      IMAGE_REFERENCE: release-scan-${{ matrix.image }}:${{ github.sha }}
+      CANDIDATE_DIR: ${{ github.workspace }}/.release-candidate
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
@@ -56,40 +62,65 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
           ref: ${{ github.sha }}
-      - name: Verify candidate revision
-        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Resolve release build inputs
+        id: inputs
+        run: python3 .github/scripts/release-candidate.py prepare
       - name: Build candidate locally
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
           push: "false"
           load: "true"
-          tags: release-scan-${{ matrix.image }}:${{ github.sha }}
+          tags: ${{ env.IMAGE_REFERENCE }}
+          version: ${{ steps.inputs.outputs.version }}
+          previous-image: ${{ steps.inputs.outputs.previous-image }}
+          require-previous-assets: "true"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-amd64
-      - name: Pin locally built image
-        id: image
-        env:
-          IMAGE: release-scan-${{ matrix.image }}:${{ github.sha }}
+          sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
+      - name: Seal candidate bytes for scanning
         run: |
-          set -euo pipefail
-          image_id=$(docker image inspect "$IMAGE" --format '{{.Id}}')
-          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-          echo "reference=local://${image_id}" >> "$GITHUB_OUTPUT"
-          echo "Candidate ${GITHUB_SHA}: ${IMAGE} -> ${image_id}" >> "$GITHUB_STEP_SUMMARY"
+          docker save --output "$CANDIDATE_DIR/image.tar" "$IMAGE_REFERENCE"
+          python3 .github/scripts/release-candidate.py seal
+      - name: Verify candidate bytes
+        id: image
+        run: python3 .github/scripts/release-candidate.py verify
       - name: Scan exact candidate bytes
+        id: scan
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
+          platform: linux/${{ matrix.arch }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
+      - name: Record successful scan
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: python3 .github/scripts/release-candidate.py scanned
+      - name: Retain exact scanned bytes
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-candidate-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.CANDIDATE_DIR }}/image.tar
+            ${{ env.CANDIDATE_DIR }}/build.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 1
+      - name: Transfer scan evidence to gate
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-evidence-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ env.CANDIDATE_DIR }}/evidence/*
+          if-no-files-found: error
+          retention-days: 1
 
   release-image-security:
     name: Release Image Security
@@ -104,12 +135,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
+      - name: Download complete scan evidence
+        if: ${{ needs.classify.outputs.scan == 'true' && needs.scan-release-images.result == 'success' }}
+        uses: ./.github/actions/github-download-artifact
+        with:
+          pattern: release-evidence-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence
+          merge-multiple: true
       - name: Require a complete scan for the current release PR revision
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
           SCAN_RESULT: ${{ needs.scan-release-images.result }}
+          EVIDENCE_DIR: ${{ runner.temp }}/release-evidence
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/release-image-policy.py gate
 

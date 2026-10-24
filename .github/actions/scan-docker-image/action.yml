@@ -51,20 +51,27 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         SCOUT_VERSION: "1.24.0"
-        SCOUT_ARCHIVE_SHA256: "f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b"
+        SCOUT_AMD64_SHA256: "f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b"
+        SCOUT_ARM64_SHA256: "8b21594c72d4d9403a82a49e9dbdfc04c27c6a21933906f1eefbb0beabe22d58"
       run: |
         set -euo pipefail
 
+        case "$(uname -m)" in
+          x86_64) scout_arch=amd64; scout_sha=$SCOUT_AMD64_SHA256 ;;
+          aarch64|arm64) scout_arch=arm64; scout_sha=$SCOUT_ARM64_SHA256 ;;
+          *) echo 'Unsupported Docker Scout runner architecture' >&2; exit 1 ;;
+        esac
+
         scout_dir="${RUNNER_TEMP}/docker-scout-${SCOUT_VERSION}"
-        scout_archive="${scout_dir}/docker-scout_${SCOUT_VERSION}_linux_amd64.tar.gz"
+        scout_archive="${scout_dir}/docker-scout_${SCOUT_VERSION}_linux_${scout_arch}.tar.gz"
         mkdir -p "${scout_dir}"
 
         gh release download "v${SCOUT_VERSION}" \
           --repo docker/scout-cli \
-          --pattern "docker-scout_${SCOUT_VERSION}_linux_amd64.tar.gz" \
+          --pattern "docker-scout_${SCOUT_VERSION}_linux_${scout_arch}.tar.gz" \
           --output "${scout_archive}" \
           --clobber
-        echo "${SCOUT_ARCHIVE_SHA256}  ${scout_archive}" | sha256sum --check
+        echo "${scout_sha}  ${scout_archive}" | sha256sum --check
         tar -xzf "${scout_archive}" -C "${scout_dir}" docker-scout
 
     - name: Docker Scout CVE Check

@@ -6,6 +6,36 @@ import LimitModel, { LimitValidationService } from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
 describe("unit and interval quotas", () => {
+  test("proxy validation cleans expired non-budget counters without resetting throughput", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const mcp = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "mcp_server_calls",
+      mcpServerName: "synthetic-counter",
+      cleanupInterval: "calendar_day",
+      limitValue: 10,
+    });
+    const throughput = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "requests",
+      cleanupInterval: "calendar_day",
+      limitValue: 10,
+    });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({ agentId: agent.id }),
+    ).resolves.toBeNull();
+    expect((await LimitModel.findById(mcp.id))?.lastCleanup).toBeInstanceOf(
+      Date,
+    );
+    expect((await LimitModel.findById(throughput.id))?.lastCleanup).toBeNull();
+  });
+
   test("scoped budget cleanup preserves throughput windows and minute spend", async ({
     makeOrganization,
   }) => {

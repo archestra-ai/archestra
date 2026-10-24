@@ -1120,6 +1120,13 @@ class LimitModel {
       .execute({ ...parameters, limitType });
   }
 
+  /** Read current budgets and any scoped counters needing cleanup together. */
+  static async findProxyLimitState(entities: LimitsCleanupOptionsEntities) {
+    return LimitModel.proxyLimitState
+      .get()
+      .execute(limitEntityParameters(entities));
+  }
+
   // Org-scoped audit snapshot via the entity FK.  limitsTable has no
   // organizationId column of its own, so tenancy is resolved through the
   // entity that owns the limit (organization/team/agent/user/virtual_key).
@@ -1320,18 +1327,27 @@ class LimitModel {
     database
       .select({ id: schema.limitsTable.id })
       .from(schema.limitsTable)
+      .where(and(limitEntitiesCondition(), scopedCleanupDueCondition()))
+      .prepare("archestra_due_limits_by_entities"),
+  );
+
+  private static readonly proxyLimitState = new PreparedQuery((database) =>
+    database
+      .select({
+        ...getTableColumns(schema.limitsTable),
+        cleanupDue: scopedCleanupDueCondition(),
+      })
+      .from(schema.limitsTable)
       .where(
         and(
           limitEntitiesCondition(),
-          sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
-          sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
           or(
-            sql`${schema.limitsTable.lastCleanup} IS NULL`,
-            buildCleanupDueCondition(),
+            eq(schema.limitsTable.limitType, "token_cost"),
+            scopedCleanupDueCondition(),
           ),
         ),
       )
-      .prepare("archestra_due_limits_by_entities"),
+      .prepare("archestra_proxy_limit_state"),
   );
   private static readonly validationByEntities = new PreparedQuery((database) =>
     database
@@ -1449,9 +1465,6 @@ export class LimitValidationService {
         entities.environment = environmentId;
       }
 
-      logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
-      await LimitModel.cleanupLimitsIfNeeded({ entities });
-
       // Prefetch every limit, per-model usage row, and model price the priority
       // checks below may need, in a fixed set of batched queries. Each entity
       // level used to issue its own limit_model_usage + models lookups, which
@@ -1498,8 +1511,28 @@ export class LimitValidationService {
           entityId: organizationId,
         });
       }
-      const prefetch =
-        await LimitValidationService.prefetchEntityLimits(entitiesToCheck);
+      let scopedLimits = await LimitModel.findProxyLimitState(entities);
+      if (scopedLimits.some((limit) => limit.cleanupDue)) {
+        await LimitModel.cleanupLimitsIfNeeded({ entities });
+        // Cleanup changes usage: validation must read its committed result.
+        scopedLimits = await LimitModel.findProxyLimitState(entities);
+      }
+      const checkedEntities = new Set(
+        entitiesToCheck.map(
+          ({ entityType, entityId }) => `${entityType}:${entityId}`,
+        ),
+      );
+      const limits = scopedLimits
+        .filter(
+          (limit) =>
+            limit.limitType === "token_cost" &&
+            checkedEntities.has(`${limit.entityType}:${limit.entityId}`),
+        )
+        .map(({ cleanupDue: _cleanupDue, ...limit }) => limit);
+      const prefetch = await LimitValidationService.prefetchEntityLimits(
+        entitiesToCheck,
+        limits,
+      );
 
       if (params.unpricedMediaModel) {
         const applies = (models?: string[] | null) =>
@@ -1729,11 +1762,14 @@ export class LimitValidationService {
    */
   private static async prefetchEntityLimits(
     entities: { entityType: LimitEntityType; entityId: string }[],
+    currentLimits?: Limit[],
   ): Promise<LimitPrefetch> {
-    const limits = await LimitModel.findLimitsForValidationForEntities(
-      entities,
-      "token_cost",
-    );
+    const limits =
+      currentLimits ??
+      (await LimitModel.findLimitsForValidationForEntities(
+        entities,
+        "token_cost",
+      ));
 
     const limitsByEntity = new Map<string, Limit[]>();
     for (const limit of limits) {
@@ -2041,6 +2077,14 @@ export function buildOrganizationLimitScopeCondition(
 function llmOauthClientInOrganization(organizationId: string): SQL {
   return sql`(${schema.oauthClientsTable.metadata}->>'type' IN ('llm_oauth_client', 'managed_oauth_client')
     AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId})`;
+}
+
+function scopedCleanupDueCondition(): SQL<boolean> {
+  return and(
+    sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
+    sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,
+    or(isNull(schema.limitsTable.lastCleanup), buildCleanupDueCondition()),
+  ) as SQL<boolean>;
 }
 
 function buildCleanupDueCondition(): SQL {

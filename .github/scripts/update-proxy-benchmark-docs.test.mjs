@@ -150,6 +150,14 @@ test("diagnostic CPU profiles cannot replace release docs", async () => {
   assert.equal(f.writes.length, 0);
 });
 
+test("manual worker scaling cannot replace the single-process release table", async () => {
+  const f = fixture();
+  f.summary.webWorkers = 4;
+  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+  assert.equal(await commitBenchmarkDocs(f), "ineligible");
+  assert.equal(f.writes.length, 0);
+});
+
 test("partial, unsuccessful, missing, duplicate or injected results cannot replace the docs table", () => {
   for (const change of [
     (s) => {

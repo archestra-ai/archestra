@@ -95,7 +95,7 @@ jobs:
   validate-agent-catalog-images:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     if: ${{ inputs.version == '' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout the repository and build the image.

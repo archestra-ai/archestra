@@ -43,9 +43,8 @@ jobs:
     name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    # Platform builds dominate the queue's 30-minute check window. Use the
-    # proven E2E builder and its warm BuildKit cache for the AMD64 candidates.
-    runs-on: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && matrix.arch == 'amd64' && 'blacksmith-16vcpu-ubuntu-2404' || (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
+    # Build every architecture on native Blacksmith runners in parallel.
+    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -72,7 +71,7 @@ jobs:
       - name: Build candidate locally
         uses: $/.github/actions/build-docker-image
         with:
-          builder-cache-key: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && matrix.arch == 'amd64' && format('{0}-platform-e2e-linux-amd64-v1', github.repository) || '' }}
+          builder-cache-key: ${{ format('{0}-release-scan-{1}-{2}-v1', github.repository, matrix.image, matrix.arch) }}
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
@@ -222,7 +221,7 @@ jobs:
   handoff-fixture:
     name: Build non-publishing handoff fixture
     if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:

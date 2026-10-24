@@ -263,9 +263,13 @@ jobs:
         working-directory: /tmp/digests
         run: |
           # Stable aliases move only in the release workflow's approved publication job.
+          references=()
+          for digest in *; do
+            references+=("${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:${digest}")
+          done
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
-            $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+            "${references[@]}"
         env:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}

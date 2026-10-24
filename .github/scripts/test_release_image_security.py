@@ -36,7 +36,7 @@ def step_source(source, name):
 
 class ReleasePolicyTests(unittest.TestCase):
     def test_main_and_stable_release_updates_always_scan_without_labels(self):
-        for branch in ("main", "release/1.4", "release/12.30"):
+        for branch in ("main", "release/1.3", "release/1.4", "release/12.30"):
             for action in ("opened", "synchronize", "reopened", "edited"):
                 with self.subTest(branch=branch, action=action):
                     self.assertTrue(POLICY.requires_scan("pull_request", {
@@ -278,8 +278,8 @@ class WorkflowContractTests(unittest.TestCase):
             section = step_source(source, name)
             self.assertNotIn("continue-on-error", section)
             self.assertIn('exit-code: "true"', section)
-        reuse = source.split("  reuse-image:\n", 1)[1].split("  build-image:\n", 1)[0]
-        self.assertIn("!startsWith(inputs.checkout_ref, 'platform-v')", reuse)
+        # This release line predates image reuse: every release build must run.
+        self.assertNotIn("  reuse-image:\n", source)
         checkout = step_source(source.split("  merge-manifests:\n", 1)[1], "Checkout repository")
         self.assertIn("inputs.checkout_ref", checkout)
 
@@ -290,7 +290,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("needs: [classify, scan-release-images]", gate)
         for job in ("required-contexts", "legacy-required-context"):
             section = re.search(rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)", source, re.M | re.S).group(1)
-            self.assertIn("if: ${{ always() }}", section)
+            self.assertIn("if: ${{ always() && github.event_name != 'merge_group' }}", section)
             self.assertIn("needs: [release-image-security]", section)
             for result in ("success", "failure", "cancelled", "skipped", ""):
                 command = section.split("        run: ", 1)[1].splitlines()[0]
@@ -298,7 +298,14 @@ class WorkflowContractTests(unittest.TestCase):
                     env=os.environ | {"RESULT": result})
                 self.assertEqual(completed.returncode == 0, result == "success")
         e2e = (ROOT / ".github/workflows/platform-e2e-tests.yml").read_text()
-        self.assertNotIn("uses: ./.github/actions/scan-docker-image", e2e)
+        queue = e2e.split("  merge-queue-image-scanning:\n", 1)[1].split("  platform-e2e-cancel-on-build-failure:\n", 1)[0]
+        self.assertIn("github.event_name == 'merge_group'", queue)
+        self.assertIn("needs: [platform-e2e-build]", queue)
+        self.assertIn("uses: ./.github/actions/scan-docker-image", queue)
+        self.assertIn('exit-code: "true"', queue)
+        p4 = source.split("  merge-queue-p4-image-scanning:\n", 1)[1]
+        self.assertIn("github.event_name == 'merge_group'", p4)
+        self.assertIn('exit-code: "true"', p4)
         self.assertNotIn("run-docker-scan", source)
 
 

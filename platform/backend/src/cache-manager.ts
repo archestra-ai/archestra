@@ -548,36 +548,19 @@ class CacheManager {
    * out. Like {@link get}, a failed read is reported as misses.
    */
   async getMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
-    const entries = new Map<AllowedCacheKey, T>();
     if (!this.keyv) {
       logger.warn("CacheManager: Not started, returning no entries");
-      return entries;
+      return new Map();
     }
-    if (keys.length === 0) return entries;
     try {
-      const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
-      const result = await db.execute<{ key: string; value: string }>(sql`
-        SELECT key, value FROM keyv_cache
-        WHERE key IN (${sql.join(prefixed, sql`, `)})
-      `);
-      const now = Date.now();
-      for (const row of result.rows) {
-        const data = await this.keyv.deserializeData<T>(row.value);
-        if (data?.value === undefined) continue;
-        if (typeof data.expires === "number" && now > data.expires) continue;
-        entries.set(
-          row.key.slice("keyv:".length) as AllowedCacheKey,
-          data.value,
-        );
-      }
+      return await this.readMany<T>(keys);
     } catch (error) {
       logger.error(
         { error, keys },
         "CacheManager: Error getting cache entries",
       );
-      entries.clear();
     }
-    return entries;
+    return new Map();
   }
 
   /**

@@ -124,6 +124,62 @@ describe("CacheManager", () => {
     cacheManager.shutdown();
   });
 
+  describe("batch reads", () => {
+    test("preserves key encoding, duplicate handling and expiration boundaries", async () => {
+      await ensureKeyvCacheTable();
+      cacheManager.start();
+      const live = `${CacheKey.VirtualKeyRateLimit}-quotes',{}\\λ` as const;
+      const boundary = `${CacheKey.VirtualKeyRateLimit}-boundary` as const;
+      const expired = `${CacheKey.VirtualKeyRateLimit}-expired` as const;
+      const missing = `${CacheKey.VirtualKeyRateLimit}-missing` as const;
+      const now = Date.now();
+      await insertKeyvEntry(live, { count: 2 }, now + 60_000);
+      await insertKeyvEntry(boundary, { count: 3 }, now);
+      await insertKeyvEntry(expired, { count: 4 }, now - 1);
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+      try {
+        for (const read of [
+          cacheManager.getMany.bind(cacheManager),
+          cacheManager.readMany.bind(cacheManager),
+        ]) {
+          expect(await read([])).toEqual(new Map());
+          expect(await read([live, boundary, expired, missing, live])).toEqual(
+            new Map([
+              [live, { count: 2 }],
+              [boundary, { count: 3 }],
+            ]),
+          );
+        }
+      } finally {
+        clock.mockRestore();
+      }
+    });
+
+    test("strict reads throw on an outage, ordinary reads miss, and both recover", async () => {
+      await ensureKeyvCacheTable();
+      cacheManager.start();
+      const key = `${CacheKey.VirtualKeyRateLimit}-recovery` as const;
+      await insertKeyvEntry(key, { count: 2 });
+      expect(await cacheManager.readMany([key])).toEqual(
+        new Map([[key, { count: 2 }]]),
+      );
+      await db.execute(
+        sql`ALTER TABLE keyv_cache RENAME TO keyv_cache_unavailable`,
+      );
+      try {
+        await expect(cacheManager.readMany([key])).rejects.toThrow();
+        expect(await cacheManager.getMany([key])).toEqual(new Map());
+      } finally {
+        await db.execute(
+          sql`ALTER TABLE keyv_cache_unavailable RENAME TO keyv_cache`,
+        );
+      }
+      expect(await cacheManager.getMany([key])).toEqual(
+        new Map([[key, { count: 2 }]]),
+      );
+    });
+  });
+
   describe("withLock", () => {
     const scope = `${CacheKey.OpenAppaHitlRuling}-transaction` as const;
     const key = `${CacheKey.OpenAppaHitlReview}-transaction` as const;

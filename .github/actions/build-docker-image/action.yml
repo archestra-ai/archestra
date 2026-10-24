@@ -55,6 +55,10 @@ inputs:
     description: "Optional previously published image to extract static assets from before building"
     required: false
     default: ""
+  require-previous-assets:
+    description: "Fail if configured previous frontend assets cannot be extracted"
+    required: false
+    default: "false"
   cache-from:
     description: "External cache sources, one per line (e.g. type=registry,ref=...)"
     required: false
@@ -104,8 +108,10 @@ runs:
       if: ${{ inputs.previous-image != '' }}
       shell: bash
       run: |
+        set -euo pipefail
         echo "Pulling previous image: $INPUT_PREVIOUS_IMAGE"
         docker pull "$INPUT_PREVIOUS_IMAGE" || {
+          [ "$REQUIRE_PREVIOUS_ASSETS" != true ] || exit 1
           echo "Warning: Failed to pull previous image"
           exit 0
         }
@@ -113,15 +119,20 @@ runs:
         CID=$(docker create "$INPUT_PREVIOUS_IMAGE" 2>/dev/null) || true
         if [ -n "$CID" ]; then
           echo "Extracting previous static assets from container $CID"
-          docker cp "${CID}:/static-assets-source/." "${INPUT_CONTEXT}/docker/prev-static-assets/" || echo "Warning: Failed to copy previous assets"
+          docker cp "${CID}:/static-assets-source/." "${INPUT_CONTEXT}/docker/prev-static-assets/" || {
+            if [ "$REQUIRE_PREVIOUS_ASSETS" = true ]; then docker rm "$CID"; exit 1; fi
+            echo "Warning: Failed to copy previous assets"
+          }
           docker rm "$CID"
           echo "Successfully extracted previous static assets"
         else
+          [ "$REQUIRE_PREVIOUS_ASSETS" != true ] || exit 1
           echo "No previous container created, skipping asset extraction"
         fi
       env:
         INPUT_CONTEXT: ${{ inputs.context }}
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
+        REQUIRE_PREVIOUS_ASSETS: ${{ inputs.require-previous-assets }}
 
     - name: Setup Docker Builder
       id: builder

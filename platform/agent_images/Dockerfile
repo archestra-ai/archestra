@@ -134,8 +134,15 @@ USER 1000:1000
 
 FROM agent-base AS agent-hermes
 USER root
+# Hermes 0.19.0 pins vulnerable versions; override its transitive packages
+# until upstream publishes a fixed release. The startup test below exercises
+# the resulting runtime.
 RUN python3 -m venv /opt/hermes \
  && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
+ && /opt/hermes/bin/pip install --no-cache-dir \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
+      cryptography==50.0.0 mcp==1.28.1 starlette==1.3.1 \
+      jaraco-context==6.1.0 wheel==0.46.2 \
  && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
  && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
@@ -148,7 +155,9 @@ RUN --network=none \
 
 FROM agent-base AS agent-openclaw
 USER root
-RUN pnpm add --global openclaw@2026.7.1-2 \
+COPY agent_images/openclaw /opt/agent-openclaw
+RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
+ && ln -s /opt/agent-openclaw/node_modules/.bin/openclaw /usr/local/bin/openclaw \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000

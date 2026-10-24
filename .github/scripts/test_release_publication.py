@@ -78,20 +78,24 @@ gh() {
                     {"tag_name": "platform-v1.4.0", "prerelease": False, "draft": draft}
                 ]))
 
-    def test_one_time_security_patch_preserves_newer_channels(self):
+    def test_retired_line_security_patches_preserve_newer_channels(self):
         releases = [{"tag_name": "platform-v1.4.4", "prerelease": False}]
-        result = self.run_guard(releases, version="1.3.78")
-        self.assert_allowed(result)
-        self.assertEqual(result.policy_output, "preserve_latest=true\n")
-        for ref, version in (("main", "1.3.78"), ("release/1.3", "1.3.79")):
+        for version in ("1.3.78", "1.3.79"):
+            with self.subTest(version=version):
+                result = self.run_guard(releases, version=version)
+                self.assert_allowed(result)
+                self.assertEqual(result.policy_output, "preserve_latest=true\n")
+        for ref, version in (("main", "1.3.78"), ("main", "1.3.79"), ("release/1.3", "1.3.80")):
             with self.subTest(ref=ref, version=version):
                 self.assert_blocked(self.run_guard(releases, ref=ref, version=version))
-        for draft in (False, True):
-            self.assert_blocked(self.run_guard([
-                {"tag_name": "platform-v1.3.79", "prerelease": False, "draft": draft}
-            ], version="1.3.78"))
-        self.assert_blocked(self.run_guard(releases, version="1.3.78", freeze="true"))
-        self.assert_blocked(self.run_guard(releases, version="1.3.78", api_status=1))
+        for version, newer in (("1.3.78", "1.3.79"), ("1.3.79", "1.3.80")):
+            for draft in (False, True):
+                with self.subTest(version=version, newer=newer, draft=draft):
+                    self.assert_blocked(self.run_guard([
+                        {"tag_name": f"platform-v{newer}", "prerelease": False, "draft": draft}
+                    ], version=version))
+            self.assert_blocked(self.run_guard(releases, version=version, freeze="true"))
+            self.assert_blocked(self.run_guard(releases, version=version, api_status=1))
 
     def test_older_and_same_stable_allow_retry(self):
         self.assert_allowed(self.run_guard([

@@ -395,8 +395,8 @@ jobs:
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
           PRESERVE_LATEST=false
-          # Explicitly approved one-time security release of the retired line.
-          if [ "${GITHUB_REF_NAME:-}" = release/1.3 ] && [ "$VERSION" = 1.3.78 ]; then
+          # Security releases on the retired 1.3 line must not move newer latest tags.
+          if [ "${GITHUB_REF_NAME:-}" = release/1.3 ] && [[ "$VERSION" = 1.3.78 || "$VERSION" = 1.3.79 ]]; then
             PRESERVE_LATEST=true
           fi
           if [[ "$VERSION" != *-beta.* ]]; then
